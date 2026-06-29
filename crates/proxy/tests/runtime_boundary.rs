@@ -1536,6 +1536,7 @@ fn hysteria2_inbound_uses_adapter_request_model() {
     let adapter = read("src/adapters/hysteria2/inbound.rs");
     let protocol_udp = fs::read_to_string(repo_root().join("protocols/hysteria2/src/udp.rs"))
         .expect("read hysteria2 protocol udp source");
+    let protocol_dispatch_parts = struct_block(&protocol_udp, "Hysteria2InboundUdpDispatchParts");
     let protocol_inbound =
         fs::read_to_string(repo_root().join("protocols/hysteria2/src/inbound.rs"))
             .expect("read hysteria2 protocol inbound source");
@@ -1652,12 +1653,18 @@ fn hysteria2_inbound_uses_adapter_request_model() {
             && !inbound.contains("view.pipe_parts()")
             && !inbound.contains("view.clone().into_pipe_parts()")
             && !inbound.contains("udp_session.record_proxy_session_for_view")
-            && inbound.contains("udp_session.record_proxy_session_for_parts")
+            && inbound.contains("udp_session.record_proxy_session(*sid, request_session_id)")
             && inbound.contains("udp_session.send_response")
             && inbound.contains("udp_session.send_response_to_socket_addr")
             && !inbound.contains("request.into_dispatch_parts()")
             && !inbound.contains("request.request_session_id")
             && !inbound.contains("request.client_session_id")
+            && !inbound.contains("parts.target")
+            && !inbound.contains("parts.port")
+            && !inbound.contains("parts.payload")
+            && !inbound.contains("parts.client_session_id")
+            && inbound.contains("parts.request_session_id()")
+            && inbound.contains("parts.into_pipe_parts()")
             && inbound.contains("UdpDispatch::new(&inbound_tag)")
             && inbound.contains("dispatch.poll_refs()")
             && inbound.contains("upstream_udp.recv_response")
@@ -1680,6 +1687,11 @@ fn hysteria2_inbound_uses_adapter_request_model() {
             && protocol_udp.contains("struct Hysteria2InboundUdpSession")
             && protocol_udp.contains("struct Hysteria2InboundUdpRequest")
             && protocol_udp.contains("struct Hysteria2InboundUdpDispatchParts")
+            && !protocol_dispatch_parts.contains("pub request_session_id: u16")
+            && !protocol_dispatch_parts.contains("pub target: Address")
+            && !protocol_dispatch_parts.contains("pub port: u16")
+            && !protocol_dispatch_parts.contains("pub payload: Vec<u8>")
+            && !protocol_dispatch_parts.contains("pub client_session_id: Option<u64>")
             && protocol_udp.contains("struct Hysteria2InboundUdpDispatchView")
             && protocol_udp.contains("fn into_parts")
             && protocol_udp.contains("fn into_dispatch_parts")
@@ -2904,6 +2916,8 @@ fn shadowsocks_udp_inbound_uses_protocol_codec_not_datagram_primitives() {
         .nth(1)
         .and_then(|content| content.split("impl ShadowsocksInboundUdpPacket").next())
         .expect("Shadowsocks inbound UDP packet struct section");
+    let inbound_dispatch_struct =
+        struct_block(&protocol_inbound, "ShadowsocksInboundUdpDispatchParts");
     let inbound_response_struct = protocol_inbound
         .split("pub struct ShadowsocksInboundUdpResponse")
         .nth(1)
@@ -2935,6 +2949,10 @@ fn shadowsocks_udp_inbound_uses_protocol_codec_not_datagram_primitives() {
             && protocol_inbound.contains("struct ShadowsocksInboundUdpDispatchParts")
             && protocol_inbound.contains("fn into_dispatch_parts")
             && protocol_inbound.contains("fn into_parts(self) -> (Address, u16, Vec<u8>, Option<u64>)")
+            && !inbound_dispatch_struct.contains("pub target: Address")
+            && !inbound_dispatch_struct.contains("pub port: u16")
+            && !inbound_dispatch_struct.contains("pub payload: Vec<u8>")
+            && !inbound_dispatch_struct.contains("pub client_session_id: Option<u64>")
             && protocol_inbound.contains("struct ShadowsocksInboundUdpResponseTarget")
             && protocol_inbound.contains("fn encode_response_to_client")
             && protocol_inbound.contains("fn response_frame")
@@ -5347,6 +5365,7 @@ fn trojan_inbound_udp_packet_framing_stays_in_protocol_crate() {
         .join("protocols/trojan/src/inbound.rs");
     let protocol_inbound =
         fs::read_to_string(protocol_inbound).expect("read trojan protocol inbound source");
+    let protocol_dispatch_parts = struct_block(&protocol_inbound, "TrojanInboundUdpDispatchParts");
     let protocol_lib = fs::read_to_string(repo_root().join("protocols/trojan/src/lib.rs"))
         .expect("read trojan protocol lib source");
     let protocol_shared = fs::read_to_string(repo_root().join("protocols/trojan/src/shared.rs"))
@@ -5404,6 +5423,10 @@ fn trojan_inbound_udp_packet_framing_stays_in_protocol_crate() {
             && protocol_inbound.contains("struct TrojanInboundUdpSession")
             && protocol_inbound.contains("struct TrojanInboundUdpRequest")
             && protocol_inbound.contains("struct TrojanInboundUdpDispatchParts")
+            && !protocol_dispatch_parts.contains("pub target: zero_core::Address")
+            && !protocol_dispatch_parts.contains("pub port: u16")
+            && !protocol_dispatch_parts.contains("pub payload: Vec<u8>")
+            && !protocol_dispatch_parts.contains("pub client_session_id: Option<u64>")
             && protocol_inbound.contains("struct TrojanInboundUdpDispatchView")
             && protocol_inbound.contains("fn into_parts")
             && protocol_inbound.contains("fn into_dispatch_parts")

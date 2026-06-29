@@ -100,11 +100,11 @@ pub struct Hysteria2InboundUdpRequest {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Hysteria2InboundUdpDispatchParts {
-    pub request_session_id: u16,
-    pub target: Address,
-    pub port: u16,
-    pub payload: Vec<u8>,
-    pub client_session_id: Option<u64>,
+    request_session_id: u16,
+    target: Address,
+    port: u16,
+    payload: Vec<u8>,
+    client_session_id: Option<u64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -133,6 +133,16 @@ impl Hysteria2InboundUdpDispatchView {
 
     fn request_session_id(&self) -> u16 {
         self.parts.request_session_id
+    }
+}
+
+impl Hysteria2InboundUdpDispatchParts {
+    pub fn request_session_id(&self) -> u16 {
+        self.request_session_id
+    }
+
+    pub fn into_pipe_parts(self) -> (Address, u16, Vec<u8>, Option<u64>) {
+        (self.target, self.port, self.payload, self.client_session_id)
     }
 }
 
@@ -254,7 +264,7 @@ impl Hysteria2InboundUdpSession {
         proxy_session_id: u64,
         parts: &Hysteria2InboundUdpDispatchParts,
     ) {
-        self.record_proxy_session(proxy_session_id, parts.request_session_id);
+        self.record_proxy_session(proxy_session_id, parts.request_session_id());
     }
 
     pub fn record_proxy_session_for_view(

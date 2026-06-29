@@ -196,10 +196,10 @@ impl ShadowsocksInboundUdpPacket {
 #[cfg(feature = "crypto")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ShadowsocksInboundUdpDispatchParts {
-    pub target: Address,
-    pub port: u16,
-    pub payload: Vec<u8>,
-    pub client_session_id: Option<u64>,
+    target: Address,
+    port: u16,
+    payload: Vec<u8>,
+    client_session_id: Option<u64>,
 }
 
 #[cfg(feature = "crypto")]

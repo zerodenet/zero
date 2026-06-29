@@ -58,10 +58,10 @@ pub struct TrojanInboundUdpRequest {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TrojanInboundUdpDispatchParts {
-    pub target: zero_core::Address,
-    pub port: u16,
-    pub payload: Vec<u8>,
-    pub client_session_id: Option<u64>,
+    target: zero_core::Address,
+    port: u16,
+    payload: Vec<u8>,
+    client_session_id: Option<u64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
