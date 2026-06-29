@@ -12,9 +12,10 @@ pub(super) struct PathKey {
 
 impl PathKey {
     pub(super) fn from_lookup(lookup: PacketPathLookupKey) -> Self {
+        let (carrier_key, datagram) = lookup.into_path_parts();
         Self {
-            carrier_key: lookup.carrier_cache_key,
-            datagram: lookup.datagram,
+            carrier_key,
+            datagram,
         }
     }
 

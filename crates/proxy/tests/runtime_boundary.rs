@@ -6843,8 +6843,11 @@ fn udp_packet_path_carrier_snapshot_is_protocol_neutral() {
         traits.contains("struct PacketPathFlowSnapshot")
             && traits.contains("carrier_cache_key: String")
             && traits.contains("datagram: UdpDatagramKey")
+            && !traits.contains("pub(crate) carrier_cache_key: String")
+            && !traits.contains("pub(crate) datagram: UdpDatagramKey")
+            && traits.contains("pub(crate) fn lookup_key(&self) -> PacketPathLookupKey")
             && !traits.contains("datagram_cache_key: String"),
-        "packet-path flow snapshots should store only neutral carrier/datagram cache identities"
+        "packet-path flow snapshots should store only private neutral carrier/datagram cache identities"
     );
 }
 
@@ -12130,6 +12133,7 @@ fn udp_build_traits_consume_protocol_parts() {
     let stream_manager = read("src/runtime/udp_flow/managed/stream_manager.rs");
     let datagram_manager = read("src/runtime/udp_flow/managed/datagram_manager.rs");
     let packet_path = read("src/runtime/udp_flow/packet_path.rs");
+    let packet_path_key = read("src/runtime/udp_flow/packet_path_chain/key.rs");
     let socks5_packet_path = read("src/adapters/socks5/udp/packet_path.rs");
     let shadowsocks_packet_path = read("src/adapters/shadowsocks/udp/packet_path.rs");
     let shadowsocks_managed = read("src/adapters/shadowsocks/udp/managed.rs");
@@ -12210,6 +12214,7 @@ fn udp_build_traits_consume_protocol_parts() {
     assert!(
         packet_path.contains("fn into_parts(self) -> (String, String, u16);")
             && packet_path.contains("let (cache_key, server, port) = build.into_parts();")
+            && packet_path.contains("fn into_path_parts(self) -> (String, UdpDatagramKey)")
             && !packet_path.contains("fn server(&self) -> &str;")
             && !packet_path.contains("fn port(&self) -> u16;")
             && socks5_packet_path.contains("self.into_parts()")
@@ -12227,6 +12232,12 @@ fn udp_build_traits_consume_protocol_parts() {
             )
             && hysteria2_protocol.contains("pub fn into_parts(self) -> (String, String, u16)"),
         "packet-path carrier descriptors should cross into proxy as consumed neutral parts"
+    );
+    assert!(
+        packet_path_key.contains("let (carrier_key, datagram) = lookup.into_path_parts();")
+            && !packet_path_key.contains("lookup.carrier_cache_key")
+            && !packet_path_key.contains("lookup.datagram"),
+        "packet-path lookup keys should cross chain management through consuming helpers, not public field reads"
     );
     for (name, source) in [
         ("socks5 descriptor", &socks5_descriptor_impl),

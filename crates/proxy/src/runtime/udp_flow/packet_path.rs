@@ -199,8 +199,8 @@ impl UdpDatagramEndpoint {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct PacketPathLookupKey {
-    pub(crate) carrier_cache_key: String,
-    pub(crate) datagram: UdpDatagramKey,
+    carrier_cache_key: String,
+    datagram: UdpDatagramKey,
 }
 
 impl PacketPathLookupKey {
@@ -217,12 +217,16 @@ impl PacketPathLookupKey {
     pub(crate) fn datagram_endpoint(&self) -> (String, u16) {
         (self.datagram.server.clone(), self.datagram.port)
     }
+
+    pub(crate) fn into_path_parts(self) -> (String, UdpDatagramKey) {
+        (self.carrier_cache_key, self.datagram)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct PacketPathFlowSnapshot {
-    pub(crate) carrier_cache_key: String,
-    pub(crate) datagram: UdpDatagramKey,
+    carrier_cache_key: String,
+    datagram: UdpDatagramKey,
 }
 
 impl PacketPathFlowSnapshot {
