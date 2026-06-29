@@ -280,6 +280,7 @@ fn inbound_udp_response_accounting_uses_runtime_helpers() {
         "src/inbound/trojan.rs",
         "src/inbound/mieru.rs",
         "src/inbound/hysteria2.rs",
+        "src/inbound/shadowsocks/udp.rs",
         "src/inbound/socks5/udp_associate/direct_response.rs",
         "src/inbound/socks5/udp_associate/chain_response.rs",
         "src/inbound/socks5/udp_associate/upstream_response.rs",

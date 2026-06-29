@@ -9,6 +9,7 @@ use zero_core::ProtocolType;
 use zero_engine::EngineError;
 
 use crate::runtime::pipe::{KernelPipe, UdpPipe, UdpPipeInput};
+use crate::runtime::udp_flow::helpers::UdpInboundResponseAccounting;
 use crate::runtime::Proxy;
 
 impl Proxy {
@@ -68,20 +69,27 @@ impl Proxy {
                 recv = direct_sock.recv_from_addr(&mut direct_buf) => {
                     let (n, sender) = recv?;
                     let session_id = dispatch.direct_response_session_id(sender);
-                    let _ = udp_session
+                    let response_accounting =
+                        UdpInboundResponseAccounting::record_received(self, session_id, n);
+                    if let Ok(Some(written)) = udp_session
                         .send_response_for_proxy_session_to_sender_tokio(
                             udp_socket.as_ref(),
                             session_id,
                             sender,
                             &direct_buf[..n],
                         )
-                        .await;
+                        .await
+                    {
+                        response_accounting.record_sent(written);
+                    }
                 }
 
                 Some(chain_result) = chain_tasks.join_next() => {
                     match chain_result {
                         Ok(Ok((target, port, payload, session_id))) => {
-                            let _ = udp_session
+                            let response_accounting =
+                                UdpInboundResponseAccounting::record_received(self, session_id, payload.len());
+                            if let Ok(Some(written)) = udp_session
                                 .send_response_for_proxy_session_to_client_tokio(
                                     udp_socket.as_ref(),
                                     session_id,
@@ -89,7 +97,10 @@ impl Proxy {
                                     port,
                                     &payload,
                                 )
-                                .await;
+                                .await
+                            {
+                                response_accounting.record_sent(written);
+                            }
                         }
                         Ok(Err(error)) => {
                             warn!(error = %error, "ss chain response error");
