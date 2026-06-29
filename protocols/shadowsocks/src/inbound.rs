@@ -387,6 +387,7 @@ impl ShadowsocksInboundUdpCodec {
 pub struct ShadowsocksInboundUdpSession {
     codec: ShadowsocksInboundUdpCodec,
     proxy_sessions: std::collections::HashMap<u64, Option<u64>>,
+    proxy_clients: std::collections::HashMap<u64, std::net::SocketAddr>,
 }
 
 #[cfg(feature = "crypto")]
@@ -395,6 +396,7 @@ impl ShadowsocksInboundUdpSession {
         Self {
             codec,
             proxy_sessions: std::collections::HashMap::new(),
+            proxy_clients: std::collections::HashMap::new(),
         }
     }
 
@@ -472,6 +474,32 @@ impl ShadowsocksInboundUdpSession {
             self.proxy_sessions
                 .insert(proxy_session_id, client_session_id);
         }
+    }
+
+    pub fn record_client_session(
+        &mut self,
+        proxy_session_id: u64,
+        client_session_id: Option<u64>,
+        client: std::net::SocketAddr,
+    ) {
+        self.record_proxy_session(proxy_session_id, client_session_id);
+        self.proxy_clients.insert(proxy_session_id, client);
+    }
+
+    pub async fn send_proxy_session_response_to_client_tokio(
+        &self,
+        socket: &tokio::net::UdpSocket,
+        proxy_session_id: u64,
+        target: &Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<Option<usize>, Error> {
+        let Some(&client) = self.proxy_clients.get(&proxy_session_id) else {
+            return Ok(None);
+        };
+        self.send_response_to_client_tokio(socket, proxy_session_id, target, port, payload, client)
+            .await
+            .map(Some)
     }
 
     pub fn response_target_for_proxy_session(

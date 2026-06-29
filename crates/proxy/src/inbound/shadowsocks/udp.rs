@@ -1,9 +1,6 @@
 //! Shadowsocks UDP relay: protocol framing and routing through the UDP pipe.
 
-use std::net::SocketAddr;
 use std::sync::Arc;
-
-use std::collections::HashMap;
 
 use shadowsocks::ShadowsocksInboundProfile;
 use tokio::net::UdpSocket;
@@ -23,8 +20,6 @@ impl Proxy {
     ) -> Result<(), EngineError> {
         let mut dispatch = crate::runtime::udp_dispatch::UdpDispatch::new(inbound_tag).await?;
         let mut udp_session = profile.udp_session();
-        // Map session_id -> client_addr for response delivery.
-        let mut client_sessions: HashMap<u64, SocketAddr> = HashMap::new();
         let mut buf = [0u8; 65536];
         let mut direct_buf = [0u8; 65536];
 
@@ -59,8 +54,11 @@ impl Proxy {
                         .await
                     {
                         Ok(session_id) => {
-                            client_sessions.insert(session_id, client_addr);
-                            udp_session.record_proxy_session(session_id, client_session_id);
+                            udp_session.record_client_session(
+                                session_id,
+                                client_session_id,
+                                client_addr,
+                            );
                         }
                         Err(error) => {
                             warn!(error = %error, "ss udp dispatch failed");
@@ -71,19 +69,16 @@ impl Proxy {
                 recv = direct_sock.recv_from_addr(&mut direct_buf) => {
                     let (n, sender) = recv?;
                     if let Some(sid) = dispatch.direct_response_session_id(sender) {
-                        if let Some(&client) = client_sessions.get(&sid) {
-                            let target = crate::runtime::udp_flow::helpers::address_from_socket_addr(sender);
-                            let _ = udp_session
-                                .send_response_to_client_tokio(
-                                    udp_socket.as_ref(),
-                                    sid,
-                                    &target,
-                                    sender.port(),
-                                    &direct_buf[..n],
-                                    client,
-                                )
-                                .await;
-                        }
+                        let target = crate::runtime::udp_flow::helpers::address_from_socket_addr(sender);
+                        let _ = udp_session
+                            .send_proxy_session_response_to_client_tokio(
+                                udp_socket.as_ref(),
+                                sid,
+                                &target,
+                                sender.port(),
+                                &direct_buf[..n],
+                            )
+                            .await;
                     }
                 }
 
@@ -91,18 +86,15 @@ impl Proxy {
                     match chain_result {
                         Ok(Ok((target, port, payload, session_id))) => {
                             if let Some(sid) = session_id {
-                                if let Some(&client) = client_sessions.get(&sid) {
-                                    let _ = udp_session
-                                        .send_response_to_client_tokio(
-                                            udp_socket.as_ref(),
-                                            sid,
-                                            &target,
-                                            port,
-                                            &payload,
-                                            client,
-                                        )
-                                        .await;
-                                }
+                                let _ = udp_session
+                                    .send_proxy_session_response_to_client_tokio(
+                                        udp_socket.as_ref(),
+                                        sid,
+                                        &target,
+                                        port,
+                                        &payload,
+                                    )
+                                    .await;
                             }
                         }
                         Ok(Err(error)) => {
