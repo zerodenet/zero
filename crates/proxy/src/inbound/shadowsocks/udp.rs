@@ -53,9 +53,9 @@ impl Proxy {
                         .await
                     {
                         Ok(session_id) => {
-                            udp_session.record_client_session(
+                            udp_session.record_dispatched_client_session(
                                 session_id,
-                                client_session_id,
+                                &dispatch_parts,
                                 client_addr,
                             );
                         }
