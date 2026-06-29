@@ -47,6 +47,10 @@ impl TrackedSocks5UdpAssociation {
         &self.identity
     }
 
+    fn lifecycle_record(&self) -> socks5::udp::Socks5UdpAssociationLifecycleRecord {
+        self.identity.lifecycle_record()
+    }
+
     fn close(self, reason: UpstreamAssociationCloseReason) {
         self.association.close(reason);
     }
@@ -163,11 +167,12 @@ impl Socks5UdpRuntime {
 
         if !needs_new_association {
             proxy.record_udp_upstream_association_reused();
+            let record = target.lifecycle_record();
             crate::logging::log_udp_upstream_association_reused(
                 inbound_tag,
-                target.outbound_tag(),
-                target.server(),
-                target.port(),
+                record.outbound_tag(),
+                record.server(),
+                record.port(),
             );
             return Ok(());
         }
@@ -189,11 +194,12 @@ impl Socks5UdpRuntime {
             Ok(a) => {
                 proxy.record_udp_upstream_association_created();
                 self.idle_deadline = Some(TokioInstant::now() + proxy.udp_upstream_idle_timeout());
+                let record = target.lifecycle_record();
                 crate::logging::log_udp_upstream_association_created(
                     inbound_tag,
-                    target.outbound_tag(),
-                    target.server(),
-                    target.port(),
+                    record.outbound_tag(),
+                    record.server(),
+                    record.port(),
                     proxy.udp_upstream_idle_timeout(),
                 );
                 self.upstream = Some(TrackedSocks5UdpAssociation::new(target, a));
@@ -208,13 +214,13 @@ impl Socks5UdpRuntime {
 
     pub(super) fn drop_after_send_error(&mut self, inbound_tag: &str, error: &EngineError) {
         if let Some(assoc) = self.upstream.take() {
-            let active = assoc.identity().clone();
+            let record = assoc.lifecycle_record();
             assoc.close(UpstreamAssociationCloseReason::Dropped);
             crate::logging::log_udp_upstream_association_dropped(
                 inbound_tag,
-                active.outbound_tag(),
-                active.server(),
-                active.port(),
+                record.outbound_tag(),
+                record.server(),
+                record.port(),
                 error,
             );
         }
@@ -265,9 +271,9 @@ impl Socks5UdpRuntime {
 
     pub(crate) fn close_idle(&mut self) -> Option<ClosedSocks5UdpAssociation> {
         self.take_upstream().map(|association| {
-            let active = association.identity().clone();
+            let record = association.lifecycle_record();
             association.close(UpstreamAssociationCloseReason::IdleTimeout);
-            let (outbound_tag, server, port) = active.into_parts();
+            let (outbound_tag, server, port) = record.into_parts();
             ClosedSocks5UdpAssociation {
                 outbound_tag,
                 server,
@@ -278,9 +284,9 @@ impl Socks5UdpRuntime {
 
     pub(crate) fn close_dropped(&mut self) -> Option<ClosedSocks5UdpAssociation> {
         self.take_upstream().map(|association| {
-            let active = association.identity().clone();
+            let record = association.lifecycle_record();
             association.close(UpstreamAssociationCloseReason::Dropped);
-            let (outbound_tag, server, port) = active.into_parts();
+            let (outbound_tag, server, port) = record.into_parts();
             ClosedSocks5UdpAssociation {
                 outbound_tag,
                 server,

@@ -82,6 +82,13 @@ pub struct Socks5UdpAssociationIdentity {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Socks5UdpAssociationLifecycleRecord {
+    outbound_tag: alloc::string::String,
+    server: alloc::string::String,
+    port: u16,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Socks5UdpAssociationEndpoint {
     server: alloc::string::String,
     port: u16,
@@ -159,6 +166,32 @@ impl Socks5UdpAssociationIdentity {
         self.outbound_tag == other.outbound_tag
             && self.server == other.server
             && self.port == other.port
+    }
+
+    pub fn lifecycle_record(&self) -> Socks5UdpAssociationLifecycleRecord {
+        Socks5UdpAssociationLifecycleRecord {
+            outbound_tag: self.outbound_tag.clone(),
+            server: self.server.clone(),
+            port: self.port,
+        }
+    }
+}
+
+impl Socks5UdpAssociationLifecycleRecord {
+    pub fn outbound_tag(&self) -> &str {
+        &self.outbound_tag
+    }
+
+    pub fn server(&self) -> &str {
+        &self.server
+    }
+
+    pub fn port(&self) -> u16 {
+        self.port
+    }
+
+    pub fn into_parts(self) -> (alloc::string::String, alloc::string::String, u16) {
+        (self.outbound_tag, self.server, self.port)
     }
 }
 
