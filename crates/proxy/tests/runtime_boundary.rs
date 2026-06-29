@@ -1061,6 +1061,9 @@ fn hysteria2_inbound_uses_adapter_request_model() {
     let adapter = read("src/adapters/hysteria2/inbound.rs");
     let protocol_udp = fs::read_to_string(repo_root().join("protocols/hysteria2/src/udp.rs"))
         .expect("read hysteria2 protocol udp source");
+    let protocol_inbound =
+        fs::read_to_string(repo_root().join("protocols/hysteria2/src/inbound.rs"))
+            .expect("read hysteria2 protocol inbound source");
     let protocol_lib = fs::read_to_string(repo_root().join("protocols/hysteria2/src/lib.rs"))
         .expect("read hysteria2 protocol lib source");
 
@@ -1087,6 +1090,9 @@ fn hysteria2_inbound_uses_adapter_request_model() {
     for forbidden in [
         "parse_auth_frame",
         "verify_hmac",
+        "authenticate_client(&salt",
+        "auth_error_response",
+        "auth_ok_response",
         "build_auth_error",
         "build_auth_ok",
         "build_connect_error",
@@ -1098,6 +1104,17 @@ fn hysteria2_inbound_uses_adapter_request_model() {
             "Hysteria2 inbound should delegate private auth/connect framing to the protocol crate; found `{forbidden}`"
         );
     }
+    assert!(
+        inbound.contains("profile\n            .authenticate_connection(&mut auth_stream, &salt)")
+            && inbound.contains("Hysteria2Inbound.accept_tcp_stream(&mut stream).await")
+            && protocol_inbound.contains("pub async fn authenticate_connection")
+            && protocol_inbound.contains("pub async fn accept_tcp_stream")
+            && protocol_inbound.contains("self.authenticate_client(salt")
+            && protocol_inbound.contains("self.auth_error_response")
+            && protocol_inbound.contains("self.auth_ok_response")
+            && protocol_inbound.contains("self.accept_tcp_connect_header(&header_buf[..n])"),
+        "Hysteria2 protocol crate should own auth stream and TCP connect header IO while proxy only orchestrates QUIC tasks"
+    );
     for forbidden in [
         "build_udp_datagram",
         "parse_udp_datagram",

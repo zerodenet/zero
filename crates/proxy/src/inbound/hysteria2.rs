@@ -228,7 +228,7 @@ impl Proxy {
             return Err(EngineError::Io(io::Error::other("quic key export failed")));
         }
 
-        // Wait for auth stream from client
+        // Wait for auth stream from client.
         let (send, recv) = match conn.accept_bi().await {
             Ok(stream) => stream,
             Err(e) => {
@@ -240,32 +240,9 @@ impl Proxy {
 
         let mut auth_stream = Hysteria2Stream::new(send, recv);
 
-        // Read auth frame
-        let mut auth_buf = [0u8; 64];
-        let n = AsyncSocket::read(&mut auth_stream, &mut auth_buf)
-            .await
-            .map_err(|e| EngineError::Io(io::Error::other(format!("read auth: {e}"))))?;
-        if n == 0 {
-            return Err(EngineError::Io(io::Error::new(
-                io::ErrorKind::ConnectionAborted,
-                "hysteria2: EOF on auth stream",
-            )));
-        }
-
-        if profile.authenticate_client(&salt, &auth_buf[..n]).is_err() {
-            let err_resp = profile.auth_error_response("authentication failed");
-            let _ = AsyncSocket::write_all(&mut auth_stream, &err_resp).await;
-            return Err(EngineError::Io(io::Error::new(
-                io::ErrorKind::PermissionDenied,
-                "hysteria2: auth failed",
-            )));
-        }
-
-        let ok_resp = profile.auth_ok_response();
-        AsyncSocket::write_all(&mut auth_stream, &ok_resp)
-            .await
-            .map_err(|e| EngineError::Io(io::Error::other(format!("write auth ok: {e}"))))?;
-
+        profile
+            .authenticate_connection(&mut auth_stream, &salt)
+            .await?;
         drop(auth_stream);
 
         info!(inbound_tag, "hysteria2 auth success");
@@ -302,18 +279,8 @@ impl Proxy {
                             let tag = inbound_tag.to_owned();
                             let handler = stream_handler.clone();
                             stream_tasks.spawn(async move {
-                                // Inline accept: parse connect header, build session
                                 let mut stream = Hysteria2Stream::new(send, recv);
-                                let mut header_buf = [0u8; 512];
-                                let n = match AsyncSocket::read(&mut stream, &mut header_buf).await {
-                                    Ok(0) => return Ok(()),
-                                    Ok(n) => n,
-                                    Err(_) => return Ok(()),
-                                };
-
-                                let session = match Hysteria2Inbound
-                                    .accept_tcp_connect_header(&header_buf[..n])
-                                {
+                                let session = match Hysteria2Inbound.accept_tcp_stream(&mut stream).await {
                                     Ok(session) => session,
                                     Err(_) => return Ok(()),
                                 };

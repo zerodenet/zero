@@ -3,6 +3,7 @@
 use alloc::string::String;
 use alloc::vec::Vec;
 use zero_core::{Error, Network, ProtocolType, Session, SessionAuth};
+use zero_traits::AsyncSocket;
 
 /// Hysteria2 inbound handler — validates client auth and dispatches streams.
 #[derive(Debug, Default, Clone, Copy)]
@@ -48,6 +49,36 @@ impl Hysteria2InboundProfile {
     pub fn auth_error_response(&self, message: &str) -> Vec<u8> {
         crate::shared::build_auth_error(message)
     }
+
+    pub async fn authenticate_connection<S>(
+        &self,
+        stream: &mut S,
+        salt: &[u8; 32],
+    ) -> Result<(), Error>
+    where
+        S: AsyncSocket,
+    {
+        let mut auth_buf = [0u8; 64];
+        let n = stream
+            .read(&mut auth_buf)
+            .await
+            .map_err(|_| Error::Io("hysteria2: read auth"))?;
+        if n == 0 {
+            return Err(Error::Protocol("hysteria2: EOF on auth stream"));
+        }
+
+        if self.authenticate_client(salt, &auth_buf[..n]).is_err() {
+            let err_resp = self.auth_error_response("authentication failed");
+            let _ = stream.write_all(&err_resp).await;
+            return Err(Error::Protocol("hysteria2: auth failed"));
+        }
+
+        let ok_resp = self.auth_ok_response();
+        stream
+            .write_all(&ok_resp)
+            .await
+            .map_err(|_| Error::Io("hysteria2: write auth ok"))
+    }
 }
 
 /// Trait for looking up Hysteria2 users by password validation.
@@ -74,6 +105,21 @@ impl Hysteria2Inbound {
             Network::Tcp,
             ProtocolType::Hysteria2,
         ))
+    }
+
+    pub async fn accept_tcp_stream<S>(&self, stream: &mut S) -> Result<Session, Error>
+    where
+        S: AsyncSocket,
+    {
+        let mut header_buf = [0u8; 512];
+        let n = stream
+            .read(&mut header_buf)
+            .await
+            .map_err(|_| Error::Io("hysteria2: read tcp connect header"))?;
+        if n == 0 {
+            return Err(Error::Protocol("hysteria2: EOF on tcp connect stream"));
+        }
+        self.accept_tcp_connect_header(&header_buf[..n])
     }
 
     pub fn connect_ok_response(&self) -> Vec<u8> {
