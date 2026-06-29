@@ -8,10 +8,9 @@ use crate::runtime::udp_flow::managed::{
 };
 use crate::runtime::Proxy;
 use crate::transport::{
-    open_trojan_udp_tls_relay_stream, open_trojan_udp_tls_stream, TcpRelayStream,
+    open_trojan_udp_tls_relay_stream, open_trojan_udp_tls_stream, TcpRelayStream, TrojanTlsProfile,
     TrojanUdpTlsOptions,
 };
-use zero_config::ClientTlsConfig;
 use zero_core::Session;
 use zero_engine::EngineError;
 
@@ -115,20 +114,13 @@ fn udp_tls_options<'a>(
     tls_profile: trojan::udp::TrojanUdpTlsProfile,
 ) -> TrojanUdpTlsOptions<'a> {
     TrojanUdpTlsOptions {
-        tls_config: udp_tls_config(tls_profile),
+        tls_profile: TrojanTlsProfile::from_parts(
+            tls_profile.server_name(),
+            tls_profile.insecure(),
+            tls_profile.client_fingerprint(),
+        ),
         source_dir: proxy.config.source_dir(),
         server: endpoint.server,
-    }
-}
-
-fn udp_tls_config(tls_profile: trojan::udp::TrojanUdpTlsProfile) -> ClientTlsConfig {
-    ClientTlsConfig {
-        server_name: tls_profile.server_name().map(ToOwned::to_owned),
-        disable_sni: false,
-        ca_cert_path: None,
-        insecure: tls_profile.insecure(),
-        alpn: Vec::new(),
-        client_fingerprint: tls_profile.client_fingerprint().map(ToOwned::to_owned),
     }
 }
 

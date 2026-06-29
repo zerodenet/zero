@@ -2371,23 +2371,31 @@ fn trojan_tcp_connect_uses_request_model() {
     );
     assert!(
         adapter.contains("open_trojan_udp_tls_stream")
-            && adapter.contains("trojan_tcp_tls_config(")
             && adapter.contains("trojan_tls_options("),
-        "Trojan adapter TCP glue should share the Trojan transport TLS opening path with UDP while keeping config/profile conversion outside runtime"
+        "Trojan adapter TCP glue should share the Trojan transport TLS opening path with UDP while keeping TLS opening outside runtime"
     );
     assert!(
         adapter.contains("TrojanTcpOutboundProfile::from_config_parts")
+            && adapter.contains("TrojanTcpTlsProfile::from_config_parts")
+            && adapter.contains("TrojanTlsProfile::from_parts")
+            && !adapter.contains("ClientTlsConfig")
+            && !adapter.contains("ClientTlsConfig {")
+            && !adapter.contains("trojan_tcp_tls_config(")
             && !adapter.contains("TrojanTcpTunnelTarget::new")
             && !adapter.contains("TrojanTcpTunnelTarget {"),
-        "Trojan adapter TCP glue should use a protocol-owned outbound profile instead of constructing TCP targets directly"
+        "Trojan adapter TCP glue should use protocol-owned outbound/TLS profiles instead of constructing TCP targets or raw TLS config directly"
     );
     assert!(
         protocol_outbound.contains("struct TrojanTcpOutboundProfile")
+            && protocol_outbound.contains("pub struct TrojanTcpTlsProfile")
+            && protocol_outbound.contains("pub fn server_name(&self) -> Option<&str>")
+            && protocol_outbound.contains("pub fn insecure(&self) -> bool")
+            && protocol_outbound.contains("pub fn client_fingerprint(&self) -> Option<&str>")
             && protocol_outbound.contains("pub fn from_config_parts")
             && protocol_outbound.contains("pub async fn establish_tcp_tunnel")
             && protocol_outbound.contains("impl<'a> TrojanTcpTunnelTarget<'a>")
             && protocol_outbound.contains("pub fn new(session: &'a Session, password: &'a str)"),
-        "Trojan protocol crate should own TCP target construction and profile-backed handshake"
+        "Trojan protocol crate should own TCP target construction and profile-backed handshake/TLS identity"
     );
 }
 
@@ -9462,22 +9470,26 @@ fn trojan_udp_tls_connect_lives_outside_manager() {
             && connector.contains("open_trojan_udp_tls_stream")
             && connector.contains("open_trojan_udp_tls_relay_stream")
             && connector.contains("TrojanUdpTlsOptions")
-            && connector.contains("fn udp_tls_config(")
-            && connector.contains("ClientTlsConfig {")
             && connector.contains("tls_profile_spec().tls_profile(")
             && !connector.contains("resume.tls_profile(")
             && connector.contains("tls_profile.server_name()")
             && connector.contains("tls_profile.insecure()")
             && connector.contains("tls_profile.client_fingerprint()")
+            && connector.contains("TrojanTlsProfile::from_parts")
+            && !connector.contains("fn udp_tls_config(")
+            && !connector.contains("ClientTlsConfig")
+            && !connector.contains("ClientTlsConfig {")
             && transport.contains("pub struct TrojanUdpTlsOptions")
+            && transport.contains("pub struct TrojanTlsProfile")
             && transport.contains("ClientTlsConfig")
-            && transport.contains("tls_config: ClientTlsConfig")
+            && transport.contains("fn into_tls_config(self) -> ClientTlsConfig")
+            && transport.contains("tls_profile: TrojanTlsProfile")
             && transport.contains("crate::tls::connect_tls_upstream")
             && transport.contains("crate::tls::connect_tls_stream")
             && !transport.contains("trojan::")
             && !transport.contains("TrojanUdpTlsProfile")
-            && !transport.contains("tls_profile."),
-        "zero-transport should own only neutral TLS stream opening; Trojan TLS profile conversion stays in the adapter UDP connector boundary"
+            && !transport.contains("TrojanTcpTlsProfile"),
+        "zero-transport should own neutral TLS stream opening and config materialization; Trojan protocol profiles stay outside transport"
     );
 }
 

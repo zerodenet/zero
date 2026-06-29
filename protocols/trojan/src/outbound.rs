@@ -46,6 +46,39 @@ impl TrojanTcpOutboundProfile {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TrojanTcpTlsProfile {
+    server_name: Option<String>,
+    insecure: bool,
+    client_fingerprint: Option<String>,
+}
+
+impl TrojanTcpTlsProfile {
+    pub fn from_config_parts(
+        sni: Option<&str>,
+        insecure: bool,
+        client_fingerprint: Option<&str>,
+    ) -> Self {
+        Self {
+            server_name: sni.map(ToOwned::to_owned),
+            insecure,
+            client_fingerprint: client_fingerprint.map(ToOwned::to_owned),
+        }
+    }
+
+    pub fn server_name(&self) -> Option<&str> {
+        self.server_name.as_deref()
+    }
+
+    pub fn insecure(&self) -> bool {
+        self.insecure
+    }
+
+    pub fn client_fingerprint(&self) -> Option<&str> {
+        self.client_fingerprint.as_deref()
+    }
+}
+
 impl TrojanOutbound {
     pub fn protocol(&self) -> ProtocolType {
         ProtocolType::Trojan

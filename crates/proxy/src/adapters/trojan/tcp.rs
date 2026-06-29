@@ -1,5 +1,4 @@
 use tokio::io::AsyncWriteExt;
-use zero_config::ClientTlsConfig;
 use zero_core::Session;
 use zero_engine::{EngineError, ResolvedLeafOutbound};
 
@@ -9,7 +8,7 @@ use crate::protocol_registry::ProtocolSupportCapability;
 use crate::runtime::Proxy;
 use crate::transport::{
     open_trojan_udp_tls_stream, EstablishedTcpOutbound, MeteredStream, TcpOutboundFailure,
-    TcpRelayStream, TrojanUdpTlsOptions,
+    TcpRelayStream, TrojanTlsProfile, TrojanUdpTlsOptions,
 };
 
 impl TrojanAdapter {
@@ -104,7 +103,7 @@ async fn connect_tcp(request: TrojanTcpConnect<'_>) -> Result<TcpRelayStream, En
         trojan_tls_options(
             proxy,
             server,
-            trojan_tcp_tls_config(sni, insecure, client_fingerprint),
+            trojan::TrojanTcpTlsProfile::from_config_parts(sni, insecure, client_fingerprint),
         ),
     )
     .await?;
@@ -127,27 +126,16 @@ async fn connect_tcp(request: TrojanTcpConnect<'_>) -> Result<TcpRelayStream, En
 fn trojan_tls_options<'a>(
     proxy: &'a Proxy,
     server: &'a str,
-    tls_config: ClientTlsConfig,
+    profile: trojan::TrojanTcpTlsProfile,
 ) -> TrojanUdpTlsOptions<'a> {
     TrojanUdpTlsOptions {
-        tls_config,
+        tls_profile: TrojanTlsProfile::from_parts(
+            profile.server_name(),
+            profile.insecure(),
+            profile.client_fingerprint(),
+        ),
         source_dir: proxy.config.source_dir(),
         server,
-    }
-}
-
-fn trojan_tcp_tls_config(
-    sni: Option<&str>,
-    insecure: bool,
-    client_fingerprint: Option<&str>,
-) -> ClientTlsConfig {
-    ClientTlsConfig {
-        server_name: sni.map(ToOwned::to_owned),
-        disable_sni: false,
-        ca_cert_path: None,
-        insecure,
-        alpn: Vec::new(),
-        client_fingerprint: client_fingerprint.map(ToOwned::to_owned),
     }
 }
 

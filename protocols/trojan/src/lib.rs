@@ -14,4 +14,6 @@ pub mod udp;
 
 pub use inbound::{TrojanAccept, TrojanInbound, TrojanInboundProfile};
 pub use metadata::TrojanProtocol;
-pub use outbound::{TrojanOutbound, TrojanTcpOutboundProfile, TrojanTcpTunnelTarget};
+pub use outbound::{
+    TrojanOutbound, TrojanTcpOutboundProfile, TrojanTcpTlsProfile, TrojanTcpTunnelTarget,
+};
