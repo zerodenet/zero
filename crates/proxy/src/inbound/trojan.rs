@@ -133,7 +133,7 @@ pub(crate) async fn run_trojan_listener_with_bound(
                 let p = proxy.clone();
                 let t = tag.clone();
                 let h = handler.clone();
-                let source_addr = remote_addr_to_socket(peer);
+                let source_addr = zero_platform_tokio::remote_ip_to_socket_addr(peer);
                 conns.spawn(async move {
                     match h.accept(s.into()).await {
                         Ok((session, client)) => {
@@ -282,15 +282,4 @@ impl Proxy {
 
         Ok(())
     }
-}
-
-fn remote_addr_to_socket(addr: Option<zero_traits::IpAddress>) -> Option<std::net::SocketAddr> {
-    addr.map(|ip| match ip {
-        zero_traits::IpAddress::V4(octets) => {
-            std::net::SocketAddr::new(std::net::IpAddr::V4(std::net::Ipv4Addr::from(octets)), 0)
-        }
-        zero_traits::IpAddress::V6(octets) => {
-            std::net::SocketAddr::new(std::net::IpAddr::V6(std::net::Ipv6Addr::from(octets)), 0)
-        }
-    })
 }

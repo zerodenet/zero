@@ -104,7 +104,7 @@ pub(crate) async fn run_http_connect_listener_with_bound(
                         let engine = proxy.clone();
                         let tag = inbound.tag.clone();
                         let handler = handler.clone();
-                        let source_addr = remote_addr_to_socket(remote_addr);
+                        let source_addr = zero_platform_tokio::remote_ip_to_socket_addr(remote_addr);
                         connections.spawn(async move {
                             let mut metered = MeteredStream::new(
                                 TcpRelayStream::from(stream),
@@ -207,15 +207,4 @@ fn build_redirect_response(
         }
     }
     None
-}
-
-fn remote_addr_to_socket(addr: Option<zero_traits::IpAddress>) -> Option<std::net::SocketAddr> {
-    addr.map(|ip| match ip {
-        zero_traits::IpAddress::V4(octets) => {
-            std::net::SocketAddr::new(std::net::IpAddr::V4(std::net::Ipv4Addr::from(octets)), 0)
-        }
-        zero_traits::IpAddress::V6(octets) => {
-            std::net::SocketAddr::new(std::net::IpAddr::V6(std::net::Ipv6Addr::from(octets)), 0)
-        }
-    })
 }

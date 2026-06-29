@@ -98,7 +98,7 @@ pub(crate) async fn run_direct_listener_with_bound(
                         let tgt = target.clone();
                         let pt = port;
                         let h = handler.clone();
-                        let src = remote_addr_to_socket(remote_addr);
+                        let src = zero_platform_tokio::remote_ip_to_socket_addr(remote_addr);
                         connections.spawn(async move {
                             let address = match tgt.as_deref() {
                                 Some(d) if d.parse::<std::net::Ipv4Addr>().is_ok() => {
@@ -134,15 +134,4 @@ pub(crate) async fn run_direct_listener_with_bound(
     connections.abort_all();
     info!(inbound_tag = %inbound.tag, protocol = "direct", listen = %local_addr, "inbound listener stopped");
     Ok(())
-}
-
-fn remote_addr_to_socket(addr: Option<zero_traits::IpAddress>) -> Option<std::net::SocketAddr> {
-    addr.map(|ip| match ip {
-        zero_traits::IpAddress::V4(o) => {
-            std::net::SocketAddr::new(std::net::IpAddr::V4(std::net::Ipv4Addr::from(o)), 0)
-        }
-        zero_traits::IpAddress::V6(o) => {
-            std::net::SocketAddr::new(std::net::IpAddr::V6(std::net::Ipv6Addr::from(o)), 0)
-        }
-    })
 }

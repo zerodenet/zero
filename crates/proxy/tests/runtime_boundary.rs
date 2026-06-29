@@ -2637,6 +2637,57 @@ fn protocol_named_inbound_modules_stay_proxy_glue_not_crypto_implementations() {
 }
 
 #[test]
+fn tcp_inbound_source_address_conversion_lives_in_platform_layer() {
+    let platform = fs::read_to_string(repo_root().join("crates/platform/tokio/src/lib.rs"))
+        .expect("read zero-platform-tokio source");
+
+    assert!(
+        platform.contains("pub fn remote_ip_to_socket_addr")
+            && platform.contains("addr.map(|ip| socket_addr_from_ip(ip, 0))"),
+        "zero-platform-tokio should own remote IpAddress to SocketAddr conversion for listener source addresses"
+    );
+
+    for source_path in [
+        "src/inbound/direct.rs",
+        "src/inbound/http_connect.rs",
+        "src/inbound/mixed.rs",
+        "src/inbound/socks5.rs",
+        "src/inbound/shadowsocks.rs",
+        "src/inbound/trojan.rs",
+        "src/inbound/mieru.rs",
+        "src/inbound/vmess/listener.rs",
+        "src/inbound/vmess/helpers.rs",
+    ] {
+        let source = read(source_path);
+        assert!(
+            !source.contains("fn remote_addr_to_socket")
+                && !source.contains("IpAddress::V4")
+                && !source.contains("IpAddress::V6")
+                && !source.contains("Ipv4Addr::from")
+                && !source.contains("Ipv6Addr::from"),
+            "{source_path} should not own listener source address conversion"
+        );
+    }
+
+    for source_path in [
+        "src/inbound/direct.rs",
+        "src/inbound/http_connect.rs",
+        "src/inbound/mixed.rs",
+        "src/inbound/socks5.rs",
+        "src/inbound/shadowsocks.rs",
+        "src/inbound/trojan.rs",
+        "src/inbound/mieru.rs",
+        "src/inbound/vmess/listener.rs",
+    ] {
+        let source = read(source_path);
+        assert!(
+            source.contains("zero_platform_tokio::remote_ip_to_socket_addr"),
+            "{source_path} should call the platform listener source address helper"
+        );
+    }
+}
+
+#[test]
 fn mieru_inbound_stream_uses_protocol_codec_not_crypto_primitives() {
     for path in rust_sources_under("src/inbound/mieru") {
         let source = relative(&path);

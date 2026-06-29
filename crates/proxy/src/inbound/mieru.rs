@@ -1,7 +1,5 @@
 //! Mieru inbound encrypted handshake and AEAD-framed relay.
 
-use std::net::SocketAddr;
-
 use async_trait::async_trait;
 use mieru::{MieruInbound, MieruInboundProfile};
 use tokio::select;
@@ -119,7 +117,7 @@ pub(crate) async fn run_mieru_listener_with_bound(
                         let engine = proxy.clone();
                         let tag = inbound.tag.clone();
                         let handler = handler.clone();
-                        let source_addr = remote_addr_to_socket(remote_addr);
+                        let source_addr = zero_platform_tokio::remote_ip_to_socket_addr(remote_addr);
                         connections.spawn(async move {
                             match handler.accept(stream.into()).await {
                                 Ok((session, client)) => {
@@ -293,15 +291,4 @@ impl Proxy {
         tracing::info!(inbound_tag = %inbound_tag, "mieru udp session ended");
         Ok(())
     }
-}
-
-fn remote_addr_to_socket(addr: Option<zero_traits::IpAddress>) -> Option<SocketAddr> {
-    addr.map(|ip| match ip {
-        zero_traits::IpAddress::V4(octets) => {
-            SocketAddr::new(std::net::IpAddr::V4(std::net::Ipv4Addr::from(octets)), 0)
-        }
-        zero_traits::IpAddress::V6(octets) => {
-            SocketAddr::new(std::net::IpAddr::V6(std::net::Ipv6Addr::from(octets)), 0)
-        }
-    })
 }

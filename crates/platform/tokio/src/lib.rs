@@ -145,6 +145,10 @@ pub fn socket_addr_to_socket_address(addr: SocketAddr) -> SocketAddress {
     SocketAddress::new(socket_addr_to_ip(addr), addr.port())
 }
 
+pub fn remote_ip_to_socket_addr(addr: Option<IpAddress>) -> Option<SocketAddr> {
+    addr.map(|ip| socket_addr_from_ip(ip, 0))
+}
+
 fn ip_addr_to_ip(addr: IpAddr) -> IpAddress {
     match addr {
         IpAddr::V4(addr) => IpAddress::V4(addr.octets()),

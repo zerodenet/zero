@@ -60,7 +60,7 @@ pub(crate) async fn run_mixed_listener_with_bound(
                         let tag = inbound.tag.clone();
                         let socks5_h = socks5_handler.clone();
                         let http_h = http_handler.clone();
-                        let source_addr = remote_addr_to_socket(remote_addr);
+                        let source_addr = zero_platform_tokio::remote_ip_to_socket_addr(remote_addr);
                         connections.spawn(async move {
                             // Detect protocol from first byte
                             let mut first = [0_u8; 1];
@@ -155,17 +155,6 @@ pub(crate) async fn run_mixed_listener_with_bound(
 
     info!(inbound_tag = %inbound.tag, protocol = "mixed", listen = %local_addr, "inbound listener stopped");
     Ok(())
-}
-
-fn remote_addr_to_socket(addr: Option<zero_traits::IpAddress>) -> Option<std::net::SocketAddr> {
-    addr.map(|ip| match ip {
-        zero_traits::IpAddress::V4(octets) => {
-            std::net::SocketAddr::new(std::net::IpAddr::V4(std::net::Ipv4Addr::from(octets)), 0)
-        }
-        zero_traits::IpAddress::V6(octets) => {
-            std::net::SocketAddr::new(std::net::IpAddr::V6(std::net::Ipv6Addr::from(octets)), 0)
-        }
-    })
 }
 
 fn prefixed_relay_stream(

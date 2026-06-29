@@ -8,10 +8,7 @@ use vmess::VmessInbound;
 use zero_engine::EngineError;
 
 use super::model::VmessInboundRequest;
-use super::{
-    handle_vmess_grpc, handle_vmess_raw, handle_vmess_ws, remote_addr_to_socket,
-    VmessInboundHandler,
-};
+use super::{handle_vmess_grpc, handle_vmess_raw, handle_vmess_ws, VmessInboundHandler};
 use crate::runtime::Proxy;
 
 pub(crate) async fn run_vmess_listener_with_bound(
@@ -74,7 +71,7 @@ pub(crate) async fn run_vmess_listener_with_bound(
                 let h = handler.clone();
                 let ws = ws_config.clone();
                 let grpc = grpc_config.clone();
-                let source_addr = remote_addr_to_socket(peer);
+                let source_addr = zero_platform_tokio::remote_ip_to_socket_addr(peer);
                 conns.spawn(async move {
                     let res = if let Some(grpc_cfg) = &grpc {
                         handle_vmess_grpc(&p, &h, s.into(), grpc_cfg, &t, source_addr).await
