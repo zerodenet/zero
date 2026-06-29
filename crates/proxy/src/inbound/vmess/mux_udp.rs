@@ -9,7 +9,7 @@ use crate::runtime::udp_dispatch::UdpDispatch;
 use crate::runtime::udp_flow::helpers::{
     log_completed_udp_flow, record_chain_udp_response_received,
     record_direct_udp_response_received, record_upstream_udp_response_received,
-    wait_for_upstream_idle,
+    udp_response_target_from_socket_addr, wait_for_upstream_idle,
 };
 use crate::runtime::Proxy;
 
@@ -73,11 +73,13 @@ impl Proxy {
                                 last_activity = TokioInstant::now();
                                 let response_accounting =
                                     record_direct_udp_response_received(&proxy, &dispatch, sender, n);
-                                match udp_session.write_mux_response_to_socket_addr(
+                                let (target, port) = udp_response_target_from_socket_addr(sender);
+                                let client_response =
+                                    vmess::VmessInboundUdpClientResponse::new(&target, port, &direct_buf[..n]);
+                                match udp_session.write_mux_client_response(
                                     &writer,
                                     mux_session_id,
-                                    sender,
-                                    &direct_buf[..n],
+                                    client_response,
                                 ) {
                                     Ok(frame_len) => {
                                         response_accounting.record_sent(frame_len);

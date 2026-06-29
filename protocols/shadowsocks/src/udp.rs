@@ -1,8 +1,8 @@
 #[cfg(feature = "crypto")]
 pub use crate::inbound::{
-    ShadowsocksInboundUdpCodec, ShadowsocksInboundUdpDispatchParts, ShadowsocksInboundUdpPacket,
-    ShadowsocksInboundUdpResponse, ShadowsocksInboundUdpResponseTarget,
-    ShadowsocksInboundUdpSession,
+    ShadowsocksInboundUdpClientResponse, ShadowsocksInboundUdpCodec,
+    ShadowsocksInboundUdpDispatchParts, ShadowsocksInboundUdpPacket, ShadowsocksInboundUdpResponse,
+    ShadowsocksInboundUdpResponseTarget, ShadowsocksInboundUdpSession,
 };
 #[cfg(feature = "crypto")]
 pub use crate::outbound::{

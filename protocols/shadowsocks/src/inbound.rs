@@ -276,6 +276,40 @@ impl ShadowsocksInboundUdpResponseTarget {
     }
 }
 
+#[cfg(feature = "crypto")]
+pub struct ShadowsocksInboundUdpClientResponse<'a> {
+    target: &'a Address,
+    port: u16,
+    payload: &'a [u8],
+}
+
+#[cfg(feature = "crypto")]
+impl<'a> ShadowsocksInboundUdpClientResponse<'a> {
+    pub fn new(target: &'a Address, port: u16, payload: &'a [u8]) -> Self {
+        Self {
+            target,
+            port,
+            payload,
+        }
+    }
+
+    pub fn payload_len(&self) -> usize {
+        self.payload.len()
+    }
+
+    fn target(&self) -> &'a Address {
+        self.target
+    }
+
+    fn port(&self) -> u16 {
+        self.port
+    }
+
+    fn payload(&self) -> &'a [u8] {
+        self.payload
+    }
+}
+
 /// Protocol-owned codec/state for Shadowsocks inbound UDP.
 ///
 /// Runtime code owns socket I/O and routing, while this type owns
@@ -516,6 +550,24 @@ impl ShadowsocksInboundUdpSession {
             .map_err(|_| Error::Io("failed to send Shadowsocks UDP response"))
     }
 
+    pub async fn send_client_response_to_client_tokio(
+        &self,
+        socket: &tokio::net::UdpSocket,
+        proxy_session_id: u64,
+        response: ShadowsocksInboundUdpClientResponse<'_>,
+        client: std::net::SocketAddr,
+    ) -> Result<usize, Error> {
+        self.send_response_to_client_tokio(
+            socket,
+            proxy_session_id,
+            response.target(),
+            response.port(),
+            response.payload(),
+            client,
+        )
+        .await
+    }
+
     fn record_proxy_session(&mut self, proxy_session_id: u64, client_session_id: Option<u64>) {
         if client_session_id.is_some() {
             self.proxy_sessions
@@ -558,6 +610,20 @@ impl ShadowsocksInboundUdpSession {
             .map(Some)
     }
 
+    pub async fn send_proxy_session_client_response_to_client_tokio(
+        &self,
+        socket: &tokio::net::UdpSocket,
+        proxy_session_id: u64,
+        response: ShadowsocksInboundUdpClientResponse<'_>,
+    ) -> Result<Option<usize>, Error> {
+        let Some(&client) = self.proxy_clients.get(&proxy_session_id) else {
+            return Ok(None);
+        };
+        self.send_client_response_to_client_tokio(socket, proxy_session_id, response, client)
+            .await
+            .map(Some)
+    }
+
     pub async fn send_response_for_proxy_session_to_client_tokio(
         &self,
         socket: &tokio::net::UdpSocket,
@@ -577,6 +643,19 @@ impl ShadowsocksInboundUdpSession {
             payload,
         )
         .await
+    }
+
+    pub async fn send_client_response_for_proxy_session_to_client_tokio(
+        &self,
+        socket: &tokio::net::UdpSocket,
+        proxy_session_id: Option<u64>,
+        response: ShadowsocksInboundUdpClientResponse<'_>,
+    ) -> Result<Option<usize>, Error> {
+        let Some(proxy_session_id) = proxy_session_id else {
+            return Ok(None);
+        };
+        self.send_proxy_session_client_response_to_client_tokio(socket, proxy_session_id, response)
+            .await
     }
 
     pub async fn send_proxy_session_response_to_sender_tokio(

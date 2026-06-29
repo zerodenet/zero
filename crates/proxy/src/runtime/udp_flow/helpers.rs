@@ -34,6 +34,10 @@ pub(crate) fn address_from_socket_addr(addr: SocketAddr) -> Address {
     }
 }
 
+pub(crate) fn udp_response_target_from_socket_addr(addr: SocketAddr) -> (Address, u16) {
+    (address_from_socket_addr(addr), addr.port())
+}
+
 pub(crate) fn record_udp_inbound_response_rx(
     proxy: &Proxy,
     session_id: Option<u64>,

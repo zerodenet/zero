@@ -7,7 +7,7 @@ use crate::runtime::udp_dispatch::UdpDispatch;
 use crate::runtime::udp_flow::helpers::{
     log_completed_udp_flow, record_chain_udp_response_received,
     record_direct_udp_response_received, record_upstream_udp_response_received,
-    wait_for_upstream_idle,
+    udp_response_target_from_socket_addr, wait_for_upstream_idle,
 };
 use crate::runtime::Proxy;
 use crate::transport::{ClientStream, MeteredStream};
@@ -96,11 +96,13 @@ impl Proxy {
                     let response_accounting =
                         record_direct_udp_response_received(self, &dispatch, sender, n);
 
-                    match udp_session.write_response_to_socket_addr_tokio(
-                        &mut client,
-                        sender,
-                        &udp_buffer[..n],
-                    ).await {
+                    let (target, port) = udp_response_target_from_socket_addr(sender);
+                    let client_response =
+                        vless::VlessInboundUdpClientResponse::new(&target, port, &udp_buffer[..n]);
+                    match udp_session
+                        .write_client_response_tokio(&mut client, client_response)
+                        .await
+                    {
                         Ok(written) => {
                             response_accounting.record_sent(written);
                             self.record_session_inbound_traffic(0, client.drain_traffic());
