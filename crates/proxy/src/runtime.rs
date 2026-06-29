@@ -16,6 +16,7 @@ use crate::inventory::ProtocolInventory;
 
 mod engine_facade;
 mod handle;
+pub(crate) mod http_redirect;
 pub(crate) mod inbound_protocol;
 mod listeners;
 pub(crate) mod orchestration;

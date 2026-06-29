@@ -3228,12 +3228,18 @@ fn generic_udp_dispatch_does_not_encode_protocol_packets_directly() {
 fn http_connect_redirect_response_framing_stays_in_protocol_crate() {
     let inbound = read("src/inbound/http_connect.rs");
     let mixed = read("src/inbound/mixed.rs");
+    let redirect = read("src/runtime/http_redirect.rs");
     let protocol_inbound =
         fs::read_to_string(repo_root().join("protocols/http-connect/src/inbound.rs"))
             .expect("read http-connect protocol inbound source");
 
     assert!(
         inbound.contains("select_redirect_target")
+            && !inbound.contains("fn select_redirect_target")
+            && redirect.contains("pub(crate) fn select_redirect_target")
+            && redirect.contains("rules: &[zero_config::UrlRewriteRule]")
+            && redirect.contains("session: &Session")
+            && redirect.contains("rule.status_code?")
             && !inbound.contains("build_redirect_response")
             && inbound.contains("send_redirect_response")
             && inbound.contains("Some((status, location))")

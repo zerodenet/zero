@@ -8,6 +8,7 @@ use zero_core::{Error as CoreError, Session};
 use zero_engine::EngineError;
 
 use crate::logging::log_listener_connection_error;
+use crate::runtime::http_redirect::select_redirect_target;
 use crate::runtime::inbound_protocol::{serve_inbound, InboundProtocol};
 use crate::runtime::Proxy;
 use crate::transport::{MeteredStream, TcpRelayStream};
@@ -178,33 +179,4 @@ pub(crate) async fn run_http_connect_listener_with_bound(
 
     info!(inbound_tag = %inbound.tag, protocol = "http_connect", listen = %local_addr, "inbound listener stopped");
     Ok(())
-}
-
-/// Check url_rewrite rules for a redirect (with `status_code` set).
-/// Returns redirect status and location, or None if no redirect rule matches.
-fn select_redirect_target(
-    rules: &[zero_config::UrlRewriteRule],
-    session: &Session,
-) -> Option<(u16, String)> {
-    let domain = match &session.target {
-        zero_core::Address::Domain(d) => d,
-        _ => return None,
-    };
-    for rule in rules {
-        let status = rule.status_code?;
-        let matched = if let Some(ref from) = rule.from {
-            from == domain
-        } else if let Some(ref pattern) = rule.from_regex {
-            regex::Regex::new(pattern)
-                .map(|re| re.is_match(domain))
-                .unwrap_or(false)
-        } else {
-            false
-        };
-        if matched {
-            let location = format!("https://{}:{}", rule.to, session.port);
-            return Some((status, location));
-        }
-    }
-    None
 }
