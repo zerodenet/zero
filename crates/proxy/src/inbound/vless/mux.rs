@@ -46,9 +46,12 @@ impl Proxy {
                     };
                     match streams.apply_inbound_action(&mut mux, &mut client, action).await {
                         Ok(Some(opened)) => {
-                            let (sid, mut session, up_rx) = opened.into_parts();
-                            match session.network {
-                                zero_core::Network::Tcp => {
+                            match opened.into_kind() {
+                                vless::mux::VlessInboundMuxOpenedKind::Tcp {
+                                    session_id: sid,
+                                    mut session,
+                                    up_rx,
+                                } => {
                                     // Route and establish TCP outbound
                                     if let Some(ref a) = auth {
                                         session.apply_auth(a.clone());
@@ -81,7 +84,11 @@ impl Proxy {
                                         port = session.port, network = "tcp",
                                         "MUX stream accepted");
                                 }
-                                zero_core::Network::Udp => {
+                                vless::mux::VlessInboundMuxOpenedKind::Udp {
+                                    session_id: sid,
+                                    session,
+                                    up_rx,
+                                } => {
                                     let proxy_clone = self.clone();
                                     let inbound_tag_owned = inbound_tag.to_owned();
                                     let auth_clone = auth.clone();

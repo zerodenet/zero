@@ -532,11 +532,15 @@ fn vless_inbound_mux_frame_detail_lives_in_protocol_crate() {
         protocol_mux.contains("pub fn into_session(self) -> Result<Session, Error>")
             && protocol_mux.contains("ProtocolType::Vless")
             && protocol_mux.contains("impl From<MuxServerEvent> for VlessInboundMuxAction")
-            && inbound.contains("opened.into_parts()")
+            && inbound.contains("opened.into_kind()")
+            && protocol_mux.contains("VlessInboundMuxOpenedKind")
+            && protocol_mux.contains("pub fn into_kind")
+            && protocol_mux.contains("match session.network")
             && protocol_mux.contains("VlessInboundMuxAction::OpenStream")
             && protocol_mux.contains("VlessInboundMuxOpenedStream::new")
             && !inbound.contains("target.into_session()")
             && !inbound.contains("MuxNetwork")
+            && !inbound.contains("session.network")
             && !inbound.contains("zero_core::Session::new"),
         "VLESS inbound mux target to Session conversion should be protocol-owned and exposed as an action"
     );
@@ -5209,10 +5213,14 @@ fn inbound_vmess_mux_task_models_do_not_live_in_proxy_model() {
         "protocols/vmess should classify raw VMess MUX frames into server events and proxy-facing actions"
     );
     assert!(
-        root.contains("opened.into_parts()")
+        root.contains("opened.into_kind()")
+            && protocol_mux.contains("VmessInboundMuxOpenedKind")
+            && protocol_mux.contains("pub fn into_kind")
+            && protocol_mux.contains("match session.network")
             && protocol_mux.contains("VmessInboundMuxAction::OpenStream")
             && protocol_mux.contains("VmessInboundMuxOpenedStream::new")
             && protocol_mux.contains("ProtocolType::Vmess")
+            && !root.contains("session.network")
             && !root.contains("network,")
             && !root.contains("Session::new(0,")
             && !model.contains("pub(crate) target: Address")

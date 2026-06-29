@@ -156,6 +156,20 @@ pub struct VlessInboundMuxOpenedStream {
 }
 
 #[cfg(feature = "reality")]
+pub enum VlessInboundMuxOpenedKind {
+    Tcp {
+        session_id: u16,
+        session: Session,
+        up_rx: mpsc::UnboundedReceiver<Vec<u8>>,
+    },
+    Udp {
+        session_id: u16,
+        session: Session,
+        up_rx: mpsc::UnboundedReceiver<Vec<u8>>,
+    },
+}
+
+#[cfg(feature = "reality")]
 impl VlessInboundMuxOpenedStream {
     pub fn new(
         session_id: u16,
@@ -171,6 +185,22 @@ impl VlessInboundMuxOpenedStream {
 
     pub fn into_parts(self) -> (u16, Session, mpsc::UnboundedReceiver<Vec<u8>>) {
         (self.session_id, *self.session, self.up_rx)
+    }
+
+    pub fn into_kind(self) -> VlessInboundMuxOpenedKind {
+        let (session_id, session, up_rx) = self.into_parts();
+        match session.network {
+            Network::Tcp => VlessInboundMuxOpenedKind::Tcp {
+                session_id,
+                session,
+                up_rx,
+            },
+            Network::Udp => VlessInboundMuxOpenedKind::Udp {
+                session_id,
+                session,
+                up_rx,
+            },
+        }
     }
 }
 

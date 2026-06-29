@@ -4,7 +4,7 @@ use tokio::select;
 use tokio::task::JoinSet;
 use tokio::time::Instant as TokioInstant;
 use tracing::{info, warn};
-use zero_core::{Network, ProtocolType, Session};
+use zero_core::{ProtocolType, Session};
 use zero_engine::EngineError;
 
 use crate::runtime::pipe::{KernelPipe, TcpPipe, TcpPipeInput, UdpPipe, UdpPipeInput};
@@ -47,9 +47,12 @@ impl Proxy {
                     };
 
                     if let Some(opened) = streams.apply_inbound_action(action) {
-                        let (session_id, session, up_rx) = opened.into_parts();
-                            match session.network {
-                                Network::Tcp => {
+                            match opened.into_kind() {
+                                vmess::mux::VmessInboundMuxOpenedKind::Tcp {
+                                    session_id,
+                                    session,
+                                    up_rx,
+                                } => {
                                     self.spawn_vmess_mux_tcp_stream_task(
                                         &mut mux_tasks,
                                         session_id,
@@ -59,7 +62,11 @@ impl Proxy {
                                         inbound_tag.to_owned(),
                                     )
                                 }
-                                Network::Udp => {
+                                vmess::mux::VmessInboundMuxOpenedKind::Udp {
+                                    session_id,
+                                    session,
+                                    up_rx,
+                                } => {
                                     self.spawn_vmess_mux_udp_stream_task(
                                         &mut mux_tasks,
                                         session_id,
