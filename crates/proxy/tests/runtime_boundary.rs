@@ -209,6 +209,9 @@ fn inbound_udp_response_accounting_uses_runtime_helpers() {
     assert!(
         helper.contains("fn record_udp_inbound_response_rx")
             && helper.contains("fn record_udp_inbound_response_tx")
+            && helper.contains("struct UdpInboundResponseAccounting")
+            && helper.contains("fn record_received(")
+            && helper.contains("fn record_sent(")
             && helper.contains("fn udp_response_session_id")
             && helper.contains("record_session_outbound_rx")
             && helper.contains("record_session_inbound_tx")
@@ -228,8 +231,8 @@ fn inbound_udp_response_accounting_uses_runtime_helpers() {
     ] {
         let content = read(source);
         assert!(
-            content.contains("record_udp_inbound_response_rx")
-                && content.contains("record_udp_inbound_response_tx")
+            content.contains("UdpInboundResponseAccounting::record_received")
+                && content.contains("response_accounting.record_sent")
                 && !content.contains("record_session_outbound_rx")
                 && !content.contains("record_session_inbound_tx"),
             "{source} should use neutral UDP inbound response accounting helpers"
@@ -246,8 +249,8 @@ fn inbound_udp_response_accounting_uses_runtime_helpers() {
         .nth(1)
         .expect("hysteria2 datagram loop");
     assert!(
-        datagram_loop.contains("record_udp_inbound_response_rx")
-            && datagram_loop.contains("record_udp_inbound_response_tx")
+        datagram_loop.contains("UdpInboundResponseAccounting::record_received")
+            && datagram_loop.contains("response_accounting.record_sent")
             && datagram_loop.contains("udp_response_session_id")
             && !datagram_loop.contains("record_session_outbound_rx")
             && !datagram_loop.contains("record_session_inbound_tx")
@@ -265,10 +268,31 @@ fn inbound_udp_response_accounting_uses_runtime_helpers() {
         vless_upstream_response.contains("record_udp_upstream_packet_received")
             && vless_upstream_response.contains("dispatch.touch_upstream_idle")
             && vless_upstream_response.contains("udp_response_session_id(&dispatch, &target, port)")
-            && vless_upstream_response.contains("record_udp_inbound_response_rx")
-            && vless_upstream_response.contains("record_udp_inbound_response_tx"),
+            && vless_upstream_response.contains("UdpInboundResponseAccounting::record_received")
+            && vless_upstream_response.contains("response_accounting.record_sent"),
         "VLESS ordinary UDP upstream responses should use the same neutral response accounting as other UDP inbound loops"
     );
+
+    for source in [
+        "src/inbound/vless/udp_session.rs",
+        "src/inbound/vless/mux.rs",
+        "src/inbound/vmess/mux.rs",
+        "src/inbound/trojan.rs",
+        "src/inbound/mieru.rs",
+        "src/inbound/hysteria2.rs",
+        "src/inbound/socks5/udp_associate/direct_response.rs",
+        "src/inbound/socks5/udp_associate/chain_response.rs",
+        "src/inbound/socks5/udp_associate/upstream_response.rs",
+    ] {
+        let content = read(source);
+        assert!(
+            content.contains("UdpInboundResponseAccounting::record_received")
+                && content.contains("response_accounting.record_sent")
+                && !content.contains("record_udp_inbound_response_rx")
+                && !content.contains("record_udp_inbound_response_tx"),
+            "{source} should use the neutral UDP inbound response accounting object instead of open-coding rx/tx pairs"
+        );
+    }
 }
 
 #[test]
@@ -5652,10 +5676,10 @@ fn trojan_inbound_udp_packet_framing_stays_in_protocol_crate() {
             && !inbound.contains("parts.into_pipe_parts()")
             && inbound.contains("udp_session.write_response(&mut client")
             && inbound.contains("let written = udp_session")
-            && inbound.contains("record_udp_inbound_response_tx(self, session_id, written)")
-            && !inbound.contains("record_udp_inbound_response_tx(self, session_id, n)")
+            && inbound.contains("response_accounting.record_sent(written)")
+            && !inbound.contains("response_accounting.record_sent(n)")
             && !inbound.contains("let payload_len = payload.len()")
-            && !inbound.contains("record_udp_inbound_response_tx(self, session_id, payload_len)")
+            && !inbound.contains("response_accounting.record_sent(payload_len)")
             && inbound.contains("udp_session")
             && inbound.contains(".write_response_to_socket_addr_tokio(&mut client")
             && !inbound.contains("request.into_dispatch_parts()")

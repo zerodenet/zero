@@ -17,8 +17,7 @@ use zero_engine::EngineError;
 use crate::runtime::inbound_protocol::{serve_inbound, InboundProtocol};
 use crate::runtime::pipe::{KernelPipe, UdpPipe, UdpPipeInput};
 use crate::runtime::udp_flow::helpers::{
-    record_udp_inbound_response_rx, record_udp_inbound_response_tx, udp_response_session_id,
-    wait_for_upstream_idle,
+    udp_response_session_id, wait_for_upstream_idle, UdpInboundResponseAccounting,
 };
 use crate::runtime::Proxy;
 use crate::transport::{copy_one_way, Hysteria2Stream};
@@ -326,14 +325,15 @@ impl Proxy {
                 recv = direct_sock.recv_from_addr(&mut direct_buf) => {
                     let (n, sender) = recv?;
                     let session_id = dispatch.direct_response_session_id(sender);
-                    record_udp_inbound_response_rx(&proxy, session_id, n);
+                    let response_accounting =
+                        UdpInboundResponseAccounting::record_received(&proxy, session_id, n);
                     if let Ok(Some(written)) = udp_session.send_response_to_socket_addr_for_proxy_session(
                         &conn,
                         session_id,
                         sender,
                         &direct_buf[..n],
                     ) {
-                        record_udp_inbound_response_tx(&proxy, session_id, written);
+                        response_accounting.record_sent(written);
                     }
                 }
 
@@ -344,7 +344,8 @@ impl Proxy {
                             dispatch.touch_upstream_idle(proxy.udp_upstream_idle_timeout());
                             let (target, port, payload) = pkt.into_parts();
                             let session_id = udp_response_session_id(&dispatch, &target, port);
-                            record_udp_inbound_response_rx(&proxy, session_id, payload.len());
+                            let response_accounting =
+                                UdpInboundResponseAccounting::record_received(&proxy, session_id, payload.len());
                             if let Ok(Some(written)) = udp_session.send_response_for_proxy_session(
                                 &conn,
                                 session_id,
@@ -352,7 +353,7 @@ impl Proxy {
                                 port,
                                 &payload,
                             ) {
-                                record_udp_inbound_response_tx(&proxy, session_id, written);
+                                response_accounting.record_sent(written);
                             }
                         }
                         Err(error) => warn!(error = %error, "h2 upstream response error"),
@@ -364,7 +365,8 @@ impl Proxy {
                 Some(chain_result) = chain_tasks.join_next() => {
                     match chain_result {
                         Ok(Ok((target, port, payload, session_id))) => {
-                            record_udp_inbound_response_rx(&proxy, session_id, payload.len());
+                            let response_accounting =
+                                UdpInboundResponseAccounting::record_received(&proxy, session_id, payload.len());
                             if let Ok(Some(written)) = udp_session.send_response_for_proxy_session(
                                 &conn,
                                 session_id,
@@ -372,7 +374,7 @@ impl Proxy {
                                 port,
                                 &payload,
                             ) {
-                                record_udp_inbound_response_tx(&proxy, session_id, written);
+                                response_accounting.record_sent(written);
                             }
                         }
                         Ok(Err(error)) => warn!(error = %error, "h2 chain response error"),

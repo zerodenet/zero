@@ -5,9 +5,7 @@ use zero_engine::EngineError;
 use zero_platform_tokio::TokioDatagramSocket;
 
 use crate::runtime::udp_dispatch::UdpDispatch;
-use crate::runtime::udp_flow::helpers::{
-    record_udp_inbound_response_rx, record_udp_inbound_response_tx,
-};
+use crate::runtime::udp_flow::helpers::UdpInboundResponseAccounting;
 use crate::runtime::Proxy;
 
 pub(super) async fn forward_relay_socket_response(
@@ -19,9 +17,10 @@ pub(super) async fn forward_relay_socket_response(
     payload: &[u8],
 ) -> Result<(), EngineError> {
     let session_id = dispatch.direct_response_session_id(sender);
-    record_udp_inbound_response_rx(proxy, session_id, payload.len());
+    let response_accounting =
+        UdpInboundResponseAccounting::record_received(proxy, session_id, payload.len());
     let sent = forward_direct_udp_response(relay, client_addr, sender, payload).await?;
-    record_udp_inbound_response_tx(proxy, session_id, sent);
+    response_accounting.record_sent(sent);
 
     Ok(())
 }
@@ -40,11 +39,12 @@ pub(super) async fn forward_dispatch_socket_response(
     };
 
     let session_id = dispatch.direct_response_session_id(sender);
-    record_udp_inbound_response_rx(proxy, session_id, payload.len());
+    let response_accounting =
+        UdpInboundResponseAccounting::record_received(proxy, session_id, payload.len());
 
     match forward_direct_udp_response(relay, client_addr, sender, payload).await {
         Ok(sent) => {
-            record_udp_inbound_response_tx(proxy, session_id, sent);
+            response_accounting.record_sent(sent);
         }
         Err(error) => {
             warn!(

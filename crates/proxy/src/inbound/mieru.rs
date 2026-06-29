@@ -15,8 +15,8 @@ use crate::logging::log_listener_connection_error;
 use crate::runtime::inbound_protocol::{serve_inbound, InboundProtocol};
 use crate::runtime::pipe::{KernelPipe, UdpPipe, UdpPipeInput};
 use crate::runtime::udp_flow::helpers::{
-    log_completed_udp_flow, record_udp_inbound_response_rx, record_udp_inbound_response_tx,
-    udp_response_session_id, wait_for_upstream_idle,
+    log_completed_udp_flow, udp_response_session_id, wait_for_upstream_idle,
+    UdpInboundResponseAccounting,
 };
 use crate::runtime::Proxy;
 use crate::transport::TcpRelayStream;
@@ -241,11 +241,12 @@ impl Proxy {
                     last_activity = TokioInstant::now();
 
                     let session_id = dispatch.direct_response_session_id(sender);
-                    record_udp_inbound_response_rx(self, session_id, n);
+                    let response_accounting =
+                        UdpInboundResponseAccounting::record_received(self, session_id, n);
                     let written = udp_session
                         .write_response_for_sender_tokio(&mut client, sender, &direct_buf[..n])
                         .await?;
-                    record_udp_inbound_response_tx(self, session_id, written);
+                    response_accounting.record_sent(written);
                 }
                 upstream = upstream_udp.recv_response(&mut upstream_buf) => {
                     match upstream {
@@ -255,11 +256,12 @@ impl Proxy {
                             dispatch.touch_upstream_idle(self.udp_upstream_idle_timeout());
                             let (target, port, payload) = pkt.into_parts();
                             let session_id = udp_response_session_id(&dispatch, &target, port);
-                            record_udp_inbound_response_rx(self, session_id, payload.len());
+                            let response_accounting =
+                                UdpInboundResponseAccounting::record_received(self, session_id, payload.len());
                             let written = udp_session
                                 .write_response_for_target_tokio(&mut client, &target, port, &payload)
                                 .await?;
-                            record_udp_inbound_response_tx(self, session_id, written);
+                            response_accounting.record_sent(written);
                         }
                         Err(error) => {
                             tracing::warn!(error = %error, "mieru udp socks5 upstream recv error");
@@ -271,11 +273,12 @@ impl Proxy {
                     match chain_result {
                         Ok(Ok((target, port, payload, session_id))) => {
                             last_activity = TokioInstant::now();
-                            record_udp_inbound_response_rx(self, session_id, payload.len());
+                            let response_accounting =
+                                UdpInboundResponseAccounting::record_received(self, session_id, payload.len());
                             let written = udp_session
                                 .write_response_for_target_tokio(&mut client, &target, port, &payload)
                                 .await?;
-                            record_udp_inbound_response_tx(self, session_id, written);
+                            response_accounting.record_sent(written);
                         }
                         Ok(Err(error)) => tracing::warn!(error = %error, "mieru udp chain response error"),
                         Err(error) => tracing::warn!(error = %error, "mieru udp chain task panicked"),

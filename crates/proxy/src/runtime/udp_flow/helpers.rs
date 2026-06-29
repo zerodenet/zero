@@ -53,6 +53,26 @@ pub(crate) fn record_udp_inbound_response_tx(
     }
 }
 
+pub(crate) struct UdpInboundResponseAccounting<'a> {
+    proxy: &'a Proxy,
+    session_id: Option<u64>,
+}
+
+impl<'a> UdpInboundResponseAccounting<'a> {
+    pub(crate) fn record_received(
+        proxy: &'a Proxy,
+        session_id: Option<u64>,
+        payload_len: usize,
+    ) -> Self {
+        record_udp_inbound_response_rx(proxy, session_id, payload_len);
+        Self { proxy, session_id }
+    }
+
+    pub(crate) fn record_sent(&self, written_len: usize) {
+        record_udp_inbound_response_tx(self.proxy, self.session_id, written_len);
+    }
+}
+
 pub(crate) fn udp_response_session_id(
     dispatch: &UdpDispatch,
     target: &Address,

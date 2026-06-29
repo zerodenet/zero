@@ -6,9 +6,7 @@ use zero_platform_tokio::TokioDatagramSocket;
 
 use crate::logging::log_udp_upstream_association_dropped;
 use crate::runtime::udp_dispatch::UdpDispatch;
-use crate::runtime::udp_flow::helpers::{
-    record_udp_inbound_response_rx, record_udp_inbound_response_tx,
-};
+use crate::runtime::udp_flow::helpers::UdpInboundResponseAccounting;
 use crate::runtime::Proxy;
 
 pub(super) async fn handle_upstream_response(
@@ -64,7 +62,8 @@ async fn forward_upstream_response(
         return Ok(());
     };
 
-    record_udp_inbound_response_rx(proxy, session_id, payload.len());
+    let response_accounting =
+        UdpInboundResponseAccounting::record_received(proxy, session_id, payload.len());
     let udp_session = socks5::Socks5Inbound.udp_session();
     let sent = udp_session
         .send_encoded_response_to_client(
@@ -74,7 +73,7 @@ async fn forward_upstream_response(
         )
         .await
         .map_err(|error| error.into_mapped(EngineError::from))?;
-    record_udp_inbound_response_tx(proxy, session_id, sent);
+    response_accounting.record_sent(sent);
 
     Ok(())
 }

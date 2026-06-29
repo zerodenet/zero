@@ -6,8 +6,8 @@ use tracing::{info, warn};
 use crate::runtime::pipe::{KernelPipe, TcpPipe, TcpPipeInput, UdpPipe, UdpPipeInput};
 use crate::runtime::udp_dispatch::UdpDispatch;
 use crate::runtime::udp_flow::helpers::{
-    log_completed_udp_flow, record_udp_inbound_response_rx, record_udp_inbound_response_tx,
-    udp_response_session_id, wait_for_upstream_idle,
+    log_completed_udp_flow, udp_response_session_id, wait_for_upstream_idle,
+    UdpInboundResponseAccounting,
 };
 
 use crate::runtime::Proxy;
@@ -202,7 +202,8 @@ impl Proxy {
                         Ok((n, sender)) => {
                             last_activity = TokioInstant::now();
                             let session_id = dispatch.direct_response_session_id(sender);
-                            record_udp_inbound_response_rx(self, session_id, n);
+                            let response_accounting =
+                                UdpInboundResponseAccounting::record_received(self, session_id, n);
                             match udp_session.send_mux_response_to_socket_addr(
                                 &writer,
                                 mux_session_id,
@@ -210,7 +211,7 @@ impl Proxy {
                                 &direct_buf[..n],
                             ) {
                                 Ok(frame_len) => {
-                                    record_udp_inbound_response_tx(self, session_id, frame_len);
+                                    response_accounting.record_sent(frame_len);
                                 }
                                 Err(error) => {
                                     warn!(%error, mux_session_id, "vless mux udp direct response encode failed");
@@ -232,7 +233,8 @@ impl Proxy {
                             dispatch.touch_upstream_idle(timeout);
                             let (target, port, payload) = pkt.into_parts();
                             let session_id = udp_response_session_id(&dispatch, &target, port);
-                            record_udp_inbound_response_rx(self, session_id, payload.len());
+                            let response_accounting =
+                                UdpInboundResponseAccounting::record_received(self, session_id, payload.len());
                             match udp_session.send_mux_response(
                                 &writer,
                                 mux_session_id,
@@ -241,7 +243,7 @@ impl Proxy {
                                 &payload,
                             ) {
                                 Ok(frame_len) => {
-                                    record_udp_inbound_response_tx(self, session_id, frame_len);
+                                    response_accounting.record_sent(frame_len);
                                 }
                                 Err(error) => {
                                     warn!(%error, mux_session_id, "vless mux udp upstream response encode failed");
@@ -257,7 +259,8 @@ impl Proxy {
                     match chain_result {
                         Ok(Ok((target, port, payload, session_id))) => {
                             last_activity = TokioInstant::now();
-                            record_udp_inbound_response_rx(self, session_id, payload.len());
+                            let response_accounting =
+                                UdpInboundResponseAccounting::record_received(self, session_id, payload.len());
                             match udp_session.send_mux_response(
                                 &writer,
                                 mux_session_id,
@@ -266,7 +269,7 @@ impl Proxy {
                                 &payload,
                             ) {
                                 Ok(frame_len) => {
-                                    record_udp_inbound_response_tx(self, session_id, frame_len);
+                                    response_accounting.record_sent(frame_len);
                                 }
                                 Err(error) => {
                                     warn!(%error, mux_session_id, "vless mux udp chain response encode failed");
