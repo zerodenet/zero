@@ -1384,7 +1384,11 @@ fn mieru_inbound_uses_adapter_request_model() {
             && !inbound.contains("accept_request(&mut metered, &self.users)")
             && adapter.contains("MieruInboundProfile::from_config_users")
             && !adapter.contains("MieruInboundProfile::from_config_parts")
+            && !adapter.contains("user.username.clone()")
+            && !adapter.contains("user.password.clone()")
+            && adapter.contains("(user.username.as_str(), user.password.as_str())")
             && protocol_inbound.contains("pub fn from_config_users")
+            && protocol_inbound.contains("impl IntoMieruInboundUserConfig for (&str, &str)")
             && !adapter.contains(".collect::<Vec<_>>()")
             && !adapter.contains("MieruInboundProfile::from_config(profile)"),
         "Mieru inbound listener should receive a protocol-owned profile instead of raw user/password tuples"

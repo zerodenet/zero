@@ -69,6 +69,12 @@ impl IntoMieruInboundUserConfig for (String, String) {
     }
 }
 
+impl IntoMieruInboundUserConfig for (&str, &str) {
+    fn into_mieru_inbound_user_config(self) -> (String, String) {
+        (self.0.to_owned(), self.1.to_owned())
+    }
+}
+
 /// Result of accepting a mieru TCP connection.
 ///
 /// The mieru session is target-agnostic: it is an encrypted tunnel. The proxy

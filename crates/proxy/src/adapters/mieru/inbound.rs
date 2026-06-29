@@ -21,7 +21,7 @@ impl MieruAdapter {
                     mieru::MieruInboundProfile::from_config_users(
                         users
                             .iter()
-                            .map(|user| (user.username.clone(), user.password.clone())),
+                            .map(|user| (user.username.as_str(), user.password.as_str())),
                     )
                 }
                 _ => {
