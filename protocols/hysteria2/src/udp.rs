@@ -7,7 +7,7 @@ use alloc::string::String;
 use alloc::vec::Vec;
 
 use zero_core::{Address, Error, InboundUdpDispatch, ProtocolType, UdpFlowPacket};
-use zero_traits::{DatagramCodec, IpAddress};
+use zero_traits::DatagramCodec;
 
 #[cfg(feature = "tokio")]
 use alloc::sync::Arc;
@@ -312,18 +312,6 @@ impl Hysteria2InboundUdpSession {
             .map(Some)
     }
 
-    pub fn send_response_to_ip(
-        &self,
-        conn: &quinn::Connection,
-        proxy_session_id: u64,
-        ip: IpAddress,
-        port: u16,
-        payload: &[u8],
-    ) -> Result<Option<usize>, Error> {
-        let target = address_from_ip(ip);
-        self.send_response(conn, proxy_session_id, &target, port, payload)
-    }
-
     pub fn send_response_for_proxy_session(
         &self,
         conn: &quinn::Connection,
@@ -358,13 +346,6 @@ impl Hysteria2InboundUdpSession {
 impl Default for Hysteria2InboundUdpSession {
     fn default() -> Self {
         Self::new()
-    }
-}
-
-fn address_from_ip(ip: IpAddress) -> Address {
-    match ip {
-        IpAddress::V4(bytes) => Address::Ipv4(bytes),
-        IpAddress::V6(bytes) => Address::Ipv6(bytes),
     }
 }
 
