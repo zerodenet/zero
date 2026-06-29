@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use tokio::select;
 use tokio::task::JoinSet;
 use tokio::time::Instant as TokioInstant;
@@ -28,14 +27,13 @@ impl Proxy {
     where
         S: ClientStream,
     {
-        use tokio::sync::mpsc;
-        use vless::mux::{VlessInboundMuxAction, VlessInboundMuxSession};
+        use vless::mux::{VlessInboundMuxAction, VlessInboundMuxSession, VlessInboundMuxStreams};
 
         vless::VlessInbound.send_response(&mut client).await?;
         self.record_session_inbound_traffic(0, client.drain_traffic());
 
         let mut mux = VlessInboundMuxSession::with_encryption(&uuid);
-        let mut up_senders: HashMap<u16, mpsc::UnboundedSender<Vec<u8>>> = HashMap::new();
+        let mut streams = VlessInboundMuxStreams::new();
         let mut relay_tasks = JoinSet::new();
         let (mux_writer, mut down_rx) = vless::mux::VlessInboundMuxWriter::channel();
 
@@ -58,8 +56,7 @@ impl Proxy {
                                 break;
                             }
 
-                            let (up_tx, up_rx) = mpsc::unbounded_channel();
-                            up_senders.insert(sid, up_tx);
+                            let up_rx = streams.open_stream(sid);
 
                             match session.network {
                                 zero_core::Network::Tcp => {
@@ -77,7 +74,7 @@ impl Proxy {
                                         Ok(result) => result.upstream,
                                         Err(_) => {
                                             let _ = mux.reject_inbound_stream(&mut client).await;
-                                            up_senders.remove(&sid);
+                                            streams.close_inbound_stream(sid);
                                             continue;
                                         }
                                     };
@@ -118,9 +115,7 @@ impl Proxy {
                         }
                         VlessInboundMuxAction::Data { session_id, payload } => {
                             // Data for an existing stream
-                            if let Some(tx) = up_senders.get(&session_id) {
-                                let _ = tx.send(payload);
-                            } else {
+                            if !streams.push_stream_data(session_id, payload) {
                                 // Data for unknown stream -?ignore or send END
                                 let _ =
                                     mux.end_inbound_stream(&mut client, session_id).await;
@@ -128,14 +123,14 @@ impl Proxy {
                         }
                         VlessInboundMuxAction::End { session_id } => {
                             // Client terminated this stream
-                            up_senders.remove(&session_id);
+                            streams.close_inbound_stream(session_id);
                             info!(mux_stream_id = session_id,
                                 "MUX stream ended by client");
                         }
                         VlessInboundMuxAction::Unknown { session_id } => {
                             // Unknown status -?ignore
                             let _ = mux.reject_inbound_stream(&mut client).await;
-                            up_senders.remove(&session_id);
+                            streams.close_inbound_stream(session_id);
                         }
                     }
                 }
@@ -143,12 +138,12 @@ impl Proxy {
                 down = down_rx.recv() => {
                     if let Some(downlink) = down {
                         let sid = downlink.session_id();
-                        if up_senders.contains_key(&sid) {
+                        if streams.contains_stream(sid) {
                             let is_end = downlink.is_end();
                             let (sid, payload) = downlink.into_parts();
                             let _ = mux.send_inbound_stream_payload(&mut client, sid, &payload).await;
                             if is_end {
-                                up_senders.remove(&sid);
+                                streams.close_inbound_stream(sid);
                             }
                         }
                     }

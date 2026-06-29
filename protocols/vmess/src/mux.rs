@@ -343,6 +343,45 @@ where
 #[derive(Debug, Default, Clone, Copy)]
 pub struct VmessInboundMuxSession;
 
+#[derive(Debug, Default)]
+pub struct VmessInboundMuxStreams {
+    streams: std::collections::HashMap<u16, mpsc::UnboundedSender<Vec<u8>>>,
+}
+
+impl VmessInboundMuxStreams {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn open_stream(
+        &mut self,
+        session_id: u16,
+        initial_payload: Vec<u8>,
+    ) -> mpsc::UnboundedReceiver<Vec<u8>> {
+        let (tx, rx) = mpsc::unbounded_channel::<Vec<u8>>();
+        self.streams.insert(session_id, tx.clone());
+        if !initial_payload.is_empty() {
+            let _ = tx.send(initial_payload);
+        }
+        rx
+    }
+
+    pub fn push_stream_data(&self, session_id: u16, payload: Vec<u8>) -> bool {
+        if payload.is_empty() {
+            return true;
+        }
+        self.streams
+            .get(&session_id)
+            .is_some_and(|tx| tx.send(payload).is_ok())
+    }
+
+    pub fn close_inbound_stream(&mut self, session_id: u16) -> bool {
+        self.streams
+            .remove(&session_id)
+            .is_some_and(|tx| tx.send(Vec::new()).is_ok())
+    }
+}
+
 impl VmessInboundMuxSession {
     pub fn new() -> Self {
         Self

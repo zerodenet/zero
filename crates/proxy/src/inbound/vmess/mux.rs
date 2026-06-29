@@ -1,7 +1,6 @@
 //! VMess inbound: TLS accept, transport dispatch (WS/gRPC), protocol auth, route, TCP relay.
 
 use tokio::select;
-use tokio::sync::mpsc;
 use tokio::task::JoinSet;
 use tokio::time::Instant as TokioInstant;
 use tracing::{info, warn};
@@ -29,8 +28,7 @@ impl Proxy {
         let mux_writer = vmess::mux::VmessInboundMuxWriter::from_tokio_writer(writer);
         let mut mux_tasks: JoinSet<()> = JoinSet::new();
         let mux_session = vmess::mux::VmessInboundMuxSession::new();
-        let mut streams: std::collections::HashMap<u16, mpsc::UnboundedSender<Vec<u8>>> =
-            std::collections::HashMap::new();
+        let mut streams = vmess::mux::VmessInboundMuxStreams::new();
 
         info!(
             inbound_tag = inbound_tag,
@@ -57,11 +55,7 @@ impl Proxy {
                             initial_payload,
                         } => {
                             let session = *session;
-                            let (up_tx, up_rx) = mpsc::unbounded_channel::<Vec<u8>>();
-                            streams.insert(session_id, up_tx.clone());
-                            if !initial_payload.is_empty() {
-                                let _ = up_tx.send(initial_payload);
-                            }
+                            let up_rx = streams.open_stream(session_id, initial_payload);
                             match session.network {
                                 Network::Tcp => {
                                     self.spawn_vmess_mux_tcp_stream_task(VmessMuxTcpStreamTask {
@@ -89,16 +83,10 @@ impl Proxy {
                             session_id,
                             payload,
                         } => {
-                            if let Some(tx) = streams.get(&session_id) {
-                                if !payload.is_empty() {
-                                    let _ = tx.send(payload);
-                                }
-                            }
+                            let _ = streams.push_stream_data(session_id, payload);
                         }
                         vmess::mux::VmessInboundMuxAction::End { session_id } => {
-                            if let Some(tx) = streams.remove(&session_id) {
-                                let _ = tx.send(Vec::new());
-                            }
+                            let _ = streams.close_inbound_stream(session_id);
                         }
                         vmess::mux::VmessInboundMuxAction::Unknown { .. } => {}
                     }

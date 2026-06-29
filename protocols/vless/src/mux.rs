@@ -154,9 +154,42 @@ pub struct VlessInboundMuxWriter {
 }
 
 #[cfg(feature = "reality")]
+#[derive(Default)]
+pub struct VlessInboundMuxStreams {
+    streams: alloc::collections::BTreeMap<u16, mpsc::UnboundedSender<Vec<u8>>>,
+}
+
+#[cfg(feature = "reality")]
 pub struct VlessInboundMuxDownlink {
     session_id: u16,
     payload: Vec<u8>,
+}
+
+#[cfg(feature = "reality")]
+impl VlessInboundMuxStreams {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn open_stream(&mut self, session_id: u16) -> mpsc::UnboundedReceiver<Vec<u8>> {
+        let (tx, rx) = mpsc::unbounded_channel::<Vec<u8>>();
+        self.streams.insert(session_id, tx);
+        rx
+    }
+
+    pub fn push_stream_data(&self, session_id: u16, payload: Vec<u8>) -> bool {
+        self.streams
+            .get(&session_id)
+            .is_some_and(|tx| tx.send(payload).is_ok())
+    }
+
+    pub fn close_inbound_stream(&mut self, session_id: u16) -> bool {
+        self.streams.remove(&session_id).is_some()
+    }
+
+    pub fn contains_stream(&self, session_id: u16) -> bool {
+        self.streams.contains_key(&session_id)
+    }
 }
 
 #[cfg(feature = "reality")]

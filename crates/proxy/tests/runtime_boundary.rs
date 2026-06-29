@@ -4998,6 +4998,9 @@ fn inbound_vmess_mux_task_model_lives_outside_mux_root() {
             && !root.contains("VmessInboundMuxWriter::new")
             && !root.contains("let (write_tx")
             && !root.contains("write_rx")
+            && !root.contains("mpsc::UnboundedSender<Vec<u8>>")
+            && !root.contains("mpsc::unbounded_channel::<Vec<u8>>()")
+            && !root.contains("std::collections::HashMap<u16")
             && !root.contains("write_all(&mut writer, &frame)")
             && !root.contains("flush(&mut writer)")
             && !root.contains("shutdown(&mut writer)")
@@ -5022,8 +5025,12 @@ fn inbound_vmess_mux_task_model_lives_outside_mux_root() {
                 .contains("self.write_inbound_stream_data(writer, session_id, payload)")
             && protocol_mux.contains("pub fn from_tokio_writer")
             && protocol_mux.contains("spawn_mux_write_relay(writer, write_rx)")
+            && protocol_mux.contains("pub struct VmessInboundMuxStreams")
+            && protocol_mux.contains("pub fn open_stream")
+            && protocol_mux.contains("pub fn push_stream_data")
+            && protocol_mux.contains("pub fn close_inbound_stream")
             && root.contains("write_inbound_stream_payload(&writer, mux_session_id, &[])"),
-        "VMess inbound MUX downstream payload to DATA/END frame selection and writer pump should live in protocols/vmess"
+        "VMess inbound MUX downstream payload selection, writer pump, and stream table should live in protocols/vmess"
     );
     for required in ["queue_keep_stream", "queue_end_stream"] {
         assert!(
@@ -5209,13 +5216,20 @@ fn inbound_vless_mux_task_model_lives_outside_mux_root() {
             && !root.contains("writer.end(")
             && model.contains("writer: vless::mux::VlessInboundMuxWriter")
             && !root.contains("mpsc::unbounded_channel::<(u16, Vec<u8>)>")
+            && !root.contains("HashMap<u16, mpsc::UnboundedSender<Vec<u8>>>")
+            && !root.contains("mpsc::unbounded_channel()")
+            && !root.contains("up_senders")
             && !root.contains("down_tx")
             && !model.contains("mpsc::UnboundedSender<(u16, Vec<u8>)>")
             && protocol_mux.contains("struct VlessInboundMuxDownlink")
+            && protocol_mux.contains("pub struct VlessInboundMuxStreams")
+            && protocol_mux.contains("pub fn open_stream")
+            && protocol_mux.contains("pub fn push_stream_data")
+            && protocol_mux.contains("pub fn close_inbound_stream")
             && protocol_mux.contains("pub fn channel()")
             && protocol_mux.contains("pub fn write_inbound_stream_payload")
             && protocol_mux.contains("mpsc::unbounded_channel::<VlessInboundMuxDownlink>()"),
-        "VLESS inbound MUX task model should carry a protocol-owned writer and keep raw downlink channel shape in protocols/vless"
+        "VLESS inbound MUX task model should carry protocol-owned writer/stream state and keep raw channel shapes in protocols/vless"
     );
 }
 
