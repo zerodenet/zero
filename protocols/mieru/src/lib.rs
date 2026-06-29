@@ -31,7 +31,7 @@ pub use crypto::{
 };
 
 #[cfg(feature = "crypto")]
-pub use inbound::{MieruAccept, MieruInbound, MieruInboundDataCodec};
+pub use inbound::{MieruAccept, MieruInbound, MieruInboundDataCodec, MieruInboundStream};
 pub use metadata::{
     DataMetadata, SessionMetadata, ACK_CLIENT_TO_SERVER, ACK_SERVER_TO_CLIENT,
     CLOSE_SESSION_REQUEST, CLOSE_SESSION_RESPONSE, DATA_CLIENT_TO_SERVER, DATA_SERVER_TO_CLIENT,

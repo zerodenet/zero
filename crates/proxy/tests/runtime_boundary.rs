@@ -2084,13 +2084,37 @@ fn mieru_inbound_stream_uses_protocol_codec_not_crypto_primitives() {
         }
     }
 
-    let stream = read("src/inbound/mieru/model.rs");
+    let inbound = read("src/inbound/mieru.rs");
+    let protocol_inbound = fs::read_to_string(repo_root().join("protocols/mieru/src/inbound.rs"))
+        .expect("read mieru protocol inbound source");
     assert!(
-        stream.contains("MieruInboundDataCodec")
-            && stream.contains("decrypt_client_data_with_consumed")
-            && stream.contains("encrypt_server_data"),
-        "Mieru inbound stream adapter should delegate data-phase protocol logic to protocols/mieru"
+        inbound.contains("type MieruClientStream = mieru::MieruInboundStream<TcpRelayStream>")
+            && inbound.contains("mieru::MieruInboundStream::new")
+            && !manifest_dir().join("src/inbound/mieru/model.rs").exists(),
+        "Mieru proxy inbound should use a protocol-owned data-phase stream wrapper"
     );
+    for required in [
+        "pub struct MieruInboundStream",
+        "impl<S> AsyncRead for MieruInboundStream<S>",
+        "impl<S> AsyncWrite for MieruInboundStream<S>",
+        "decrypt_client_data_with_consumed",
+        "encrypt_server_data",
+    ] {
+        assert!(
+            protocol_inbound.contains(required),
+            "protocols/mieru should own Mieru inbound stream detail `{required}`"
+        );
+    }
+    for forbidden in [
+        "MieruInboundDataCodec",
+        "decrypt_client_data_with_consumed",
+        "encrypt_server_data",
+    ] {
+        assert!(
+            !inbound.contains(forbidden),
+            "Mieru proxy inbound should not hold data-phase codec detail `{forbidden}`"
+        );
+    }
 }
 
 #[test]
@@ -4402,7 +4426,8 @@ fn trojan_inbound_udp_packet_framing_stays_in_protocol_crate() {
 #[test]
 fn mieru_client_stream_model_lives_outside_inbound_root() {
     let root = read("src/inbound/mieru.rs");
-    let model = read("src/inbound/mieru/model.rs");
+    let protocol_inbound = fs::read_to_string(repo_root().join("protocols/mieru/src/inbound.rs"))
+        .expect("read mieru protocol inbound source");
 
     for forbidden in [
         "struct MieruClientStream",
@@ -4411,20 +4436,24 @@ fn mieru_client_stream_model_lives_outside_inbound_root() {
     ] {
         assert!(
             !root.contains(forbidden),
-            "inbound/mieru.rs should keep client stream state in inbound/mieru/model.rs; found `{forbidden}`"
+            "inbound/mieru.rs should keep client stream state in protocols/mieru; found `{forbidden}`"
         );
     }
 
     for required in [
-        "struct MieruClientStream",
-        "impl AsyncRead for MieruClientStream",
-        "impl AsyncWrite for MieruClientStream",
+        "pub struct MieruInboundStream",
+        "impl<S> AsyncRead for MieruInboundStream<S>",
+        "impl<S> AsyncWrite for MieruInboundStream<S>",
     ] {
         assert!(
-            model.contains(required),
-            "Mieru client stream state should live in inbound/mieru/model.rs; missing `{required}`"
+            protocol_inbound.contains(required),
+            "Mieru client stream state should live in protocols/mieru; missing `{required}`"
         );
     }
+    assert!(
+        !manifest_dir().join("src/inbound/mieru/model.rs").exists(),
+        "Mieru proxy inbound should not keep a protocol data-phase stream model"
+    );
 }
 
 #[test]

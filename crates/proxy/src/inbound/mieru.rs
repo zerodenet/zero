@@ -20,9 +20,7 @@ use crate::runtime::inbound_protocol::{serve_inbound, InboundProtocol};
 use crate::runtime::Proxy;
 use crate::transport::TcpRelayStream;
 
-mod model;
-
-use model::MieruClientStream;
+type MieruClientStream = mieru::MieruInboundStream<TcpRelayStream>;
 
 #[derive(Debug)]
 pub(crate) struct MieruInboundRequest {
@@ -107,7 +105,7 @@ impl InboundProtocol for MieruInboundHandler {
             .accept_request(&mut metered, &self.users)
             .await?;
 
-        let mut client = MieruClientStream::new(metered.into_inner(), accept);
+        let mut client = mieru::MieruInboundStream::new(metered.into_inner(), accept);
 
         // mieru conveys the proxy target via a socks5 request inside the tunnel.
         let (target, port, is_udp) = socks5_serve(&mut client)
