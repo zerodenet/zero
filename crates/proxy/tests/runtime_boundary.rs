@@ -212,6 +212,11 @@ fn inbound_udp_response_accounting_uses_runtime_helpers() {
             && helper.contains("struct UdpInboundResponseAccounting")
             && helper.contains("fn record_received(")
             && helper.contains("fn record_sent(")
+            && helper.contains("fn session_id(")
+            && helper.contains("struct UdpUpstreamResponseParts")
+            && helper.contains("fn record_upstream_udp_response_received")
+            && helper.contains("record_udp_upstream_packet_received")
+            && helper.contains("touch_upstream_idle")
             && helper.contains("fn udp_response_session_id")
             && helper.contains("record_session_outbound_rx")
             && helper.contains("record_session_inbound_tx")
@@ -239,7 +244,7 @@ fn inbound_udp_response_accounting_uses_runtime_helpers() {
         );
         assert!(
             !content.contains("session_id_by_target"),
-            "{source} should use udp_response_session_id instead of querying dispatch response sessions directly"
+            "{source} should use runtime UDP response helpers instead of querying dispatch response sessions directly"
         );
     }
 
@@ -249,9 +254,12 @@ fn inbound_udp_response_accounting_uses_runtime_helpers() {
         .nth(1)
         .expect("hysteria2 datagram loop");
     assert!(
-        datagram_loop.contains("UdpInboundResponseAccounting::record_received")
+        datagram_loop.contains("record_upstream_udp_response_received")
+            && datagram_loop.contains("UdpInboundResponseAccounting::record_received")
             && datagram_loop.contains("response_accounting.record_sent")
-            && datagram_loop.contains("udp_response_session_id")
+            && datagram_loop.contains("response.accounting.record_sent")
+            && datagram_loop.contains("response.accounting.session_id()")
+            && !datagram_loop.contains("udp_response_session_id")
             && !datagram_loop.contains("record_session_outbound_rx")
             && !datagram_loop.contains("record_session_inbound_tx")
             && !datagram_loop.contains("session_id_by_target"),
@@ -265,13 +273,31 @@ fn inbound_udp_response_accounting_uses_runtime_helpers() {
         .and_then(|content| content.split("_ = wait_for_upstream_idle").next())
         .expect("vless udp upstream response branch");
     assert!(
-        vless_upstream_response.contains("record_udp_upstream_packet_received")
-            && vless_upstream_response.contains("dispatch.touch_upstream_idle")
-            && vless_upstream_response.contains("udp_response_session_id(&dispatch, &target, port)")
-            && vless_upstream_response.contains("UdpInboundResponseAccounting::record_received")
-            && vless_upstream_response.contains("response_accounting.record_sent"),
-        "VLESS ordinary UDP upstream responses should use the same neutral response accounting as other UDP inbound loops"
+        vless_upstream_response.contains("record_upstream_udp_response_received")
+            && vless_upstream_response.contains("response.accounting.record_sent")
+            && !vless_upstream_response.contains("record_udp_upstream_packet_received")
+            && !vless_upstream_response.contains("dispatch.touch_upstream_idle")
+            && !vless_upstream_response.contains("udp_response_session_id(&dispatch, &target, port)")
+            && !vless_upstream_response.contains("UdpInboundResponseAccounting::record_received"),
+        "VLESS ordinary UDP upstream responses should use the neutral upstream response accounting helper"
     );
+
+    for source in [
+        "src/inbound/vless/udp_session.rs",
+        "src/inbound/vless/mux.rs",
+        "src/inbound/vmess/mux.rs",
+        "src/inbound/trojan.rs",
+        "src/inbound/mieru.rs",
+        "src/inbound/hysteria2.rs",
+    ] {
+        let content = read(source);
+        assert!(
+            content.contains("record_upstream_udp_response_received")
+                && !content.contains("record_udp_upstream_packet_received")
+                && !content.contains("udp_response_session_id"),
+            "{source} should consume registered upstream UDP responses through the neutral runtime helper"
+        );
+    }
 
     for source in [
         "src/inbound/vless/udp_session.rs",
@@ -5272,7 +5298,8 @@ fn vmess_inbound_udp_response_encoding_stays_in_protocol_crate() {
             && mux.contains("request.pipe_parts()")
             && !mux.contains("request.into_parts()")
             && !mux.contains("request.into_dispatch_parts()")
-            && mux.contains("pkt.into_parts()")
+            && mux.contains("record_upstream_udp_response_received")
+            && mux.contains("response.target")
             && !mux.contains("client_session_id: None")
             && !mux.contains("request.target().clone()")
             && !mux.contains("request.payload()")
@@ -5479,7 +5506,8 @@ fn vless_inbound_udp_packet_framing_stays_in_protocol_crate() {
             && udp_session.contains("request.pipe_parts()")
             && !udp_session.contains("request.into_parts()")
             && !udp_session.contains("request.into_dispatch_parts()")
-            && udp_session.contains("pkt.into_parts()")
+            && udp_session.contains("record_upstream_udp_response_received")
+            && udp_session.contains("response.target")
             && !udp_session.contains("client_session_id: None")
             && !udp_session.contains("request.target().clone()")
             && !udp_session.contains("request.payload()")
@@ -5504,7 +5532,8 @@ fn vless_inbound_udp_packet_framing_stays_in_protocol_crate() {
             && mux.contains("request.pipe_parts()")
             && !mux.contains("request.into_parts()")
             && !mux.contains("request.into_dispatch_parts()")
-            && mux.contains("pkt.into_parts()")
+            && mux.contains("record_upstream_udp_response_received")
+            && mux.contains("response.target")
             && !mux.contains("client_session_id: None")
             && !mux.contains("request.target().clone()")
             && !mux.contains("request.payload()")
@@ -5691,7 +5720,8 @@ fn trojan_inbound_udp_packet_framing_stays_in_protocol_crate() {
             && inbound.contains(".write_response_to_socket_addr_tokio(&mut client")
             && !inbound.contains("request.into_dispatch_parts()")
             && !inbound.contains("request.client_session_id")
-            && inbound.contains("pkt.into_parts()")
+            && inbound.contains("record_upstream_udp_response_received")
+            && inbound.contains("response.target")
             && !inbound.contains("client_session_id: None")
             && !inbound.contains("request.target().clone()")
             && !inbound.contains("request.payload()")

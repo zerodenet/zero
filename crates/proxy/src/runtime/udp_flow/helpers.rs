@@ -7,6 +7,7 @@ use crate::logging::log_session_finished;
 use crate::runtime::udp_dispatch::UdpDispatch;
 use crate::runtime::Proxy;
 
+use super::response::UpstreamUdpResponse;
 use super::sessions::CompletedUdpFlow;
 
 pub(crate) fn log_completed_udp_flow(completed: CompletedUdpFlow) {
@@ -70,6 +71,37 @@ impl<'a> UdpInboundResponseAccounting<'a> {
 
     pub(crate) fn record_sent(&self, written_len: usize) {
         record_udp_inbound_response_tx(self.proxy, self.session_id, written_len);
+    }
+
+    pub(crate) fn session_id(&self) -> Option<u64> {
+        self.session_id
+    }
+}
+
+pub(crate) struct UdpUpstreamResponseParts<'a> {
+    pub(crate) target: Address,
+    pub(crate) port: u16,
+    pub(crate) payload: Vec<u8>,
+    pub(crate) accounting: UdpInboundResponseAccounting<'a>,
+}
+
+pub(crate) fn record_upstream_udp_response_received<'a>(
+    proxy: &'a Proxy,
+    dispatch: &mut UdpDispatch,
+    timeout: std::time::Duration,
+    response: UpstreamUdpResponse,
+) -> UdpUpstreamResponseParts<'a> {
+    proxy.record_udp_upstream_packet_received();
+    dispatch.touch_upstream_idle(timeout);
+    let (target, port, payload) = response.into_parts();
+    let session_id = udp_response_session_id(dispatch, &target, port);
+    let accounting =
+        UdpInboundResponseAccounting::record_received(proxy, session_id, payload.len());
+    UdpUpstreamResponseParts {
+        target,
+        port,
+        payload,
+        accounting,
     }
 }
 

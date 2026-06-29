@@ -10,7 +10,7 @@ use zero_engine::EngineError;
 use crate::runtime::pipe::{KernelPipe, TcpPipe, TcpPipeInput, UdpPipe, UdpPipeInput};
 use crate::runtime::udp_dispatch::UdpDispatch;
 use crate::runtime::udp_flow::helpers::{
-    log_completed_udp_flow, udp_response_session_id, wait_for_upstream_idle,
+    log_completed_udp_flow, record_upstream_udp_response_received, wait_for_upstream_idle,
     UdpInboundResponseAccounting,
 };
 use crate::runtime::Proxy;
@@ -213,21 +213,21 @@ impl Proxy {
                         match upstream {
                             Ok(pkt) => {
                                 last_activity = TokioInstant::now();
-                                proxy.record_udp_upstream_packet_received();
-                                dispatch.touch_upstream_idle(proxy.udp_upstream_idle_timeout());
-                                let (target, port, payload) = pkt.into_parts();
-                                let session_id = udp_response_session_id(&dispatch, &target, port);
-                                let response_accounting =
-                                    UdpInboundResponseAccounting::record_received(&proxy, session_id, payload.len());
+                                let response = record_upstream_udp_response_received(
+                                    &proxy,
+                                    &mut dispatch,
+                                    timeout,
+                                    pkt,
+                                );
                                 match udp_session.write_mux_response(
                                     &writer,
                                     mux_session_id,
-                                    &target,
-                                    port,
-                                    &payload,
+                                    &response.target,
+                                    response.port,
+                                    &response.payload,
                                 ) {
                                     Ok(frame_len) => {
-                                        response_accounting.record_sent(frame_len);
+                                        response.accounting.record_sent(frame_len);
                                     }
                                     Err(error) => {
                                         warn!(%error, mux_session_id, "vmess mux udp upstream response send failed");
@@ -352,19 +352,19 @@ impl Proxy {
                     match upstream {
                         Ok(pkt) => {
                             last_activity = TokioInstant::now();
-                            self.record_udp_upstream_packet_received();
-                            dispatch.touch_upstream_idle(self.udp_upstream_idle_timeout());
-                            let (target, port, payload) = pkt.into_parts();
-                            let session_id = udp_response_session_id(&dispatch, &target, port);
-                            let response_accounting =
-                                UdpInboundResponseAccounting::record_received(self, session_id, payload.len());
+                            let response = record_upstream_udp_response_received(
+                                self,
+                                &mut dispatch,
+                                self.udp_upstream_idle_timeout(),
+                                pkt,
+                            );
                             let written = udp_session.write_response_tokio(
                                 &mut client,
-                                &target,
-                                port,
-                                &payload,
+                                &response.target,
+                                response.port,
+                                &response.payload,
                             ).await?;
-                            response_accounting.record_sent(written);
+                            response.accounting.record_sent(written);
                         }
                         Err(error) => {
                             warn!(error = %error, "vmess udp socks5 upstream recv error");

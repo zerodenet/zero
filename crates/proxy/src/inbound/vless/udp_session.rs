@@ -5,7 +5,7 @@ use tracing::{info, warn};
 use crate::runtime::pipe::{KernelPipe, UdpPipe, UdpPipeInput};
 use crate::runtime::udp_dispatch::UdpDispatch;
 use crate::runtime::udp_flow::helpers::{
-    log_completed_udp_flow, udp_response_session_id, wait_for_upstream_idle,
+    log_completed_udp_flow, record_upstream_udp_response_received, wait_for_upstream_idle,
     UdpInboundResponseAccounting,
 };
 use crate::runtime::Proxy;
@@ -124,20 +124,20 @@ impl Proxy {
                     match upstream {
                         Ok(pkt) => {
                             last_activity = TokioInstant::now();
-                            proxy.record_udp_upstream_packet_received();
-                            dispatch.touch_upstream_idle(timeout);
-                            let (target, port, payload) = pkt.into_parts();
-                            let session_id = udp_response_session_id(&dispatch, &target, port);
-                            let response_accounting =
-                                UdpInboundResponseAccounting::record_received(&proxy, session_id, payload.len());
+                            let response = record_upstream_udp_response_received(
+                                &proxy,
+                                &mut dispatch,
+                                timeout,
+                                pkt,
+                            );
                             match udp_session.write_response_tokio(
                                 &mut client,
-                                &target,
-                                port,
-                                &payload,
+                                &response.target,
+                                response.port,
+                                &response.payload,
                             ).await {
                                 Ok(written) => {
-                                    response_accounting.record_sent(written);
+                                    response.accounting.record_sent(written);
                                     proxy.record_session_inbound_traffic(0, client.drain_traffic());
                                 }
                                 Err(error) => {

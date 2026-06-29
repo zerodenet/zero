@@ -17,7 +17,7 @@ use zero_engine::EngineError;
 use crate::runtime::inbound_protocol::{serve_inbound, InboundProtocol};
 use crate::runtime::pipe::{KernelPipe, UdpPipe, UdpPipeInput};
 use crate::runtime::udp_flow::helpers::{
-    udp_response_session_id, wait_for_upstream_idle, UdpInboundResponseAccounting,
+    record_upstream_udp_response_received, wait_for_upstream_idle, UdpInboundResponseAccounting,
 };
 use crate::runtime::Proxy;
 use crate::transport::{copy_one_way, Hysteria2Stream};
@@ -340,20 +340,20 @@ impl Proxy {
                 upstream = upstream_udp.recv_response(&mut upstream_buf) => {
                     match upstream {
                         Ok(pkt) => {
-                            proxy.record_udp_upstream_packet_received();
-                            dispatch.touch_upstream_idle(proxy.udp_upstream_idle_timeout());
-                            let (target, port, payload) = pkt.into_parts();
-                            let session_id = udp_response_session_id(&dispatch, &target, port);
-                            let response_accounting =
-                                UdpInboundResponseAccounting::record_received(&proxy, session_id, payload.len());
+                            let response = record_upstream_udp_response_received(
+                                &proxy,
+                                &mut dispatch,
+                                proxy.udp_upstream_idle_timeout(),
+                                pkt,
+                            );
                             if let Ok(Some(written)) = udp_session.send_response_for_proxy_session(
                                 &conn,
-                                session_id,
-                                &target,
-                                port,
-                                &payload,
+                                response.accounting.session_id(),
+                                &response.target,
+                                response.port,
+                                &response.payload,
                             ) {
-                                response_accounting.record_sent(written);
+                                response.accounting.record_sent(written);
                             }
                         }
                         Err(error) => warn!(error = %error, "h2 upstream response error"),
