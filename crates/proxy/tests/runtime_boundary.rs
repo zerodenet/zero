@@ -9095,11 +9095,15 @@ fn packet_path_key_model_lives_outside_chain_manager() {
 fn packet_path_entry_model_lives_outside_chain_manager() {
     let manager = read("src/runtime/udp_flow/packet_path_chain.rs");
     let model = read("src/runtime/udp_flow/packet_path_chain/model.rs");
+    let bridge = read("src/runtime/udp_flow/packet_path_chain/bridge.rs");
+    let traits = read("src/runtime/udp_flow/packet_path.rs");
 
     for forbidden in [
         "struct Entry",
         "struct EntryCandidate",
         "fn key(&self) -> PathKey",
+        "datagram_server: String",
+        "datagram_port: u16",
     ] {
         assert!(
             !manager.contains(forbidden),
@@ -9111,12 +9115,22 @@ fn packet_path_entry_model_lives_outside_chain_manager() {
         "struct Entry",
         "struct EntryCandidate",
         "fn key(&self) -> PathKey",
+        "datagram_endpoint: UdpDatagramEndpoint",
     ] {
         assert!(
             model.contains(required),
             "packet-path entry model should live in packet_path_chain/model.rs; missing `{required}`"
         );
     }
+    assert!(
+        !bridge.contains("entry.datagram_server")
+            && !bridge.contains("entry.datagram_port")
+            && bridge.contains("entry.datagram_endpoint.target()")
+            && bridge.contains("entry.datagram_endpoint.upstream()")
+            && traits.contains("struct UdpDatagramEndpoint")
+            && traits.contains("fn endpoint(&self) -> UdpDatagramEndpoint"),
+        "packet-path bridge should use a neutral datagram endpoint instead of unpacking entry datagram fields"
+    );
 }
 
 #[test]

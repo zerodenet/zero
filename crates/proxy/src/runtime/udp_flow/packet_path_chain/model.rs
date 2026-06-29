@@ -7,15 +7,14 @@ use super::bridge::Waiter;
 use super::key::PathKey;
 use crate::runtime::udp_flow::packet_path::PacketPathCarrier;
 use crate::runtime::udp_flow::packet_path::{
-    DatagramCodec, PacketPathCarrierDescriptor, UdpDatagramSource,
+    DatagramCodec, PacketPathCarrierDescriptor, UdpDatagramEndpoint, UdpDatagramSource,
 };
 
 pub(super) struct Entry {
     pub(super) path: Arc<dyn PacketPathCarrier>,
     pub(super) waiters: Arc<Mutex<VecDeque<Waiter>>>,
     pub(super) codec: Arc<dyn DatagramCodec<Address, Error = zero_core::Error>>,
-    pub(super) datagram_server: String,
-    pub(super) datagram_port: u16,
+    pub(super) datagram_endpoint: UdpDatagramEndpoint,
 }
 
 pub(super) struct EntryCandidate {

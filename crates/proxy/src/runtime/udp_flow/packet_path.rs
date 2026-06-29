@@ -108,6 +108,13 @@ impl UdpDatagramDescriptor {
             cache_key: self.cache_key.clone(),
         }
     }
+
+    pub(crate) fn endpoint(&self) -> UdpDatagramEndpoint {
+        UdpDatagramEndpoint {
+            server: self.server.clone(),
+            port: self.port,
+        }
+    }
 }
 
 /// Adapter-provided datagram role output for packet-path relay chains.
@@ -172,6 +179,26 @@ pub(crate) struct UdpDatagramKey {
     pub(crate) server: String,
     pub(crate) port: u16,
     pub(crate) cache_key: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub(crate) struct UdpDatagramEndpoint {
+    server: String,
+    port: u16,
+}
+
+impl UdpDatagramEndpoint {
+    pub(crate) fn target(&self) -> Address {
+        Address::Domain(self.server.clone())
+    }
+
+    pub(crate) fn port(&self) -> u16 {
+        self.port
+    }
+
+    pub(crate) fn upstream(&self) -> (String, u16) {
+        (self.server.clone(), self.port)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

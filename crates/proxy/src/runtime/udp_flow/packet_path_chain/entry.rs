@@ -52,7 +52,6 @@ pub(super) async fn build_entry(
         path,
         waiters,
         codec,
-        datagram_server: datagram_desc.server.clone(),
-        datagram_port: datagram_desc.port,
+        datagram_endpoint: datagram_desc.endpoint(),
     })
 }

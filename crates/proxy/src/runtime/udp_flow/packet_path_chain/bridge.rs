@@ -33,7 +33,7 @@ pub(super) async fn dispatch_via_entry(
         .map_err(|error| FlowFailure {
             stage: "packet_path_encode",
             error: error.into(),
-            upstream: Some((entry.datagram_server.clone(), entry.datagram_port)),
+            upstream: Some(entry.datagram_endpoint.upstream()),
         })?;
 
     let (response_tx, response_rx) = oneshot::channel();
@@ -47,8 +47,8 @@ pub(super) async fn dispatch_via_entry(
             tx: response_tx,
         });
 
-    let datagram_target = Address::Domain(entry.datagram_server.clone());
-    let datagram_port = entry.datagram_port;
+    let datagram_target = entry.datagram_endpoint.target();
+    let datagram_port = entry.datagram_endpoint.port();
     if let Err(error) = entry
         .path
         .send_to(&datagram_target, datagram_port, &packet)
@@ -58,7 +58,7 @@ pub(super) async fn dispatch_via_entry(
         return Err(FlowFailure {
             stage: "packet_path_send",
             error,
-            upstream: Some((entry.datagram_server.clone(), entry.datagram_port)),
+            upstream: Some(entry.datagram_endpoint.upstream()),
         });
     }
 
