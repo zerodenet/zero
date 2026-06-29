@@ -35,7 +35,6 @@ pub(super) async fn direct_flow(
     request: &VmessUdpStartFlow<'_>,
 ) -> Result<ManagedStreamConnection, EngineError> {
     if let Some(max_concurrency) = request.mux_concurrency {
-        let mux_identity = request.config.mux_open_identity();
         let mux_stream = request
             .mux_pool
             .open_udp_stream(VmessMuxOpenRequest {
@@ -43,11 +42,7 @@ pub(super) async fn direct_flow(
                 session: request.session,
                 server: request.server.to_owned(),
                 port: request.port,
-                identity: vmess::VmessMuxIdentity::from_parts(
-                    mux_identity.id,
-                    mux_identity.cipher_name.to_owned(),
-                    mux_identity.cipher,
-                ),
+                identity: request.config.mux_pool_identity(),
                 tls: request.transport.tls,
                 ws: request.transport.ws,
                 grpc: request.transport.grpc,

@@ -326,6 +326,10 @@ impl<'a> VlessUdpFlowConfig<'a> {
         }
     }
 
+    pub fn mux_pool_identity(&self) -> crate::mux_pool::MuxIdentity {
+        crate::mux_pool::MuxIdentity::from_uuid(self.identity.uuid)
+    }
+
     #[cfg(feature = "reality")]
     pub fn encode_initial_flow_packet(
         &self,

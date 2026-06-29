@@ -20,7 +20,6 @@ pub(super) async fn start_mux_fast_path(
     }
 
     let max_concurrency = 8u32;
-    let mux_identity = request.config.mux_open_identity();
     let Ok((_mux_sid, up_tx, _down_rx)) = request
         .mux_pool
         .open_udp_stream(VlessMuxOpenRequest {
@@ -28,7 +27,7 @@ pub(super) async fn start_mux_fast_path(
             session: None,
             server: request.server,
             port: request.port,
-            identity: vless::mux_pool::MuxIdentity::from_uuid(mux_identity.id),
+            identity: request.config.mux_pool_identity(),
             tls: request.transport.tls,
             reality: request.transport.reality,
             max_concurrency,

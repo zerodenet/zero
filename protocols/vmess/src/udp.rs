@@ -77,6 +77,14 @@ impl<'a> VmessUdpFlowConfig<'a> {
         }
     }
 
+    pub fn mux_pool_identity(&self) -> crate::VmessMuxIdentity {
+        crate::VmessMuxIdentity::from_parts(
+            self.identity.uuid,
+            self.cipher_name.to_owned(),
+            self.identity.cipher,
+        )
+    }
+
     pub async fn establish_flow_with_initial_packet<S>(
         &self,
         stream: S,
