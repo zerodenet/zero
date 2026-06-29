@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use socks5::{Socks5Inbound, Socks5Reply, Socks5Request};
+use socks5::{Socks5Inbound, Socks5Request};
 use tokio::io::AsyncWriteExt;
 use tokio::sync::watch;
 use tokio::task::JoinSet;
@@ -64,16 +64,13 @@ impl InboundProtocol for Socks5InboundHandler {
 
     async fn send_ok(&self, client: &mut TcpRelayStream) -> Result<(), EngineError> {
         self.socks5_inbound
-            .send_response(client, Socks5Reply::Succeeded)
+            .send_success_response(client)
             .await
             .map_err(EngineError::from)
     }
 
     async fn send_blocked(&self, client: &mut TcpRelayStream) -> Result<(), EngineError> {
-        let _ = self
-            .socks5_inbound
-            .send_response(client, Socks5Reply::ConnectionNotAllowed)
-            .await;
+        let _ = self.socks5_inbound.send_blocked_response(client).await;
         let _ = AsyncWriteExt::shutdown(client).await;
         Ok(())
     }
@@ -81,7 +78,7 @@ impl InboundProtocol for Socks5InboundHandler {
     async fn send_upstream_failure(&self, client: &mut TcpRelayStream) -> Result<(), EngineError> {
         let _ = self
             .socks5_inbound
-            .send_response(client, Socks5Reply::HostUnreachable)
+            .send_upstream_failure_response(client)
             .await;
         let _ = AsyncWriteExt::shutdown(client).await;
         Ok(())

@@ -212,6 +212,29 @@ impl Socks5Inbound {
         write_reply(stream, reply).await
     }
 
+    pub async fn send_success_response<S>(&self, stream: &mut S) -> Result<(), Error>
+    where
+        S: AsyncSocket,
+    {
+        self.send_response(stream, Socks5Reply::Succeeded).await
+    }
+
+    pub async fn send_blocked_response<S>(&self, stream: &mut S) -> Result<(), Error>
+    where
+        S: AsyncSocket,
+    {
+        self.send_response(stream, Socks5Reply::ConnectionNotAllowed)
+            .await
+    }
+
+    pub async fn send_upstream_failure_response<S>(&self, stream: &mut S) -> Result<(), Error>
+    where
+        S: AsyncSocket,
+    {
+        self.send_response(stream, Socks5Reply::HostUnreachable)
+            .await
+    }
+
     pub async fn send_response_with_bound<S>(
         &self,
         stream: &mut S,

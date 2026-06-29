@@ -979,6 +979,22 @@ fn socks5_inbound_uses_adapter_request_model() {
             && !mixed.contains("socks5_users()"),
         "SOCKS5 inbound auth lookup should live in protocols/socks5 while proxy listeners hold only a protocol-owned auth profile"
     );
+    assert!(
+        inbound.contains(".send_success_response(")
+            && inbound.contains(".send_blocked_response(")
+            && inbound.contains(".send_upstream_failure_response(")
+            && !inbound.contains("Socks5Reply"),
+        "SOCKS5 inbound TCP response reply selection should stay behind protocol-owned semantic response methods"
+    );
+    assert!(
+        protocol_inbound.contains("pub async fn send_success_response")
+            && protocol_inbound.contains("pub async fn send_blocked_response")
+            && protocol_inbound.contains("pub async fn send_upstream_failure_response")
+            && protocol_inbound.contains("Socks5Reply::Succeeded")
+            && protocol_inbound.contains("Socks5Reply::ConnectionNotAllowed")
+            && protocol_inbound.contains("Socks5Reply::HostUnreachable"),
+        "protocols/socks5 should own concrete SOCKS5 reply selection for common inbound TCP outcomes"
+    );
 }
 
 #[test]
