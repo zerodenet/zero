@@ -102,9 +102,7 @@ impl VmessMuxConnectionPool {
         let stream = connector.connect(socket, &key.server, key.port).await?;
 
         let metered = MeteredStream::new(stream);
-        let stream = TcpRelayStream::new(
-            vmess::mux::establish_mux_outbound_stream(metered, key.uuid(), key.cipher()).await?,
-        );
+        let stream = TcpRelayStream::new(key.establish_mux_outbound_stream(metered).await?);
 
         Ok(vmess::mux::VmessMuxConn::new(
             stream,

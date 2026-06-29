@@ -110,6 +110,16 @@ impl VmessMuxPoolKey {
     pub fn cipher(&self) -> VmessCipher {
         self.identity.cipher()
     }
+
+    pub async fn establish_mux_outbound_stream<S>(
+        &self,
+        stream: S,
+    ) -> Result<VmessAeadStream<S>, Error>
+    where
+        S: AsyncSocket,
+    {
+        establish_mux_outbound_stream(stream, self.uuid(), self.cipher()).await
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

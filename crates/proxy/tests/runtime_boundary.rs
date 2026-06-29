@@ -4146,8 +4146,11 @@ fn vmess_mux_pool_model_lives_outside_runtime_root() {
         );
     }
     assert!(
-        root.contains("vmess::mux::establish_mux_outbound_stream"),
-        "VMess mux pool runtime should call the protocol mux connection helper"
+        root.contains("key.establish_mux_outbound_stream(metered)")
+            && !root.contains("vmess::mux::establish_mux_outbound_stream")
+            && !root.contains("key.uuid()")
+            && !root.contains("key.cipher()"),
+        "VMess mux pool runtime should ask the protocol key to establish MUX streams without unpacking identity fields"
     );
     assert!(
         root.contains("vmess::mux::VmessMuxConn::new") && root.contains(".open_stream("),
@@ -4165,6 +4168,7 @@ fn vmess_mux_pool_model_lives_outside_runtime_root() {
         "fn spawn_mux_read_relay",
         "tokio::spawn",
         "read_mux_server_event(&mut reader)",
+        "pub async fn establish_mux_outbound_stream",
     ] {
         assert!(
             protocol_mux.contains(required),
@@ -4511,18 +4515,28 @@ fn vless_mux_pool_model_lives_outside_runtime_root() {
     for required in [
         "open_mux_tcp_stream",
         "open_mux_udp_stream",
-        "MuxPoolConn::new",
+        "establish_mux_connection",
+        "into_pool_conn",
     ] {
         assert!(
             root.contains(required),
             "VLESS adapter mux pool should delegate protocol MUX stream mechanics through `{required}`"
         );
     }
+    assert!(
+        !root.contains("VlessOutbound")
+            && !root.contains("establish_mux(&mut metered")
+            && !root.contains("key.uuid()")
+            && !root.contains("MuxPoolConn::new("),
+        "VLESS adapter mux pool should not unpack protocol identity or construct MUX connections directly"
+    );
     let protocol_mux_pool = fs::read_to_string(repo_root().join("protocols/vless/src/mux_pool.rs"))
         .expect("read protocols/vless mux_pool source");
     for required in [
         "pub fn open_mux_tcp_stream",
         "pub fn open_mux_udp_stream",
+        "pub async fn establish_mux_connection",
+        "pub fn into_pool_conn",
         "impl MuxPoolConn",
         "tokio::spawn",
         "encrypt_mux_payload",

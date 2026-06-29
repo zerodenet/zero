@@ -72,6 +72,25 @@ impl PoolKey {
     pub fn uuid(&self) -> &[u8; 16] {
         self.identity.uuid()
     }
+
+    pub async fn establish_mux_connection<S>(
+        &self,
+        stream: &mut S,
+    ) -> Result<crate::mux::MuxClient, Error>
+    where
+        S: zero_traits::AsyncSocket,
+    {
+        crate::VlessOutbound
+            .establish_mux(stream, self.uuid())
+            .await
+    }
+
+    pub fn into_pool_conn<S>(self, stream: S, max_concurrency: u32) -> MuxPoolConn
+    where
+        S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+    {
+        MuxPoolConn::new(stream, self.uuid(), max_concurrency)
+    }
 }
 
 // ── Pool connection ──

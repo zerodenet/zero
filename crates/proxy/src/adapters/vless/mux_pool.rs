@@ -178,15 +178,13 @@ impl MuxConnectionPool {
         let stream: TcpRelayStream = connector.connect(socket, &key.server, key.port).await?;
 
         let mut metered = MeteredStream::new(stream);
-        let _mux = vless::VlessOutbound
-            .establish_mux(&mut metered, key.uuid())
+        let _mux = key
+            .establish_mux_connection(&mut metered)
             .await
             .map_err(|e| EngineError::Io(std::io::Error::other(e.to_string())))?;
 
-        Ok(MuxPoolConn::new(
-            metered.into_inner(),
-            key.uuid(),
-            request.max_concurrency,
-        ))
+        Ok(key
+            .clone()
+            .into_pool_conn(metered.into_inner(), request.max_concurrency))
     }
 }
