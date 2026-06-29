@@ -253,6 +253,14 @@ impl VlessInboundProfile {
     }
 }
 
+pub fn inbound_profile_from_config_users<I, U>(users: I) -> Result<VlessInboundProfile, Error>
+where
+    I: IntoIterator<Item = U>,
+    U: IntoVlessInboundUserConfig,
+{
+    VlessInboundProfile::from_config_users(users)
+}
+
 pub trait IntoVlessInboundUserConfig {
     fn into_vless_inbound_user_config(self) -> VlessInboundUserConfigParts;
 }

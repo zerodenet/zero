@@ -1,82 +1,10 @@
-use zero_config::{
-    FallbackConfig, GrpcConfig, H2Config, HttpUpgradeConfig, InboundConfig, InboundProtocolConfig,
-    SplitHttpConfig, TlsConfig, WebSocketConfig,
-};
+use zero_config::{InboundConfig, InboundProtocolConfig};
 use zero_engine::EngineError;
 
 use crate::adapters::vless::VlessAdapter;
 use crate::protocol_registry::BoundInbound;
 use crate::runtime::Proxy;
 use crate::transport::QuicInbound;
-
-fn parse_inbound_profile(
-    inbound: &InboundConfig,
-) -> Result<vless::VlessInboundProfile, EngineError> {
-    vless::VlessInboundProfile::from_config_users(inbound.protocol.vless_users().iter().map(
-        |user| {
-            (
-                user.id.as_str(),
-                user.flow.as_deref(),
-                user.credential_id.as_deref(),
-                user.principal_key.as_deref(),
-                user.up_bps,
-                user.down_bps,
-            )
-        },
-    ))
-    .map_err(EngineError::from)
-}
-
-fn parse_reality_profile(inbound: &InboundConfig) -> Option<vless::VlessRealityServerProfile> {
-    inbound.protocol.vless_reality().map(|reality| {
-        vless::VlessRealityServerProfile::from_config_server(
-            reality.private_key.clone(),
-            reality.short_ids.clone(),
-            reality.server_name.clone(),
-            reality.cipher_suites.clone(),
-        )
-    })
-}
-
-struct VlessInboundTransportConfig {
-    tls: Option<Box<TlsConfig>>,
-    ws: Option<Box<WebSocketConfig>>,
-    grpc: Option<Box<GrpcConfig>>,
-    h2: Option<Box<H2Config>>,
-    http_upgrade: Option<Box<HttpUpgradeConfig>>,
-    split_http: Option<Box<SplitHttpConfig>>,
-    fallback: Option<Box<FallbackConfig>>,
-}
-
-fn parse_transport_config(
-    inbound: &InboundConfig,
-) -> Result<VlessInboundTransportConfig, EngineError> {
-    let InboundProtocolConfig::Vless {
-        tls,
-        ws,
-        grpc,
-        h2,
-        http_upgrade,
-        split_http,
-        fallback,
-        ..
-    } = &inbound.protocol
-    else {
-        return Err(EngineError::Io(std::io::Error::new(
-            std::io::ErrorKind::InvalidInput,
-            "vless adapter received non-vless inbound config",
-        )));
-    };
-    Ok(VlessInboundTransportConfig {
-        tls: tls.clone(),
-        ws: ws.clone(),
-        grpc: grpc.clone(),
-        h2: h2.clone(),
-        http_upgrade: http_upgrade.clone(),
-        split_http: split_http.clone(),
-        fallback: fallback.clone(),
-    })
-}
 
 impl VlessAdapter {
     pub(super) async fn bind_inbound_impl(
@@ -111,11 +39,50 @@ impl VlessAdapter {
     ) {
         let p = proxy.clone();
         listeners.spawn(async move {
-            let profile = parse_inbound_profile(&inbound)?;
-            let reality = parse_reality_profile(&inbound);
-            let transport = parse_transport_config(&inbound)?;
-            let tls_acceptor = transport
-                .tls
+            let InboundProtocolConfig::Vless {
+                users,
+                reality,
+                tls,
+                ws,
+                grpc,
+                h2,
+                http_upgrade,
+                split_http,
+                fallback,
+                ..
+            } = &inbound.protocol
+            else {
+                return Err(EngineError::Io(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "vless adapter received non-vless inbound config",
+                )));
+            };
+            let profile = vless::inbound_profile_from_config_users(users.iter().map(|user| {
+                (
+                    user.id.as_str(),
+                    user.flow.as_deref(),
+                    user.credential_id.as_deref(),
+                    user.principal_key.as_deref(),
+                    user.up_bps,
+                    user.down_bps,
+                )
+            }))
+            .map_err(EngineError::from)?;
+            let reality = reality.as_ref().map(|reality| {
+                vless::VlessRealityServerProfile::from_config_server(
+                    reality.private_key.clone(),
+                    reality.short_ids.clone(),
+                    reality.server_name.clone(),
+                    reality.cipher_suites.clone(),
+                )
+            });
+            let ws = ws.clone();
+            let grpc = grpc.clone();
+            let h2 = h2.clone();
+            let http_upgrade = http_upgrade.clone();
+            let split_http = split_http.clone();
+            let fallback = fallback.clone();
+            let tls_acceptor = tls
                 .as_deref()
                 .map(|tls| crate::transport::build_tls_acceptor(tls, p.config.source_dir()))
                 .transpose()?;
@@ -126,12 +93,12 @@ impl VlessAdapter {
                     profile,
                     reality,
                     tls_acceptor,
-                    ws: transport.ws,
-                    grpc: transport.grpc,
-                    h2: transport.h2,
-                    http_upgrade: transport.http_upgrade,
-                    split_http: transport.split_http,
-                    fallback: transport.fallback,
+                    ws,
+                    grpc,
+                    h2,
+                    http_upgrade,
+                    split_http,
+                    fallback,
                 },
                 bound,
                 shutdown_rx,

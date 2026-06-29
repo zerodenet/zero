@@ -1887,15 +1887,11 @@ fn vless_inbound_users_are_adapter_parsed() {
             "VLESS inbound listener/session/helpers should receive adapter-parsed protocol values; found `{forbidden}`"
         );
     }
-    for required in [
-        "parse_inbound_profile",
-        "VlessInboundProfile::from_config_users",
-    ] {
-        assert!(
-            adapter.contains(required),
-            "VLESS adapter inbound module should ask protocols/vless for parsed users through `{required}`"
-        );
-    }
+    let required = "vless::inbound_profile_from_config_users";
+    assert!(
+        adapter.contains(required),
+        "VLESS adapter inbound module should ask protocols/vless for parsed users through `{required}`"
+    );
     for private_detail in ["parse_uuid", "parse_flow"] {
         assert!(
             !adapter.contains(private_detail) && protocol_inbound.contains(private_detail),
@@ -1907,6 +1903,8 @@ fn vless_inbound_users_are_adapter_parsed() {
             && !adapter.contains("VlessConfiguredUser::from_config")
             && !adapter.contains("VlessInboundProfile::from_users")
             && !adapter.contains("VlessInboundProfile::from_config_parts")
+            && !adapter.contains("VlessInboundProfile::from_config_users")
+            && !adapter.contains("fn parse_inbound_profile")
             && adapter.contains("user.id.as_str()")
             && adapter.contains("user.flow.as_deref()")
             && adapter.contains("user.credential_id.as_deref()")
@@ -1918,6 +1916,7 @@ fn vless_inbound_users_are_adapter_parsed() {
             && protocol_inbound.contains("pub fn from_config")
             && protocol_inbound.contains("pub fn from_config_parts")
             && protocol_inbound.contains("pub fn from_config_users")
+            && protocol_inbound.contains("pub fn inbound_profile_from_config_users")
             && protocol_inbound.contains("VlessUser::from_config"),
         "VLESS adapter should not hand-build protocol users"
     );
@@ -1969,8 +1968,8 @@ fn vless_inbound_users_are_adapter_parsed() {
             && model.contains("http_upgrade: Option<Box<zero_config::HttpUpgradeConfig>>")
             && model.contains("split_http: Option<Box<zero_config::SplitHttpConfig>>")
             && model.contains("fallback: Option<Box<zero_config::FallbackConfig>>")
-            && adapter.contains("parse_transport_config")
-            && adapter.contains("parse_reality_profile")
+            && !adapter.contains("fn parse_transport_config")
+            && !adapter.contains("fn parse_reality_profile")
             && adapter.contains("crate::transport::build_tls_acceptor")
             && adapter.contains("tls_acceptor")
             && adapter.contains("VlessRealityServerProfile::from_config_server")
