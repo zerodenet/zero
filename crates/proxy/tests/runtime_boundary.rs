@@ -84,6 +84,7 @@ fn protocol_inbound_sources() -> Vec<PathBuf> {
         "src/inbound/mieru.rs",
         "src/inbound/mieru",
         "src/inbound/hysteria2.rs",
+        "src/inbound/hysteria2",
         "src/inbound/vless",
         "src/inbound/vmess",
     ]
@@ -192,7 +193,7 @@ fn ordinary_udp_inbounds_submit_packets_through_udp_pipe() {
         "src/inbound/vmess/mux.rs",
         "src/inbound/trojan/udp.rs",
         "src/inbound/shadowsocks/udp.rs",
-        "src/inbound/hysteria2.rs",
+        "src/inbound/hysteria2/udp.rs",
         "src/inbound/mieru/udp.rs",
     ] {
         let content = read(source);
@@ -359,7 +360,7 @@ fn inbound_udp_response_accounting_uses_runtime_helpers() {
         );
     }
 
-    let hysteria2 = read("src/inbound/hysteria2.rs");
+    let hysteria2 = read("src/inbound/hysteria2/udp.rs");
     let datagram_loop = hysteria2
         .split("async fn hysteria2_datagram_loop")
         .nth(1)
@@ -401,7 +402,7 @@ fn inbound_udp_response_accounting_uses_runtime_helpers() {
         "src/inbound/vmess/mux.rs",
         "src/inbound/trojan/udp.rs",
         "src/inbound/mieru/udp.rs",
-        "src/inbound/hysteria2.rs",
+        "src/inbound/hysteria2/udp.rs",
     ] {
         let content = read(source);
         assert!(
@@ -418,7 +419,7 @@ fn inbound_udp_response_accounting_uses_runtime_helpers() {
         "src/inbound/vmess/mux.rs",
         "src/inbound/trojan/udp.rs",
         "src/inbound/mieru/udp.rs",
-        "src/inbound/hysteria2.rs",
+        "src/inbound/hysteria2/udp.rs",
         "src/inbound/shadowsocks/udp.rs",
         "src/inbound/socks5/udp_associate/direct_response.rs",
         "src/inbound/socks5/udp_associate/chain_response.rs",
@@ -1595,7 +1596,7 @@ fn inbound_auth_identity_stays_in_protocol_crates() {
 fn stream_udp_inbound_direct_response_target_conversion_is_protocol_owned() {
     let trojan_udp_inbound = read("src/inbound/trojan/udp.rs");
     let mieru_udp_inbound = read("src/inbound/mieru/udp.rs");
-    let hysteria2_inbound = read("src/inbound/hysteria2.rs");
+    let hysteria2_inbound = read("src/inbound/hysteria2/udp.rs");
     let vless_udp_inbound = read("src/inbound/vless/udp_session.rs");
     let vless_mux_inbound = read("src/inbound/vless/mux.rs");
     let vmess_mux_inbound = read("src/inbound/vmess/mux.rs");
@@ -1970,6 +1971,7 @@ fn vless_inbound_users_are_adapter_parsed() {
 #[test]
 fn hysteria2_inbound_uses_adapter_request_model() {
     let inbound = read("src/inbound/hysteria2.rs");
+    let udp = read("src/inbound/hysteria2/udp.rs");
     let adapter = read("src/adapters/hysteria2/inbound.rs");
     let protocol_udp = fs::read_to_string(repo_root().join("protocols/hysteria2/src/udp.rs"))
         .expect("read hysteria2 protocol udp source");
@@ -2051,6 +2053,13 @@ fn hysteria2_inbound_uses_adapter_request_model() {
             && protocol_inbound.contains("self.accept_tcp_connect_header(&header_buf[..n])"),
         "Hysteria2 protocol crate should own auth stream and TCP connect header IO while proxy only orchestrates QUIC tasks"
     );
+    assert!(
+        inbound.contains("mod udp;")
+            && !inbound.contains("async fn hysteria2_datagram_loop")
+            && !inbound.contains("UdpPipe::new")
+            && !inbound.contains("record_direct_udp_response_received"),
+        "Hysteria2 inbound root should keep QUIC listener/TCP stream glue while datagram relay glue lives in src/inbound/hysteria2/udp.rs"
+    );
     for private_helper in [
         "build_auth_error",
         "build_auth_frame",
@@ -2080,58 +2089,58 @@ fn hysteria2_inbound_uses_adapter_request_model() {
         "hysteria2::encode_inbound_udp_datagram",
     ] {
         assert!(
-            !inbound.contains(forbidden),
+            !udp.contains(forbidden),
             "Hysteria2 inbound should use inbound-specific protocol datagram helpers instead of `{forbidden}`"
         );
     }
     assert!(
-        inbound.contains("hysteria2::Hysteria2Inbound.udp_session()")
-            && inbound.contains("udp_session.read_inbound_dispatch_from_datagram")
-            && inbound.contains("UdpPipeInput::from_inbound_dispatch")
-            && !inbound.contains("udp_session.read_dispatch_view_from_datagram")
-            && !inbound.contains("conn.read_datagram")
-            && !inbound.contains("udp_session.decode_dispatch_view")
-            && !inbound.contains("view.pipe_parts()")
-            && !inbound.contains("view.clone().into_pipe_parts()")
-            && !inbound.contains("udp_session.record_proxy_session_for_view")
-            && !inbound.contains("udp_session.record_proxy_session_for_parts")
-            && !inbound.contains("parts.request_session_id()")
-            && !inbound.contains("request_session_id")
-            && inbound.contains("udp_session.record_dispatch_success(*sid, &tracked)")
-            && !inbound.contains("parts.record_dispatch_success")
-            && !inbound.contains("udp_session.record_dispatched_proxy_session")
-            && inbound.contains("udp_session.send_response_for_proxy_session")
-            && inbound.contains("udp_session.send_response_to_socket_addr_for_proxy_session")
-            && !inbound.contains("if let Some(sid) = session_id")
-            && !inbound.contains("udp_session.send_response(&conn, sid")
-            && !inbound.contains("udp_session.send_response_to_socket_addr(\n                            &conn,\n                            sid")
-            && !inbound.contains("request.into_dispatch_parts()")
-            && !inbound.contains("request.request_session_id")
-            && !inbound.contains("request.client_session_id")
-            && !inbound.contains("parts.target")
-            && !inbound.contains("parts.port")
-            && !inbound.contains("parts.payload")
-            && !inbound.contains("parts.client_session_id")
-            && !inbound.contains("parts.pipe_parts()")
-            && !inbound.contains("parts.into_pipe_parts()")
-            && inbound.contains("UdpDispatch::new(&inbound_tag)")
-            && inbound.contains("dispatch.poll_refs()")
-            && inbound.contains("upstream_udp.recv_response")
-            && inbound.contains("wait_for_upstream_idle(socks5_idle)")
-            && !inbound.contains("tokio::net::UdpSocket::bind")
-            && !inbound.contains("failed to bind UDP socket")
-            && !inbound.contains("resolver: Arc<zero_dns::DnsSystem>")
-            && !inbound.contains("client_session_id: None")
-            && !inbound.contains("request.target().clone()")
-            && !inbound.contains("request.payload()")
-            && !inbound.contains("Address::Ipv4")
-            && !inbound.contains("Address::Ipv6")
-            && !inbound.contains("Hysteria2InboundUdpCodec")
-            && !inbound.contains("decode_datagram")
-            && !inbound.contains("send_datagram")
-            && !inbound.contains("h2_flows")
-            && !inbound.contains("Hysteria2InboundUdpCodec.encode_datagram")
-            && !inbound.contains("conn.send_datagram")
+        udp.contains("hysteria2::Hysteria2Inbound.udp_session()")
+            && udp.contains("udp_session.read_inbound_dispatch_from_datagram")
+            && udp.contains("UdpPipeInput::from_inbound_dispatch")
+            && !udp.contains("udp_session.read_dispatch_view_from_datagram")
+            && !udp.contains("conn.read_datagram")
+            && !udp.contains("udp_session.decode_dispatch_view")
+            && !udp.contains("view.pipe_parts()")
+            && !udp.contains("view.clone().into_pipe_parts()")
+            && !udp.contains("udp_session.record_proxy_session_for_view")
+            && !udp.contains("udp_session.record_proxy_session_for_parts")
+            && !udp.contains("parts.request_session_id()")
+            && !udp.contains("request_session_id")
+            && udp.contains("udp_session.record_dispatch_success(*sid, &tracked)")
+            && !udp.contains("parts.record_dispatch_success")
+            && !udp.contains("udp_session.record_dispatched_proxy_session")
+            && udp.contains("udp_session.send_response_for_proxy_session")
+            && udp.contains("udp_session.send_response_to_socket_addr_for_proxy_session")
+            && !udp.contains("if let Some(sid) = session_id")
+            && !udp.contains("udp_session.send_response(&conn, sid")
+            && !udp.contains("udp_session.send_response_to_socket_addr(\n                            &conn,\n                            sid")
+            && !udp.contains("request.into_dispatch_parts()")
+            && !udp.contains("request.request_session_id")
+            && !udp.contains("request.client_session_id")
+            && !udp.contains("parts.target")
+            && !udp.contains("parts.port")
+            && !udp.contains("parts.payload")
+            && !udp.contains("parts.client_session_id")
+            && !udp.contains("parts.pipe_parts()")
+            && !udp.contains("parts.into_pipe_parts()")
+            && udp.contains("UdpDispatch::new(&inbound_tag)")
+            && udp.contains("dispatch.poll_refs()")
+            && udp.contains("upstream_udp.recv_response")
+            && udp.contains("wait_for_upstream_idle(socks5_idle)")
+            && !udp.contains("tokio::net::UdpSocket::bind")
+            && !udp.contains("failed to bind UDP socket")
+            && !udp.contains("resolver: Arc<zero_dns::DnsSystem>")
+            && !udp.contains("client_session_id: None")
+            && !udp.contains("request.target().clone()")
+            && !udp.contains("request.payload()")
+            && !udp.contains("Address::Ipv4")
+            && !udp.contains("Address::Ipv6")
+            && !udp.contains("Hysteria2InboundUdpCodec")
+            && !udp.contains("decode_datagram")
+            && !udp.contains("send_datagram")
+            && !udp.contains("h2_flows")
+            && !udp.contains("Hysteria2InboundUdpCodec.encode_datagram")
+            && !udp.contains("conn.send_datagram")
             && protocol_udp.contains("struct Hysteria2InboundUdpCodec")
             && protocol_udp.contains("struct Hysteria2InboundUdpSession")
             && protocol_udp.contains("struct Hysteria2InboundUdpRequest")
