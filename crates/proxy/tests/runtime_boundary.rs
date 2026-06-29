@@ -1512,7 +1512,7 @@ fn vless_inbound_users_are_adapter_parsed() {
             && model.contains("reality: Option<vless::VlessRealityServerProfile>")
             && listener.contains("request: VlessInboundRequest")
             && listener.contains("let VlessInboundRequest")
-            && model.contains("tls: Option<Box<zero_config::TlsConfig>>")
+            && model.contains("tls_acceptor: Option<crate::transport::TlsAcceptor>")
             && model.contains("ws: Option<Box<zero_config::WebSocketConfig>>")
             && model.contains("grpc: Option<Box<zero_config::GrpcConfig>>")
             && model.contains("h2: Option<Box<zero_config::H2Config>>")
@@ -1521,8 +1521,12 @@ fn vless_inbound_users_are_adapter_parsed() {
             && model.contains("fallback: Option<Box<zero_config::FallbackConfig>>")
             && adapter.contains("parse_transport_config")
             && adapter.contains("parse_reality_profile")
+            && adapter.contains("crate::transport::build_tls_acceptor")
+            && adapter.contains("tls_acceptor")
             && adapter.contains("VlessRealityServerProfile::from_config_parts")
             && !adapter.contains("VlessRealityServerProfile::new")
+            && !listener.contains("build_tls_acceptor")
+            && !listener.contains("zero_config::TlsConfig")
             && protocol_inbound.contains("pub struct VlessInboundProfile"),
         "VLESS inbound request model should live in inbound/vless/model.rs"
     );

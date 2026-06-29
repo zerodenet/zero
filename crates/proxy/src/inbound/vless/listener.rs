@@ -1,6 +1,6 @@
 use crate::logging::log_listener_connection_error;
 use crate::runtime::Proxy;
-use crate::transport::{build_tls_acceptor, InboundTlsStream, PrefixedSocket};
+use crate::transport::{InboundTlsStream, PrefixedSocket};
 use tokio::sync::watch;
 use tokio::task::JoinSet;
 use tracing::{error, info};
@@ -21,7 +21,7 @@ pub(crate) async fn run_vless_listener_with_bound(
         inbound,
         profile,
         reality,
-        tls,
+        tls_acceptor,
         ws,
         grpc,
         h2,
@@ -55,10 +55,6 @@ pub(crate) async fn run_vless_listener_with_bound(
         }
         crate::protocol_registry::BoundInbound::Tcp(listener) => {
             let local_addr = listener.local_addr()?;
-            let tls_acceptor = tls
-                .as_deref()
-                .map(|tls| build_tls_acceptor(tls, proxy.config.source_dir()))
-                .transpose()?;
             let ws_config = ws.as_deref().cloned();
             let grpc_config = grpc.as_deref().cloned();
             let h2_config = h2.as_deref().cloned();

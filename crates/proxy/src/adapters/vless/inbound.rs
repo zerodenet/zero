@@ -114,13 +114,18 @@ impl VlessAdapter {
             let profile = parse_inbound_profile(&inbound)?;
             let reality = parse_reality_profile(&inbound);
             let transport = parse_transport_config(&inbound)?;
+            let tls_acceptor = transport
+                .tls
+                .as_deref()
+                .map(|tls| crate::transport::build_tls_acceptor(tls, p.config.source_dir()))
+                .transpose()?;
             crate::inbound::run_vless_listener_with_bound(
                 &p,
                 crate::inbound::vless::model::VlessInboundRequest {
                     inbound,
                     profile,
                     reality,
-                    tls: transport.tls,
+                    tls_acceptor,
                     ws: transport.ws,
                     grpc: transport.grpc,
                     h2: transport.h2,
