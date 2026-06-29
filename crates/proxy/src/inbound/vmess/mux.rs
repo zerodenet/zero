@@ -47,15 +47,8 @@ impl Proxy {
                         }
                     };
 
-                    match action {
-                        vmess::mux::VmessInboundMuxAction::KeepAlive => continue,
-                        vmess::mux::VmessInboundMuxAction::OpenStream {
-                            session_id,
-                            session,
-                            initial_payload,
-                        } => {
-                            let session = *session;
-                            let up_rx = streams.open_stream(session_id, initial_payload);
+                    if let Some(opened) = streams.apply_inbound_action(action) {
+                        let (session_id, session, up_rx) = opened.into_parts();
                             match session.network {
                                 Network::Tcp => {
                                     self.spawn_vmess_mux_tcp_stream_task(VmessMuxTcpStreamTask {
@@ -78,17 +71,6 @@ impl Proxy {
                                     })
                                 }
                             }
-                        }
-                        vmess::mux::VmessInboundMuxAction::Data {
-                            session_id,
-                            payload,
-                        } => {
-                            let _ = streams.push_stream_data(session_id, payload);
-                        }
-                        vmess::mux::VmessInboundMuxAction::End { session_id } => {
-                            let _ = streams.close_inbound_stream(session_id);
-                        }
-                        vmess::mux::VmessInboundMuxAction::Unknown { .. } => {}
                     }
                 }
                 Some(joined) = mux_tasks.join_next(), if !mux_tasks.is_empty() => {

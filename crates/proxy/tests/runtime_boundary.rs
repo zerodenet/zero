@@ -4953,7 +4953,7 @@ fn inbound_vmess_mux_task_model_lives_outside_mux_root() {
     assert!(
         root.contains("vmess::mux::VmessInboundMuxSession::new()")
             && root.contains("mux_session.read_inbound_action(&mut reader)")
-            && root.contains("vmess::mux::VmessInboundMuxAction"),
+            && root.contains("streams.apply_inbound_action(action)"),
         "VMess inbound MUX runtime should consume protocol-owned semantic mux actions"
     );
     for forbidden in [
@@ -4994,7 +4994,9 @@ fn inbound_vmess_mux_task_model_lives_outside_mux_root() {
         "protocols/vmess should classify raw VMess MUX frames into server events and proxy-facing actions"
     );
     assert!(
-        root.contains("VmessInboundMuxAction::OpenStream")
+        root.contains("opened.into_parts()")
+            && protocol_mux.contains("VmessInboundMuxAction::OpenStream")
+            && protocol_mux.contains("VmessInboundMuxOpenedStream::new")
             && protocol_mux.contains("ProtocolType::Vmess")
             && !root.contains("network,")
             && !root.contains("Session::new(0,")
@@ -5032,7 +5034,10 @@ fn inbound_vmess_mux_task_model_lives_outside_mux_root() {
             && !root.contains("vmess::mux::queue_end_stream")
             && !root.contains("vmess::mux::queue_keep_stream")
             && !root.contains("vmess::mux::encode_end_stream")
-            && !root.contains("vmess::mux::encode_keep_stream"),
+            && !root.contains("vmess::mux::encode_keep_stream")
+            && !root.contains("streams.open_stream(")
+            && !root.contains("streams.push_stream_data(")
+            && !root.contains("streams.close_inbound_stream("),
         "VMess inbound MUX runtime should use the protocol-owned inbound MUX session wrapper"
     );
     assert!(
@@ -5046,6 +5051,8 @@ fn inbound_vmess_mux_task_model_lives_outside_mux_root() {
             && protocol_mux.contains("pub fn open_stream")
             && protocol_mux.contains("pub fn push_stream_data")
             && protocol_mux.contains("pub fn close_inbound_stream")
+            && protocol_mux.contains("pub fn apply_inbound_action")
+            && protocol_mux.contains("pub struct VmessInboundMuxOpenedStream")
             && protocol_mux.contains("pub async fn relay_inbound_mux_stream")
             && protocol_mux.contains("write_inbound_stream_payload(&writer, session_id")
             && root.contains("vmess::mux::relay_inbound_mux_stream"),

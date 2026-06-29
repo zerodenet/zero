@@ -204,6 +204,30 @@ pub enum VmessInboundMuxAction {
     },
 }
 
+pub struct VmessInboundMuxOpenedStream {
+    session_id: u16,
+    session: Box<Session>,
+    up_rx: mpsc::UnboundedReceiver<Vec<u8>>,
+}
+
+impl VmessInboundMuxOpenedStream {
+    pub fn new(
+        session_id: u16,
+        session: Box<Session>,
+        up_rx: mpsc::UnboundedReceiver<Vec<u8>>,
+    ) -> Self {
+        Self {
+            session_id,
+            session,
+            up_rx,
+        }
+    }
+
+    pub fn into_parts(self) -> (u16, Session, mpsc::UnboundedReceiver<Vec<u8>>) {
+        (self.session_id, *self.session, self.up_rx)
+    }
+}
+
 pub fn mux_cool_session() -> Session {
     Session::new(
         0,
@@ -379,6 +403,35 @@ impl VmessInboundMuxStreams {
         self.streams
             .remove(&session_id)
             .is_some_and(|tx| tx.send(Vec::new()).is_ok())
+    }
+
+    pub fn apply_inbound_action(
+        &mut self,
+        action: VmessInboundMuxAction,
+    ) -> Option<VmessInboundMuxOpenedStream> {
+        match action {
+            VmessInboundMuxAction::KeepAlive => None,
+            VmessInboundMuxAction::OpenStream {
+                session_id,
+                session,
+                initial_payload,
+            } => {
+                let up_rx = self.open_stream(session_id, initial_payload);
+                Some(VmessInboundMuxOpenedStream::new(session_id, session, up_rx))
+            }
+            VmessInboundMuxAction::Data {
+                session_id,
+                payload,
+            } => {
+                let _ = self.push_stream_data(session_id, payload);
+                None
+            }
+            VmessInboundMuxAction::End { session_id } => {
+                let _ = self.close_inbound_stream(session_id);
+                None
+            }
+            VmessInboundMuxAction::Unknown { .. } => None,
+        }
     }
 }
 
