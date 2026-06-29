@@ -1436,7 +1436,9 @@ fn hysteria2_inbound_uses_adapter_request_model() {
     }
     assert!(
         inbound.contains("hysteria2::Hysteria2Inbound.udp_session()")
-            && inbound.contains("udp_session.decode_dispatch_view")
+            && inbound.contains("udp_session.read_dispatch_view_from_datagram")
+            && !inbound.contains("conn.read_datagram")
+            && !inbound.contains("udp_session.decode_dispatch_view")
             && inbound.contains("view.pipe_parts()")
             && !inbound.contains("view.clone().into_pipe_parts()")
             && inbound.contains("udp_session.record_proxy_session_for_view")
@@ -1477,6 +1479,7 @@ fn hysteria2_inbound_uses_adapter_request_model() {
             && protocol_udp.contains("fn decode_request")
             && protocol_udp.contains("fn decode_dispatch_parts")
             && protocol_udp.contains("fn decode_dispatch_view")
+            && protocol_udp.contains("fn read_dispatch_view_from_datagram")
             && protocol_udp.contains("fn record_proxy_session")
             && protocol_udp.contains("fn record_proxy_session_for_view")
             && protocol_udp.contains("fn send_response")

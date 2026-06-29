@@ -298,29 +298,27 @@ impl Proxy {
             let (direct_sock, upstream_udp, socks5_idle, chain_tasks) = dispatch.poll_refs();
 
             select! {
-                dg = conn.read_datagram() => {
+                dg = udp_session.read_dispatch_view_from_datagram(&conn) => {
                     match dg {
-                        Ok(data) => {
-                            if let Ok(view) = udp_session.decode_dispatch_view(&data) {
-                                let (target, port, payload, client_session_id) = view.pipe_parts();
-                                let _ = UdpPipe::new(&proxy, &mut dispatch)
-                                    .dispatch(UdpPipeInput {
-                                        target: target.clone(),
-                                        port,
-                                        payload,
-                                        protocol: ProtocolType::Hysteria2,
-                                        auth: None,
-                                        client_session_id,
-                                    })
-                                    .await.inspect(|sid| {
-                                    udp_session.record_proxy_session_for_view(*sid, &view);
-                                }).inspect_err(|e| {
-                                    warn!(error = %e, "h2 udp dispatch failed");
-                                });
-                            }
+                        Ok(view) => {
+                            let (target, port, payload, client_session_id) = view.pipe_parts();
+                            let _ = UdpPipe::new(&proxy, &mut dispatch)
+                                .dispatch(UdpPipeInput {
+                                    target: target.clone(),
+                                    port,
+                                    payload,
+                                    protocol: ProtocolType::Hysteria2,
+                                    auth: None,
+                                    client_session_id,
+                                })
+                                .await.inspect(|sid| {
+                                udp_session.record_proxy_session_for_view(*sid, &view);
+                            }).inspect_err(|e| {
+                                warn!(error = %e, "h2 udp dispatch failed");
+                            });
                         }
                         Err(e) => {
-                            warn!(error = %e, "hysteria2 read_datagram error");
+                            warn!(error = %e, "hysteria2 datagram read/decode error");
                             break Ok(());
                         }
                     }
