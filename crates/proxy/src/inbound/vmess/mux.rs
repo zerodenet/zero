@@ -189,7 +189,7 @@ impl Proxy {
                         match read {
                             Ok(0) => break,
                             Ok(n) => {
-                                match mux_session.write_inbound_stream_data(&writer, mux_session_id, &buf[..n]) {
+                                match mux_session.write_inbound_stream_payload(&writer, mux_session_id, &buf[..n]) {
                                     Ok(_) => {}
                                     Err(error) => {
                                         warn!(%error, mux_session_id, "vmess mux response encode failed");
@@ -205,7 +205,7 @@ impl Proxy {
                     }
                 }
             }
-            let _ = mux_session.end_inbound_stream(&writer, mux_session_id);
+            let _ = mux_session.write_inbound_stream_payload(&writer, mux_session_id, &[]);
         });
     }
 

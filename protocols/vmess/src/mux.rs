@@ -345,6 +345,19 @@ impl VmessInboundMuxSession {
         self.write_data(writer, session_id, payload)
     }
 
+    pub fn write_inbound_stream_payload(
+        &self,
+        writer: &VmessInboundMuxWriter,
+        session_id: u16,
+        payload: &[u8],
+    ) -> Result<usize, Error> {
+        if payload.is_empty() {
+            self.end_inbound_stream(writer, session_id)
+        } else {
+            self.write_inbound_stream_data(writer, session_id, payload)
+        }
+    }
+
     pub fn write_end(
         &self,
         writer: &VmessInboundMuxWriter,

@@ -4702,6 +4702,7 @@ fn inbound_vmess_mux_task_model_lives_outside_mux_root() {
         "read_mux_server_event",
         "pub async fn read_inbound_action",
         "pub fn write_inbound_stream_data",
+        "pub fn write_inbound_stream_payload",
         "pub fn end_inbound_stream",
         "pub fn data",
         "pub fn end",
@@ -4724,7 +4725,8 @@ fn inbound_vmess_mux_task_model_lives_outside_mux_root() {
     );
     assert!(
         root.contains(".end_inbound_stream(&writer, mux_session_id)")
-            && root.contains(".write_inbound_stream_data(&writer, mux_session_id")
+            && root.contains(".write_inbound_stream_payload(&writer, mux_session_id")
+            && !root.contains(".write_inbound_stream_data(&writer, mux_session_id")
             && root.contains("VmessInboundMuxWriter::new")
             && !root.contains("writer.end(")
             && !root.contains("writer.data(")
@@ -4739,6 +4741,14 @@ fn inbound_vmess_mux_task_model_lives_outside_mux_root() {
             && !root.contains("vmess::encode_mux_end_stream")
             && !root.contains("vmess::encode_mux_keep_stream"),
         "VMess inbound MUX runtime should use the protocol-owned inbound MUX session wrapper"
+    );
+    assert!(
+        protocol_mux.contains("if payload.is_empty()")
+            && protocol_mux.contains("self.end_inbound_stream(writer, session_id)")
+            && protocol_mux
+                .contains("self.write_inbound_stream_data(writer, session_id, payload)")
+            && root.contains("write_inbound_stream_payload(&writer, mux_session_id, &[])"),
+        "VMess inbound MUX downstream payload to DATA/END frame selection should live in protocols/vmess"
     );
     for required in ["queue_keep_stream", "queue_end_stream"] {
         assert!(
