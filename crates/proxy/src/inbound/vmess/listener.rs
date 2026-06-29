@@ -22,12 +22,12 @@ pub(crate) async fn run_vmess_listener_with_bound(
 ) -> Result<(), EngineError> {
     let VmessInboundRequest {
         inbound,
-        users,
+        profile,
         tls: tls_cfg,
         ws: ws_config,
         grpc: grpc_config,
     } = request;
-    if users.is_empty() {
+    if profile.is_empty() {
         return Err(EngineError::Io(io::Error::new(
             io::ErrorKind::InvalidInput,
             "vmess requires at least one user",
@@ -45,7 +45,7 @@ pub(crate) async fn run_vmess_listener_with_bound(
 
     let handler = VmessInboundHandler {
         vmess_inbound: VmessInbound,
-        users,
+        profile,
         tls_acceptor: acceptor,
     };
 

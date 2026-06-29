@@ -51,17 +51,10 @@ pub(crate) async fn handle_vmess_ws(
 
     let mut ws = crate::transport::accept_ws(tls, &ws_cfg.path).await?;
 
-    let accepted = if handler.users.len() == 1 {
-        handler
-            .vmess_inbound
-            .accept_tcp(&mut ws, &handler.users[0])
-            .await?
-    } else {
-        handler
-            .vmess_inbound
-            .accept_tcp_multi(&mut ws, &handler.users)
-            .await?
-    };
+    let accepted = handler
+        .profile
+        .accept_tcp(handler.vmess_inbound, &mut ws)
+        .await?;
     let session = accepted.session.clone();
     let client = wrap_vmess_client(TcpRelayStream::new(ws), accepted)?;
 
@@ -91,21 +84,17 @@ pub(crate) async fn handle_vmess_grpc(
         .map_err(|e| EngineError::Io(io::Error::other(e)))?;
 
     let service_names = grpc_cfg.service_names.clone();
-    let users = handler.users.clone();
+    let profile = handler.profile.clone();
     let vmess = handler.vmess_inbound;
     let proxy = proxy.clone();
     let tag = tag.to_owned();
 
     crate::transport::serve_grpc(tls, &service_names, move |mut grpc_stream| {
-        let users = users.clone();
+        let profile = profile.clone();
         let proxy = proxy.clone();
         let tag = tag.clone();
         async move {
-            let result = if users.len() == 1 {
-                vmess.accept_tcp(&mut grpc_stream, &users[0]).await
-            } else {
-                vmess.accept_tcp_multi(&mut grpc_stream, &users).await
-            };
+            let result = profile.accept_tcp(vmess, &mut grpc_stream).await;
             match result {
                 Ok(accepted) => {
                     let session = accepted.session.clone();

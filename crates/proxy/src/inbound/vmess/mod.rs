@@ -3,7 +3,7 @@
 use std::io;
 
 use async_trait::async_trait;
-use vmess::{VmessInbound, VmessUser};
+use vmess::{VmessInbound, VmessInboundProfile};
 use zero_core::Session;
 use zero_engine::EngineError;
 use zero_traits::AsyncSocket;
@@ -32,7 +32,7 @@ impl AsyncSocket for TlsStream {
 #[derive(Clone)]
 pub(crate) struct VmessInboundHandler {
     vmess_inbound: VmessInbound,
-    users: Vec<VmessUser>,
+    profile: VmessInboundProfile,
     tls_acceptor: crate::transport::TlsAcceptor,
 }
 
@@ -50,15 +50,10 @@ impl InboundProtocol for VmessInboundHandler {
             .await
             .map_err(|e| EngineError::Io(io::Error::other(e)))?;
         let mut sock = TlsStream(tls);
-        let accepted = if self.users.len() == 1 {
-            self.vmess_inbound
-                .accept_tcp(&mut sock, &self.users[0])
-                .await?
-        } else {
-            self.vmess_inbound
-                .accept_tcp_multi(&mut sock, &self.users)
-                .await?
-        };
+        let accepted = self
+            .profile
+            .accept_tcp(self.vmess_inbound, &mut sock)
+            .await?;
         let session = accepted.session.clone();
         let client = wrap_vmess_client(TcpRelayStream::new(sock.0), accepted)?;
         Ok((session, client))

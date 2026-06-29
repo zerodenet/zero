@@ -4,7 +4,7 @@ use zero_core::Address;
 
 pub(crate) struct VmessInboundRequest {
     pub(crate) inbound: zero_config::InboundConfig,
-    pub(crate) users: Vec<vmess::VmessUser>,
+    pub(crate) profile: vmess::VmessInboundProfile,
     pub(crate) tls: Option<Box<zero_config::TlsConfig>>,
     pub(crate) ws: Option<Box<zero_config::WebSocketConfig>>,
     pub(crate) grpc: Option<Box<zero_config::GrpcConfig>>,

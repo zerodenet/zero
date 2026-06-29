@@ -49,11 +49,12 @@ impl VmessAdapter {
                     })
                 })
                 .collect::<Result<Vec<_>, EngineError>>()?;
+            let profile = vmess::VmessInboundProfile::from_users(users);
             crate::inbound::run_vmess_listener_with_bound(
                 &p,
                 crate::inbound::vmess::model::VmessInboundRequest {
                     inbound,
-                    users,
+                    profile,
                     tls,
                     ws,
                     grpc,

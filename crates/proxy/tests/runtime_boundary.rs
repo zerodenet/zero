@@ -1121,6 +1121,7 @@ fn vmess_inbound_uses_adapter_request_model() {
     let inbound = read("src/inbound/vmess/listener.rs");
     let model = read("src/inbound/vmess/model.rs");
     let root = read("src/inbound/vmess/mod.rs");
+    let transport = read("src/inbound/vmess/transport.rs");
     let adapter = read("src/adapters/vmess/inbound.rs");
     let protocol_inbound = fs::read_to_string(repo_root().join("protocols/vmess/src/inbound.rs"))
         .expect("read vmess protocol inbound source");
@@ -1157,6 +1158,22 @@ fn vmess_inbound_uses_adapter_request_model() {
         adapter.contains("vmess::VmessUser::from_config")
             && protocol_inbound.contains("pub fn from_config"),
         "VMess adapter should ask protocols/vmess to build parsed inbound users"
+    );
+    assert!(
+        protocol_inbound.contains("pub struct VmessInboundProfile")
+            && protocol_inbound.contains("pub fn from_users(users: Vec<VmessUser>) -> Self")
+            && protocol_inbound.contains("pub async fn accept_tcp<S: AsyncSocket>")
+            && model.contains("pub(crate) profile: vmess::VmessInboundProfile")
+            && root.contains("profile: VmessInboundProfile")
+            && root.contains(".profile")
+            && root.contains(".accept_tcp(self.vmess_inbound, &mut sock)")
+            && inbound.contains("profile.is_empty()")
+            && adapter.contains("vmess::VmessInboundProfile::from_users(users)")
+            && !model.contains("users: Vec<vmess::VmessUser>")
+            && !root.contains("users: Vec<VmessUser>")
+            && !root.contains("handler.users")
+            && !transport.contains("handler.users"),
+        "VMess inbound should carry a protocol-owned profile instead of proxy-owned user vectors"
     );
     assert!(
         !inbound.contains("VmessUserConfig") && !model.contains("VmessUserConfig"),

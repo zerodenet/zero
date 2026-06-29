@@ -7,7 +7,7 @@ mod shared;
 mod stream;
 pub mod udp;
 
-pub use inbound::{VmessAccept, VmessInbound, VmessUser};
+pub use inbound::{VmessAccept, VmessInbound, VmessInboundProfile, VmessUser};
 pub use metadata::VmessProtocol;
 pub use mux::{
     decode_metadata as decode_mux_metadata, encode_end_stream as encode_mux_end_stream,

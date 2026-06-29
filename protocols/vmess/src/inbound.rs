@@ -43,6 +43,33 @@ impl VmessUser {
     }
 }
 
+#[derive(Clone)]
+pub struct VmessInboundProfile {
+    users: Vec<VmessUser>,
+}
+
+impl VmessInboundProfile {
+    pub fn from_users(users: Vec<VmessUser>) -> Self {
+        Self { users }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.users.is_empty()
+    }
+
+    pub async fn accept_tcp<S: AsyncSocket>(
+        &self,
+        inbound: VmessInbound,
+        stream: &mut S,
+    ) -> Result<VmessAccept, Error> {
+        if self.users.len() == 1 {
+            inbound.accept_tcp(stream, &self.users[0]).await
+        } else {
+            inbound.accept_tcp_multi(stream, &self.users).await
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct VmessInbound;
 
