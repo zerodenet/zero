@@ -107,38 +107,14 @@ pub struct Hysteria2InboundUdpDispatchParts {
     client_session_id: Option<u64>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Hysteria2InboundUdpDispatchView {
-    parts: Hysteria2InboundUdpDispatchParts,
-}
-
-impl Hysteria2InboundUdpDispatchView {
+impl Hysteria2InboundUdpDispatchParts {
     pub fn pipe_parts(&self) -> (&Address, u16, &[u8], Option<u64>) {
         (
-            &self.parts.target,
-            self.parts.port,
-            &self.parts.payload,
-            self.parts.client_session_id,
+            &self.target,
+            self.port,
+            &self.payload,
+            self.client_session_id,
         )
-    }
-
-    pub fn into_pipe_parts(self) -> (Address, u16, Vec<u8>, Option<u64>) {
-        (
-            self.parts.target,
-            self.parts.port,
-            self.parts.payload,
-            self.parts.client_session_id,
-        )
-    }
-
-    fn request_session_id(&self) -> u16 {
-        self.parts.request_session_id
-    }
-}
-
-impl Hysteria2InboundUdpDispatchParts {
-    pub fn request_session_id(&self) -> u16 {
-        self.request_session_id
     }
 
     pub fn into_pipe_parts(self) -> (Address, u16, Vec<u8>, Option<u64>) {
@@ -188,12 +164,6 @@ impl Hysteria2InboundUdpRequest {
             client_session_id: None,
         }
     }
-
-    pub fn into_dispatch_view(self) -> Hysteria2InboundUdpDispatchView {
-        Hysteria2InboundUdpDispatchView {
-            parts: self.into_dispatch_parts(),
-        }
-    }
 }
 
 /// Stateful inbound UDP bridge for Hysteria2 datagram sessions.
@@ -224,25 +194,6 @@ impl Hysteria2InboundUdpSession {
             .map(Hysteria2InboundUdpRequest::into_dispatch_parts)
     }
 
-    pub fn decode_dispatch_view(
-        &self,
-        data: &[u8],
-    ) -> Result<Hysteria2InboundUdpDispatchView, Error> {
-        self.decode_request(data)
-            .map(Hysteria2InboundUdpRequest::into_dispatch_view)
-    }
-
-    pub async fn read_dispatch_view_from_datagram(
-        &self,
-        conn: &quinn::Connection,
-    ) -> Result<Hysteria2InboundUdpDispatchView, Error> {
-        let data = conn
-            .read_datagram()
-            .await
-            .map_err(|_| Error::Io("failed to read Hysteria2 UDP datagram"))?;
-        self.decode_dispatch_view(&data)
-    }
-
     pub async fn read_dispatch_parts_from_datagram(
         &self,
         conn: &quinn::Connection,
@@ -264,15 +215,7 @@ impl Hysteria2InboundUdpSession {
         proxy_session_id: u64,
         parts: &Hysteria2InboundUdpDispatchParts,
     ) {
-        self.record_proxy_session(proxy_session_id, parts.request_session_id());
-    }
-
-    pub fn record_proxy_session_for_view(
-        &mut self,
-        proxy_session_id: u64,
-        view: &Hysteria2InboundUdpDispatchView,
-    ) {
-        self.record_proxy_session(proxy_session_id, view.request_session_id());
+        self.record_proxy_session(proxy_session_id, parts.request_session_id);
     }
 
     pub fn send_response(

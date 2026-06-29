@@ -300,19 +300,18 @@ impl Proxy {
                 dg = udp_session.read_dispatch_parts_from_datagram(&conn) => {
                     match dg {
                         Ok(parts) => {
-                            let request_session_id = parts.request_session_id();
-                            let (target, port, payload, client_session_id) = parts.into_pipe_parts();
+                            let (target, port, payload, client_session_id) = parts.pipe_parts();
                             let _ = UdpPipe::new(&proxy, &mut dispatch)
                                 .dispatch(UdpPipeInput {
-                                    target,
+                                    target: target.clone(),
                                     port,
-                                    payload: &payload,
+                                    payload,
                                     protocol: ProtocolType::Hysteria2,
                                     auth: None,
                                     client_session_id,
                                 })
                                 .await.inspect(|sid| {
-                                udp_session.record_proxy_session(*sid, request_session_id);
+                                udp_session.record_proxy_session_for_parts(*sid, &parts);
                             }).inspect_err(|e| {
                                 warn!(error = %e, "h2 udp dispatch failed");
                             });
