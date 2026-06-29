@@ -148,6 +148,32 @@ pub enum VlessInboundMuxAction {
 }
 
 #[cfg(feature = "reality")]
+pub struct VlessInboundMuxOpenedStream {
+    session_id: u16,
+    session: Box<Session>,
+    up_rx: mpsc::UnboundedReceiver<Vec<u8>>,
+}
+
+#[cfg(feature = "reality")]
+impl VlessInboundMuxOpenedStream {
+    pub fn new(
+        session_id: u16,
+        session: Box<Session>,
+        up_rx: mpsc::UnboundedReceiver<Vec<u8>>,
+    ) -> Self {
+        Self {
+            session_id,
+            session,
+            up_rx,
+        }
+    }
+
+    pub fn into_parts(self) -> (u16, Session, mpsc::UnboundedReceiver<Vec<u8>>) {
+        (self.session_id, *self.session, self.up_rx)
+    }
+}
+
+#[cfg(feature = "reality")]
 #[derive(Clone)]
 pub struct VlessInboundMuxWriter {
     down_tx: mpsc::UnboundedSender<VlessInboundMuxDownlink>,
@@ -189,6 +215,62 @@ impl VlessInboundMuxStreams {
 
     pub fn contains_stream(&self, session_id: u16) -> bool {
         self.streams.contains_key(&session_id)
+    }
+
+    pub async fn apply_inbound_action<S>(
+        &mut self,
+        mux: &mut VlessInboundMuxSession,
+        stream: &mut S,
+        action: VlessInboundMuxAction,
+    ) -> Result<Option<VlessInboundMuxOpenedStream>, Error>
+    where
+        S: AsyncSocket,
+    {
+        match action {
+            VlessInboundMuxAction::KeepAlive => Ok(None),
+            VlessInboundMuxAction::OpenStream {
+                session_id,
+                session,
+            } => {
+                mux.accept_inbound_stream(stream, session_id).await?;
+                let up_rx = self.open_stream(session_id);
+                Ok(Some(VlessInboundMuxOpenedStream::new(
+                    session_id, session, up_rx,
+                )))
+            }
+            VlessInboundMuxAction::Data {
+                session_id,
+                payload,
+            } => {
+                if !self.push_stream_data(session_id, payload) {
+                    mux.end_inbound_stream(stream, session_id).await?;
+                }
+                Ok(None)
+            }
+            VlessInboundMuxAction::End { session_id } => {
+                self.close_inbound_stream(session_id);
+                Ok(None)
+            }
+            VlessInboundMuxAction::Unknown { session_id } => {
+                mux.reject_inbound_stream(stream).await?;
+                self.close_inbound_stream(session_id);
+                Ok(None)
+            }
+        }
+    }
+
+    pub async fn reject_opened_stream<S>(
+        &mut self,
+        mux: &mut VlessInboundMuxSession,
+        stream: &mut S,
+        session_id: u16,
+    ) -> Result<(), Error>
+    where
+        S: AsyncSocket,
+    {
+        mux.reject_inbound_stream(stream).await?;
+        self.close_inbound_stream(session_id);
+        Ok(())
     }
 
     pub async fn send_inbound_downlink<S>(

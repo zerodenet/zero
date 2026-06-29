@@ -325,11 +325,8 @@ fn vless_inbound_mux_frame_detail_lives_in_protocol_crate() {
 
     for required in [
         "VlessInboundMuxSession",
-        "VlessInboundMuxAction",
         "VlessInboundMuxWriter",
         "read_inbound_action",
-        "accept_inbound_stream",
-        "reject_inbound_stream",
     ] {
         assert!(
             inbound.contains(required),
@@ -340,6 +337,22 @@ fn vless_inbound_mux_frame_detail_lives_in_protocol_crate() {
             "protocols/vless should own VLESS semantic MUX server API `{required}`"
         );
     }
+    for required in [
+        "VlessInboundMuxAction",
+        "accept_inbound_stream",
+        "reject_inbound_stream",
+    ] {
+        assert!(
+            protocol_mux.contains(required),
+            "protocols/vless should own VLESS semantic MUX server API `{required}`"
+        );
+    }
+    assert!(
+        !inbound.contains("VlessInboundMuxAction")
+            && protocol_mux.contains("VlessInboundMuxAction")
+            && inbound.contains(".apply_inbound_action(&mut mux, &mut client, action)"),
+        "VLESS inbound mux glue should not match protocol action variants directly"
+    );
     for required in [
         "send_inbound_downlink",
         "send_inbound_stream_payload",
@@ -381,7 +394,9 @@ fn vless_inbound_mux_frame_detail_lives_in_protocol_crate() {
         protocol_mux.contains("pub fn into_session(self) -> Result<Session, Error>")
             && protocol_mux.contains("ProtocolType::Vless")
             && protocol_mux.contains("impl From<MuxServerEvent> for VlessInboundMuxAction")
-            && inbound.contains("VlessInboundMuxAction::OpenStream")
+            && inbound.contains("opened.into_parts()")
+            && protocol_mux.contains("VlessInboundMuxAction::OpenStream")
+            && protocol_mux.contains("VlessInboundMuxOpenedStream::new")
             && !inbound.contains("target.into_session()")
             && !inbound.contains("MuxNetwork")
             && !inbound.contains("zero_core::Session::new"),
@@ -403,7 +418,17 @@ fn vless_inbound_mux_frame_detail_lives_in_protocol_crate() {
         );
     }
     assert!(
-        inbound.contains(".send_inbound_downlink(&mut mux, &mut client, downlink)")
+        inbound.contains(".apply_inbound_action(&mut mux, &mut client, action)")
+            && inbound.contains(".send_inbound_downlink(&mut mux, &mut client, downlink)")
+            && inbound.contains(".reject_opened_stream(&mut mux, &mut client, sid)")
+            && !inbound.contains("streams.open_stream(")
+            && !inbound.contains("streams.push_stream_data(")
+            && !inbound.contains("streams.close_inbound_stream(")
+            && !inbound.contains("VlessInboundMuxAction::KeepAlive")
+            && !inbound.contains("VlessInboundMuxAction::OpenStream")
+            && !inbound.contains("VlessInboundMuxAction::Data")
+            && !inbound.contains("VlessInboundMuxAction::End")
+            && !inbound.contains("VlessInboundMuxAction::Unknown")
             && !inbound.contains("mux.send_inbound_stream_payload(&mut client, sid, &payload)")
             && !inbound.contains("downlink.is_end()")
             && !inbound.contains("downlink.into_parts()")
@@ -5257,6 +5282,9 @@ fn inbound_vless_mux_task_model_lives_outside_mux_root() {
             && protocol_mux.contains("pub fn open_stream")
             && protocol_mux.contains("pub fn push_stream_data")
             && protocol_mux.contains("pub fn close_inbound_stream")
+            && protocol_mux.contains("pub async fn apply_inbound_action")
+            && protocol_mux.contains("pub async fn reject_opened_stream")
+            && protocol_mux.contains("pub struct VlessInboundMuxOpenedStream")
             && protocol_mux.contains("pub async fn send_inbound_downlink")
             && protocol_mux.contains("pub async fn relay_inbound_mux_stream")
             && protocol_mux.contains("pub fn channel()")

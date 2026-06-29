@@ -27,7 +27,7 @@ impl Proxy {
     where
         S: ClientStream,
     {
-        use vless::mux::{VlessInboundMuxAction, VlessInboundMuxSession, VlessInboundMuxStreams};
+        use vless::mux::{VlessInboundMuxSession, VlessInboundMuxStreams};
 
         vless::VlessInbound.send_response(&mut client).await?;
         self.record_session_inbound_traffic(0, client.drain_traffic());
@@ -45,19 +45,9 @@ impl Proxy {
                         Ok(action) => action,
                         Err(_) => break,
                     };
-                    match action {
-                        VlessInboundMuxAction::KeepAlive => {
-                            // Keep-alive -?ignore
-                            continue;
-                        }
-                        VlessInboundMuxAction::OpenStream { session_id: sid, session } => {
-                            let mut session = *session;
-                            if mux.accept_inbound_stream(&mut client, sid).await.is_err() {
-                                break;
-                            }
-
-                            let up_rx = streams.open_stream(sid);
-
+                    match streams.apply_inbound_action(&mut mux, &mut client, action).await {
+                        Ok(Some(opened)) => {
+                            let (sid, mut session, up_rx) = opened.into_parts();
                             match session.network {
                                 zero_core::Network::Tcp => {
                                     // Route and establish TCP outbound
@@ -73,8 +63,9 @@ impl Proxy {
                                     {
                                         Ok(result) => result.upstream,
                                         Err(_) => {
-                                            let _ = mux.reject_inbound_stream(&mut client).await;
-                                            streams.close_inbound_stream(sid);
+                                            let _ = streams
+                                                .reject_opened_stream(&mut mux, &mut client, sid)
+                                                .await;
                                             continue;
                                         }
                                     };
@@ -116,25 +107,8 @@ impl Proxy {
                                 }
                             }
                         }
-                        VlessInboundMuxAction::Data { session_id, payload } => {
-                            // Data for an existing stream
-                            if !streams.push_stream_data(session_id, payload) {
-                                // Data for unknown stream -?ignore or send END
-                                let _ =
-                                    mux.end_inbound_stream(&mut client, session_id).await;
-                            }
-                        }
-                        VlessInboundMuxAction::End { session_id } => {
-                            // Client terminated this stream
-                            streams.close_inbound_stream(session_id);
-                            info!(mux_stream_id = session_id,
-                                "MUX stream ended by client");
-                        }
-                        VlessInboundMuxAction::Unknown { session_id } => {
-                            // Unknown status -?ignore
-                            let _ = mux.reject_inbound_stream(&mut client).await;
-                            streams.close_inbound_stream(session_id);
-                        }
+                        Ok(None) => {}
+                        Err(_) => break,
                     }
                 }
 
