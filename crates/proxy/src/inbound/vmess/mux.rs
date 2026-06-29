@@ -67,25 +67,29 @@ impl Proxy {
 
                     match event {
                         vmess::VmessMuxServerEvent::KeepAlive => continue,
-                        vmess::VmessMuxServerEvent::NewStream {
+                        event @ vmess::VmessMuxServerEvent::NewStream { .. } => {
+                            let Some(session) = event.new_stream_session() else {
+                                continue;
+                            };
+                            let vmess::VmessMuxServerEvent::NewStream {
                             session_id,
-                            network,
-                            target,
-                            port,
                             payload,
-                        } => {
+                            ..
+                            } = event else {
+                                unreachable!();
+                            };
                             let (up_tx, up_rx) = mpsc::unbounded_channel::<Vec<u8>>();
                             streams.insert(session_id, up_tx.clone());
                             if !payload.is_empty() {
                                 let _ = up_tx.send(payload);
                             }
-                            match network {
+                            match session.network {
                                 Network::Tcp => {
                                     self.spawn_vmess_mux_tcp_stream_task(VmessMuxTcpStreamTask {
                                         tasks: &mut mux_tasks,
                                         mux_session_id: session_id,
-                                        target,
-                                        port,
+                                        target: session.target,
+                                        port: session.port,
                                         up_rx,
                                         write_tx: write_tx.clone(),
                                         inbound_tag: inbound_tag.to_owned(),
@@ -95,8 +99,8 @@ impl Proxy {
                                     self.spawn_vmess_mux_udp_stream_task(VmessMuxUdpStreamTask {
                                         tasks: &mut mux_tasks,
                                         mux_session_id: session_id,
-                                        default_target: target,
-                                        default_port: port,
+                                        default_target: session.target,
+                                        default_port: session.port,
                                         up_rx,
                                         write_tx: write_tx.clone(),
                                         inbound_tag: inbound_tag.to_owned(),

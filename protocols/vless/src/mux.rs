@@ -34,7 +34,7 @@
 
 use alloc::vec::Vec;
 
-use zero_core::{Address, Error};
+use zero_core::{Address, Error, Network, ProtocolType, Session};
 use zero_traits::AsyncSocket;
 
 use crate::shared::{read_exact, write_address, ATYP_DOMAIN, ATYP_IPV4, ATYP_IPV6};
@@ -100,6 +100,20 @@ impl MuxTarget {
             NETWORK_UDP => Ok(MuxNetwork::Udp),
             _ => Err(Error::Protocol("MUX new stream unknown network type")),
         }
+    }
+
+    pub fn into_session(self) -> Result<Session, Error> {
+        let network = match self.network_kind()? {
+            MuxNetwork::Tcp => Network::Tcp,
+            MuxNetwork::Udp => Network::Udp,
+        };
+        Ok(Session::new(
+            0,
+            self.address,
+            self.port,
+            network,
+            ProtocolType::Vless,
+        ))
     }
 }
 

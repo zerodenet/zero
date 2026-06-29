@@ -29,7 +29,7 @@ impl Proxy {
         S: ClientStream,
     {
         use tokio::sync::mpsc;
-        use vless::{MuxNetwork, MuxServerEvent, VlessInboundMuxSession};
+        use vless::{MuxServerEvent, VlessInboundMuxSession};
 
         vless::VlessInbound.send_response(&mut client).await?;
         self.record_session_inbound_traffic(0, client.drain_traffic());
@@ -53,8 +53,8 @@ impl Proxy {
                             continue;
                         }
                         MuxServerEvent::NewStream { session_id: sid, target } => {
-                            match target.network_kind() {
-                                Ok(network) => {
+                            match target.into_session() {
+                                Ok(mut session) => {
                                     if mux.accept_stream(&mut client, sid).await.is_err() {
                                         break;
                                     }
@@ -62,14 +62,9 @@ impl Proxy {
                                     let (up_tx, up_rx) = mpsc::unbounded_channel();
                                     up_senders.insert(sid, up_tx);
 
-                                    match network {
-                                        MuxNetwork::Tcp => {
+                                    match session.network {
+                                        zero_core::Network::Tcp => {
                                             // Route and establish TCP outbound
-                                            let mut session = zero_core::Session::new(
-                                                0, target.address, target.port,
-                                                zero_core::Network::Tcp,
-                                                zero_core::ProtocolType::Vless,
-                                            );
                                             if let Some(ref a) = auth {
                                                 session.apply_auth(a.clone());
                                             }
@@ -94,10 +89,10 @@ impl Proxy {
                                             });
 
                                             info!(inbound_tag, mux_stream_id = sid,
-                                                port = target.port, network = "tcp",
+                                                port = session.port, network = "tcp",
                                                 "MUX stream accepted");
                                         }
-                                        MuxNetwork::Udp => {
+                                        zero_core::Network::Udp => {
                                             let down = down_tx.clone();
                                             let proxy_clone = self.clone();
                                             let inbound_tag_owned = inbound_tag.to_owned();
@@ -117,7 +112,7 @@ impl Proxy {
                                             });
 
                                             info!(inbound_tag, mux_stream_id = sid,
-                                                port = target.port, network = "udp",
+                                                port = session.port, network = "udp",
                                                 "MUX stream accepted");
                                         }
                                     }

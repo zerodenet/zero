@@ -323,6 +323,14 @@ fn vless_inbound_mux_frame_detail_lives_in_protocol_crate() {
             "protocols/vless should own VLESS MUX server API `{required}`"
         );
     }
+    assert!(
+        protocol_mux.contains("pub fn into_session(self) -> Result<Session, Error>")
+            && protocol_mux.contains("ProtocolType::Vless")
+            && inbound.contains("target.into_session()")
+            && !inbound.contains("MuxNetwork")
+            && !inbound.contains("zero_core::Session::new"),
+        "VLESS inbound mux target to Session conversion should be protocol-owned"
+    );
     for forbidden in [
         "MuxServer::",
         ".recv_event(",
@@ -4233,6 +4241,7 @@ fn inbound_vmess_mux_task_model_lives_outside_mux_root() {
     for required in [
         "VmessInboundMuxSession",
         "VmessMuxServerEvent",
+        "pub fn new_stream_session(&self) -> Option<Session>",
         "read_mux_server_event",
         "pub fn queue_data",
         "pub fn queue_end",
@@ -4245,6 +4254,12 @@ fn inbound_vmess_mux_task_model_lives_outside_mux_root() {
     assert!(
         protocol_mux.contains("try_into_server_event"),
         "protocols/vmess should classify raw VMess MUX frames into server events"
+    );
+    assert!(
+        root.contains("event.new_stream_session()")
+            && protocol_mux.contains("ProtocolType::Vmess")
+            && !root.contains("network,"),
+        "VMess inbound MUX new-stream Session conversion should be protocol-owned"
     );
     assert!(
         root.contains(".queue_end(&write_tx, mux_session_id)")

@@ -5,7 +5,7 @@ use std::task::{Context, Poll};
 
 use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt, ReadBuf};
 use tokio::sync::mpsc;
-use zero_core::{Address, Error, Network, Session};
+use zero_core::{Address, Error, Network, ProtocolType, Session};
 use zero_traits::AsyncSocket;
 
 use crate::outbound::VmessOutbound;
@@ -144,6 +144,26 @@ pub enum VmessMuxServerEvent {
         session_id: u16,
         status: u8,
     },
+}
+
+impl VmessMuxServerEvent {
+    pub fn new_stream_session(&self) -> Option<Session> {
+        match self {
+            Self::NewStream {
+                network,
+                target,
+                port,
+                ..
+            } => Some(Session::new(
+                0,
+                target.clone(),
+                *port,
+                *network,
+                ProtocolType::Vmess,
+            )),
+            _ => None,
+        }
+    }
 }
 
 pub fn mux_cool_session() -> Session {
