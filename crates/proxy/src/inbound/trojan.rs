@@ -206,7 +206,7 @@ impl Proxy {
                                     target: target.clone(),
                                     port,
                                     payload,
-                                    protocol: zero_core::ProtocolType::Trojan,
+                                    protocol: parts.protocol(),
                                     auth: auth.as_ref(),
                                     client_session_id,
                                 })

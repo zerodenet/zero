@@ -14,7 +14,7 @@ use std::collections::HashMap;
 #[cfg(feature = "crypto")]
 use std::net::SocketAddr;
 
-use zero_core::{Address, Error};
+use zero_core::{Address, Error, ProtocolType};
 use zero_traits::DatagramCodec;
 #[cfg(feature = "crypto")]
 use zero_traits::IpAddress;
@@ -105,6 +105,10 @@ pub struct MieruInboundUdpDispatchParts {
 }
 
 impl MieruInboundUdpDispatchParts {
+    pub fn protocol(&self) -> ProtocolType {
+        ProtocolType::Mieru
+    }
+
     pub fn pipe_parts(&self) -> (&Address, u16, &[u8], Option<u64>) {
         (
             &self.target,

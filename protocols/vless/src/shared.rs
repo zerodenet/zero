@@ -4,7 +4,7 @@ use alloc::vec::Vec;
 #[cfg(feature = "reality")]
 use std::net::SocketAddr;
 
-use zero_core::{Address, Error};
+use zero_core::{Address, Error, ProtocolType};
 use zero_traits::{AsyncSocket, IpAddress};
 
 pub const VLESS_VERSION: u8 = 0x00;
@@ -267,6 +267,10 @@ impl VlessInboundUdpRequest {
 }
 
 impl VlessInboundUdpDispatchParts {
+    pub fn protocol(&self) -> ProtocolType {
+        ProtocolType::Vless
+    }
+
     pub fn pipe_parts(&self) -> (&Address, u16, &[u8], Option<u64>) {
         (
             &self.target,

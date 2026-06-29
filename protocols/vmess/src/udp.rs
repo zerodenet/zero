@@ -406,6 +406,10 @@ impl VmessInboundUdpRequest {
 }
 
 impl VmessInboundUdpDispatchParts {
+    pub fn protocol(&self) -> ProtocolType {
+        ProtocolType::Vmess
+    }
+
     pub fn pipe_parts(&self) -> (&Address, u16, &[u8], Option<u64>) {
         (
             &self.target,

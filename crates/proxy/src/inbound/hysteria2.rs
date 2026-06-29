@@ -11,7 +11,7 @@ use tokio::sync::watch;
 use tokio::task::JoinSet;
 use tracing::{error, info, warn};
 use zero_config::InboundConfig;
-use zero_core::{ProtocolType, Session};
+use zero_core::Session;
 use zero_engine::EngineError;
 
 use crate::runtime::inbound_protocol::{
@@ -306,7 +306,7 @@ impl Proxy {
                                     target: target.clone(),
                                     port,
                                     payload,
-                                    protocol: ProtocolType::Hysteria2,
+                                    protocol: parts.protocol(),
                                     auth: None,
                                     client_session_id,
                                 })

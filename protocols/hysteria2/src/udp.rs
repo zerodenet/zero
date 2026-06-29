@@ -6,7 +6,7 @@ use alloc::collections::BTreeMap;
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use zero_core::{Address, Error, UdpFlowPacket};
+use zero_core::{Address, Error, ProtocolType, UdpFlowPacket};
 use zero_traits::{DatagramCodec, IpAddress};
 
 #[cfg(feature = "tokio")]
@@ -108,6 +108,10 @@ pub struct Hysteria2InboundUdpDispatchParts {
 }
 
 impl Hysteria2InboundUdpDispatchParts {
+    pub fn protocol(&self) -> ProtocolType {
+        ProtocolType::Hysteria2
+    }
+
     pub fn pipe_parts(&self) -> (&Address, u16, &[u8], Option<u64>) {
         (
             &self.target,

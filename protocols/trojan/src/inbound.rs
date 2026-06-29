@@ -82,6 +82,10 @@ pub struct TrojanInboundUdpDispatchParts {
 }
 
 impl TrojanInboundUdpDispatchParts {
+    pub fn protocol(&self) -> ProtocolType {
+        ProtocolType::Trojan
+    }
+
     pub fn pipe_parts(&self) -> (&zero_core::Address, u16, &[u8], Option<u64>) {
         (
             &self.target,

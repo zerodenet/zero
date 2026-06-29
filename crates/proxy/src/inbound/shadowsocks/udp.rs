@@ -5,7 +5,6 @@ use std::sync::Arc;
 use shadowsocks::ShadowsocksInboundProfile;
 use tokio::net::UdpSocket;
 use tracing::warn;
-use zero_core::ProtocolType;
 use zero_engine::EngineError;
 
 use crate::runtime::pipe::{KernelPipe, UdpPipe, UdpPipeInput};
@@ -49,7 +48,7 @@ impl Proxy {
                             target: target.clone(),
                             port,
                             payload,
-                            protocol: ProtocolType::Shadowsocks,
+                            protocol: dispatch_parts.protocol(),
                             auth: Some(&sa),
                             client_session_id,
                         })

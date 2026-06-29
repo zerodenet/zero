@@ -4,7 +4,7 @@ use tokio::select;
 use tokio::task::JoinSet;
 use tokio::time::Instant as TokioInstant;
 use tracing::{info, warn};
-use zero_core::{ProtocolType, Session};
+use zero_core::Session;
 use zero_engine::EngineError;
 
 use crate::runtime::pipe::{KernelPipe, TcpPipe, TcpPipeInput, UdpPipe, UdpPipeInput};
@@ -178,7 +178,7 @@ impl Proxy {
                                 target: target.clone(),
                                 port,
                                 payload,
-                                protocol: ProtocolType::Vmess,
+                                protocol: request.protocol(),
                                 auth: None,
                                 client_session_id,
                             })
@@ -325,7 +325,7 @@ impl Proxy {
                                     target: target.clone(),
                                     port,
                                     payload,
-                                    protocol: ProtocolType::Vmess,
+                                    protocol: request.protocol(),
                                     auth: auth.as_ref(),
                                     client_session_id,
                                 })

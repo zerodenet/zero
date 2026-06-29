@@ -162,9 +162,12 @@ fn ordinary_udp_inbounds_submit_packets_through_udp_pipe() {
     for source in [
         "src/inbound/socks5/udp_associate/dispatch.rs",
         "src/inbound/vless/udp_session.rs",
+        "src/inbound/vless/mux.rs",
+        "src/inbound/vmess/mux.rs",
         "src/inbound/trojan.rs",
         "src/inbound/shadowsocks/udp.rs",
         "src/inbound/hysteria2.rs",
+        "src/inbound/mieru.rs",
     ] {
         let content = read(source);
         assert!(
@@ -174,6 +177,54 @@ fn ordinary_udp_inbounds_submit_packets_through_udp_pipe() {
         assert!(
             !content.contains("UdpDispatch::dispatch"),
             "{source} should not call the UDP dispatch state machine directly"
+        );
+        for forbidden in [
+            "protocol: ProtocolType::Socks5",
+            "protocol: ProtocolType::Shadowsocks",
+            "protocol: ProtocolType::Hysteria2",
+            "protocol: ProtocolType::Vless",
+            "protocol: ProtocolType::Vmess",
+            "protocol: zero_core::ProtocolType::Vless",
+            "protocol: zero_core::ProtocolType::Trojan",
+            "protocol: zero_core::ProtocolType::Mieru",
+        ] {
+            assert!(
+                !content.contains(forbidden),
+                "{source} should take UDP dispatch protocol identity from protocol-owned dispatch parts, not `{forbidden}`"
+            );
+        }
+    }
+
+    for (protocol_source, dispatch_parts) in [
+        (
+            "protocols/socks5/src/shared.rs",
+            "Socks5InboundUdpDispatchParts",
+        ),
+        (
+            "protocols/shadowsocks/src/inbound.rs",
+            "ShadowsocksInboundUdpDispatchParts",
+        ),
+        (
+            "protocols/hysteria2/src/udp.rs",
+            "Hysteria2InboundUdpDispatchParts",
+        ),
+        (
+            "protocols/vless/src/shared.rs",
+            "VlessInboundUdpDispatchParts",
+        ),
+        ("protocols/vmess/src/udp.rs", "VmessInboundUdpDispatchParts"),
+        (
+            "protocols/trojan/src/inbound.rs",
+            "TrojanInboundUdpDispatchParts",
+        ),
+        ("protocols/mieru/src/udp.rs", "MieruInboundUdpDispatchParts"),
+    ] {
+        let content = fs::read_to_string(repo_root().join(protocol_source))
+            .expect("read protocol dispatch parts source");
+        assert!(
+            content.contains(&format!("impl {dispatch_parts}"))
+                && content.contains("pub fn protocol(&self) -> ProtocolType"),
+            "{dispatch_parts} should expose protocol identity to inbound UDP glue"
         );
     }
 }
@@ -6047,7 +6098,8 @@ fn mieru_inbound_udp_packet_framing_stays_in_protocol_crate() {
             && !inbound.contains("dispatch_parts.into_parts()")
             && !inbound.contains("request.into_dispatch_parts().into_parts()")
             && inbound.contains("UdpPipe::new(self, &mut dispatch)")
-            && inbound.contains("protocol: zero_core::ProtocolType::Mieru")
+            && inbound.contains("protocol: dispatch_parts.protocol()")
+            && !inbound.contains("protocol: zero_core::ProtocolType::Mieru")
             && !inbound.contains("tokio::net::UdpSocket::bind")
             && !inbound.contains("self.resolver.resolve")
             && !inbound.contains("udp_socket.send_to")
@@ -6304,7 +6356,8 @@ fn socks5_udp_associate_loop_delegates_dispatch_and_direct_response_framing() {
     assert!(
         dispatch.contains("async fn dispatch_packet")
             && dispatch.contains("UdpPipeInput")
-            && dispatch.contains("ProtocolType::Socks5")
+            && dispatch.contains("protocol: request.protocol()")
+            && !dispatch.contains("ProtocolType::Socks5")
             && dispatch.contains(".decode_dispatch_parts_or_resolve_local_dns(")
             && !dispatch.contains(".resolver.resolve("),
         "SOCKS5 UDP packet dispatch should live in inbound/socks5/udp_associate/dispatch.rs"

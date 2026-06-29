@@ -208,6 +208,10 @@ pub struct ShadowsocksInboundUdpDispatchParts {
 
 #[cfg(feature = "crypto")]
 impl ShadowsocksInboundUdpDispatchParts {
+    pub fn protocol(&self) -> ProtocolType {
+        ProtocolType::Shadowsocks
+    }
+
     pub fn pipe_parts(&self) -> (&Address, u16, &[u8], Option<u64>) {
         (
             &self.target,

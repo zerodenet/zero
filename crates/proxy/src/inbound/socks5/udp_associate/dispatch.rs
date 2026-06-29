@@ -1,4 +1,3 @@
-use zero_core::ProtocolType;
 use zero_engine::EngineError;
 
 use crate::runtime::pipe::{KernelPipe, UdpPipe, UdpPipeInput};
@@ -29,7 +28,7 @@ pub(super) async fn dispatch_packet(
             target: target.clone(),
             port,
             payload,
-            protocol: ProtocolType::Socks5,
+            protocol: request.protocol(),
             auth: None,
             client_session_id,
         })

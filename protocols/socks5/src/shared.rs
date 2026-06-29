@@ -3,7 +3,7 @@ use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
 
-use zero_core::{Address, Error};
+use zero_core::{Address, Error, ProtocolType};
 use zero_traits::AsyncSocket;
 
 use crate::outbound::{Socks5OutboundAuth, Socks5UdpFlowResume};
@@ -214,6 +214,10 @@ pub enum Socks5InboundUdpDispatchAction {
 }
 
 impl Socks5InboundUdpDispatchView {
+    pub fn protocol(&self) -> ProtocolType {
+        self.parts.protocol()
+    }
+
     pub fn into_parts(self) -> (Socks5InboundUdpDispatchParts, usize) {
         (self.parts, self.protocol_overhead_len)
     }
@@ -231,6 +235,10 @@ impl Socks5InboundUdpDispatchView {
 }
 
 impl Socks5InboundUdpDispatchParts {
+    pub fn protocol(&self) -> ProtocolType {
+        ProtocolType::Socks5
+    }
+
     pub fn pipe_parts(&self) -> (&Address, u16, &[u8], Option<u64>) {
         (
             &self.target,
