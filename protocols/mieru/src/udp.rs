@@ -5,6 +5,7 @@
 //
 // This preserves datagram boundaries when transmitted over TCP streams.
 
+use alloc::borrow::ToOwned;
 use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
@@ -14,7 +15,9 @@ use std::collections::HashMap;
 use std::net::SocketAddr;
 
 use zero_core::{Address, Error};
-use zero_traits::{DatagramCodec, IpAddress};
+use zero_traits::DatagramCodec;
+#[cfg(feature = "crypto")]
+use zero_traits::IpAddress;
 
 #[cfg(feature = "crypto")]
 pub use crate::outbound::{
@@ -93,7 +96,22 @@ pub struct MieruInboundUdpRequest {
     payload: Vec<u8>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MieruInboundUdpDispatchParts {
+    target: Address,
+    port: u16,
+    payload: Vec<u8>,
+    client_session_id: Option<u64>,
+}
+
+impl MieruInboundUdpDispatchParts {
+    pub fn into_parts(self) -> (Address, u16, Vec<u8>, Option<u64>) {
+        (self.target, self.port, self.payload, self.client_session_id)
+    }
+}
+
 impl MieruInboundUdpRequest {
+    #[cfg(feature = "crypto")]
     fn from_packet(packet: MieruInboundUdpPacket) -> Self {
         let (target, port, payload) = packet.into_parts();
         Self {
@@ -117,6 +135,15 @@ impl MieruInboundUdpRequest {
 
     pub fn target_endpoint(&self) -> (&Address, u16) {
         (&self.target, self.port)
+    }
+
+    pub fn into_dispatch_parts(self) -> MieruInboundUdpDispatchParts {
+        MieruInboundUdpDispatchParts {
+            target: self.target,
+            port: self.port,
+            payload: self.payload,
+            client_session_id: None,
+        }
     }
 
     #[cfg(feature = "crypto")]
@@ -189,6 +216,21 @@ impl MieruInboundUdpSession {
             .write_response_tokio(writer, target, *port, payload)
             .await
             .map(Some)
+    }
+
+    pub async fn write_response_for_target_tokio<W>(
+        &self,
+        writer: &mut W,
+        target: &Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<usize, Error>
+    where
+        W: tokio::io::AsyncWrite + Unpin,
+    {
+        MieruUdpFlowCodec
+            .write_response_tokio(writer, target, port, payload)
+            .await
     }
 }
 

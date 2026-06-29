@@ -8,14 +8,16 @@ use tokio::io::AsyncReadExt;
 use tokio::select;
 use tokio::sync::watch;
 use tokio::task::JoinSet;
+use tokio::time::Instant as TokioInstant;
 use tracing::{error, info};
 use zero_config::InboundConfig;
 use zero_core::Session;
 use zero_engine::EngineError;
-use zero_traits::DnsResolver;
 
 use crate::logging::log_listener_connection_error;
 use crate::runtime::inbound_protocol::{serve_inbound, InboundProtocol};
+use crate::runtime::pipe::{KernelPipe, UdpPipe, UdpPipeInput};
+use crate::runtime::udp_flow::helpers::{log_completed_udp_flow, wait_for_upstream_idle};
 use crate::runtime::Proxy;
 use crate::transport::TcpRelayStream;
 
@@ -174,51 +176,67 @@ pub(crate) async fn run_mieru_listener_with_bound(
 // UDP relay.
 
 impl Proxy {
-    /// Run a Mieru UDP relay: read encrypted data segments, decrypt,
-    /// unwrap Mieru UDP associate framing, parse SOCKS5 UDP packet,
-    /// forward to target, and send responses back.
+    /// Run a Mieru UDP relay through the generic UDP pipe.
     async fn run_mieru_udp_relay(
         &self,
         mut client: MieruClientStream,
-        _session: &Session,
+        session: &Session,
         inbound_tag: &str,
     ) -> Result<(), EngineError> {
-        let udp_socket = tokio::net::UdpSocket::bind("0.0.0.0:0")
-            .await
-            .map_err(|e| EngineError::Io(std::io::Error::other(format!("mieru udp bind: {e}"))))?;
+        let mut dispatch = crate::runtime::udp_dispatch::UdpDispatch::new(inbound_tag).await?;
+        let auth = session.auth.clone();
+        let mut last_activity = TokioInstant::now();
+        let timeout = self.udp_upstream_idle_timeout();
 
         let mut read_buf = [0u8; 65536];
-        let mut recv_buf = [0u8; 65536];
-        let mut udp_session = mieru::MieruInbound.udp_session();
+        let mut direct_buf = [0u8; 65536];
+        let mut upstream_buf = [0u8; 65536];
+        let udp_session = mieru::MieruInbound.udp_session();
+
+        info!(
+            inbound_tag = inbound_tag,
+            protocol = "mieru_udp",
+            "mieru udp session started"
+        );
 
         loop {
+            let (direct_sock, upstream_udp, socks5_idle, chain_tasks) = dispatch.poll_refs();
+
             tokio::select! {
-                // Read decrypted data from Mieru client
+                _ = tokio::time::sleep_until(last_activity + timeout) => {
+                    info!(
+                        inbound_tag = inbound_tag,
+                        protocol = "mieru_udp",
+                        "mieru udp session idle timeout"
+                    );
+                    break;
+                }
                 read = client.read(&mut read_buf) => {
                     match read {
                         Ok(0) => break,
                         Ok(n) => {
-                            let data = &read_buf[..n];
-                            if let Ok(request) = udp_session.decode_request(data) {
-                                let target_addr = if let Some(addr) = request.target_socket_addr() {
-                                    Some(addr)
-                                } else if let Some((domain, _port)) = request.target_domain() {
-                                    match self.resolver.resolve(domain).await {
-                                        Ok(ips) => ips
-                                            .first()
-                                            .copied()
-                                            .map(|ip| request.resolved_target_socket_addr(ip)),
-                                        Err(_) => None,
-                                    }
-                                } else {
-                                    None
-                                };
-
-                                if let Some(addr) = target_addr {
-                                    udp_session.record_request_target(addr, &request);
-                                    let payload = request.into_payload();
-                                    let _ = udp_socket.send_to(&payload, addr).await;
+                            last_activity = TokioInstant::now();
+                            let request = match udp_session.decode_request(&read_buf[..n]) {
+                                Ok(request) => request,
+                                Err(error) => {
+                                    tracing::warn!(error = %error, "mieru udp request decode failed");
+                                    continue;
                                 }
+                            };
+                            let (target, port, payload, client_session_id) =
+                                request.into_dispatch_parts().into_parts();
+                            if let Err(error) = UdpPipe::new(self, &mut dispatch)
+                                .dispatch(UdpPipeInput {
+                                    target,
+                                    port,
+                                    payload: &payload,
+                                    protocol: zero_core::ProtocolType::Mieru,
+                                    auth: auth.as_ref(),
+                                    client_session_id,
+                                })
+                                .await
+                            {
+                                tracing::warn!(error = %error, "failed to process mieru udp packet");
                             }
                         }
                         Err(e) => {
@@ -227,30 +245,76 @@ impl Proxy {
                         }
                     }
                 }
-                // Read responses from UDP socket
-                recv = udp_socket.recv_from(&mut recv_buf) => {
-                    match recv {
-                        Ok((n, sender)) => {
-                            if let Err(e) = udp_session
-                                .write_response_tokio(&mut client, sender, &recv_buf[..n])
-                                .await
-                            {
-                                tracing::warn!(
-                                    error = %e, "mieru udp write error"
-                                );
-                                break;
+                recv = direct_sock.recv_from_addr(&mut direct_buf) => {
+                    let (n, sender) = recv?;
+                    last_activity = TokioInstant::now();
+
+                    let target = crate::runtime::udp_flow::helpers::address_from_socket_addr(sender);
+                    let session_id = dispatch.direct_response_session_id(sender);
+                    if let Some(sid) = session_id {
+                        self.record_session_outbound_rx(sid, n as u64);
+                    }
+                    let written = udp_session
+                        .write_response_for_target_tokio(
+                            &mut client,
+                            &target,
+                            sender.port(),
+                            &direct_buf[..n],
+                        )
+                        .await?;
+                    if let Some(sid) = session_id {
+                        self.record_session_inbound_tx(sid, written as u64);
+                    }
+                }
+                upstream = upstream_udp.recv_response(&mut upstream_buf) => {
+                    match upstream {
+                        Ok(pkt) => {
+                            last_activity = TokioInstant::now();
+                            self.record_udp_upstream_packet_received();
+                            dispatch.touch_upstream_idle(self.udp_upstream_idle_timeout());
+                            let (target, port, payload) = pkt.into_parts();
+                            if let Some(sid) = dispatch.session_id_by_target(&target, port, None) {
+                                self.record_session_outbound_rx(sid, payload.len() as u64);
+                            }
+                            let written = udp_session
+                                .write_response_for_target_tokio(&mut client, &target, port, &payload)
+                                .await?;
+                            if let Some(sid) = dispatch.session_id_by_target(&target, port, None) {
+                                self.record_session_inbound_tx(sid, written as u64);
                             }
                         }
-                        Err(e) => {
-                            tracing::warn!(error = %e, "mieru udp recv_from error");
-                            break;
+                        Err(error) => {
+                            tracing::warn!(error = %error, "mieru udp socks5 upstream recv error");
                         }
+                    }
+                }
+                _ = wait_for_upstream_idle(socks5_idle) => {}
+                Some(chain_result) = chain_tasks.join_next() => {
+                    match chain_result {
+                        Ok(Ok((target, port, payload, session_id))) => {
+                            last_activity = TokioInstant::now();
+                            if let Some(sid) = session_id {
+                                self.record_session_outbound_rx(sid, payload.len() as u64);
+                            }
+                            let written = udp_session
+                                .write_response_for_target_tokio(&mut client, &target, port, &payload)
+                                .await?;
+                            if let Some(sid) = session_id {
+                                self.record_session_inbound_tx(sid, written as u64);
+                            }
+                        }
+                        Ok(Err(error)) => tracing::warn!(error = %error, "mieru udp chain response error"),
+                        Err(error) => tracing::warn!(error = %error, "mieru udp chain task panicked"),
                     }
                 }
             }
         }
 
-        tracing::info!(inbound_tag = %inbound_tag, "mieru udp relay stopped");
+        for completed in dispatch.finish_all() {
+            log_completed_udp_flow(completed);
+        }
+
+        tracing::info!(inbound_tag = %inbound_tag, "mieru udp session ended");
         Ok(())
     }
 }
