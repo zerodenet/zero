@@ -299,6 +299,26 @@ TUN 虚拟网卡运行状态。
 
 Params：`policy_tag` (string), `target_tag` (string)
 
+`policy_tag` 必须是一个 `selector` policy。`target_tag` 是该 selector
+`outbounds` 里的直接成员 tag；这个成员可以是普通 outbound，也可以是
+`url_test`、`load_balance`、`fallback`、`relay` 或另一个 `selector`。控制层不要把嵌套
+policy 展开成最终 leaf 后再发送；例如 selector `proxy` 的成员里有 url_test
+组 `auto`，选择它时发送：
+
+```json
+{
+  "method": "policies.select",
+  "params": {
+    "policy_tag": "proxy",
+    "target_tag": "auto"
+  }
+}
+```
+
+这只会把外层 selector 选到 `auto`。`auto` 内部最终选中哪个成员，仍由
+`url_test` 探测状态决定；需要立即刷新延迟时，再对 `auto` 发送
+`policies.probe`，并通过事件或 policy 查询读取结果。
+
 Response：
 ```json
 { "policy_tag": "proxy", "selected": "direct" }

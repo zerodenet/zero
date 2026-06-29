@@ -128,6 +128,18 @@ print(f"活跃连接: {stats['active_sessions']}")
 
 支持的方法：`policies.select`、`policies.probe`、`flows.close`、`config.apply`、`config.validate`、`mode.set`、`tun.start`、`tun.stop`、`diagnostics.probe_target`、`diagnostics.dns_lookup`、`diagnostics.dns_cache`、`diagnostics.fakeip_lookup`、`diagnostics.trace_route`。
 
+`policies.select` 只修改 selector 自己的当前成员。GUI 应把当前 selector
+policy 的 `outbounds` 原样作为可选项展示和提交：成员可以是普通 outbound，也可以是
+`url_test`、`load_balance`、`fallback`、`relay` 或另一个 `selector`。用户在 selector
+`proxy` 中选择 url_test 组 `auto` 时，发送：
+
+```json
+{"type":"command","method":"policies.select","params":{"policy_tag":"proxy","target_tag":"auto"}}
+```
+
+不要把 `auto` 展开成 `auto` 当前选中的 leaf 再发送。`auto` 的延迟和成员健康状态通过
+`policy.probe.completed` 事件或 `{"policy":{"policy_tag":"auto"}}` 查询读取。
+
 ### 事件订阅
 
 ```
@@ -496,7 +508,10 @@ es.onmessage = (e) => console.log(JSON.parse(e.data));
 
 ### 节点管理
 
-查询 `{"policies":{}}` → 展示 selector 列表 → 用户点击切换 → `policies.select`。
+查询 `{"policies":{}}` → 展示 selector 列表 → 用户点击 selector 的直接成员 →
+`policies.select`。如果成员是 `url_test`，切换命令的 `target_tag` 仍然是该 url_test
+组 tag；随后监听 `policy.probe.completed` 或查询该 url_test policy 获取
+`latency_ms` / `url_test_members[].latency_ms`。
 
 ### 实时日志
 

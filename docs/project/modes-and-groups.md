@@ -64,7 +64,7 @@ IPC 等价命令：
 - `load_balance`
   - 负载均衡，按策略（round_robin / random）分发连接
 
-这三类组的成员现在都可以引用另一个组。运行时会递归解析，配置阶段会拦掉循环引用。
+这些组的成员现在都可以引用另一个组。运行时会递归解析，配置阶段会拦掉循环引用。
 
 ### 默认选择逻辑
 
@@ -88,6 +88,25 @@ Fallback 和 URL test 固定从 `outbounds[0]` 开始。
 
 当前本地控制入口使用 `POST /api/v1/commands`，selector 切换通过
 `method: "policies.select"` 完成。
+
+`policies.select` 的 `target_tag` 是 selector `outbounds` 里的直接成员 tag。
+这个成员可以是普通 outbound，也可以是 `url_test`、`load_balance`、`fallback`、`relay`
+或另一个 `selector`。控制层只改变这一层 selector 的选择，不展开嵌套组。例如：
+
+```json
+{
+  "method": "policies.select",
+  "params": {
+    "policy_tag": "manual",
+    "target_tag": "probe"
+  }
+}
+```
+
+这表示 selector `manual` 选中 url_test 组 `probe`。`probe` 内部最终走哪个成员，由
+url_test 探测状态决定；需要刷新延迟时对 `probe` 发送 `policies.probe`，再通过
+policy 查询或 `policy.probe.completed` 事件读取 `latency_ms` 和
+`url_test_members[].latency_ms`。
 
 ## 配置草案
 
