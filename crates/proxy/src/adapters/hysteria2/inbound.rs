@@ -51,7 +51,7 @@ impl Hysteria2Adapter {
                     )));
                 }
             };
-            let profile = hysteria2::Hysteria2InboundProfile::from_config(&password);
+            let profile = hysteria2::Hysteria2InboundProfile::from_config_parts(&password);
             crate::inbound::run_hysteria2_listener_with_bound(
                 &p,
                 crate::inbound::hysteria2::Hysteria2InboundRequest { inbound, profile },

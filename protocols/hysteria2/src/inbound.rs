@@ -33,6 +33,10 @@ impl Hysteria2InboundProfile {
         }
     }
 
+    pub fn from_config_parts(password: &str) -> Self {
+        Self::from_config(password)
+    }
+
     pub fn authenticate_client(&self, salt: &[u8; 32], auth_frame: &[u8]) -> Result<(), Error> {
         let client_hmac = crate::shared::parse_auth_frame(auth_frame)?;
         if crate::shared::verify_hmac(&self.password, salt, &client_hmac) {

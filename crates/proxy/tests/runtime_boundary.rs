@@ -1052,7 +1052,7 @@ fn shadowsocks_inbound_uses_adapter_request_model() {
         "Shadowsocks inbound listener should delegate TCP replay state and salt checks to the protocol crate"
     );
     assert!(
-        adapter.contains("ShadowsocksInboundProfile::from_config")
+        adapter.contains("ShadowsocksInboundProfile::from_config_parts")
             && !adapter.contains("CipherKind::from_str"),
         "Shadowsocks adapter should delegate inbound profile validation to the protocol crate"
     );
@@ -1167,7 +1167,7 @@ fn trojan_inbound_uses_adapter_request_model() {
             && !inbound.contains("pub(crate) password: String")
             && !inbound.contains("password: String")
             && !inbound.contains("std::slice::from_ref(&self.password)")
-            && adapter.contains("TrojanInboundProfile::from_config")
+            && adapter.contains("TrojanInboundProfile::from_config_parts")
             && !adapter.contains("password.clone(), tls.clone()"),
         "Trojan inbound listener should receive a protocol-owned profile instead of raw password"
     );
@@ -1386,7 +1386,7 @@ fn hysteria2_inbound_uses_adapter_request_model() {
             && !inbound.contains("pub(crate) password: String")
             && !adapter.contains("up_bps")
             && !adapter.contains("down_bps")
-            && adapter.contains("Hysteria2InboundProfile::from_config"),
+            && adapter.contains("Hysteria2InboundProfile::from_config_parts"),
         "Hysteria2 inbound listener should receive only protocol-owned profile data, not raw password or unused rate-limit config"
     );
     for forbidden in [

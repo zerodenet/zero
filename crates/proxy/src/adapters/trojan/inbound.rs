@@ -18,7 +18,7 @@ impl TrojanAdapter {
         listeners.spawn(async move {
             let (profile, tls) = match &inbound.protocol {
                 InboundProtocolConfig::Trojan { password, tls, .. } => (
-                    trojan::TrojanInboundProfile::from_config(password.clone()),
+                    trojan::TrojanInboundProfile::from_config_parts(password.clone()),
                     tls.clone(),
                 ),
                 _ => {

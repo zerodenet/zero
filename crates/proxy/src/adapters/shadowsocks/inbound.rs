@@ -28,7 +28,7 @@ impl ShadowsocksAdapter {
                 }
             };
             let profile =
-                shadowsocks::ShadowsocksInboundProfile::from_config(&cipher_name, &password)
+                shadowsocks::ShadowsocksInboundProfile::from_config_parts(&cipher_name, &password)
                     .map_err(|error| {
                         EngineError::Io(std::io::Error::new(
                             std::io::ErrorKind::InvalidInput,
