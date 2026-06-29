@@ -188,6 +188,10 @@ impl VlessTcpConnectConfig {
         self.flow
     }
 
+    pub fn mux_pool_identity(&self) -> crate::mux_pool::MuxIdentity {
+        crate::mux_pool::MuxIdentity::from_uuid(self.id)
+    }
+
     pub fn tcp_target<'a>(&'a self, session: &'a Session) -> VlessTcpTunnelTarget<'a> {
         VlessTcpTunnelTarget {
             session,

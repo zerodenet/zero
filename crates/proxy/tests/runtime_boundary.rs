@@ -1906,9 +1906,12 @@ fn vmess_tcp_connect_uses_request_model() {
     assert!(
         adapter.contains("VmessTcpConnectConfig::from_config")
             && adapter.contains("config: vmess::VmessTcpConnectConfig")
+            && adapter.contains("config.mux_pool_identity(cipher)")
+            && !adapter.contains("VmessMuxIdentity::from_parts")
             && protocol_outbound.contains("pub struct VmessTcpConnectConfig")
-            && protocol_outbound.contains("pub fn from_config"),
-        "VMess adapter should ask protocols/vmess to parse TCP identity config"
+            && protocol_outbound.contains("pub fn from_config")
+            && protocol_outbound.contains("pub fn mux_pool_identity"),
+        "VMess adapter should ask protocols/vmess to parse TCP identity config and build MUX identity"
     );
     assert!(
         adapter.contains("vmess::establish_tcp_outbound_stream"),
@@ -1949,11 +1952,14 @@ fn vless_tcp_connect_uses_request_model() {
     assert!(
         adapter.contains("VlessTcpConnectConfig::from_config")
             && adapter.contains("config: vless::VlessTcpConnectConfig")
+            && adapter.contains("config.mux_pool_identity()")
+            && !adapter.contains("MuxIdentity::from_uuid")
             && protocol_outbound.contains("pub struct VlessTcpConnectConfig")
             && protocol_outbound.contains("pub fn from_config")
+            && protocol_outbound.contains("pub fn mux_pool_identity")
             && protocol_outbound.contains("parse_uuid")
             && protocol_outbound.contains("parse_flow"),
-        "VLESS adapter should ask protocols/vless to parse outbound identity and flow config"
+        "VLESS adapter should ask protocols/vless to parse outbound identity/flow config and build MUX identity"
     );
 }
 

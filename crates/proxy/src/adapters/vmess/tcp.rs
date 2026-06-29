@@ -49,11 +49,7 @@ impl VmessAdapter {
                     session,
                     server: (*server).to_owned(),
                     port: *port,
-                    identity: vmess::VmessMuxIdentity::from_parts(
-                        config.uuid(),
-                        (*cipher).to_owned(),
-                        config.cipher(),
-                    ),
+                    identity: config.mux_pool_identity(cipher),
                     tls: *tls,
                     ws: *ws,
                     grpc: *grpc,

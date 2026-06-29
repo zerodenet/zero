@@ -129,6 +129,10 @@ impl VmessTcpConnectConfig {
         self.cipher
     }
 
+    pub fn mux_pool_identity(&self, cipher_name: &str) -> crate::VmessMuxIdentity {
+        crate::VmessMuxIdentity::from_parts(self.uuid, cipher_name.to_owned(), self.cipher)
+    }
+
     pub fn tcp_target<'a>(&'a self, session: &'a Session) -> VmessTcpSessionTarget<'a> {
         VmessTcpSessionTarget {
             session,
