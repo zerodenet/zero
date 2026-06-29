@@ -254,6 +254,21 @@ fn inbound_udp_response_accounting_uses_runtime_helpers() {
             && !datagram_loop.contains("session_id_by_target"),
         "Hysteria2 datagram loop should use neutral UDP response accounting helpers without affecting TCP stream relay accounting"
     );
+
+    let vless_udp = read("src/inbound/vless/udp_session.rs");
+    let vless_upstream_response = vless_udp
+        .split("upstream = upstream_udp.recv_response")
+        .nth(1)
+        .and_then(|content| content.split("_ = wait_for_upstream_idle").next())
+        .expect("vless udp upstream response branch");
+    assert!(
+        vless_upstream_response.contains("record_udp_upstream_packet_received")
+            && vless_upstream_response.contains("dispatch.touch_upstream_idle")
+            && vless_upstream_response.contains("udp_response_session_id(&dispatch, &target, port)")
+            && vless_upstream_response.contains("record_udp_inbound_response_rx")
+            && vless_upstream_response.contains("record_udp_inbound_response_tx"),
+        "VLESS ordinary UDP upstream responses should use the same neutral response accounting as other UDP inbound loops"
+    );
 }
 
 #[test]

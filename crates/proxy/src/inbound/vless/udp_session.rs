@@ -6,7 +6,7 @@ use crate::runtime::pipe::{KernelPipe, UdpPipe, UdpPipeInput};
 use crate::runtime::udp_dispatch::UdpDispatch;
 use crate::runtime::udp_flow::helpers::{
     log_completed_udp_flow, record_udp_inbound_response_rx, record_udp_inbound_response_tx,
-    wait_for_upstream_idle,
+    udp_response_session_id, wait_for_upstream_idle,
 };
 use crate::runtime::Proxy;
 use crate::transport::{ClientStream, MeteredStream};
@@ -123,14 +123,25 @@ impl Proxy {
                     match upstream {
                         Ok(pkt) => {
                             last_activity = TokioInstant::now();
+                            proxy.record_udp_upstream_packet_received();
+                            dispatch.touch_upstream_idle(timeout);
                             let (target, port, payload) = pkt.into_parts();
-                            if udp_session.write_response_tokio(
+                            let session_id = udp_response_session_id(&dispatch, &target, port);
+                            record_udp_inbound_response_rx(&proxy, session_id, payload.len());
+                            match udp_session.write_response_tokio(
                                 &mut client,
                                 &target,
                                 port,
                                 &payload,
-                            ).await.is_ok() {
-                                proxy.record_session_inbound_traffic(0, client.drain_traffic());
+                            ).await {
+                                Ok(written) => {
+                                    record_udp_inbound_response_tx(&proxy, session_id, written);
+                                    proxy.record_session_inbound_traffic(0, client.drain_traffic());
+                                }
+                                Err(error) => {
+                                    warn!(error = %error, "failed to write vless udp upstream response");
+                                    break;
+                                }
                             }
                         }
                         Err(error) => {
