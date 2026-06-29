@@ -1,4 +1,6 @@
 use alloc::string::String;
+use alloc::sync::Arc;
+use alloc::vec::Vec;
 
 use zero_core::{Address, Error, Network, ProtocolType, Session, SessionAuth};
 use zero_traits::AsyncSocket;
@@ -111,6 +113,43 @@ impl VlessUserStore for VlessConfiguredUsers<'_> {
             .iter()
             .find(|user| &user.id == id)
             .map(|user| user.user.clone())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VlessInboundProfile {
+    users: Arc<[VlessConfiguredUser]>,
+}
+
+impl VlessInboundProfile {
+    pub fn from_users(users: Vec<VlessConfiguredUser>) -> Self {
+        Self {
+            users: users.into(),
+        }
+    }
+
+    pub async fn accept_tcp_with_auth_and_id<S>(
+        &self,
+        inbound: VlessInbound,
+        stream: &mut S,
+    ) -> Result<(Session, [u8; 16]), Error>
+    where
+        S: AsyncSocket,
+    {
+        let auth = VlessConfiguredUsers::new(&self.users);
+        inbound.accept_tcp_with_auth_and_id(stream, &auth).await
+    }
+
+    pub async fn accept_tcp_with_auth<S>(
+        &self,
+        inbound: VlessInbound,
+        stream: &mut S,
+    ) -> Result<Session, Error>
+    where
+        S: AsyncSocket,
+    {
+        let auth = VlessConfiguredUsers::new(&self.users);
+        inbound.accept_tcp_with_auth(stream, &auth).await
     }
 }
 

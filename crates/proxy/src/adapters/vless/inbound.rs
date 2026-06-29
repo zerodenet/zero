@@ -6,9 +6,9 @@ use crate::protocol_registry::BoundInbound;
 use crate::runtime::Proxy;
 use crate::transport::QuicInbound;
 
-fn parse_inbound_users(
+fn parse_inbound_profile(
     inbound: &InboundConfig,
-) -> Result<std::sync::Arc<[vless::VlessConfiguredUser]>, EngineError> {
+) -> Result<vless::VlessInboundProfile, EngineError> {
     inbound
         .protocol
         .vless_users()
@@ -25,7 +25,7 @@ fn parse_inbound_users(
             .map_err(EngineError::from)
         })
         .collect::<Result<Vec<_>, EngineError>>()
-        .map(Into::into)
+        .map(vless::VlessInboundProfile::from_users)
 }
 
 fn parse_reality_profile(inbound: &InboundConfig) -> Option<vless::VlessRealityServerProfile> {
@@ -72,13 +72,13 @@ impl VlessAdapter {
     ) {
         let p = proxy.clone();
         listeners.spawn(async move {
-            let users = parse_inbound_users(&inbound)?;
+            let profile = parse_inbound_profile(&inbound)?;
             let reality = parse_reality_profile(&inbound);
             crate::inbound::run_vless_listener_with_bound(
                 &p,
                 crate::inbound::vless::model::VlessInboundRequest {
                     inbound,
-                    users,
+                    profile,
                     reality,
                 },
                 bound,

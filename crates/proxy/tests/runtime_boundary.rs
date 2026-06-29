@@ -1253,7 +1253,11 @@ fn vless_inbound_users_are_adapter_parsed() {
             "VLESS inbound listener/session/helpers should receive adapter-parsed protocol values; found `{forbidden}`"
         );
     }
-    for required in ["parse_inbound_users", "VlessConfiguredUser::from_config"] {
+    for required in [
+        "parse_inbound_profile",
+        "VlessConfiguredUser::from_config",
+        "VlessInboundProfile::from_users",
+    ] {
         assert!(
             adapter.contains(required),
             "VLESS adapter inbound module should ask protocols/vless for parsed users through `{required}`"
@@ -1274,7 +1278,16 @@ fn vless_inbound_users_are_adapter_parsed() {
     assert!(
         !helpers.contains("ConfiguredVlessUser")
             && !helpers.contains("VlessUserStore")
-            && session.contains("vless::VlessConfiguredUsers::new(users)")
+            && !listener.contains("VlessConfiguredUser")
+            && !session.contains("VlessConfiguredUser")
+            && !session.contains("VlessConfiguredUsers::new")
+            && model.contains("profile: vless::VlessInboundProfile")
+            && session.contains("profile: vless::VlessInboundProfile")
+            && session.contains(".accept_tcp_with_auth_and_id(vless::VlessInbound, &mut metered)")
+            && protocol_inbound.contains("pub struct VlessInboundProfile")
+            && protocol_inbound
+                .contains("pub fn from_users(users: Vec<VlessConfiguredUser>) -> Self")
+            && protocol_inbound.contains("let auth = VlessConfiguredUsers::new(&self.users)")
             && protocol_inbound.contains("pub struct VlessConfiguredUsers")
             && protocol_inbound.contains("impl VlessUserStore for VlessConfiguredUsers")
             && protocol_inbound.contains("user.user.clone()"),
@@ -1287,7 +1300,7 @@ fn vless_inbound_users_are_adapter_parsed() {
             && listener.contains("let VlessInboundRequest")
             && adapter.contains("parse_reality_profile")
             && adapter.contains("VlessRealityServerProfile::new")
-            && protocol_inbound.contains("pub struct VlessConfiguredUsers"),
+            && protocol_inbound.contains("pub struct VlessInboundProfile"),
         "VLESS inbound request model should live in inbound/vless/model.rs"
     );
     let protocol_reality =

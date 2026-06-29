@@ -2,7 +2,7 @@ use zero_core::SessionAuth;
 
 pub(crate) struct VlessInboundRequest {
     pub(crate) inbound: zero_config::InboundConfig,
-    pub(crate) users: std::sync::Arc<[vless::VlessConfiguredUser]>,
+    pub(crate) profile: vless::VlessInboundProfile,
     pub(crate) reality: Option<vless::VlessRealityServerProfile>,
 }
 

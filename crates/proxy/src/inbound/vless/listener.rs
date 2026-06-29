@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use crate::logging::log_listener_connection_error;
 use crate::runtime::Proxy;
 use crate::transport::{build_tls_acceptor, InboundTlsStream, PrefixedSocket};
@@ -21,7 +19,7 @@ pub(crate) async fn run_vless_listener_with_bound(
 ) -> Result<(), EngineError> {
     let VlessInboundRequest {
         inbound,
-        users,
+        profile,
         reality,
     } = request;
     let listen_addr = format!("{}:{}", inbound.listen.address, inbound.listen.port);
@@ -43,7 +41,7 @@ pub(crate) async fn run_vless_listener_with_bound(
                     &quic_inbound,
                     &mut shutdown,
                     &mut connections,
-                    Arc::clone(&users),
+                    profile,
                     fallback_config,
                 )
                 .await;
@@ -65,7 +63,6 @@ pub(crate) async fn run_vless_listener_with_bound(
                     .as_ref()
                     .map(|_| crate::transport::SplitHttpRegistry::new());
             let fallback_config = inbound.protocol.vless_fallback().cloned();
-            let vless_users = Arc::clone(&users);
             let mut connections = JoinSet::new();
 
             info!(
@@ -94,7 +91,7 @@ pub(crate) async fn run_vless_listener_with_bound(
                         let (stream, remote_addr) = accept_result?;
                         let engine = proxy.clone();
                         let inbound_tag = inbound.tag.clone();
-                        let vless_users = Arc::clone(&vless_users);
+                        let profile = profile.clone();
                         let tls_acceptor = tls_acceptor.clone();
                         let reality = reality.clone();
                         let ws_config = ws_config.clone();
@@ -159,7 +156,7 @@ pub(crate) async fn run_vless_listener_with_bound(
                                                         tls_stream,
                                                     ),
                                                     inbound_tag: inbound_tag.as_str(),
-                                                    users: &vless_users,
+                                                    profile: profile.clone(),
                                                     transport,
                                                     fallback: fallback_config.as_ref(),
                                                     sni,
@@ -174,7 +171,7 @@ pub(crate) async fn run_vless_listener_with_bound(
                                                 .handle_vless_stream(VlessStreamRequest {
                                                     stream: InboundTlsStream::new(tls_stream),
                                                     inbound_tag: inbound_tag.as_str(),
-                                                    users: &vless_users,
+                                                    profile: profile.clone(),
                                                     transport,
                                                     fallback: fallback_config.as_ref(),
                                                     sni: None,
@@ -191,7 +188,7 @@ pub(crate) async fn run_vless_listener_with_bound(
                                                 .handle_vless_stream(VlessStreamRequest {
                                                     stream: reality_stream,
                                                     inbound_tag: inbound_tag.as_str(),
-                                                    users: &vless_users,
+                                                    profile: profile.clone(),
                                                     transport,
                                                     fallback: fallback_config.as_ref(),
                                                     sni: None,
@@ -206,7 +203,7 @@ pub(crate) async fn run_vless_listener_with_bound(
                                         .handle_vless_stream(VlessStreamRequest {
                                             stream,
                                             inbound_tag: inbound_tag.as_str(),
-                                            users: &vless_users,
+                                            profile: profile.clone(),
                                             transport,
                                             fallback: fallback_config.as_ref(),
                                             sni: None,

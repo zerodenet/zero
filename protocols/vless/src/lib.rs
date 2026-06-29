@@ -28,7 +28,8 @@ pub use flow::{
     FLOW_XTLS_RPRX_VISION_UDP,
 };
 pub use inbound::{
-    VlessConfiguredUser, VlessConfiguredUsers, VlessInbound, VlessUser, VlessUserStore,
+    VlessConfiguredUser, VlessConfiguredUsers, VlessInbound, VlessInboundProfile, VlessUser,
+    VlessUserStore,
 };
 pub use metadata::VlessProtocol;
 pub use mux::{

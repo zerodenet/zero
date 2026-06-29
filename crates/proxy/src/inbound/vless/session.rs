@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use crate::logging::log_listener_connection_error;
 use crate::runtime::inbound_protocol::serve_inbound;
 use crate::runtime::Proxy;
@@ -24,7 +22,7 @@ pub(crate) struct VlessStreamTransport<'a> {
 pub(crate) struct VlessStreamRequest<'a, S> {
     pub(crate) stream: S,
     pub(crate) inbound_tag: &'a str,
-    pub(crate) users: &'a [vless::VlessConfiguredUser],
+    pub(crate) profile: vless::VlessInboundProfile,
     pub(crate) transport: VlessStreamTransport<'a>,
     pub(crate) fallback: Option<&'a zero_config::FallbackConfig>,
     pub(crate) sni: Option<String>,
@@ -37,7 +35,7 @@ impl Proxy {
         quic_inbound: &crate::transport::QuicInbound,
         shutdown: &mut watch::Receiver<bool>,
         connections: &mut JoinSet<Result<(), EngineError>>,
-        vless_users: Arc<[vless::VlessConfiguredUser]>,
+        profile: vless::VlessInboundProfile,
         fallback_config: Option<zero_config::FallbackConfig>,
     ) -> Result<(), EngineError> {
         loop {
@@ -54,7 +52,7 @@ impl Proxy {
                         Ok(quic_stream) => {
                             let engine = self.clone();
                             let inbound_tag = inbound.tag.clone();
-                            let vless_users = Arc::clone(&vless_users);
+                            let profile = profile.clone();
                             let fallback_config = fallback_config.clone();
 
                             connections.spawn(async move {
@@ -62,7 +60,8 @@ impl Proxy {
                                     .handle_vless_client(
                                         quic_stream,
                                         inbound_tag.as_str(),
-                                        &vless_users, fallback_config.as_ref(),
+                                        profile,
+                                        fallback_config.as_ref(),
                                         None,
                                     )
                                     .await;
@@ -123,7 +122,7 @@ impl Proxy {
         let VlessStreamRequest {
             stream,
             inbound_tag,
-            users,
+            profile,
             transport,
             fallback,
             sni,
@@ -144,7 +143,7 @@ impl Proxy {
             if zero_transport::split_http::XhttpMode::parse(&cfg.mode).is_single_connection() {
                 let stream_one = crate::transport::accept_xhttp_stream_one(stream, cfg).await?;
                 return self
-                    .handle_vless_client(stream_one, inbound_tag, users, fallback, sni)
+                    .handle_vless_client(stream_one, inbound_tag, profile, fallback, sni)
                     .await;
             }
         }
@@ -152,7 +151,7 @@ impl Proxy {
             match crate::transport::accept_split_http(stream, cfg, reg).await? {
                 Some(split_stream) => {
                     return self
-                        .handle_vless_client(split_stream, inbound_tag, users, fallback, sni)
+                        .handle_vless_client(split_stream, inbound_tag, profile, fallback, sni)
                         .await;
                 }
                 None => return Ok(()), // consumed by partner connection
@@ -161,29 +160,29 @@ impl Proxy {
         if let Some(cfg) = http_upgrade_config {
             let upg_stream = crate::transport::accept_http_upgrade(stream, cfg).await?;
             return self
-                .handle_vless_client(upg_stream, inbound_tag, users, fallback, sni)
+                .handle_vless_client(upg_stream, inbound_tag, profile, fallback, sni)
                 .await;
         }
         match (ws_config, grpc_config, h2_config) {
             (Some(ws), None, None) => {
                 let ws_stream = accept_ws(stream, &ws.path).await?;
-                self.handle_vless_client(ws_stream, inbound_tag, users, fallback, sni)
+                self.handle_vless_client(ws_stream, inbound_tag, profile, fallback, sni)
                     .await
             }
             (None, Some(grpc), None) => {
                 let engine = self.clone();
                 let tag = inbound_tag.to_owned();
                 let service_names = grpc.service_names.clone();
-                let users_arc: Arc<[vless::VlessConfiguredUser]> = users.into();
+                let profile = profile.clone();
                 let fb_clone = fallback.cloned();
                 return crate::transport::serve_grpc(stream, &service_names, move |grpc_stream| {
                     let engine = engine.clone();
                     let tag = tag.clone();
-                    let users = Arc::clone(&users_arc);
+                    let profile = profile.clone();
                     let fb = fb_clone.clone();
                     async move {
                         engine
-                            .handle_vless_client(grpc_stream, &tag, &users, fb.as_ref(), None)
+                            .handle_vless_client(grpc_stream, &tag, profile, fb.as_ref(), None)
                             .await
                     }
                 })
@@ -191,11 +190,11 @@ impl Proxy {
             }
             (None, None, Some(h2)) => {
                 let h2_stream = crate::transport::accept_h2(stream, h2).await?;
-                self.handle_vless_client(h2_stream, inbound_tag, users, fallback, sni)
+                self.handle_vless_client(h2_stream, inbound_tag, profile, fallback, sni)
                     .await
             }
             (None, None, None) => {
-                self.handle_vless_client(stream, inbound_tag, users, fallback, sni)
+                self.handle_vless_client(stream, inbound_tag, profile, fallback, sni)
                     .await
             }
             _ => Err(EngineError::Io(std::io::Error::new(
@@ -209,7 +208,7 @@ impl Proxy {
         &self,
         client: S,
         inbound_tag: &str,
-        users: &[vless::VlessConfiguredUser],
+        profile: vless::VlessInboundProfile,
         fallback: Option<&zero_config::FallbackConfig>,
         sni: Option<String>,
     ) -> Result<(), EngineError>
@@ -217,9 +216,8 @@ impl Proxy {
         S: ClientStream + 'static,
     {
         let mut metered = MeteredStream::new(RecordingStream::new(client));
-        let auth = vless::VlessConfiguredUsers::new(users);
-        let result = vless::VlessInbound
-            .accept_tcp_with_auth_and_id(&mut metered, &auth)
+        let result = profile
+            .accept_tcp_with_auth_and_id(vless::VlessInbound, &mut metered)
             .await;
 
         let (mut session, uuid) = match result {
