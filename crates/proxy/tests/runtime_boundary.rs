@@ -73,6 +73,30 @@ fn rust_sources_under(relative: &str) -> Vec<PathBuf> {
     files
 }
 
+fn protocol_inbound_sources() -> Vec<PathBuf> {
+    [
+        "src/inbound/socks5.rs",
+        "src/inbound/socks5",
+        "src/inbound/shadowsocks.rs",
+        "src/inbound/shadowsocks",
+        "src/inbound/trojan.rs",
+        "src/inbound/mieru.rs",
+        "src/inbound/hysteria2.rs",
+        "src/inbound/vless",
+        "src/inbound/vmess",
+    ]
+    .into_iter()
+    .flat_map(|relative| {
+        let path = manifest_dir().join(relative);
+        if path.is_dir() {
+            rust_sources_under(relative)
+        } else {
+            vec![path]
+        }
+    })
+    .collect()
+}
+
 fn relative(path: &Path) -> String {
     path.strip_prefix(manifest_dir())
         .expect("path under manifest dir")
@@ -3070,34 +3094,45 @@ fn protocol_inbound_submodules_do_not_use_wildcard_parent_imports() {
 
 #[test]
 fn protocol_named_inbound_modules_stay_proxy_glue_not_crypto_implementations() {
-    for root in ["src/inbound/vless", "src/inbound/vmess"] {
-        for path in rust_sources_under(root) {
-            let source = relative(&path);
-            let content = fs::read_to_string(&path).expect("read inbound protocol module");
+    for path in protocol_inbound_sources() {
+        let source = relative(&path);
+        let content = fs::read_to_string(&path).expect("read inbound protocol module");
 
-            for forbidden in [
-                "use aes",
-                "use chacha",
-                "use cipher",
-                "use hmac",
-                "use md5",
-                "use ring",
-                "use sha",
-                "use uuid",
-                "Aes128",
-                "Aes256",
-                "ChaCha20",
-                "Hmac",
-                "Md5",
-                "Sha1",
-                "Sha256",
-                "Uuid::",
-            ] {
-                assert!(
-                    !content.contains(forbidden),
-                    "{source} should stay proxy-side inbound glue and delegate protocol crypto/parsing primitives to protocols/*; found `{forbidden}`"
-                );
-            }
+        for forbidden in [
+            "use aes::",
+            "use chacha",
+            "use cipher::",
+            "use hmac::",
+            "use md5::",
+            "use ring::",
+            "use sha1::",
+            "use sha2::",
+            "use uuid::",
+            "aes::",
+            "cipher::",
+            "hmac::",
+            "md5::",
+            "ring::",
+            "sha1::",
+            "sha2::",
+            "uuid::",
+            "Aes128",
+            "Aes256",
+            "ChaCha20",
+            "Hmac",
+            "Md5",
+            "Sha1",
+            "Sha256",
+            "Uuid::",
+            "CipherKind::from_str",
+            "password: String",
+            "pub(crate) password",
+            "cipher_name()",
+        ] {
+            assert!(
+                !content.contains(forbidden),
+                "{source} should stay proxy-side inbound glue and delegate protocol crypto/parsing primitives to protocols/*; found `{forbidden}`"
+            );
         }
     }
 }
