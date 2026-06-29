@@ -140,15 +140,9 @@ impl Proxy {
 
                 down = down_rx.recv() => {
                     if let Some(downlink) = down {
-                        let sid = downlink.session_id();
-                        if streams.contains_stream(sid) {
-                            let is_end = downlink.is_end();
-                            let (sid, payload) = downlink.into_parts();
-                            let _ = mux.send_inbound_stream_payload(&mut client, sid, &payload).await;
-                            if is_end {
-                                streams.close_inbound_stream(sid);
-                            }
-                        }
+                        let _ = streams
+                            .send_inbound_downlink(&mut mux, &mut client, downlink)
+                            .await;
                     }
                 }
             }

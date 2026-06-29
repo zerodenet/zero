@@ -190,6 +190,30 @@ impl VlessInboundMuxStreams {
     pub fn contains_stream(&self, session_id: u16) -> bool {
         self.streams.contains_key(&session_id)
     }
+
+    pub async fn send_inbound_downlink<S>(
+        &mut self,
+        mux: &mut VlessInboundMuxSession,
+        stream: &mut S,
+        downlink: VlessInboundMuxDownlink,
+    ) -> Result<bool, Error>
+    where
+        S: AsyncSocket,
+    {
+        let sid = downlink.session_id();
+        if !self.contains_stream(sid) {
+            return Ok(false);
+        }
+
+        let should_close = downlink.is_end();
+        let (sid, payload) = downlink.into_parts();
+        mux.send_inbound_stream_payload(stream, sid, &payload)
+            .await?;
+        if should_close {
+            self.close_inbound_stream(sid);
+        }
+        Ok(true)
+    }
 }
 
 #[cfg(feature = "reality")]

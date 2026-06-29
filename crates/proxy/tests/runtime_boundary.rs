@@ -330,13 +330,21 @@ fn vless_inbound_mux_frame_detail_lives_in_protocol_crate() {
         "read_inbound_action",
         "accept_inbound_stream",
         "reject_inbound_stream",
-        "send_inbound_stream_payload",
-        "end_inbound_stream",
     ] {
         assert!(
             inbound.contains(required),
             "VLESS inbound mux should consume protocol-owned semantic MUX server APIs; missing `{required}`"
         );
+        assert!(
+            protocol_mux.contains(required),
+            "protocols/vless should own VLESS semantic MUX server API `{required}`"
+        );
+    }
+    for required in [
+        "send_inbound_downlink",
+        "send_inbound_stream_payload",
+        "end_inbound_stream",
+    ] {
         assert!(
             protocol_mux.contains(required),
             "protocols/vless should own VLESS semantic MUX server API `{required}`"
@@ -395,7 +403,10 @@ fn vless_inbound_mux_frame_detail_lives_in_protocol_crate() {
         );
     }
     assert!(
-        inbound.contains("mux.send_inbound_stream_payload(&mut client, sid, &payload)")
+        inbound.contains(".send_inbound_downlink(&mut mux, &mut client, downlink)")
+            && !inbound.contains("mux.send_inbound_stream_payload(&mut client, sid, &payload)")
+            && !inbound.contains("downlink.is_end()")
+            && !inbound.contains("downlink.into_parts()")
             && !inbound.contains("mux.send_inbound_stream_data(&mut client, sid, &payload)")
             && !inbound.contains("mux.end_inbound_stream(&mut client, sid)")
             && protocol_mux.contains("if payload.is_empty()")
@@ -5239,6 +5250,7 @@ fn inbound_vless_mux_task_model_lives_outside_mux_root() {
             && protocol_mux.contains("pub fn open_stream")
             && protocol_mux.contains("pub fn push_stream_data")
             && protocol_mux.contains("pub fn close_inbound_stream")
+            && protocol_mux.contains("pub async fn send_inbound_downlink")
             && protocol_mux.contains("pub async fn relay_inbound_mux_stream")
             && protocol_mux.contains("pub fn channel()")
             && protocol_mux.contains("pub fn write_inbound_stream_payload")
@@ -5345,7 +5357,8 @@ fn vless_inbound_udp_packet_framing_stays_in_protocol_crate() {
             && mux.contains("udp_session.send_mux_response")
             && mux.contains("udp_session.send_mux_response_to_socket_addr")
             && mux.contains("writer.end_inbound_stream")
-            && mux.contains("mux.send_inbound_stream_payload")
+            && mux.contains(".send_inbound_downlink(")
+            && !mux.contains("mux.send_inbound_stream_payload(&mut client, sid, &payload)")
             && !mux.contains("writer.end(")
             && !mux.contains("request.target")
             && !mux.contains("request.port")
