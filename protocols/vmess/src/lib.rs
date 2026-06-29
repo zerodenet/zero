@@ -20,4 +20,4 @@ pub use shared::{
     parse_uuid, VmessCipher, AUTH_ID_LEN, CMD_TCP, CMD_UDP, GCM_TAG_LEN, MUX_COOL_DOMAIN,
     MUX_COOL_PORT, VERSION,
 };
-pub use stream::VmessAeadStream;
+pub use stream::{wrap_tcp_inbound_stream, VmessAeadStream};

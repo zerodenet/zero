@@ -55,7 +55,10 @@ impl InboundProtocol for VmessInboundHandler {
             .accept_tcp(self.vmess_inbound, &mut sock)
             .await?;
         let session = accepted.session.clone();
-        let client = wrap_vmess_client(TcpRelayStream::new(sock.0), accepted)?;
+        let client = TcpRelayStream::new(vmess::wrap_tcp_inbound_stream(
+            TcpRelayStream::new(sock.0),
+            accepted,
+        )?);
         Ok((session, client))
     }
 
@@ -105,12 +108,10 @@ impl InboundProtocol for VmessTransportHandler {
 
 // Listener.
 
-mod helpers;
 mod listener;
 pub(crate) mod model;
 mod mux;
 mod transport;
 
-pub(crate) use helpers::wrap_vmess_client;
 pub(crate) use listener::run_vmess_listener_with_bound;
 pub(crate) use transport::{handle_vmess_grpc, handle_vmess_raw, handle_vmess_ws};

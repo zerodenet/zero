@@ -7,7 +7,7 @@ use zero_config::{GrpcConfig, WebSocketConfig};
 use zero_core::Session;
 use zero_engine::EngineError;
 
-use super::{wrap_vmess_client, VmessInboundHandler, VmessTransportHandler};
+use super::{VmessInboundHandler, VmessTransportHandler};
 use crate::runtime::inbound_protocol::{serve_inbound, InboundProtocol};
 use crate::runtime::Proxy;
 use crate::transport::TcpRelayStream;
@@ -72,7 +72,10 @@ pub(crate) async fn handle_vmess_ws(
         .accept_tcp(handler.vmess_inbound, &mut ws)
         .await?;
     let session = accepted.session.clone();
-    let client = wrap_vmess_client(TcpRelayStream::new(ws), accepted)?;
+    let client = TcpRelayStream::new(vmess::wrap_tcp_inbound_stream(
+        TcpRelayStream::new(ws),
+        accepted,
+    )?);
 
     let transport_handler = VmessTransportHandler;
     dispatch_vmess_session(proxy, session, client, &transport_handler, tag, source_addr).await
@@ -108,7 +111,10 @@ pub(crate) async fn handle_vmess_grpc(
             match result {
                 Ok(accepted) => {
                     let session = accepted.session.clone();
-                    let client = wrap_vmess_client(TcpRelayStream::new(grpc_stream), accepted)?;
+                    let client = TcpRelayStream::new(vmess::wrap_tcp_inbound_stream(
+                        TcpRelayStream::new(grpc_stream),
+                        accepted,
+                    )?);
                     let transport_handler = VmessTransportHandler;
                     dispatch_vmess_session(
                         &proxy,

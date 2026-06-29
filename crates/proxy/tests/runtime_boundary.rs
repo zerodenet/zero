@@ -1703,8 +1703,13 @@ fn vmess_inbound_uses_adapter_request_model() {
     let root = read("src/inbound/vmess/mod.rs");
     let transport = read("src/inbound/vmess/transport.rs");
     let adapter = read("src/adapters/vmess/inbound.rs");
+    let helper_path = manifest_dir().join("src/inbound/vmess/helpers.rs");
     let protocol_inbound = fs::read_to_string(repo_root().join("protocols/vmess/src/inbound.rs"))
         .expect("read vmess protocol inbound source");
+    let protocol_stream = fs::read_to_string(repo_root().join("protocols/vmess/src/stream.rs"))
+        .expect("read vmess protocol stream source");
+    let protocol_lib = fs::read_to_string(repo_root().join("protocols/vmess/src/lib.rs"))
+        .expect("read vmess protocol lib source");
 
     assert!(
         model.contains("struct VmessInboundRequest")
@@ -1771,6 +1776,19 @@ fn vmess_inbound_uses_adapter_request_model() {
             && !root.contains("handler.users")
             && !transport.contains("handler.users"),
         "VMess inbound should carry a protocol-owned profile instead of proxy-owned user vectors"
+    );
+    assert!(
+        !helper_path.exists()
+            && root.contains("vmess::wrap_tcp_inbound_stream")
+            && transport.contains("vmess::wrap_tcp_inbound_stream")
+            && !root.contains("wrap_vmess_client")
+            && !transport.contains("wrap_vmess_client")
+            && !root.contains("VmessAeadStream")
+            && !transport.contains("VmessAeadStream")
+            && protocol_stream.contains("pub fn wrap_tcp_inbound_stream")
+            && protocol_stream.contains("VmessAeadStream::inbound")
+            && protocol_lib.contains("wrap_tcp_inbound_stream"),
+        "VMess inbound stream wrapping should be protocol-owned, not a proxy helper around VmessAeadStream"
     );
     assert!(
         !inbound.contains("VmessUserConfig") && !model.contains("VmessUserConfig"),
@@ -3275,7 +3293,6 @@ fn tcp_inbound_source_address_conversion_lives_in_platform_layer() {
         "src/inbound/trojan.rs",
         "src/inbound/mieru.rs",
         "src/inbound/vmess/listener.rs",
-        "src/inbound/vmess/helpers.rs",
     ] {
         let source = read(source_path);
         assert!(
@@ -5583,7 +5600,7 @@ fn vmess_transport_dispatch_uses_protocol_session_classification() {
 
 #[test]
 fn vmess_inbound_udp_response_encoding_stays_in_protocol_crate() {
-    let helper = read("src/inbound/vmess/helpers.rs");
+    let helper_path = manifest_dir().join("src/inbound/vmess/helpers.rs");
     let mux = read("src/inbound/vmess/mux.rs");
     let protocol_udp = manifest_dir()
         .parent()
@@ -5596,7 +5613,11 @@ fn vmess_inbound_udp_response_encoding_stays_in_protocol_crate() {
     let protocol_dispatch_parts = struct_block(&protocol_udp, "VmessInboundUdpDispatchParts");
 
     assert!(
-        !helper.contains("vmess::build_udp_packet"),
+        !helper_path.exists(),
+        "VMess inbound helper should not exist; stream and UDP framing should be protocol-owned"
+    );
+    assert!(
+        !mux.contains("vmess::build_udp_packet"),
         "VMess inbound helper should not build protocol UDP response packets directly"
     );
     assert!(
@@ -5624,17 +5645,17 @@ fn vmess_inbound_udp_response_encoding_stays_in_protocol_crate() {
         "vmess::decode_inbound_udp_datagram",
     ] {
         assert!(
-            !helper.contains(forbidden),
+            !mux.contains(forbidden),
             "VMess inbound helper should use inbound-specific protocol helpers; found `{forbidden}`"
         );
     }
     assert!(
-        !helper.contains("VmessInboundUdpPayload")
-            && !helper.contains("VmessUdpPayloadMode")
-            && !helper.contains("decode_vmess_udp_payload")
-            && !helper.contains("encode_vmess_udp_response")
-            && !helper.contains("encode_vmess_mux_udp_response")
-            && !helper.contains("vmess::VmessInboundUdpCodec")
+        !mux.contains("VmessInboundUdpPayload")
+            && !mux.contains("VmessUdpPayloadMode")
+            && !mux.contains("decode_vmess_udp_payload")
+            && !mux.contains("encode_vmess_udp_response")
+            && !mux.contains("encode_vmess_mux_udp_response")
+            && !mux.contains("vmess::VmessInboundUdpCodec")
             && !mux.contains("fn vmess_udp_response_mode")
             && !mux.contains("vmess::VmessUdpPayloadMode")
             && !mux.contains("vmess::VmessUdpPayloadState")

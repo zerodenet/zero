@@ -318,6 +318,13 @@ impl<S> VmessAeadStream<S> {
     }
 }
 
+pub fn wrap_tcp_inbound_stream<S>(
+    stream: S,
+    accept: VmessAccept,
+) -> Result<VmessAeadStream<S>, zero_core::Error> {
+    VmessAeadStream::inbound(stream, accept)
+}
+
 impl<S> VmessAeadStream<S>
 where
     S: AsyncRead + AsyncWrite + Unpin,
