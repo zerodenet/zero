@@ -9,7 +9,9 @@ use zero_core::ProtocolType;
 use zero_engine::EngineError;
 
 use crate::runtime::pipe::{KernelPipe, UdpPipe, UdpPipeInput};
-use crate::runtime::udp_flow::helpers::UdpInboundResponseAccounting;
+use crate::runtime::udp_flow::helpers::{
+    record_chain_udp_response_received, record_direct_udp_response_received,
+};
 use crate::runtime::Proxy;
 
 impl Proxy {
@@ -68,13 +70,12 @@ impl Proxy {
 
                 recv = direct_sock.recv_from_addr(&mut direct_buf) => {
                     let (n, sender) = recv?;
-                    let session_id = dispatch.direct_response_session_id(sender);
                     let response_accounting =
-                        UdpInboundResponseAccounting::record_received(self, session_id, n);
+                        record_direct_udp_response_received(self, &dispatch, sender, n);
                     if let Ok(Some(written)) = udp_session
                         .send_response_for_proxy_session_to_sender_tokio(
                             udp_socket.as_ref(),
-                            session_id,
+                            response_accounting.session_id(),
                             sender,
                             &direct_buf[..n],
                         )
@@ -88,7 +89,7 @@ impl Proxy {
                     match chain_result {
                         Ok(Ok((target, port, payload, session_id))) => {
                             let response_accounting =
-                                UdpInboundResponseAccounting::record_received(self, session_id, payload.len());
+                                record_chain_udp_response_received(self, session_id, payload.len());
                             if let Ok(Some(written)) = udp_session
                                 .send_response_for_proxy_session_to_client_tokio(
                                     udp_socket.as_ref(),

@@ -17,7 +17,8 @@ use zero_engine::EngineError;
 use crate::runtime::inbound_protocol::{serve_inbound, InboundProtocol};
 use crate::runtime::pipe::{KernelPipe, UdpPipe, UdpPipeInput};
 use crate::runtime::udp_flow::helpers::{
-    record_upstream_udp_response_received, wait_for_upstream_idle, UdpInboundResponseAccounting,
+    record_chain_udp_response_received, record_direct_udp_response_received,
+    record_upstream_udp_response_received, wait_for_upstream_idle,
 };
 use crate::runtime::Proxy;
 use crate::transport::{copy_one_way, Hysteria2Stream};
@@ -324,12 +325,11 @@ impl Proxy {
 
                 recv = direct_sock.recv_from_addr(&mut direct_buf) => {
                     let (n, sender) = recv?;
-                    let session_id = dispatch.direct_response_session_id(sender);
                     let response_accounting =
-                        UdpInboundResponseAccounting::record_received(&proxy, session_id, n);
+                        record_direct_udp_response_received(&proxy, &dispatch, sender, n);
                     if let Ok(Some(written)) = udp_session.send_response_to_socket_addr_for_proxy_session(
                         &conn,
-                        session_id,
+                        response_accounting.session_id(),
                         sender,
                         &direct_buf[..n],
                     ) {
@@ -366,7 +366,7 @@ impl Proxy {
                     match chain_result {
                         Ok(Ok((target, port, payload, session_id))) => {
                             let response_accounting =
-                                UdpInboundResponseAccounting::record_received(&proxy, session_id, payload.len());
+                                record_chain_udp_response_received(&proxy, session_id, payload.len());
                             if let Ok(Some(written)) = udp_session.send_response_for_proxy_session(
                                 &conn,
                                 session_id,

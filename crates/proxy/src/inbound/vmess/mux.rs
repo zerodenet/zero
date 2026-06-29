@@ -10,8 +10,9 @@ use zero_engine::EngineError;
 use crate::runtime::pipe::{KernelPipe, TcpPipe, TcpPipeInput, UdpPipe, UdpPipeInput};
 use crate::runtime::udp_dispatch::UdpDispatch;
 use crate::runtime::udp_flow::helpers::{
-    log_completed_udp_flow, record_upstream_udp_response_received, wait_for_upstream_idle,
-    UdpInboundResponseAccounting,
+    log_completed_udp_flow, record_chain_udp_response_received,
+    record_direct_udp_response_received, record_upstream_udp_response_received,
+    wait_for_upstream_idle,
 };
 use crate::runtime::Proxy;
 use crate::transport::TcpRelayStream;
@@ -185,9 +186,8 @@ impl Proxy {
                         match recv {
                             Ok((n, sender)) => {
                                 last_activity = TokioInstant::now();
-                                let session_id = dispatch.direct_response_session_id(sender);
                                 let response_accounting =
-                                    UdpInboundResponseAccounting::record_received(&proxy, session_id, n);
+                                    record_direct_udp_response_received(&proxy, &dispatch, sender, n);
                                 match udp_session.write_mux_response_to_socket_addr(
                                     &writer,
                                     mux_session_id,
@@ -244,7 +244,7 @@ impl Proxy {
                             Ok(Ok((target, port, payload, session_id))) => {
                                 last_activity = TokioInstant::now();
                                 let response_accounting =
-                                    UdpInboundResponseAccounting::record_received(&proxy, session_id, payload.len());
+                                    record_chain_udp_response_received(&proxy, session_id, payload.len());
                                 match udp_session.write_mux_response(
                                     &writer,
                                     mux_session_id,
@@ -338,9 +338,8 @@ impl Proxy {
                 recv = direct_sock.recv_from_addr(&mut direct_buf) => {
                     let (n, sender) = recv?;
                     last_activity = TokioInstant::now();
-                    let session_id = dispatch.direct_response_session_id(sender);
                     let response_accounting =
-                        UdpInboundResponseAccounting::record_received(self, session_id, n);
+                        record_direct_udp_response_received(self, &dispatch, sender, n);
                     let written = udp_session.write_response_to_socket_addr_tokio(
                         &mut client,
                         sender,
@@ -377,7 +376,7 @@ impl Proxy {
                         Ok(Ok((target, port, payload, session_id))) => {
                             last_activity = TokioInstant::now();
                             let response_accounting =
-                                UdpInboundResponseAccounting::record_received(self, session_id, payload.len());
+                                record_chain_udp_response_received(self, session_id, payload.len());
                             let written = udp_session.write_response_tokio(
                                 &mut client,
                                 &target,

@@ -215,8 +215,13 @@ fn inbound_udp_response_accounting_uses_runtime_helpers() {
             && helper.contains("fn session_id(")
             && helper.contains("struct UdpUpstreamResponseParts")
             && helper.contains("fn record_upstream_udp_response_received")
+            && helper.contains("fn record_direct_udp_response_received")
+            && helper.contains("fn record_chain_udp_response_received")
+            && helper.contains("direct_response_session_id")
             && helper.contains("record_udp_upstream_packet_received")
             && helper.contains("touch_upstream_idle")
+            && helper.contains("upstream_association_view")
+            && helper.contains("upstream_response_session_id")
             && helper.contains("fn udp_response_session_id")
             && helper.contains("record_session_outbound_rx")
             && helper.contains("record_session_inbound_tx")
@@ -236,8 +241,12 @@ fn inbound_udp_response_accounting_uses_runtime_helpers() {
     ] {
         let content = read(source);
         assert!(
-            content.contains("UdpInboundResponseAccounting::record_received")
-                && content.contains("response_accounting.record_sent")
+            (content.contains("record_direct_udp_response_received")
+                || content.contains("record_chain_udp_response_received")
+                || content.contains("record_upstream_udp_response_received")
+                || content.contains("UdpInboundResponseAccounting::record_received"))
+                && (content.contains("response_accounting.record_sent")
+                    || content.contains("response.accounting.record_sent"))
                 && !content.contains("record_session_outbound_rx")
                 && !content.contains("record_session_inbound_tx"),
             "{source} should use neutral UDP inbound response accounting helpers"
@@ -255,11 +264,13 @@ fn inbound_udp_response_accounting_uses_runtime_helpers() {
         .expect("hysteria2 datagram loop");
     assert!(
         datagram_loop.contains("record_upstream_udp_response_received")
-            && datagram_loop.contains("UdpInboundResponseAccounting::record_received")
+            && datagram_loop.contains("record_direct_udp_response_received")
+            && datagram_loop.contains("record_chain_udp_response_received")
             && datagram_loop.contains("response_accounting.record_sent")
             && datagram_loop.contains("response.accounting.record_sent")
             && datagram_loop.contains("response.accounting.session_id()")
             && !datagram_loop.contains("udp_response_session_id")
+            && !datagram_loop.contains("UdpInboundResponseAccounting::record_received")
             && !datagram_loop.contains("record_session_outbound_rx")
             && !datagram_loop.contains("record_session_inbound_tx")
             && !datagram_loop.contains("session_id_by_target"),
@@ -313,11 +324,35 @@ fn inbound_udp_response_accounting_uses_runtime_helpers() {
     ] {
         let content = read(source);
         assert!(
-            content.contains("UdpInboundResponseAccounting::record_received")
-                && content.contains("response_accounting.record_sent")
+            (content.contains("record_direct_udp_response_received")
+                || content.contains("record_chain_udp_response_received")
+                || content.contains("record_upstream_udp_response_received")
+                || content.contains("UdpInboundResponseAccounting::record_received"))
+                && (content.contains("response_accounting.record_sent")
+                    || content.contains("response.accounting.record_sent"))
                 && !content.contains("record_udp_inbound_response_rx")
                 && !content.contains("record_udp_inbound_response_tx"),
             "{source} should use the neutral UDP inbound response accounting object instead of open-coding rx/tx pairs"
+        );
+    }
+
+    for source in [
+        "src/inbound/vless/udp_session.rs",
+        "src/inbound/vless/mux.rs",
+        "src/inbound/vmess/mux.rs",
+        "src/inbound/trojan.rs",
+        "src/inbound/mieru.rs",
+        "src/inbound/hysteria2.rs",
+        "src/inbound/shadowsocks/udp.rs",
+        "src/inbound/socks5/udp_associate/direct_response.rs",
+        "src/inbound/socks5/udp_associate/chain_response.rs",
+        "src/inbound/socks5/udp_associate/upstream_response.rs",
+    ] {
+        let content = read(source);
+        assert!(
+            !content.contains("direct_response_session_id")
+                && !content.contains("UdpInboundResponseAccounting::record_received"),
+            "{source} should use runtime UDP response helpers for neutral response attribution"
         );
     }
 }
@@ -6012,7 +6047,7 @@ fn socks5_udp_upstream_association_uses_outbound_tag_for_session_lookup() {
         fs::read_to_string(repo_root().join("protocols/socks5/src/outbound.rs"))
             .expect("read socks5 outbound");
     let upstream = read("src/runtime/udp_flow/registered/upstream.rs");
-    let response = read("src/inbound/socks5/udp_associate/upstream_response.rs");
+    let response = read("src/runtime/udp_flow/helpers.rs");
 
     assert!(
         send.contains("resume.association_send(")
@@ -6063,7 +6098,7 @@ fn socks5_udp_upstream_association_uses_outbound_tag_for_session_lookup() {
         response.contains("association.outbound_tag")
             && response.contains("dispatch.upstream_response_session_id")
             && !response.contains("inbound_tag, &packet.target"),
-        "SOCKS5 upstream responses should look up sessions by outbound tag"
+        "runtime UDP response helper should look up upstream response sessions by outbound tag"
     );
 }
 
@@ -6173,7 +6208,8 @@ fn socks5_udp_associate_loop_delegates_dispatch_and_direct_response_framing() {
         direct_response.contains("async fn forward_direct_udp_response")
             && direct_response.contains("async fn forward_relay_socket_response")
             && direct_response.contains("async fn forward_dispatch_socket_response")
-            && direct_response.contains("direct_response_session_id")
+            && direct_response.contains("record_direct_udp_response_received")
+            && read("src/runtime/udp_flow/helpers.rs").contains("direct_response_session_id")
             && direct_response.contains("socks5::Socks5Inbound.udp_session()")
             && direct_response.contains(".send_response_to_client_socket_addr")
             && direct_response.contains("socket_addr_to_socket_address(client_addr)")
@@ -6251,7 +6287,10 @@ fn socks5_udp_associate_loop_delegates_dispatch_and_direct_response_framing() {
             && !dispatch.contains("udp_packet.into_dispatch_parts()")
             && dispatch.contains("protocol_overhead_len")
             && upstream_response.contains("socks5::Socks5Inbound.udp_session()")
-            && upstream_response.contains("response.into_parts()")
+            && upstream_response.contains("record_upstream_udp_response_received")
+            && upstream_response.contains("&response.target")
+            && upstream_response.contains("response.port")
+            && upstream_response.contains("&response.payload")
             && upstream_response.contains(".send_response_to_client_target")
             && !upstream_response.contains("udp_session.response_session_key_parts")
             && !upstream_response.contains(".send_encoded_response_to_client")
@@ -6338,12 +6377,13 @@ fn socks5_udp_associate_loop_delegates_dispatch_and_direct_response_framing() {
     }
     assert!(
         upstream_response.contains("async fn handle_upstream_response")
-            && upstream_response.contains("upstream_association_view")
-            && upstream_response.contains("upstream_response_session_id")
+            && upstream_response.contains("record_upstream_udp_response_received")
             && upstream_response.contains("record_udp_upstream_recv_failure")
             && upstream_response.contains("UpstreamUdpResponse")
-            && upstream_response.contains("failed to attribute upstream UDP response"),
-        "SOCKS5 UDP upstream response attribution and cleanup should live in inbound/socks5/udp_associate/upstream_response.rs"
+            && !upstream_response.contains("upstream_association_view")
+            && !upstream_response.contains("upstream_response_session_id")
+            && !upstream_response.contains("failed to attribute upstream UDP response"),
+        "SOCKS5 UDP upstream response glue should delegate success attribution to runtime helpers and keep cleanup local"
     );
     assert!(
         idle_timeout.contains("fn handle_idle_timeout")

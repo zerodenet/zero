@@ -4,7 +4,7 @@ use tracing::warn;
 use zero_core::Address;
 use zero_platform_tokio::TokioDatagramSocket;
 
-use crate::runtime::udp_flow::helpers::UdpInboundResponseAccounting;
+use crate::runtime::udp_flow::helpers::record_chain_udp_response_received;
 use crate::runtime::udp_flow::packet_path::ChainTask;
 use crate::runtime::Proxy;
 
@@ -54,7 +54,7 @@ struct ForwardChainResponseRequest<'a> {
 }
 
 async fn forward_chain_response(request: ForwardChainResponseRequest<'_>) {
-    let response_accounting = UdpInboundResponseAccounting::record_received(
+    let response_accounting = record_chain_udp_response_received(
         request.proxy,
         request.session_id,
         request.payload.len(),

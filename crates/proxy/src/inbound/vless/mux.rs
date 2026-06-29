@@ -6,8 +6,9 @@ use tracing::{info, warn};
 use crate::runtime::pipe::{KernelPipe, TcpPipe, TcpPipeInput, UdpPipe, UdpPipeInput};
 use crate::runtime::udp_dispatch::UdpDispatch;
 use crate::runtime::udp_flow::helpers::{
-    log_completed_udp_flow, record_upstream_udp_response_received, wait_for_upstream_idle,
-    UdpInboundResponseAccounting,
+    log_completed_udp_flow, record_chain_udp_response_received,
+    record_direct_udp_response_received, record_upstream_udp_response_received,
+    wait_for_upstream_idle,
 };
 
 use crate::runtime::Proxy;
@@ -201,9 +202,8 @@ impl Proxy {
                     match recv {
                         Ok((n, sender)) => {
                             last_activity = TokioInstant::now();
-                            let session_id = dispatch.direct_response_session_id(sender);
                             let response_accounting =
-                                UdpInboundResponseAccounting::record_received(self, session_id, n);
+                                record_direct_udp_response_received(self, &dispatch, sender, n);
                             match udp_session.send_mux_response_to_socket_addr(
                                 &writer,
                                 mux_session_id,
@@ -260,7 +260,7 @@ impl Proxy {
                         Ok(Ok((target, port, payload, session_id))) => {
                             last_activity = TokioInstant::now();
                             let response_accounting =
-                                UdpInboundResponseAccounting::record_received(self, session_id, payload.len());
+                                record_chain_udp_response_received(self, session_id, payload.len());
                             match udp_session.send_mux_response(
                                 &writer,
                                 mux_session_id,

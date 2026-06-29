@@ -15,8 +15,9 @@ use crate::logging::log_listener_connection_error;
 use crate::runtime::inbound_protocol::{serve_inbound, InboundProtocol};
 use crate::runtime::pipe::{KernelPipe, UdpPipe, UdpPipeInput};
 use crate::runtime::udp_flow::helpers::{
-    log_completed_udp_flow, record_upstream_udp_response_received, wait_for_upstream_idle,
-    UdpInboundResponseAccounting,
+    log_completed_udp_flow, record_chain_udp_response_received,
+    record_direct_udp_response_received, record_upstream_udp_response_received,
+    wait_for_upstream_idle,
 };
 use crate::runtime::Proxy;
 use crate::transport::TcpRelayStream;
@@ -240,9 +241,8 @@ impl Proxy {
                     let (n, sender) = recv?;
                     last_activity = TokioInstant::now();
 
-                    let session_id = dispatch.direct_response_session_id(sender);
                     let response_accounting =
-                        UdpInboundResponseAccounting::record_received(self, session_id, n);
+                        record_direct_udp_response_received(self, &dispatch, sender, n);
                     let written = udp_session
                         .write_response_for_sender_tokio(&mut client, sender, &direct_buf[..n])
                         .await?;
@@ -279,7 +279,7 @@ impl Proxy {
                         Ok(Ok((target, port, payload, session_id))) => {
                             last_activity = TokioInstant::now();
                             let response_accounting =
-                                UdpInboundResponseAccounting::record_received(self, session_id, payload.len());
+                                record_chain_udp_response_received(self, session_id, payload.len());
                             let written = udp_session
                                 .write_response_for_target_tokio(&mut client, &target, port, &payload)
                                 .await?;

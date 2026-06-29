@@ -5,7 +5,7 @@ use zero_engine::EngineError;
 use zero_platform_tokio::TokioDatagramSocket;
 
 use crate::runtime::udp_dispatch::UdpDispatch;
-use crate::runtime::udp_flow::helpers::UdpInboundResponseAccounting;
+use crate::runtime::udp_flow::helpers::record_direct_udp_response_received;
 use crate::runtime::Proxy;
 
 pub(super) async fn forward_relay_socket_response(
@@ -16,9 +16,8 @@ pub(super) async fn forward_relay_socket_response(
     sender: SocketAddr,
     payload: &[u8],
 ) -> Result<(), EngineError> {
-    let session_id = dispatch.direct_response_session_id(sender);
     let response_accounting =
-        UdpInboundResponseAccounting::record_received(proxy, session_id, payload.len());
+        record_direct_udp_response_received(proxy, dispatch, sender, payload.len());
     let sent = forward_direct_udp_response(relay, client_addr, sender, payload).await?;
     response_accounting.record_sent(sent);
 
@@ -38,9 +37,8 @@ pub(super) async fn forward_dispatch_socket_response(
         return;
     };
 
-    let session_id = dispatch.direct_response_session_id(sender);
     let response_accounting =
-        UdpInboundResponseAccounting::record_received(proxy, session_id, payload.len());
+        record_direct_udp_response_received(proxy, dispatch, sender, payload.len());
 
     match forward_direct_udp_response(relay, client_addr, sender, payload).await {
         Ok(sent) => {

@@ -94,7 +94,12 @@ pub(crate) fn record_upstream_udp_response_received<'a>(
     proxy.record_udp_upstream_packet_received();
     dispatch.touch_upstream_idle(timeout);
     let (target, port, payload) = response.into_parts();
-    let session_id = udp_response_session_id(dispatch, &target, port);
+    let session_id = match dispatch.upstream_association_view() {
+        Some(association) => {
+            dispatch.upstream_response_session_id(association.outbound_tag, &target, port)
+        }
+        None => udp_response_session_id(dispatch, &target, port),
+    };
     let accounting =
         UdpInboundResponseAccounting::record_received(proxy, session_id, payload.len());
     UdpUpstreamResponseParts {
@@ -103,6 +108,24 @@ pub(crate) fn record_upstream_udp_response_received<'a>(
         payload,
         accounting,
     }
+}
+
+pub(crate) fn record_direct_udp_response_received<'a>(
+    proxy: &'a Proxy,
+    dispatch: &UdpDispatch,
+    sender: SocketAddr,
+    payload_len: usize,
+) -> UdpInboundResponseAccounting<'a> {
+    let session_id = dispatch.direct_response_session_id(sender);
+    UdpInboundResponseAccounting::record_received(proxy, session_id, payload_len)
+}
+
+pub(crate) fn record_chain_udp_response_received(
+    proxy: &Proxy,
+    session_id: Option<u64>,
+    payload_len: usize,
+) -> UdpInboundResponseAccounting<'_> {
+    UdpInboundResponseAccounting::record_received(proxy, session_id, payload_len)
 }
 
 pub(crate) fn udp_response_session_id(
