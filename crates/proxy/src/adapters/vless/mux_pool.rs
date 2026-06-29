@@ -48,18 +48,15 @@ impl MuxConnectionPool {
         &self,
         request: &VlessMuxOpenRequest<'_>,
     ) -> Result<Arc<MuxPoolConn>, EngineError> {
-        let key = PoolKey::from_identity(
+        let key = PoolKey::from_config_parts(
             request.server.to_owned(),
             request.port,
             request.identity.clone(),
-            vless::mux_pool::transport_key_from_config(
-                request.tls.and_then(|tls| tls.server_name.as_deref()),
-                request.reality.map(|reality| reality.public_key.as_str()),
-                request
-                    .reality
-                    .and_then(|reality| reality.server_name.as_deref()),
-                request.server,
-            ),
+            request.tls.and_then(|tls| tls.server_name.as_deref()),
+            request.reality.map(|reality| reality.public_key.as_str()),
+            request
+                .reality
+                .and_then(|reality| reality.server_name.as_deref()),
         );
 
         let conn = {

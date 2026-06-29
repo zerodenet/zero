@@ -87,6 +87,23 @@ impl PoolKey {
         }
     }
 
+    pub fn from_config_parts(
+        server: String,
+        port: u16,
+        identity: MuxIdentity,
+        tls_server_name: Option<&str>,
+        reality_public_key: Option<&str>,
+        reality_server_name: Option<&str>,
+    ) -> Self {
+        let transport = transport_key_from_config(
+            tls_server_name,
+            reality_public_key,
+            reality_server_name,
+            &server,
+        );
+        Self::from_identity(server, port, identity, transport)
+    }
+
     pub fn uuid(&self) -> &[u8; 16] {
         self.identity.uuid()
     }

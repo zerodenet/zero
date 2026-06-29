@@ -103,6 +103,22 @@ impl VmessMuxPoolKey {
         )
     }
 
+    pub fn from_config_parts(
+        server: String,
+        port: u16,
+        identity: VmessMuxIdentity,
+        tls_server_name: Option<&str>,
+        ws_path: Option<&str>,
+        grpc_service_names: Option<Vec<String>>,
+    ) -> Result<Self, Error> {
+        Ok(Self::from_identity(
+            server,
+            port,
+            identity,
+            transport_key_from_config(tls_server_name, ws_path, grpc_service_names)?,
+        ))
+    }
+
     pub fn uuid(&self) -> &[u8; 16] {
         self.identity.uuid()
     }

@@ -49,12 +49,17 @@ impl VmessMuxConnectionPool {
         request: VmessMuxOpenRequest<'_>,
         network: Network,
     ) -> Result<TcpRelayStream, EngineError> {
-        let key = vmess::mux::VmessMuxPoolKey::from_identity(
+        let key = vmess::mux::VmessMuxPoolKey::from_config_parts(
             request.server.clone(),
             request.port,
             request.identity.clone(),
-            transport_key(request.tls, request.ws, request.grpc)?,
-        );
+            request.tls.and_then(|tls| tls.server_name.as_deref()),
+            request.ws.map(|ws| ws.path.as_str()),
+            request.grpc.map(|grpc| grpc.service_names.clone()),
+        )
+        .map_err(|error| {
+            EngineError::Io(std::io::Error::new(std::io::ErrorKind::InvalidInput, error))
+        })?;
 
         let conn = self.get_or_create_conn(&key, &request).await?;
         Ok(TcpRelayStream::new(conn.open_stream(
@@ -105,17 +110,4 @@ impl VmessMuxConnectionPool {
 
         Ok(key.clone().into_pool_conn(stream, request.max_concurrency))
     }
-}
-
-fn transport_key(
-    tls: Option<&zero_config::ClientTlsConfig>,
-    ws: Option<&zero_config::WebSocketConfig>,
-    grpc: Option<&zero_config::GrpcConfig>,
-) -> Result<vmess::mux::VmessMuxTransportKey, EngineError> {
-    vmess::mux::transport_key_from_config(
-        tls.and_then(|tls| tls.server_name.as_deref()),
-        ws.map(|ws| ws.path.as_str()),
-        grpc.map(|grpc| grpc.service_names.clone()),
-    )
-    .map_err(|error| EngineError::Io(std::io::Error::new(std::io::ErrorKind::InvalidInput, error)))
 }
