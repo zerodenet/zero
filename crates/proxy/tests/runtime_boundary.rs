@@ -3138,6 +3138,39 @@ fn protocol_named_inbound_modules_stay_proxy_glue_not_crypto_implementations() {
 }
 
 #[test]
+fn protocol_named_inbound_modules_stay_runtime_glue_not_dispatch_or_packet_owners() {
+    for path in protocol_inbound_sources() {
+        let source = relative(&path);
+        let content = fs::read_to_string(&path).expect("read inbound protocol module");
+
+        for forbidden in [
+            "InboundProtocolConfig::",
+            "ResolvedLeafOutbound::",
+            "session.network",
+            "VlessInbound::is_mux_session",
+            "InboundUdpDispatchParts",
+            "InboundUdpPacket",
+            "InboundUdpResponse",
+            "InboundUdpCodec",
+            "UdpPacketTarget",
+            "UdpPacketFraming",
+            "decode_udp_associate_request",
+            "decode_udp_associate_response",
+            "encode_udp_associate_response",
+            "decode_inbound_udp",
+            "encode_inbound_udp",
+            "decode_datagram",
+            "encode_datagram",
+        ] {
+            assert!(
+                !content.contains(forbidden),
+                "{source} should stay listener/session/pipe glue and delegate dispatch classification or packet framing detail to protocols/*; found `{forbidden}`"
+            );
+        }
+    }
+}
+
+#[test]
 fn tcp_inbound_source_address_conversion_lives_in_platform_layer() {
     let platform = fs::read_to_string(repo_root().join("crates/platform/tokio/src/lib.rs"))
         .expect("read zero-platform-tokio source");
