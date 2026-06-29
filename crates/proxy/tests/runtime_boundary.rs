@@ -895,7 +895,11 @@ fn tcp_runtime_does_not_match_protocol_outbound_results() {
 
     assert!(
         tcp_dispatch.contains(".into_relay_stream()")
-            && tcp_outbound.contains("Proxied")
+            && tcp_outbound.contains("struct EstablishedTcpOutbound")
+            && tcp_outbound.contains("enum EstablishedTcpOutboundKind")
+            && tcp_outbound.contains("kind: EstablishedTcpOutboundKind")
+            && !tcp_outbound.contains("pub(crate) enum EstablishedTcpOutbound")
+            && tcp_outbound.contains("EstablishedTcpOutboundKind::Proxied")
             && tcp_outbound.contains("pub(crate) fn proxied("),
         "TCP outbound results should expose neutral relay/proxied stream normalization"
     );

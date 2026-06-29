@@ -18,15 +18,16 @@ pub(crate) struct TcpRouteResult {
     pub route_action: RouteDecision,
 }
 
-#[allow(dead_code)]
-pub(crate) enum EstablishedTcpOutbound {
+pub(crate) struct EstablishedTcpOutbound {
+    kind: EstablishedTcpOutboundKind,
+}
+
+enum EstablishedTcpOutboundKind {
     Direct {
         tag: String,
         upstream: TcpRelayStream,
     },
-    Block {
-        tag: String,
-    },
+    Block,
     Proxied {
         tag: String,
         server: String,
@@ -40,14 +41,18 @@ pub(crate) enum EstablishedTcpOutbound {
 
 impl EstablishedTcpOutbound {
     pub(crate) fn direct(tag: impl Into<String>, upstream: TcpRelayStream) -> Self {
-        Self::Direct {
-            tag: tag.into(),
-            upstream,
+        Self {
+            kind: EstablishedTcpOutboundKind::Direct {
+                tag: tag.into(),
+                upstream,
+            },
         }
     }
 
-    pub(crate) fn block(tag: impl Into<String>) -> Self {
-        Self::Block { tag: tag.into() }
+    pub(crate) fn block(_tag: impl Into<String>) -> Self {
+        Self {
+            kind: EstablishedTcpOutboundKind::Block,
+        }
     }
 
     pub(crate) fn proxied(
@@ -56,24 +61,28 @@ impl EstablishedTcpOutbound {
         port: u16,
         upstream: TcpRelayStream,
     ) -> Self {
-        Self::Proxied {
-            tag: tag.into(),
-            server: server.into(),
-            port,
-            upstream,
+        Self {
+            kind: EstablishedTcpOutboundKind::Proxied {
+                tag: tag.into(),
+                server: server.into(),
+                port,
+                upstream,
+            },
         }
     }
 
     pub(crate) fn relay(upstream: TcpRelayStream) -> Self {
-        Self::Relay { upstream }
+        Self {
+            kind: EstablishedTcpOutboundKind::Relay { upstream },
+        }
     }
 
     pub(crate) fn into_relay_stream(self) -> Result<TcpRelayStream, EngineError> {
-        match self {
-            Self::Direct { upstream, .. }
-            | Self::Proxied { upstream, .. }
-            | Self::Relay { upstream } => Ok(upstream),
-            Self::Block { .. } => Err(EngineError::Io(io::Error::new(
+        match self.kind {
+            EstablishedTcpOutboundKind::Direct { upstream, .. }
+            | EstablishedTcpOutboundKind::Proxied { upstream, .. }
+            | EstablishedTcpOutboundKind::Relay { upstream } => Ok(upstream),
+            EstablishedTcpOutboundKind::Block => Err(EngineError::Io(io::Error::new(
                 io::ErrorKind::InvalidInput,
                 "first relay hop resolved to block",
             ))),
@@ -94,19 +103,19 @@ pub(crate) struct TcpOutboundFailure {
 pub(crate) fn extract_tcp_stream(
     outbound: EstablishedTcpOutbound,
 ) -> Result<TcpRouteResult, EngineError> {
-    match outbound {
-        EstablishedTcpOutbound::Direct { tag, upstream } => Ok(TcpRouteResult {
+    match outbound.kind {
+        EstablishedTcpOutboundKind::Direct { tag, upstream } => Ok(TcpRouteResult {
             upstream,
             outbound_tag: tag,
             is_direct: true,
             upstream_endpoint: None,
             route_action: RouteDecision::Direct,
         }),
-        EstablishedTcpOutbound::Block { .. } => Err(EngineError::Io(io::Error::new(
+        EstablishedTcpOutboundKind::Block => Err(EngineError::Io(io::Error::new(
             io::ErrorKind::ConnectionRefused,
             "blocked",
         ))),
-        EstablishedTcpOutbound::Proxied {
+        EstablishedTcpOutboundKind::Proxied {
             tag,
             server,
             port,
@@ -118,7 +127,7 @@ pub(crate) fn extract_tcp_stream(
             upstream_endpoint: Some((server, port)),
             route_action: RouteDecision::Direct,
         }),
-        EstablishedTcpOutbound::Relay { upstream } => Ok(TcpRouteResult {
+        EstablishedTcpOutboundKind::Relay { upstream } => Ok(TcpRouteResult {
             upstream,
             outbound_tag: "relay".to_owned(),
             is_direct: false,
