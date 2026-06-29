@@ -361,6 +361,22 @@ impl Socks5InboundUdpSession {
         self.response_key(packet).map(|key| key.into_parts())
     }
 
+    pub async fn send_encoded_response_to_client<S>(
+        &self,
+        socket: &S,
+        client: SocketAddress,
+        packet: &[u8],
+    ) -> Result<usize, Socks5UdpRelayError<S::Error>>
+    where
+        S: DatagramSocket,
+    {
+        socket
+            .send_to(packet, client.ip, client.port)
+            .await
+            .map_err(Socks5UdpRelayError::Socket)?;
+        Ok(packet.len())
+    }
+
     pub async fn send_response_to_client<S>(
         &self,
         socket: &S,

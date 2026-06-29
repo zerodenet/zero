@@ -65,7 +65,15 @@ async fn forward_upstream_response(
     };
 
     record_udp_inbound_response_rx(proxy, session_id, payload.len());
-    let sent = relay.send_to_addr(payload, client_addr).await?;
+    let udp_session = socks5::Socks5Inbound.udp_session();
+    let sent = udp_session
+        .send_encoded_response_to_client(
+            relay,
+            zero_platform_tokio::socket_addr_to_socket_address(client_addr),
+            payload,
+        )
+        .await
+        .map_err(|error| error.into_mapped(EngineError::from))?;
     record_udp_inbound_response_tx(proxy, session_id, sent);
 
     Ok(())
