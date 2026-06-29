@@ -20,20 +20,12 @@ pub(super) async fn dispatch_packet(
     else {
         return Ok(());
     };
-    let protocol = request.protocol();
     let protocol_overhead = request.protocol_overhead();
-    let (target, port, payload, client_session_id) = request.into_pipe_parts();
+    let inbound_dispatch = request.into_inbound_dispatch();
 
     // Generic dispatch.
     let session_id = UdpPipe::new(proxy, dispatch)
-        .dispatch(UdpPipeInput {
-            target,
-            port,
-            payload: &payload,
-            protocol,
-            auth: None,
-            client_session_id,
-        })
+        .dispatch(UdpPipeInput::from_inbound_dispatch(&inbound_dispatch, None))
         .await?;
 
     // Record protocol-specific overhead: TCP control traffic and
