@@ -119,12 +119,7 @@ async fn system_tcp_loop(
 // ── Address helpers ────────────────────────────────────────────────────
 
 fn sockaddr_to_std(sa: &zero_traits::SocketAddress) -> SocketAddr {
-    use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
-    let ip = match sa.ip {
-        zero_traits::IpAddress::V4(o) => IpAddr::V4(Ipv4Addr::from(o)),
-        zero_traits::IpAddress::V6(o) => IpAddr::V6(Ipv6Addr::from(o)),
-    };
-    SocketAddr::new(ip, sa.port)
+    zero_platform_tokio::socket_address_to_socket_addr(*sa)
 }
 
 fn sockaddr_to_address(sa: &zero_traits::SocketAddress) -> Address {

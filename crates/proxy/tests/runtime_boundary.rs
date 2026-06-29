@@ -2654,7 +2654,9 @@ fn tcp_inbound_source_address_conversion_lives_in_platform_layer() {
 
     assert!(
         platform.contains("pub fn remote_ip_to_socket_addr")
-            && platform.contains("addr.map(|ip| socket_addr_from_ip(ip, 0))"),
+            && platform.contains("addr.map(|ip| socket_addr_from_ip(ip, 0))")
+            && platform.contains("pub fn socket_address_to_socket_addr")
+            && platform.contains("socket_addr_from_ip(addr.ip, addr.port)"),
         "zero-platform-tokio should own remote IpAddress to SocketAddr conversion for listener source addresses"
     );
 
@@ -2694,6 +2696,19 @@ fn tcp_inbound_source_address_conversion_lives_in_platform_layer() {
         assert!(
             source.contains("zero_platform_tokio::remote_ip_to_socket_addr"),
             "{source_path} should call the platform listener source address helper"
+        );
+    }
+
+    for source_path in ["src/inbound/system.rs", "src/inbound/tun.rs"] {
+        let source = read(source_path);
+        assert!(
+            source.contains("zero_platform_tokio::socket_address_to_socket_addr")
+                && !source.contains("use std::net::{IpAddr, Ipv4Addr, Ipv6Addr}")
+                && !source.contains("IpAddr::V4")
+                && !source.contains("IpAddr::V6")
+                && !source.contains("Ipv4Addr::from")
+                && !source.contains("Ipv6Addr::from"),
+            "{source_path} should delegate stack SocketAddress to SocketAddr conversion to zero-platform-tokio"
         );
     }
 }
