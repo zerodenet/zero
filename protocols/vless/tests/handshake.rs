@@ -505,8 +505,8 @@ fn mux_udp_response_encoder_wraps_vless_packet() {
 
     assert_eq!(u16::from_be_bytes([frame[0], frame[1]]), 4 + 7 + 3);
     assert_eq!(u16::from_be_bytes([frame[2], frame[3]]), 7);
-    assert_eq!(frame[4], vless::STATUS_KEEP);
-    assert_eq!(frame[5], vless::OPTION_DATA);
+    assert_eq!(frame[4], vless::mux::STATUS_KEEP);
+    assert_eq!(frame[5], vless::mux::OPTION_DATA);
 
     let parsed =
         <VlessOutbound as UdpPacketFraming<vless::udp::VlessUdpPacketTarget>>::decode_udp_packet(

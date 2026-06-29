@@ -293,6 +293,8 @@ fn vless_inbound_mux_frame_detail_lives_in_protocol_crate() {
     let inbound = read("src/inbound/vless/mux.rs");
     let protocol_mux = fs::read_to_string(repo_root().join("protocols/vless/src/mux.rs"))
         .expect("read protocols/vless/src/mux.rs");
+    let protocol_lib = fs::read_to_string(repo_root().join("protocols/vless/src/lib.rs"))
+        .expect("read protocols/vless/src/lib.rs");
 
     for forbidden in [
         "encode_new_stream_response",
@@ -392,6 +394,54 @@ fn vless_inbound_mux_frame_detail_lives_in_protocol_crate() {
             && protocol_mux.contains("self.send_inbound_stream_data(stream, sid, payload).await"),
         "VLESS inbound mux downstream payload to DATA/END frame selection should live in protocols/vless"
     );
+    for private_root_item in [
+        "encode_frame",
+        "encode_new_stream",
+        "encode_new_stream_response",
+        "encode_data_frame",
+        "encode_udp_data_frame",
+        "encode_end_frame",
+        "encode_keepalive",
+        "parse_new_stream",
+        "parse_new_stream_response",
+        "parse_udp_target_from_keep",
+        "MuxFrame",
+        "MuxNetwork",
+        "MuxTarget",
+        "MuxServerEvent",
+        "MUX_FRAME_HEADER_LEN",
+        "MUX_MAX_PAYLOAD",
+        "MUX_NETWORK_TCP",
+        "MUX_NETWORK_UDP",
+        "MUX_STATUS_FAIL",
+        "MUX_STATUS_OK",
+        "MUX_STREAM_NEW",
+        "NETWORK_TCP",
+        "NETWORK_UDP",
+        "OPTION_DATA",
+        "STATUS_END",
+        "STATUS_KEEP",
+        "STATUS_KEEP_ALIVE",
+        "STATUS_NEW",
+    ] {
+        assert!(
+            protocol_mux.contains(private_root_item) && !protocol_lib.contains(private_root_item),
+            "VLESS low-level mux detail `{private_root_item}` should stay under vless::mux instead of the crate root"
+        );
+    }
+    for required_root_item in [
+        "MuxClient",
+        "MuxClientStream",
+        "MuxServer",
+        "VlessInboundMuxAction",
+        "VlessInboundMuxSession",
+        "VlessInboundMuxWriter",
+    ] {
+        assert!(
+            protocol_lib.contains(required_root_item),
+            "VLESS semantic mux API `{required_root_item}` should remain available from the crate root"
+        );
+    }
 }
 
 #[test]

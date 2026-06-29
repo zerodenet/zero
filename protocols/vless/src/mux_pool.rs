@@ -201,7 +201,7 @@ pub fn open_mux_tcp_stream(
 
     conn.streams.lock().unwrap().insert(sid, down_tx);
 
-    let req = encode_mux_new_stream(crate::NETWORK_TCP, port, address)?;
+    let req = encode_mux_new_stream(crate::mux::NETWORK_TCP, port, address)?;
     conn.write_tx
         .send(req)
         .map_err(|_| Error::Io("failed to write VLESS MUX new stream request"))?;
@@ -223,7 +223,7 @@ pub fn open_mux_udp_stream(conn: Arc<MuxPoolConn>) -> Result<MuxUdpStream, Error
 
     conn.streams.lock().unwrap().insert(sid, down_tx);
 
-    let req = encode_mux_new_stream(crate::NETWORK_UDP, 0, &Address::Ipv4([0, 0, 0, 0]))?;
+    let req = encode_mux_new_stream(crate::mux::NETWORK_UDP, 0, &Address::Ipv4([0, 0, 0, 0]))?;
     conn.write_tx
         .send(req)
         .map_err(|_| Error::Io("failed to write VLESS MUX UDP stream request"))?;
@@ -374,13 +374,13 @@ pub fn decrypt_mux_payload(
 }
 
 pub fn encode_mux_new_stream(network: u8, port: u16, address: &Address) -> Result<Vec<u8>, Error> {
-    crate::encode_new_stream(network, port, address)
+    crate::mux::encode_new_stream(network, port, address)
 }
 
 pub fn encode_mux_data_frame(session_id: u16, payload: &[u8]) -> Vec<u8> {
-    crate::encode_data_frame(session_id, payload)
+    crate::mux::encode_data_frame(session_id, payload)
 }
 
 pub fn encode_mux_end_frame(session_id: u16) -> Vec<u8> {
-    crate::encode_end_frame(session_id)
+    crate::mux::encode_end_frame(session_id)
 }

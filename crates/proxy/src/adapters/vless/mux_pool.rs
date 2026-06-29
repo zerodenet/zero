@@ -100,7 +100,8 @@ impl MuxConnectionPool {
         &self,
         request: VlessMuxOpenRequest<'_>,
     ) -> Result<TcpRelayStream, EngineError> {
-        self.open_stream_inner(request, vless::NETWORK_TCP).await
+        self.open_stream_inner(request, vless::mux::NETWORK_TCP)
+            .await
     }
 
     /// Open a UDP MUX sub-stream (SIP022 Mux.Cool NETWORK_UDP).
