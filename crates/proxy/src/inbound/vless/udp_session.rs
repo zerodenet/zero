@@ -64,13 +64,13 @@ impl Proxy {
                         Ok(Some(request)) => {
                             last_activity = TokioInstant::now();
                             self.record_session_inbound_traffic(0, client.drain_traffic());
-                            let (target, port, payload, client_session_id) = request.into_parts();
+                            let (target, port, payload, client_session_id) = request.pipe_parts();
 
                             if let Err(error) = UdpPipe::new(&proxy, &mut dispatch)
                                 .dispatch(UdpPipeInput {
-                                    target,
+                                    target: target.clone(),
                                     port,
-                                    payload: &payload,
+                                    payload,
                                     protocol: zero_core::ProtocolType::Vless,
                                     auth: auth.as_ref(),
                                     client_session_id,

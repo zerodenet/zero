@@ -249,12 +249,12 @@ impl Proxy {
                                 break;
                             }
                         };
-                        let (target, port, payload, client_session_id) = request.into_parts();
+                        let (target, port, payload, client_session_id) = request.pipe_parts();
                         if let Err(error) = UdpPipe::new(&proxy, &mut dispatch)
                             .dispatch(UdpPipeInput {
-                                target,
+                                target: target.clone(),
                                 port,
-                                payload: &payload,
+                                payload,
                                 protocol: ProtocolType::Vmess,
                                 auth: None,
                                 client_session_id,
@@ -394,12 +394,12 @@ impl Proxy {
                         Ok(None) => break,
                         Ok(Some(request)) => {
                             last_activity = TokioInstant::now();
-                            let (target, port, payload, client_session_id) = request.into_parts();
+                            let (target, port, payload, client_session_id) = request.pipe_parts();
                             if let Err(error) = UdpPipe::new(self, &mut dispatch)
                                 .dispatch(UdpPipeInput {
-                                    target,
+                                    target: target.clone(),
                                     port,
-                                    payload: &payload,
+                                    payload,
                                     protocol: ProtocolType::Vmess,
                                     auth: auth.as_ref(),
                                     client_session_id,
