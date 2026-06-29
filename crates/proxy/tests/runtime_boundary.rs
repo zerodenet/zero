@@ -2744,9 +2744,10 @@ fn trojan_tcp_connect_uses_request_model() {
         "Trojan adapter TCP glue should share the Trojan transport TLS opening path with UDP while keeping TLS opening outside runtime"
     );
     assert!(
-        adapter.contains("TrojanTcpOutboundProfile::from_config_parts")
+        adapter.contains("TrojanTcpOutboundProfile::from_config_password")
             && adapter.contains("TrojanTcpTlsProfile::from_config_parts")
             && adapter.contains("TrojanTlsProfile::from_parts")
+            && !adapter.contains("password.to_owned()")
             && !adapter.contains("ClientTlsConfig")
             && !adapter.contains("ClientTlsConfig {")
             && !adapter.contains("trojan_tcp_tls_config(")
@@ -2761,6 +2762,7 @@ fn trojan_tcp_connect_uses_request_model() {
             && protocol_outbound.contains("pub fn insecure(&self) -> bool")
             && protocol_outbound.contains("pub fn client_fingerprint(&self) -> Option<&str>")
             && protocol_outbound.contains("pub fn from_config_parts")
+            && protocol_outbound.contains("pub fn from_config_password(password: &str)")
             && protocol_outbound.contains("pub async fn establish_tcp_tunnel")
             && protocol_outbound.contains("impl<'a> TrojanTcpTunnelTarget<'a>")
             && protocol_outbound.contains("pub fn new(session: &'a Session, password: &'a str)"),

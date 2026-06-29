@@ -32,6 +32,10 @@ impl TrojanTcpOutboundProfile {
         }
     }
 
+    pub fn from_config_password(password: &str) -> Self {
+        Self::from_config_parts(password)
+    }
+
     pub async fn establish_tcp_tunnel<S>(
         &self,
         stream: &mut S,
