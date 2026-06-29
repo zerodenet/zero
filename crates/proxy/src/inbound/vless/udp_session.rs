@@ -125,12 +125,15 @@ impl Proxy {
                                 timeout,
                                 pkt,
                             );
-                            match udp_session.write_response_tokio(
-                                &mut client,
+                            let client_response = vless::VlessInboundUdpClientResponse::new(
                                 &response.target,
                                 response.port,
                                 &response.payload,
-                            ).await {
+                            );
+                            match udp_session
+                                .write_client_response_tokio(&mut client, client_response)
+                                .await
+                            {
                                 Ok(written) => {
                                     response.accounting.record_sent(written);
                                     proxy.record_session_inbound_traffic(0, client.drain_traffic());
@@ -155,14 +158,18 @@ impl Proxy {
                     match chain_result {
                         Ok(Ok((target, port, payload, session_id))) => {
                             last_activity = TokioInstant::now();
+                            let client_response =
+                                vless::VlessInboundUdpClientResponse::new(&target, port, &payload);
                             let response_accounting =
-                                record_chain_udp_response_received(&proxy, session_id, payload.len());
-                            match udp_session.write_response_tokio(
-                                &mut client,
-                                &target,
-                                port,
-                                &payload,
-                            ).await {
+                                record_chain_udp_response_received(
+                                    &proxy,
+                                    session_id,
+                                    client_response.payload_len(),
+                                );
+                            match udp_session
+                                .write_client_response_tokio(&mut client, client_response)
+                                .await
+                            {
                                 Ok(written) => {
                                     response_accounting.record_sent(written);
                                     proxy.record_session_inbound_traffic(0, client.drain_traffic());

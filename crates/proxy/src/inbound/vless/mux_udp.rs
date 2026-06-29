@@ -114,12 +114,15 @@ impl Proxy {
                                 timeout,
                                 pkt,
                             );
-                            match udp_session.send_mux_response(
-                                &writer,
-                                mux_session_id,
+                            let client_response = vless::VlessInboundUdpClientResponse::new(
                                 &response.target,
                                 response.port,
                                 &response.payload,
+                            );
+                            match udp_session.send_mux_client_response(
+                                &writer,
+                                mux_session_id,
+                                client_response,
                             ) {
                                 Ok(frame_len) => {
                                     response.accounting.record_sent(frame_len);
@@ -138,14 +141,18 @@ impl Proxy {
                     match chain_result {
                         Ok(Ok((target, port, payload, session_id))) => {
                             last_activity = TokioInstant::now();
+                            let client_response =
+                                vless::VlessInboundUdpClientResponse::new(&target, port, &payload);
                             let response_accounting =
-                                record_chain_udp_response_received(self, session_id, payload.len());
-                            match udp_session.send_mux_response(
+                                record_chain_udp_response_received(
+                                    self,
+                                    session_id,
+                                    client_response.payload_len(),
+                                );
+                            match udp_session.send_mux_client_response(
                                 &writer,
                                 mux_session_id,
-                                &target,
-                                port,
-                                &payload,
+                                client_response,
                             ) {
                                 Ok(frame_len) => {
                                     response_accounting.record_sent(frame_len);

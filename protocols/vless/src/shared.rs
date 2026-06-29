@@ -229,6 +229,39 @@ pub struct VlessInboundUdpDispatchParts {
     client_session_id: Option<u64>,
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct VlessInboundUdpClientResponse<'a> {
+    target: &'a Address,
+    port: u16,
+    payload: &'a [u8],
+}
+
+impl<'a> VlessInboundUdpClientResponse<'a> {
+    pub fn new(target: &'a Address, port: u16, payload: &'a [u8]) -> Self {
+        Self {
+            target,
+            port,
+            payload,
+        }
+    }
+
+    pub fn payload_len(&self) -> usize {
+        self.payload.len()
+    }
+
+    fn target(&self) -> &'a Address {
+        self.target
+    }
+
+    fn port(&self) -> u16 {
+        self.port
+    }
+
+    fn payload(&self) -> &'a [u8] {
+        self.payload
+    }
+}
+
 impl VlessInboundUdpRequest {
     fn from_packet(packet: VlessUdpPacket) -> Self {
         let (target, port, payload) = packet.into_parts();
@@ -763,6 +796,24 @@ impl VlessInboundUdpCodec {
     }
 
     #[cfg(feature = "reality")]
+    pub async fn write_client_response_tokio<W>(
+        &self,
+        writer: &mut W,
+        response: VlessInboundUdpClientResponse<'_>,
+    ) -> Result<usize, Error>
+    where
+        W: tokio::io::AsyncWrite + Unpin,
+    {
+        self.write_response_tokio(
+            writer,
+            response.target(),
+            response.port(),
+            response.payload(),
+        )
+        .await
+    }
+
+    #[cfg(feature = "reality")]
     pub async fn write_response_to_socket_addr_tokio<W>(
         &self,
         writer: &mut W,
@@ -910,6 +961,20 @@ impl VlessInboundUdpSession {
     }
 
     #[cfg(feature = "reality")]
+    pub async fn write_client_response_tokio<W>(
+        &self,
+        writer: &mut W,
+        response: VlessInboundUdpClientResponse<'_>,
+    ) -> Result<usize, Error>
+    where
+        W: tokio::io::AsyncWrite + Unpin,
+    {
+        self.codec
+            .write_client_response_tokio(writer, response)
+            .await
+    }
+
+    #[cfg(feature = "reality")]
     pub async fn write_response_to_ip_tokio<W>(
         &self,
         writer: &mut W,
@@ -951,6 +1016,22 @@ impl VlessInboundUdpSession {
     ) -> Result<usize, Error> {
         self.codec
             .send_mux_response(writer, mux_session_id, target, port, payload)
+    }
+
+    #[cfg(feature = "reality")]
+    pub fn send_mux_client_response(
+        &self,
+        writer: &crate::mux::VlessInboundMuxWriter,
+        mux_session_id: u16,
+        response: VlessInboundUdpClientResponse<'_>,
+    ) -> Result<usize, Error> {
+        self.send_mux_response(
+            writer,
+            mux_session_id,
+            response.target(),
+            response.port(),
+            response.payload(),
+        )
     }
 
     #[cfg(feature = "reality")]
