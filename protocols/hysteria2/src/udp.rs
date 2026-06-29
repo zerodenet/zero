@@ -233,9 +233,28 @@ impl Hysteria2InboundUdpSession {
         self.decode_dispatch_view(&data)
     }
 
+    pub async fn read_dispatch_parts_from_datagram(
+        &self,
+        conn: &quinn::Connection,
+    ) -> Result<Hysteria2InboundUdpDispatchParts, Error> {
+        let data = conn
+            .read_datagram()
+            .await
+            .map_err(|_| Error::Io("failed to read Hysteria2 UDP datagram"))?;
+        self.decode_dispatch_parts(&data)
+    }
+
     pub fn record_proxy_session(&mut self, proxy_session_id: u64, request_session_id: u16) {
         self.h2_sessions_by_proxy_session
             .insert(proxy_session_id, request_session_id);
+    }
+
+    pub fn record_proxy_session_for_parts(
+        &mut self,
+        proxy_session_id: u64,
+        parts: &Hysteria2InboundUdpDispatchParts,
+    ) {
+        self.record_proxy_session(proxy_session_id, parts.request_session_id);
     }
 
     pub fn record_proxy_session_for_view(

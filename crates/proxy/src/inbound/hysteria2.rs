@@ -297,21 +297,20 @@ impl Proxy {
             let (direct_sock, upstream_udp, socks5_idle, chain_tasks) = dispatch.poll_refs();
 
             select! {
-                dg = udp_session.read_dispatch_view_from_datagram(&conn) => {
+                dg = udp_session.read_dispatch_parts_from_datagram(&conn) => {
                     match dg {
-                        Ok(view) => {
-                            let (target, port, payload, client_session_id) = view.pipe_parts();
+                        Ok(parts) => {
                             let _ = UdpPipe::new(&proxy, &mut dispatch)
                                 .dispatch(UdpPipeInput {
-                                    target: target.clone(),
-                                    port,
-                                    payload,
+                                    target: parts.target.clone(),
+                                    port: parts.port,
+                                    payload: &parts.payload,
                                     protocol: ProtocolType::Hysteria2,
                                     auth: None,
-                                    client_session_id,
+                                    client_session_id: parts.client_session_id,
                                 })
                                 .await.inspect(|sid| {
-                                udp_session.record_proxy_session_for_view(*sid, &view);
+                                udp_session.record_proxy_session_for_parts(*sid, &parts);
                             }).inspect_err(|e| {
                                 warn!(error = %e, "h2 udp dispatch failed");
                             });
