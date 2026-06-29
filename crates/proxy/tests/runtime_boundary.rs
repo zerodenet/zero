@@ -5198,6 +5198,8 @@ fn trojan_inbound_udp_packet_framing_stays_in_protocol_crate() {
         fs::read_to_string(protocol_inbound).expect("read trojan protocol inbound source");
     let protocol_lib = fs::read_to_string(repo_root().join("protocols/trojan/src/lib.rs"))
         .expect("read trojan protocol lib source");
+    let protocol_shared = fs::read_to_string(repo_root().join("protocols/trojan/src/shared.rs"))
+        .expect("read trojan protocol shared source");
 
     for forbidden in [
         "TrojanUdpPacket {",
@@ -5285,6 +5287,25 @@ fn trojan_inbound_udp_packet_framing_stays_in_protocol_crate() {
         !protocol_outbound.contains("fn udp_flow_packet") && !protocol_lib.contains("udp_flow_packet"),
         "Trojan UDP flow packet constructor helper should be removed from the public protocol surface"
     );
+    for private_root_item in [
+        "read_password",
+        "read_request",
+        "write_password",
+        "write_request",
+        "ATYP_DOMAIN",
+        "ATYP_IPV4",
+        "ATYP_IPV6",
+        "CMD_TCP",
+        "CMD_UDP",
+        "CRLF",
+        "PASSWORD_HASH_LEN",
+        "hex",
+    ] {
+        assert!(
+            protocol_shared.contains(private_root_item) && !protocol_lib.contains(private_root_item),
+            "Trojan wire helper `{private_root_item}` should stay under protocols/trojan::shared instead of the crate root"
+        );
+    }
 }
 
 #[test]

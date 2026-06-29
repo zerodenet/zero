@@ -2,8 +2,9 @@
 
 use std::io;
 
+use trojan::shared::{ATYP_DOMAIN, CMD_TCP, CMD_UDP, CRLF, PASSWORD_HASH_LEN};
 use trojan::udp::{TrojanInboundUdpSession, TrojanUdpPacket, TrojanUdpPacketTunnelTarget};
-use trojan::{TrojanOutbound, CMD_TCP, CMD_UDP, CRLF, PASSWORD_HASH_LEN};
+use trojan::TrojanOutbound;
 use zero_core::{Address, Network, ProtocolType, Session};
 use zero_traits::{AsyncSocket, UdpPacketStreamFraming, UdpPacketTunnelProtocol};
 
@@ -59,7 +60,7 @@ async fn outbound_writes_complete_request_in_one_write() {
     let request = &socket.writes[0];
     assert_eq!(&request[PASSWORD_HASH_LEN..PASSWORD_HASH_LEN + 2], CRLF);
     assert_eq!(request[PASSWORD_HASH_LEN + 2], CMD_TCP);
-    assert_eq!(request[PASSWORD_HASH_LEN + 3], trojan::ATYP_DOMAIN);
+    assert_eq!(request[PASSWORD_HASH_LEN + 3], ATYP_DOMAIN);
     assert_eq!(
         request[PASSWORD_HASH_LEN + 4] as usize,
         "www.gstatic.com".len()
@@ -107,7 +108,7 @@ async fn outbound_establishes_udp_packet_tunnel() {
     let request = &socket.writes[0];
     assert_eq!(&request[PASSWORD_HASH_LEN..PASSWORD_HASH_LEN + 2], CRLF);
     assert_eq!(request[PASSWORD_HASH_LEN + 2], CMD_UDP);
-    assert_eq!(request[PASSWORD_HASH_LEN + 3], trojan::ATYP_DOMAIN);
+    assert_eq!(request[PASSWORD_HASH_LEN + 3], ATYP_DOMAIN);
     assert_eq!(request[PASSWORD_HASH_LEN + 4] as usize, "dns.google".len());
     assert_eq!(
         &request[PASSWORD_HASH_LEN + 5..PASSWORD_HASH_LEN + 15],

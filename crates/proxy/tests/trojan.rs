@@ -11,6 +11,7 @@ use zero_config::RuntimeConfig;
 use zero_proxy::Proxy as Engine;
 
 use support::{free_port, spawn_engine, wait_for_listener};
+use trojan::shared::{ATYP_IPV4, CMD_TCP, PASSWORD_HASH_LEN};
 
 const PASSWORD: &str = "test-password";
 
@@ -109,25 +110,25 @@ async fn spawn_trojan_tls_echo_server(
         let mut stream = acceptor.accept(stream).await.expect("accept tls");
         assert!(stream.get_ref().1.alpn_protocol().is_none());
 
-        let mut password = [0_u8; trojan::PASSWORD_HASH_LEN + 2];
+        let mut password = [0_u8; PASSWORD_HASH_LEN + 2];
         stream
             .read_exact(&mut password)
             .await
             .expect("read trojan password");
-        assert_eq!(&password[trojan::PASSWORD_HASH_LEN..], b"\r\n");
+        assert_eq!(&password[PASSWORD_HASH_LEN..], b"\r\n");
 
         let mut header = [0_u8; 1];
         stream
             .read_exact(&mut header)
             .await
             .expect("read trojan command");
-        assert_eq!(header[0], trojan::CMD_TCP);
+        assert_eq!(header[0], CMD_TCP);
 
         stream
             .read_exact(&mut header)
             .await
             .expect("read trojan address type");
-        assert_eq!(header[0], trojan::ATYP_IPV4);
+        assert_eq!(header[0], ATYP_IPV4);
 
         let mut ipv4 = [0_u8; 4];
         stream
