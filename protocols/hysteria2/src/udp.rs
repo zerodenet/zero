@@ -218,6 +218,14 @@ impl Hysteria2InboundUdpSession {
         self.record_proxy_session(proxy_session_id, parts.request_session_id);
     }
 
+    pub fn record_dispatched_proxy_session(
+        &mut self,
+        proxy_session_id: u64,
+        parts: &Hysteria2InboundUdpDispatchParts,
+    ) {
+        self.record_proxy_session_for_parts(proxy_session_id, parts);
+    }
+
     pub fn send_response(
         &self,
         conn: &quinn::Connection,

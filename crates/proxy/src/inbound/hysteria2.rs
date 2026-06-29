@@ -311,7 +311,7 @@ impl Proxy {
                                     client_session_id,
                                 })
                                 .await.inspect(|sid| {
-                                udp_session.record_proxy_session_for_parts(*sid, &parts);
+                                udp_session.record_dispatched_proxy_session(*sid, &parts);
                             }).inspect_err(|e| {
                                 warn!(error = %e, "h2 udp dispatch failed");
                             });
