@@ -179,6 +179,31 @@ fn ordinary_udp_inbounds_submit_packets_through_udp_pipe() {
 }
 
 #[test]
+fn custom_tcp_inbound_relays_use_runtime_metering_helpers() {
+    let runtime = read("src/runtime/inbound_protocol.rs");
+    assert!(
+        runtime.contains("fn record_tcp_upload(")
+            && runtime.contains("fn record_tcp_download(")
+            && runtime.contains("record_session_inbound_rx")
+            && runtime.contains("record_session_outbound_tx")
+            && runtime.contains("record_session_outbound_rx")
+            && runtime.contains("record_session_inbound_tx"),
+        "runtime inbound protocol layer should own TCP relay metering helpers"
+    );
+
+    let hysteria2 = read("src/inbound/hysteria2.rs");
+    assert!(
+        hysteria2.contains("record_tcp_upload")
+            && hysteria2.contains("record_tcp_download")
+            && !hysteria2.contains("record_session_inbound_rx")
+            && !hysteria2.contains("record_session_outbound_tx")
+            && !hysteria2.contains("record_session_outbound_rx")
+            && !hysteria2.contains("record_session_inbound_tx"),
+        "custom Hysteria2 TCP relay should use runtime metering helpers instead of touching session counters directly"
+    );
+}
+
+#[test]
 fn inbound_udp_glue_does_not_name_protocol_private_packet_models() {
     for path in rust_sources_under("src/inbound") {
         let source = relative(&path);

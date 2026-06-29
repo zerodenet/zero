@@ -19,6 +19,16 @@ use crate::runtime::pipe::{KernelPipe, TcpPipe, TcpPipeInput};
 use crate::runtime::Proxy;
 use crate::transport::{is_block_error, relay_bidirectional_metered_throttled, TcpRelayStream};
 
+pub(crate) fn record_tcp_upload(proxy: &Proxy, session_id: u64, bytes: u64) {
+    proxy.record_session_inbound_rx(session_id, bytes);
+    proxy.record_session_outbound_tx(session_id, bytes);
+}
+
+pub(crate) fn record_tcp_download(proxy: &Proxy, session_id: u64, bytes: u64) {
+    proxy.record_session_outbound_rx(session_id, bytes);
+    proxy.record_session_inbound_tx(session_id, bytes);
+}
+
 // ── Trait ──────────────────────────────────────────────────────────────
 
 /// Protocol-specific half of a TCP inbound handler.
@@ -66,12 +76,10 @@ pub(crate) trait InboundProtocol: Send + Sync {
             client,
             upstream,
             |bytes| {
-                proxy.record_session_inbound_rx(session_id, bytes);
-                proxy.record_session_outbound_tx(session_id, bytes);
+                record_tcp_upload(proxy, session_id, bytes);
             },
             |bytes| {
-                proxy.record_session_outbound_rx(session_id, bytes);
-                proxy.record_session_inbound_tx(session_id, bytes);
+                record_tcp_download(proxy, session_id, bytes);
             },
             up_bps,
             down_bps,

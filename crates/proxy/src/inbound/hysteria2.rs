@@ -14,7 +14,9 @@ use zero_config::InboundConfig;
 use zero_core::{ProtocolType, Session};
 use zero_engine::EngineError;
 
-use crate::runtime::inbound_protocol::{serve_inbound, InboundProtocol};
+use crate::runtime::inbound_protocol::{
+    record_tcp_download, record_tcp_upload, serve_inbound, InboundProtocol,
+};
 use crate::runtime::pipe::{KernelPipe, UdpPipe, UdpPipeInput};
 use crate::runtime::udp_flow::helpers::{
     record_chain_udp_response_received, record_direct_udp_response_received,
@@ -91,8 +93,7 @@ impl InboundProtocol for Hysteria2StreamHandler {
                 down_read,
                 up_write,
                 |bytes| {
-                    upload_proxy.record_session_inbound_rx(session_id, bytes);
-                    upload_proxy.record_session_outbound_tx(session_id, bytes);
+                    record_tcp_upload(&upload_proxy, session_id, bytes);
                 },
                 up_bps,
             )
@@ -104,8 +105,7 @@ impl InboundProtocol for Hysteria2StreamHandler {
                 up_read,
                 down_write,
                 |bytes| {
-                    download_proxy.record_session_outbound_rx(session_id, bytes);
-                    download_proxy.record_session_inbound_tx(session_id, bytes);
+                    record_tcp_download(&download_proxy, session_id, bytes);
                 },
                 down_bps,
             )
