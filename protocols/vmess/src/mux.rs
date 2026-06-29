@@ -382,6 +382,49 @@ impl VmessInboundMuxStreams {
     }
 }
 
+pub async fn relay_inbound_mux_stream<S>(
+    session_id: u16,
+    mut up_rx: mpsc::UnboundedReceiver<Vec<u8>>,
+    writer: VmessInboundMuxWriter,
+    mut upstream: S,
+) where
+    S: AsyncRead + AsyncWrite + Unpin,
+{
+    let mux_session = VmessInboundMuxSession::new();
+    let mut buf = vec![0_u8; MUX_MAX_DATA_LEN];
+    loop {
+        tokio::select! {
+            payload = up_rx.recv() => {
+                let Some(payload) = payload else { break; };
+                if payload.is_empty() {
+                    break;
+                }
+                if tokio::io::AsyncWriteExt::write_all(&mut upstream, &payload).await.is_err() {
+                    break;
+                }
+                if tokio::io::AsyncWriteExt::flush(&mut upstream).await.is_err() {
+                    break;
+                }
+            }
+            read = tokio::io::AsyncReadExt::read(&mut upstream, &mut buf) => {
+                match read {
+                    Ok(0) => break,
+                    Ok(n) => {
+                        if mux_session
+                            .write_inbound_stream_payload(&writer, session_id, &buf[..n])
+                            .is_err()
+                        {
+                            break;
+                        }
+                    }
+                    Err(_) => break,
+                }
+            }
+        }
+    }
+    let _ = mux_session.write_inbound_stream_payload(&writer, session_id, &[]);
+}
+
 impl VmessInboundMuxSession {
     pub fn new() -> Self {
         Self

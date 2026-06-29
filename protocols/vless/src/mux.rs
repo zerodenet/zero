@@ -267,6 +267,50 @@ impl VlessInboundMuxWriter {
 
 // ── frame encode / decode ──
 
+#[cfg(feature = "reality")]
+pub async fn relay_inbound_mux_stream<S>(
+    session_id: u16,
+    mut up_rx: mpsc::UnboundedReceiver<Vec<u8>>,
+    writer: VlessInboundMuxWriter,
+    upstream: S,
+) where
+    S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send + 'static,
+{
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    let (mut upstream_r, mut upstream_w) = tokio::io::split(upstream);
+
+    let upload = tokio::spawn(async move {
+        while let Some(data) = up_rx.recv().await {
+            if upstream_w.write_all(&data).await.is_err() {
+                break;
+            }
+        }
+        let _ = upstream_w.shutdown().await;
+    });
+
+    let download = tokio::spawn(async move {
+        let mut buf = [0_u8; MUX_MAX_PAYLOAD];
+        loop {
+            match upstream_r.read(&mut buf).await {
+                Ok(0) => break,
+                Ok(n) => {
+                    if writer
+                        .write_inbound_stream_payload(session_id, buf[..n].to_vec())
+                        .is_err()
+                    {
+                        break;
+                    }
+                }
+                Err(_) => break,
+            }
+        }
+        let _ = writer.write_inbound_stream_payload(session_id, Vec::new());
+    });
+
+    let _ = tokio::join!(upload, download);
+}
+
 /// Encode a MUX frame: [length:2(BE)][session_id:2(BE)][status:1][options:1][payload…]
 /// length covers session_id(2) + status(1) + options(1) + payload.
 pub fn encode_frame(session_id: u16, status: u8, options: u8, payload: &[u8]) -> Vec<u8> {

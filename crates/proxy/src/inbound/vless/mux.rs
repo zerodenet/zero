@@ -11,7 +11,7 @@ use crate::runtime::udp_flow::helpers::{
 };
 
 use crate::runtime::Proxy;
-use crate::transport::{ClientStream, MeteredStream, TcpRelayStream};
+use crate::transport::{ClientStream, MeteredStream};
 use zero_engine::EngineError;
 
 use super::model::VlessMuxUdpStreamTask;
@@ -81,7 +81,10 @@ impl Proxy {
 
                                     let writer = mux_writer.clone();
                                     relay_tasks.spawn(async move {
-                                        Self::mux_stream_relay(sid, up_rx, writer, upstream).await;
+                                        vless::mux::relay_inbound_mux_stream(
+                                            sid, up_rx, writer, upstream,
+                                        )
+                                        .await;
                                     });
 
                                     info!(inbound_tag, mux_stream_id = sid,
@@ -154,49 +157,6 @@ impl Proxy {
         relay_tasks.abort_all();
         info!(inbound_tag, "VLESS MUX session ended");
         Ok(())
-    }
-
-    pub(crate) async fn mux_stream_relay(
-        stream_id: u16,
-        mut up_rx: tokio::sync::mpsc::UnboundedReceiver<Vec<u8>>,
-        writer: vless::mux::VlessInboundMuxWriter,
-        upstream: TcpRelayStream,
-    ) {
-        use tokio::io::{AsyncReadExt, AsyncWriteExt};
-
-        let (mut upstream_r, mut upstream_w) = tokio::io::split(upstream);
-
-        let upload = tokio::spawn(async move {
-            while let Some(data) = up_rx.recv().await {
-                if upstream_w.write_all(&data).await.is_err() {
-                    break;
-                }
-            }
-            let _ = upstream_w.shutdown().await;
-        });
-
-        let sid = stream_id;
-        let download = tokio::spawn(async move {
-            let mut buf = [0u8; 16384];
-            loop {
-                match upstream_r.read(&mut buf).await {
-                    Ok(0) => break,
-                    Ok(n) => {
-                        if writer
-                            .write_inbound_stream_payload(sid, buf[..n].to_vec())
-                            .is_err()
-                        {
-                            break;
-                        }
-                    }
-                    Err(_) => break,
-                }
-            }
-            // Send empty payload as close notification
-            let _ = writer.write_inbound_stream_payload(sid, Vec::new());
-        });
-
-        let _ = tokio::join!(upload, download);
     }
 
     pub(crate) async fn spawn_vless_mux_udp_stream_task(&self, request: VlessMuxUdpStreamTask<'_>) {

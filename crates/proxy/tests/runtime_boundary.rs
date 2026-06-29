@@ -4992,8 +4992,8 @@ fn inbound_vmess_mux_task_model_lives_outside_mux_root() {
     );
     assert!(
         root.contains(".end_inbound_stream(&writer, mux_session_id)")
-            && root.contains(".write_inbound_stream_payload(&writer, mux_session_id")
             && !root.contains(".write_inbound_stream_data(&writer, mux_session_id")
+            && !root.contains(".write_inbound_stream_payload(&writer, mux_session_id")
             && root.contains("VmessInboundMuxWriter::from_tokio_writer")
             && !root.contains("VmessInboundMuxWriter::new")
             && !root.contains("let (write_tx")
@@ -5002,6 +5002,10 @@ fn inbound_vmess_mux_task_model_lives_outside_mux_root() {
             && !root.contains("mpsc::unbounded_channel::<Vec<u8>>()")
             && !root.contains("std::collections::HashMap<u16")
             && !root.contains("write_all(&mut writer, &frame)")
+            && !root.contains("AsyncWriteExt::write_all(&mut upstream")
+            && !root.contains("AsyncWriteExt::flush(&mut upstream")
+            && !root.contains("AsyncReadExt::read(&mut upstream")
+            && !root.contains("let mut buf = vec![0_u8; 16 * 1024]")
             && !root.contains("flush(&mut writer)")
             && !root.contains("shutdown(&mut writer)")
             && !root.contains("writer.end(")
@@ -5029,8 +5033,10 @@ fn inbound_vmess_mux_task_model_lives_outside_mux_root() {
             && protocol_mux.contains("pub fn open_stream")
             && protocol_mux.contains("pub fn push_stream_data")
             && protocol_mux.contains("pub fn close_inbound_stream")
-            && root.contains("write_inbound_stream_payload(&writer, mux_session_id, &[])"),
-        "VMess inbound MUX downstream payload selection, writer pump, and stream table should live in protocols/vmess"
+            && protocol_mux.contains("pub async fn relay_inbound_mux_stream")
+            && protocol_mux.contains("write_inbound_stream_payload(&writer, session_id")
+            && root.contains("vmess::mux::relay_inbound_mux_stream"),
+        "VMess inbound MUX downstream payload selection, relay pump, and stream table should live in protocols/vmess"
     );
     for required in ["queue_keep_stream", "queue_end_stream"] {
         assert!(
@@ -5211,7 +5217,12 @@ fn inbound_vless_mux_task_model_lives_outside_mux_root() {
         root.contains("VlessInboundMuxWriter::channel")
             && root.contains("let writer = mux_writer.clone()")
             && root.contains("writer,")
-            && root.contains("writer.write_inbound_stream_payload")
+            && root.contains("vless::mux::relay_inbound_mux_stream")
+            && !root.contains("mux_stream_relay")
+            && !root.contains("writer.write_inbound_stream_payload")
+            && !root.contains("tokio::io::split(upstream)")
+            && !root.contains("AsyncWriteExt")
+            && !root.contains("AsyncReadExt")
             && !root.contains("writer.data(")
             && !root.contains("writer.end(")
             && model.contains("writer: vless::mux::VlessInboundMuxWriter")
@@ -5226,10 +5237,11 @@ fn inbound_vless_mux_task_model_lives_outside_mux_root() {
             && protocol_mux.contains("pub fn open_stream")
             && protocol_mux.contains("pub fn push_stream_data")
             && protocol_mux.contains("pub fn close_inbound_stream")
+            && protocol_mux.contains("pub async fn relay_inbound_mux_stream")
             && protocol_mux.contains("pub fn channel()")
             && protocol_mux.contains("pub fn write_inbound_stream_payload")
             && protocol_mux.contains("mpsc::unbounded_channel::<VlessInboundMuxDownlink>()"),
-        "VLESS inbound MUX task model should carry protocol-owned writer/stream state and keep raw channel shapes in protocols/vless"
+        "VLESS inbound MUX task model should carry protocol-owned writer/stream relay state and keep raw channel shapes in protocols/vless"
     );
 }
 

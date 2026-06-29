@@ -116,7 +116,6 @@ impl Proxy {
             writer,
             inbound_tag,
         } = request;
-        let mut up_rx = up_rx;
         let proxy = self.clone();
         tasks.spawn(async move {
             let mux_session = vmess::mux::VmessInboundMuxSession::new();
@@ -137,43 +136,7 @@ impl Proxy {
                 }
             };
 
-            let mut upstream = upstream;
-            let mut buf = vec![0_u8; 16 * 1024];
-            loop {
-                select! {
-                    payload = up_rx.recv() => {
-                        let Some(payload) = payload else { break; };
-                        if payload.is_empty() {
-                            break;
-                        }
-                        if tokio::io::AsyncWriteExt::write_all(&mut upstream, &payload).await.is_err() {
-                            break;
-                        }
-                        if tokio::io::AsyncWriteExt::flush(&mut upstream).await.is_err() {
-                            break;
-                        }
-                    }
-                    read = tokio::io::AsyncReadExt::read(&mut upstream, &mut buf) => {
-                        match read {
-                            Ok(0) => break,
-                            Ok(n) => {
-                                match mux_session.write_inbound_stream_payload(&writer, mux_session_id, &buf[..n]) {
-                                    Ok(_) => {}
-                                    Err(error) => {
-                                        warn!(%error, mux_session_id, "vmess mux response encode failed");
-                                        break;
-                                    }
-                                }
-                            }
-                            Err(error) => {
-                                warn!(%error, mux_session_id, "vmess mux upstream read failed");
-                                break;
-                            }
-                        }
-                    }
-                }
-            }
-            let _ = mux_session.write_inbound_stream_payload(&writer, mux_session_id, &[]);
+            vmess::mux::relay_inbound_mux_stream(mux_session_id, up_rx, writer, upstream).await;
         });
     }
 
