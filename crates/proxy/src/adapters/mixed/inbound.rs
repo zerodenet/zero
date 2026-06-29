@@ -42,9 +42,9 @@ fn socks5_auth_from_config(
     Ok(socks5::ConfiguredSocks5PasswordAuth::from_config_users(
         socks5_users.iter().map(|user| {
             (
-                user.username.clone(),
-                user.password.clone(),
-                user.principal_key.clone(),
+                user.username.as_str(),
+                user.password.as_str(),
+                user.principal_key.as_deref(),
                 user.up_bps,
                 user.down_bps,
             )

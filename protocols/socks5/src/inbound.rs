@@ -1,3 +1,4 @@
+use alloc::borrow::ToOwned;
 use alloc::boxed::Box;
 use alloc::string::String;
 use alloc::vec;
@@ -156,6 +157,20 @@ impl IntoSocks5AuthUserConfig for (String, String, Option<String>, Option<u64>, 
         self,
     ) -> (String, String, Option<String>, Option<u64>, Option<u64>) {
         self
+    }
+}
+
+impl IntoSocks5AuthUserConfig for (&str, &str, Option<&str>, Option<u64>, Option<u64>) {
+    fn into_socks5_auth_user_config(
+        self,
+    ) -> (String, String, Option<String>, Option<u64>, Option<u64>) {
+        (
+            self.0.to_owned(),
+            self.1.to_owned(),
+            self.2.map(ToOwned::to_owned),
+            self.3,
+            self.4,
+        )
     }
 }
 
