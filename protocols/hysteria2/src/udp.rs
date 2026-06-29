@@ -340,6 +340,21 @@ impl Hysteria2InboundUdpSession {
             response.payload(),
         )
     }
+
+    pub fn send_client_response_for_target_proxy_session(
+        &self,
+        conn: &quinn::Connection,
+        proxy_session_id: Option<u64>,
+        target: &Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<Option<usize>, Error> {
+        self.send_client_response_for_proxy_session(
+            conn,
+            proxy_session_id,
+            Hysteria2InboundUdpClientResponse::new(target, port, payload),
+        )
+    }
 }
 
 #[cfg(feature = "tokio")]

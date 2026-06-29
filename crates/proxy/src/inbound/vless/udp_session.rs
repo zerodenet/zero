@@ -97,10 +97,13 @@ impl Proxy {
                         record_direct_udp_response_received(self, &dispatch, sender, n);
 
                     let (target, port) = udp_response_target_from_socket_addr(sender);
-                    let client_response =
-                        vless::VlessInboundUdpClientResponse::new(&target, port, &udp_buffer[..n]);
                     match udp_session
-                        .write_client_response_tokio(&mut client, client_response)
+                        .write_client_response_for_target_tokio(
+                            &mut client,
+                            &target,
+                            port,
+                            &udp_buffer[..n],
+                        )
                         .await
                     {
                         Ok(written) => {
@@ -127,13 +130,13 @@ impl Proxy {
                                 timeout,
                                 pkt,
                             );
-                            let client_response = vless::VlessInboundUdpClientResponse::new(
-                                &response.target,
-                                response.port,
-                                &response.payload,
-                            );
                             match udp_session
-                                .write_client_response_tokio(&mut client, client_response)
+                                .write_client_response_for_target_tokio(
+                                    &mut client,
+                                    &response.target,
+                                    response.port,
+                                    &response.payload,
+                                )
                                 .await
                             {
                                 Ok(written) => {
@@ -160,16 +163,19 @@ impl Proxy {
                     match chain_result {
                         Ok(Ok((target, port, payload, session_id))) => {
                             last_activity = TokioInstant::now();
-                            let client_response =
-                                vless::VlessInboundUdpClientResponse::new(&target, port, &payload);
                             let response_accounting =
                                 record_chain_udp_response_received(
                                     &proxy,
                                     session_id,
-                                    client_response.payload_len(),
+                                    payload.len(),
                                 );
                             match udp_session
-                                .write_client_response_tokio(&mut client, client_response)
+                                .write_client_response_for_target_tokio(
+                                    &mut client,
+                                    &target,
+                                    port,
+                                    &payload,
+                                )
                                 .await
                             {
                                 Ok(written) => {

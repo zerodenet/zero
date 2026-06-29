@@ -294,6 +294,7 @@ fn inbound_udp_glue_does_not_name_protocol_private_packet_models() {
             "InboundUdpResponseTarget",
             "InboundUdpPacket",
             "InboundUdpResponse",
+            "UdpClientResponse",
             "decode_inbound_udp",
             "encode_inbound_udp",
             "read_inbound_udp",
@@ -1520,8 +1521,8 @@ fn shadowsocks_inbound_uses_adapter_request_model() {
     assert!(
         udp.contains("async fn ss_udp_relay_loop")
             && !udp.contains("struct SsProtocolResponse")
-            && udp.contains(".send_client_response_for_proxy_session_to_client_tokio")
-            && udp.contains("ShadowsocksInboundUdpClientResponse::new")
+            && udp.contains(".send_response_for_target_proxy_session_to_client_tokio")
+            && !udp.contains("ShadowsocksInboundUdpClientResponse::new")
             && !udp.contains(".send_response_for_proxy_session_to_sender_tokio")
             && !udp.contains(".send_response_for_proxy_session_to_client_tokio")
             && !udp.contains(".send_proxy_session_response_to_sender_tokio")
@@ -1620,65 +1621,72 @@ fn stream_udp_inbound_direct_responses_use_client_response_models() {
 
     assert!(
         trojan_udp_inbound.contains("udp_response_target_from_socket_addr(sender)")
-            && trojan_udp_inbound.contains("TrojanInboundUdpClientResponse::new")
-            && trojan_udp_inbound.contains(".write_client_response")
+            && !trojan_udp_inbound.contains("TrojanInboundUdpClientResponse::new")
+            && trojan_udp_inbound.contains(".write_client_response_for_target")
             && !trojan_udp_inbound.contains("write_response_to_socket_addr_tokio")
             && trojan_protocol.contains("pub async fn write_client_response")
+            && trojan_protocol.contains("pub async fn write_client_response_for_target")
             && !trojan_protocol.contains("pub async fn write_response_to_socket_addr_tokio")
             && !trojan_protocol.contains("fn address_from_socket_addr"),
-        "Trojan inbound UDP direct response glue should pass a protocol-owned client response model"
+        "Trojan inbound UDP direct response glue should pass neutral target data to protocol-owned response APIs"
     );
     assert!(
         mieru_udp_inbound.contains("udp_response_target_from_socket_addr(sender)")
-            && mieru_udp_inbound.contains("MieruInboundUdpClientResponse::new")
-            && mieru_udp_inbound.contains(".write_client_response_tokio")
+            && !mieru_udp_inbound.contains("MieruInboundUdpClientResponse::new")
+            && mieru_udp_inbound.contains(".write_client_response_for_target_tokio")
             && !mieru_udp_inbound.contains("write_response_for_sender_tokio")
             && mieru_protocol.contains("pub async fn write_client_response_tokio")
+            && mieru_protocol.contains("pub async fn write_client_response_for_target_tokio")
             && !mieru_protocol.contains("pub async fn write_response_for_sender_tokio")
             && !mieru_protocol.contains("fn address_from_socket_addr"),
-        "Mieru inbound UDP direct response glue should pass a protocol-owned client response model"
+        "Mieru inbound UDP direct response glue should pass neutral target data to protocol-owned response APIs"
     );
     assert!(
         hysteria2_inbound.contains("udp_response_target_from_socket_addr(sender)")
-            && hysteria2_inbound.contains("Hysteria2InboundUdpClientResponse::new")
-            && hysteria2_inbound.contains("send_client_response_for_proxy_session")
+            && !hysteria2_inbound.contains("Hysteria2InboundUdpClientResponse::new")
+            && hysteria2_inbound.contains("send_client_response_for_target_proxy_session")
             && !hysteria2_inbound.contains("send_response_to_socket_addr_for_proxy_session")
             && hysteria2_protocol.contains("pub fn send_client_response_for_proxy_session")
+            && hysteria2_protocol.contains("pub fn send_client_response_for_target_proxy_session")
             && !hysteria2_protocol.contains("pub fn send_response_to_socket_addr")
             && !hysteria2_protocol.contains("fn address_from_socket_addr"),
-        "Hysteria2 inbound UDP direct response glue should pass a protocol-owned client response model"
+        "Hysteria2 inbound UDP direct response glue should pass neutral target data to protocol-owned response APIs"
     );
     assert!(
         vless_udp_inbound.contains("udp_response_target_from_socket_addr(sender)")
             && vless_mux_inbound.contains("udp_response_target_from_socket_addr(sender)")
-            && vless_udp_inbound.contains("VlessInboundUdpClientResponse::new")
-            && vless_mux_inbound.contains("VlessInboundUdpClientResponse::new")
-            && vless_udp_inbound.contains(".write_client_response_tokio")
-            && vless_mux_inbound.contains(".send_mux_client_response")
+            && !vless_udp_inbound.contains("VlessInboundUdpClientResponse::new")
+            && !vless_mux_inbound.contains("VlessInboundUdpClientResponse::new")
+            && vless_udp_inbound.contains(".write_client_response_for_target_tokio")
+            && vless_mux_inbound.contains(".send_mux_client_response_for_target")
             && !vless_udp_inbound.contains("write_response_to_socket_addr_tokio")
             && !vless_mux_inbound.contains("send_mux_response_to_socket_addr")
             && vless_protocol.contains("pub async fn write_client_response_tokio")
+            && vless_protocol.contains("pub async fn write_client_response_for_target_tokio")
             && vless_protocol.contains("pub fn send_mux_client_response")
+            && vless_protocol.contains("pub fn send_mux_client_response_for_target")
             && !vless_protocol.contains("pub async fn write_response_to_socket_addr_tokio")
             && !vless_protocol.contains("pub fn send_mux_response_to_socket_addr")
             && !vless_protocol.contains("fn address_from_socket_addr"),
-        "VLESS inbound UDP direct response glue should pass protocol-owned client response models"
+        "VLESS inbound UDP direct response glue should pass neutral target data to protocol-owned response APIs"
     );
     assert!(
         vmess_udp_inbound.contains("udp_response_target_from_socket_addr(sender)")
             && vmess_mux_inbound.contains("udp_response_target_from_socket_addr(sender)")
-            && vmess_udp_inbound.contains("VmessInboundUdpClientResponse::new")
-            && vmess_mux_inbound.contains("VmessInboundUdpClientResponse::new")
-            && vmess_udp_inbound.contains(".write_client_response_tokio")
-            && vmess_mux_inbound.contains(".write_mux_client_response")
+            && !vmess_udp_inbound.contains("VmessInboundUdpClientResponse::new")
+            && !vmess_mux_inbound.contains("VmessInboundUdpClientResponse::new")
+            && vmess_udp_inbound.contains(".write_client_response_for_target_tokio")
+            && vmess_mux_inbound.contains(".write_mux_client_response_for_target")
             && !vmess_udp_inbound.contains("write_response_to_socket_addr_tokio")
             && !vmess_mux_inbound.contains("write_mux_response_to_socket_addr")
             && vmess_protocol.contains("pub async fn write_client_response_tokio")
+            && vmess_protocol.contains("pub async fn write_client_response_for_target_tokio")
             && vmess_protocol.contains("pub fn write_mux_client_response")
+            && vmess_protocol.contains("pub fn write_mux_client_response_for_target")
             && !vmess_protocol.contains("pub async fn write_response_to_socket_addr_tokio")
             && !vmess_protocol.contains("pub fn write_mux_response_to_socket_addr")
             && !vmess_protocol.contains("fn address_from_socket_addr"),
-        "VMess inbound UDP direct response glue should pass protocol-owned client response models"
+        "VMess inbound UDP direct response glue should pass neutral target data to protocol-owned response APIs"
     );
 }
 
@@ -2138,8 +2146,8 @@ fn hysteria2_inbound_uses_adapter_request_model() {
             && udp.contains("udp_session.record_dispatch_success(*sid, &tracked)")
             && !udp.contains("parts.record_dispatch_success")
             && !udp.contains("udp_session.record_dispatched_proxy_session")
-            && udp.contains("udp_session.send_client_response_for_proxy_session")
-            && udp.contains("Hysteria2InboundUdpClientResponse::new")
+            && udp.contains("udp_session.send_client_response_for_target_proxy_session")
+            && !udp.contains("Hysteria2InboundUdpClientResponse::new")
             && udp.contains("udp_response_target_from_socket_addr(sender)")
             && !udp.contains("udp_session.send_response_to_socket_addr_for_proxy_session")
             && !udp.contains("if let Some(sid) = session_id")
@@ -2200,6 +2208,7 @@ fn hysteria2_inbound_uses_adapter_request_model() {
             && protocol_udp.contains("fn send_response")
             && protocol_udp.contains("fn send_response_for_proxy_session")
             && protocol_udp.contains("fn send_client_response_for_proxy_session")
+            && protocol_udp.contains("fn send_client_response_for_target_proxy_session")
             && !protocol_udp.contains("fn send_response_to_ip")
             && !protocol_udp.contains("fn send_response_to_socket_addr")
             && !protocol_udp.contains("fn send_response_to_socket_addr_for_proxy_session")
@@ -3505,8 +3514,8 @@ fn shadowsocks_udp_inbound_uses_protocol_codec_not_datagram_primitives() {
             && !udp.contains("dispatch_parts.record_dispatch_success")
             && !udp.contains("udp_session.record_dispatched_client_session")
             && !udp.contains("udp_session.record_client_session")
-            && udp.contains(".send_client_response_for_proxy_session_to_client_tokio")
-            && udp.contains("ShadowsocksInboundUdpClientResponse::new")
+            && udp.contains(".send_response_for_target_proxy_session_to_client_tokio")
+            && !udp.contains("ShadowsocksInboundUdpClientResponse::new")
             && !udp.contains(".send_response_for_proxy_session_to_client_tokio")
             && !udp.contains(".send_response_for_proxy_session_to_sender_tokio")
             && !udp.contains("if let Some(sid) = session_id")
@@ -3550,6 +3559,7 @@ fn shadowsocks_udp_inbound_uses_protocol_codec_not_datagram_primitives() {
             && protocol_inbound.contains("fn send_client_response_to_client_tokio")
             && protocol_inbound.contains("fn send_proxy_session_client_response_to_client_tokio")
             && protocol_inbound.contains("fn send_client_response_for_proxy_session_to_client_tokio")
+            && protocol_inbound.contains("fn send_response_for_target_proxy_session_to_client_tokio")
             && !protocol_inbound.contains("fn send_response_for_proxy_session_to_client_tokio")
             && !protocol_inbound.contains("fn send_response_for_proxy_session_to_sender_tokio")
             && protocol_inbound.contains("struct ShadowsocksInboundUdpResponseDatagram")
@@ -5788,10 +5798,10 @@ fn vmess_inbound_udp_response_encoding_stays_in_protocol_crate() {
             && !mux.contains("decode_dispatch_parts(&payload)")
             && !mux.contains("client.read(&mut client_buf)")
             && !mux.contains("decode_dispatch_parts(&client_buf[..n])")
-            && udp_session.contains(".write_client_response_tokio")
+            && udp_session.contains(".write_client_response_for_target_tokio")
             && udp_session.contains("udp_response_target_from_socket_addr(sender)")
             && !udp_session.contains("udp_session.write_response_to_socket_addr_tokio")
-            && mux_udp.contains(".write_mux_client_response")
+            && mux_udp.contains(".write_mux_client_response_for_target")
             && mux_udp.contains("udp_response_target_from_socket_addr(sender)")
             && !mux_udp.contains("udp_session.write_mux_response_to_socket_addr")
             && !udp_session.contains("udp_session(session.target.clone(), session.port)")
@@ -5804,8 +5814,8 @@ fn vmess_inbound_udp_response_encoding_stays_in_protocol_crate() {
             && !mux.contains("request.into_dispatch_parts()")
             && udp_session.contains("record_upstream_udp_response_received")
             && mux_udp.contains("record_upstream_udp_response_received")
-            && udp_session.contains("VmessInboundUdpClientResponse::new")
-            && mux_udp.contains("VmessInboundUdpClientResponse::new")
+            && !udp_session.contains("VmessInboundUdpClientResponse::new")
+            && !mux_udp.contains("VmessInboundUdpClientResponse::new")
             && !udp_session.contains("udp_session.write_response_tokio(\n")
             && !mux_udp.contains("udp_session.write_mux_response(\n")
             && !mux.contains("client_session_id: None")
@@ -6043,7 +6053,7 @@ fn vless_inbound_udp_packet_framing_stays_in_protocol_crate() {
             && !udp_session.contains("udp_session.decode_dispatch_parts")
             && !udp_session.contains("client.read(&mut buffer)")
             && !udp_session.contains("decode_dispatch_parts(&buffer[..n])")
-            && udp_session.contains(".write_client_response_tokio")
+            && udp_session.contains(".write_client_response_for_target_tokio")
             && udp_session.contains("udp_response_target_from_socket_addr(sender)")
             && !udp_session.contains("udp_session.write_response_to_socket_addr_tokio")
             && !udp_session.contains("request.target")
@@ -6054,7 +6064,7 @@ fn vless_inbound_udp_packet_framing_stays_in_protocol_crate() {
             && !udp_session.contains("request.into_parts()")
             && !udp_session.contains("request.into_dispatch_parts()")
             && udp_session.contains("record_upstream_udp_response_received")
-            && udp_session.contains("VlessInboundUdpClientResponse::new")
+            && !udp_session.contains("VlessInboundUdpClientResponse::new")
             && !udp_session.contains("udp_session.write_response_tokio(\n")
             && !udp_session.contains("client_session_id: None")
             && !udp_session.contains("request.target().clone()")
@@ -6068,7 +6078,7 @@ fn vless_inbound_udp_packet_framing_stays_in_protocol_crate() {
             && mux.contains("udp_session.decode_mux_inbound_dispatch")
             && mux.contains("UdpPipeInput::from_inbound_dispatch")
             && !mux.contains("decode_dispatch_parts(&payload)")
-            && mux.contains(".send_mux_client_response")
+            && mux.contains(".send_mux_client_response_for_target")
             && mux.contains("udp_response_target_from_socket_addr(sender)")
             && !mux.contains("udp_session.send_mux_response_to_socket_addr")
             && mux.contains("writer.end_inbound_stream")
@@ -6084,7 +6094,7 @@ fn vless_inbound_udp_packet_framing_stays_in_protocol_crate() {
             && !mux.contains("request.into_parts()")
             && !mux.contains("request.into_dispatch_parts()")
             && mux.contains("record_upstream_udp_response_received")
-            && mux.contains("VlessInboundUdpClientResponse::new")
+            && !mux.contains("VlessInboundUdpClientResponse::new")
             && !mux.contains("udp_session.send_mux_response(\n")
             && !mux.contains("client_session_id: None")
             && !mux.contains("request.target().clone()")
@@ -6286,7 +6296,7 @@ fn trojan_inbound_udp_packet_framing_stays_in_protocol_crate() {
             && !inbound.contains("view.pipe_parts()")
             && !inbound.contains("parts.pipe_parts()")
             && !inbound.contains("parts.into_pipe_parts()")
-            && inbound.contains(".write_client_response")
+            && inbound.contains(".write_client_response_for_target")
             && inbound.contains("let written = udp_session")
             && inbound.contains("response_accounting.record_sent(written)")
             && !inbound.contains("response_accounting.record_sent(n)")
@@ -6298,7 +6308,7 @@ fn trojan_inbound_udp_packet_framing_stays_in_protocol_crate() {
             && !inbound.contains("request.into_dispatch_parts()")
             && !inbound.contains("request.client_session_id")
             && inbound.contains("record_upstream_udp_response_received")
-            && inbound.contains("TrojanInboundUdpClientResponse::new")
+            && !inbound.contains("TrojanInboundUdpClientResponse::new")
             && !inbound.contains("udp_session.write_response(&mut client")
             && !inbound.contains("client_session_id: None")
             && !inbound.contains("request.target().clone()")
@@ -6516,8 +6526,8 @@ fn mieru_inbound_udp_packet_framing_stays_in_protocol_crate() {
             && !inbound.contains("zero_core::Address::Ipv4")
             && !inbound.contains("zero_core::Address::Ipv6")
             && !inbound.contains("fn addr_from_ip")
-            && inbound.contains(".write_client_response_tokio")
-            && inbound.contains("MieruInboundUdpClientResponse::new")
+            && inbound.contains(".write_client_response_for_target_tokio")
+            && !inbound.contains("MieruInboundUdpClientResponse::new")
             && !inbound.contains(".write_response_for_target_tokio(&mut client")
             && !inbound.contains(".write_response_tokio(&mut client")
             && !inbound.contains("mieru::udp::MieruUdpFlowCodec")
@@ -6551,6 +6561,7 @@ fn mieru_inbound_udp_packet_framing_stays_in_protocol_crate() {
             && protocol_udp.contains("fn encode_packet")
             && protocol_udp.contains("fn write_response_tokio")
             && protocol_udp.contains("fn write_client_response_tokio")
+            && protocol_udp.contains("fn write_client_response_for_target_tokio")
             && protocol_udp.contains("fn decode_packet"),
         "Mieru inbound UDP packet framing should go through the protocols/mieru inbound UDP session"
     );
@@ -6782,8 +6793,8 @@ fn socks5_udp_associate_loop_delegates_dispatch_and_direct_response_framing() {
             && direct_response.contains("record_direct_udp_response_received")
             && read("src/runtime/udp_flow/helpers.rs").contains("direct_response_session_id")
             && direct_response.contains("socks5::Socks5Inbound.udp_session()")
-            && direct_response.contains("Socks5UdpClientResponse::new")
-            && direct_response.contains(".send_client_response")
+            && direct_response.contains(".send_client_response_for_target")
+            && !direct_response.contains("Socks5UdpClientResponse::new")
             && direct_response.contains("udp_response_target_from_socket_addr")
             && direct_response.contains("socket_addr_to_socket_address(client_addr)")
             && !direct_response.contains("socket_addr_to_socket_address(sender)")
@@ -6803,9 +6814,9 @@ fn socks5_udp_associate_loop_delegates_dispatch_and_direct_response_framing() {
         chain_response.contains("async fn handle_chain_result")
             && chain_response.contains("pub(super) struct ChainResponseRequest")
             && chain_response.contains("struct ForwardChainResponseRequest")
-            && chain_response.contains("Socks5UdpClientResponse::new")
             && chain_response.contains("socks5::Socks5Inbound.udp_session()")
-            && chain_response.contains(".send_client_response")
+            && chain_response.contains(".send_client_response_for_target")
+            && !chain_response.contains("Socks5UdpClientResponse::new")
             && chain_response.contains("socket_addr_to_socket_address(client_addr)")
             && !chain_response.contains("use zero_core::Address")
             && !chain_response.contains("socket_addr_to_ip(client_addr)")
@@ -6865,18 +6876,18 @@ fn socks5_udp_associate_loop_delegates_dispatch_and_direct_response_framing() {
             && !dispatch.contains("udp_packet.into_dispatch_parts()")
             && !dispatch.contains("protocol_overhead_len")
             && upstream_response.contains("socks5::Socks5Inbound.udp_session()")
-            && upstream_response.contains("Socks5UdpClientResponse::new")
             && upstream_response.contains("record_upstream_udp_response_received")
-            && upstream_response.contains(".send_client_response")
+            && upstream_response.contains(".send_client_response_for_target")
+            && !upstream_response.contains("Socks5UdpClientResponse::new")
             && !upstream_response.contains("udp_session.response_session_key_parts")
             && !upstream_response.contains(".send_encoded_response_to_client")
             && !upstream_response.contains("relay.send_to_addr(payload")
             && !upstream_response.contains("udp_session.response_key")
             && direct_response.contains("socks5::Socks5Inbound.udp_session()")
-            && direct_response.contains("Socks5UdpClientResponse::new")
-            && direct_response.contains(".send_client_response")
+            && !direct_response.contains("Socks5UdpClientResponse::new")
+            && direct_response.contains(".send_client_response_for_target")
             && chain_response.contains("socks5::Socks5Inbound.udp_session()")
-            && chain_response.contains(".send_client_response")
+            && chain_response.contains(".send_client_response_for_target")
             && !dispatch.contains("Socks5InboundUdpCodec")
             && !upstream_response.contains("Socks5InboundUdpCodec")
             && !direct_response.contains("Socks5InboundUdpCodec")
@@ -6915,6 +6926,7 @@ fn socks5_udp_associate_loop_delegates_dispatch_and_direct_response_framing() {
             && protocol_udp.contains("pub async fn send_response_to_client_target")
             && protocol_udp.contains("pub struct Socks5UdpClientResponse")
             && protocol_udp.contains("pub async fn send_client_response")
+            && protocol_udp.contains("pub async fn send_client_response_for_target")
             && protocol_udp.contains("pub async fn send_encoded_response_to_client")
             && protocol_udp.contains("SocketAddress")
             && !protocol_udp.contains("pub async fn send_response_to_client_endpoint")

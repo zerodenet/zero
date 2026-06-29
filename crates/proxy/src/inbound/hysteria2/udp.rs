@@ -56,16 +56,12 @@ impl Proxy {
                     let response_accounting =
                         record_direct_udp_response_received(&proxy, &dispatch, sender, n);
                     let (target, port) = udp_response_target_from_socket_addr(sender);
-                    let client_response =
-                        hysteria2::udp::Hysteria2InboundUdpClientResponse::new(
-                            &target,
-                            port,
-                            &direct_buf[..n],
-                        );
-                    if let Ok(Some(written)) = udp_session.send_client_response_for_proxy_session(
+                    if let Ok(Some(written)) = udp_session.send_client_response_for_target_proxy_session(
                         &conn,
                         response_accounting.session_id(),
-                        client_response,
+                        &target,
+                        port,
+                        &direct_buf[..n],
                     ) {
                         response_accounting.record_sent(written);
                     }
@@ -80,16 +76,12 @@ impl Proxy {
                                 proxy.udp_upstream_idle_timeout(),
                                 pkt,
                             );
-                            let client_response =
-                                hysteria2::udp::Hysteria2InboundUdpClientResponse::new(
-                                    &response.target,
-                                    response.port,
-                                    &response.payload,
-                                );
-                            if let Ok(Some(written)) = udp_session.send_client_response_for_proxy_session(
+                            if let Ok(Some(written)) = udp_session.send_client_response_for_target_proxy_session(
                                 &conn,
                                 response.accounting.session_id(),
-                                client_response,
+                                &response.target,
+                                response.port,
+                                &response.payload,
                             ) {
                                 response.accounting.record_sent(written);
                             }
@@ -103,22 +95,18 @@ impl Proxy {
                 Some(chain_result) = chain_tasks.join_next() => {
                     match chain_result {
                         Ok(Ok((target, port, payload, session_id))) => {
-                            let client_response =
-                                hysteria2::udp::Hysteria2InboundUdpClientResponse::new(
-                                    &target,
-                                    port,
-                                    &payload,
-                                );
                             let response_accounting =
                                 record_chain_udp_response_received(
                                     &proxy,
                                     session_id,
-                                    client_response.payload_len(),
+                                    payload.len(),
                                 );
-                            if let Ok(Some(written)) = udp_session.send_client_response_for_proxy_session(
+                            if let Ok(Some(written)) = udp_session.send_client_response_for_target_proxy_session(
                                 &conn,
                                 session_id,
-                                client_response,
+                                &target,
+                                port,
+                                &payload,
                             ) {
                                 response_accounting.record_sent(written);
                             }

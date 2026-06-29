@@ -13,13 +13,14 @@ pub(super) async fn handle_chain_result(
 ) {
     match chain_result {
         Ok(Ok((target, port, payload, session_id))) => {
-            let response = socks5::udp::Socks5UdpClientResponse::new(&target, port, &payload);
             forward_chain_response(ForwardChainResponseRequest {
                 proxy: request.proxy,
                 relay: request.relay,
                 client_addr: request.client_addr,
                 inbound_tag: request.inbound_tag,
-                response,
+                target,
+                port,
+                payload,
                 session_id,
             })
             .await;
@@ -45,7 +46,9 @@ struct ForwardChainResponseRequest<'a> {
     relay: &'a TokioDatagramSocket,
     client_addr: Option<SocketAddr>,
     inbound_tag: &'a str,
-    response: socks5::udp::Socks5UdpClientResponse<'a>,
+    target: zero_core::Address,
+    port: u16,
+    payload: Vec<u8>,
     session_id: Option<u64>,
 }
 
@@ -53,7 +56,7 @@ async fn forward_chain_response(request: ForwardChainResponseRequest<'_>) {
     let response_accounting = record_chain_udp_response_received(
         request.proxy,
         request.session_id,
-        request.response.payload_len(),
+        request.payload.len(),
     );
 
     let Some(client_addr) = request.client_addr else {
@@ -62,10 +65,12 @@ async fn forward_chain_response(request: ForwardChainResponseRequest<'_>) {
 
     let udp_session = socks5::Socks5Inbound.udp_session();
     match udp_session
-        .send_client_response(
+        .send_client_response_for_target(
             request.relay,
             zero_platform_tokio::socket_addr_to_socket_address(client_addr),
-            request.response,
+            &request.target,
+            request.port,
+            &request.payload,
         )
         .await
     {
@@ -76,7 +81,8 @@ async fn forward_chain_response(request: ForwardChainResponseRequest<'_>) {
             warn!(
                 inbound_tag = request.inbound_tag,
                 protocol = "socks5_udp",
-                ?request.response,
+                target = ?request.target,
+                port = request.port,
                 error = ?error,
                 "failed to send SOCKS5 UDP chain response to client"
             );

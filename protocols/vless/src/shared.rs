@@ -917,6 +917,24 @@ impl VlessInboundUdpSession {
     }
 
     #[cfg(feature = "reality")]
+    pub async fn write_client_response_for_target_tokio<W>(
+        &self,
+        writer: &mut W,
+        target: &Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<usize, Error>
+    where
+        W: tokio::io::AsyncWrite + Unpin,
+    {
+        self.write_client_response_tokio(
+            writer,
+            VlessInboundUdpClientResponse::new(target, port, payload),
+        )
+        .await
+    }
+
+    #[cfg(feature = "reality")]
     pub fn send_mux_response(
         &self,
         writer: &crate::mux::VlessInboundMuxWriter,
@@ -942,6 +960,22 @@ impl VlessInboundUdpSession {
             response.target(),
             response.port(),
             response.payload(),
+        )
+    }
+
+    #[cfg(feature = "reality")]
+    pub fn send_mux_client_response_for_target(
+        &self,
+        writer: &crate::mux::VlessInboundMuxWriter,
+        mux_session_id: u16,
+        target: &Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<usize, Error> {
+        self.send_mux_client_response(
+            writer,
+            mux_session_id,
+            VlessInboundUdpClientResponse::new(target, port, payload),
         )
     }
 }

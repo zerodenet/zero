@@ -580,6 +580,23 @@ impl VmessInboundUdpSession {
         .await
     }
 
+    pub async fn write_client_response_for_target_tokio<W>(
+        &self,
+        writer: &mut W,
+        target: &Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<usize, Error>
+    where
+        W: tokio::io::AsyncWrite + Unpin,
+    {
+        self.write_client_response_tokio(
+            writer,
+            VmessInboundUdpClientResponse::new(target, port, payload),
+        )
+        .await
+    }
+
     pub fn write_mux_response(
         &self,
         writer: &crate::mux::VmessInboundMuxWriter,
@@ -610,6 +627,21 @@ impl VmessInboundUdpSession {
             response.target(),
             response.port(),
             response.payload(),
+        )
+    }
+
+    pub fn write_mux_client_response_for_target(
+        &self,
+        writer: &crate::mux::VmessInboundMuxWriter,
+        mux_session_id: u16,
+        target: &Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<usize, Error> {
+        self.write_mux_client_response(
+            writer,
+            mux_session_id,
+            VmessInboundUdpClientResponse::new(target, port, payload),
         )
     }
 }

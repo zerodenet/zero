@@ -347,6 +347,23 @@ impl MieruInboundUdpSession {
         )
         .await
     }
+
+    pub async fn write_client_response_for_target_tokio<W>(
+        &self,
+        writer: &mut W,
+        target: &Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<usize, Error>
+    where
+        W: tokio::io::AsyncWrite + Unpin,
+    {
+        self.write_client_response_tokio(
+            writer,
+            MieruInboundUdpClientResponse::new(target, port, payload),
+        )
+        .await
+    }
 }
 
 #[cfg(feature = "crypto")]

@@ -76,10 +76,13 @@ impl Proxy {
                     let response_accounting =
                         record_direct_udp_response_received(self, &dispatch, sender, n);
                     let (target, port) = udp_response_target_from_socket_addr(sender);
-                    let client_response =
-                        vmess::VmessInboundUdpClientResponse::new(&target, port, &direct_buf[..n]);
                     let written = udp_session
-                        .write_client_response_tokio(&mut client, client_response)
+                        .write_client_response_for_target_tokio(
+                            &mut client,
+                            &target,
+                            port,
+                            &direct_buf[..n],
+                        )
                         .await?;
                     response_accounting.record_sent(written);
                 }
@@ -93,13 +96,13 @@ impl Proxy {
                                 self.udp_upstream_idle_timeout(),
                                 pkt,
                             );
-                            let client_response = vmess::VmessInboundUdpClientResponse::new(
-                                &response.target,
-                                response.port,
-                                &response.payload,
-                            );
                             let written = udp_session
-                                .write_client_response_tokio(&mut client, client_response)
+                                .write_client_response_for_target_tokio(
+                                    &mut client,
+                                    &response.target,
+                                    response.port,
+                                    &response.payload,
+                                )
                                 .await?;
                             response.accounting.record_sent(written);
                         }
@@ -113,16 +116,19 @@ impl Proxy {
                     match chain_result {
                         Ok(Ok((target, port, payload, session_id))) => {
                             last_activity = TokioInstant::now();
-                            let client_response =
-                                vmess::VmessInboundUdpClientResponse::new(&target, port, &payload);
                             let response_accounting =
                                 record_chain_udp_response_received(
                                     self,
                                     session_id,
-                                    client_response.payload_len(),
+                                    payload.len(),
                                 );
                             let written = udp_session
-                                .write_client_response_tokio(&mut client, client_response)
+                                .write_client_response_for_target_tokio(
+                                    &mut client,
+                                    &target,
+                                    port,
+                                    &payload,
+                                )
                                 .await?;
                             response_accounting.record_sent(written);
                         }

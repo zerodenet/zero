@@ -65,12 +65,13 @@ pub(super) async fn forward_direct_udp_response(
 ) -> Result<usize, EngineError> {
     let udp_session = socks5::Socks5Inbound.udp_session();
     let (target, port) = udp_response_target_from_socket_addr(sender);
-    let response = socks5::udp::Socks5UdpClientResponse::new(&target, port, payload);
     udp_session
-        .send_client_response(
+        .send_client_response_for_target(
             relay,
             zero_platform_tokio::socket_addr_to_socket_address(client_addr),
-            response,
+            &target,
+            port,
+            payload,
         )
         .await
         .map_err(|error| error.into_mapped(EngineError::from))

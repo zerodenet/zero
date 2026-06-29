@@ -74,12 +74,12 @@ impl Proxy {
                                 let response_accounting =
                                     record_direct_udp_response_received(&proxy, &dispatch, sender, n);
                                 let (target, port) = udp_response_target_from_socket_addr(sender);
-                                let client_response =
-                                    vmess::VmessInboundUdpClientResponse::new(&target, port, &direct_buf[..n]);
-                                match udp_session.write_mux_client_response(
+                                match udp_session.write_mux_client_response_for_target(
                                     &writer,
                                     mux_session_id,
-                                    client_response,
+                                    &target,
+                                    port,
+                                    &direct_buf[..n],
                                 ) {
                                     Ok(frame_len) => {
                                         response_accounting.record_sent(frame_len);
@@ -106,15 +106,12 @@ impl Proxy {
                                     timeout,
                                     pkt,
                                 );
-                                let client_response = vmess::VmessInboundUdpClientResponse::new(
+                                match udp_session.write_mux_client_response_for_target(
+                                    &writer,
+                                    mux_session_id,
                                     &response.target,
                                     response.port,
                                     &response.payload,
-                                );
-                                match udp_session.write_mux_client_response(
-                                    &writer,
-                                    mux_session_id,
-                                    client_response,
                                 ) {
                                     Ok(frame_len) => {
                                         response.accounting.record_sent(frame_len);
@@ -133,18 +130,18 @@ impl Proxy {
                         match chain_result {
                             Ok(Ok((target, port, payload, session_id))) => {
                                 last_activity = TokioInstant::now();
-                                let client_response =
-                                    vmess::VmessInboundUdpClientResponse::new(&target, port, &payload);
                                 let response_accounting =
                                     record_chain_udp_response_received(
                                         &proxy,
                                         session_id,
-                                        client_response.payload_len(),
+                                        payload.len(),
                                     );
-                                match udp_session.write_mux_client_response(
+                                match udp_session.write_mux_client_response_for_target(
                                     &writer,
                                     mux_session_id,
-                                    client_response,
+                                    &target,
+                                    port,
+                                    &payload,
                                 ) {
                                     Ok(frame_len) => {
                                         response_accounting.record_sent(frame_len);

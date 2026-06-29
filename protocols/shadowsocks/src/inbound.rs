@@ -637,6 +637,27 @@ impl ShadowsocksInboundUdpSession {
             .await
     }
 
+    pub async fn send_response_for_target_proxy_session_to_client_tokio(
+        &self,
+        socket: &tokio::net::UdpSocket,
+        proxy_session_id: Option<u64>,
+        target: &Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<Option<usize>, Error> {
+        let Some(proxy_session_id) = proxy_session_id else {
+            return Ok(None);
+        };
+        self.send_proxy_session_response_to_client_tokio(
+            socket,
+            proxy_session_id,
+            target,
+            port,
+            payload,
+        )
+        .await
+    }
+
     pub fn response_target_for_proxy_session(
         &self,
         proxy_session_id: u64,

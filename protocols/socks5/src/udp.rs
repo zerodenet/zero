@@ -559,6 +559,25 @@ impl Socks5InboundUdpSession {
         )
         .await
     }
+
+    pub async fn send_client_response_for_target<S>(
+        &self,
+        socket: &S,
+        client: SocketAddress,
+        upstream_address: &Address,
+        upstream_port: u16,
+        payload: &[u8],
+    ) -> Result<usize, Socks5UdpRelayError<S::Error>>
+    where
+        S: DatagramSocket,
+    {
+        self.send_client_response(
+            socket,
+            client,
+            Socks5UdpClientResponse::new(upstream_address, upstream_port, payload),
+        )
+        .await
+    }
 }
 
 impl<C, S> Socks5UdpAssociation<C, S> {

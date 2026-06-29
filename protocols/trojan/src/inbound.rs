@@ -253,6 +253,23 @@ impl TrojanInboundUdpSession {
         )
         .await
     }
+
+    pub async fn write_client_response_for_target<S>(
+        &self,
+        stream: &mut S,
+        target: &Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<usize, Error>
+    where
+        S: AsyncSocket,
+    {
+        self.write_client_response(
+            stream,
+            TrojanInboundUdpClientResponse::new(target, port, payload),
+        )
+        .await
+    }
 }
 
 #[derive(Debug, Default, Clone, Copy)]

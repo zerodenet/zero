@@ -68,16 +68,13 @@ impl Proxy {
                     let response_accounting =
                         record_direct_udp_response_received(self, &dispatch, sender, n);
                     let (target, port) = udp_response_target_from_socket_addr(sender);
-                    let client_response = shadowsocks::udp::ShadowsocksInboundUdpClientResponse::new(
-                        &target,
-                        port,
-                        &direct_buf[..n],
-                    );
                     if let Ok(Some(written)) = udp_session
-                        .send_client_response_for_proxy_session_to_client_tokio(
+                        .send_response_for_target_proxy_session_to_client_tokio(
                             udp_socket.as_ref(),
                             response_accounting.session_id(),
-                            client_response,
+                            &target,
+                            port,
+                            &direct_buf[..n],
                         )
                         .await
                     {
@@ -88,22 +85,18 @@ impl Proxy {
                 Some(chain_result) = chain_tasks.join_next() => {
                     match chain_result {
                         Ok(Ok((target, port, payload, session_id))) => {
-                            let client_response =
-                                shadowsocks::udp::ShadowsocksInboundUdpClientResponse::new(
-                                    &target,
-                                    port,
-                                    &payload,
-                                );
                             let response_accounting = record_chain_udp_response_received(
                                 self,
                                 session_id,
-                                client_response.payload_len(),
+                                payload.len(),
                             );
                             if let Ok(Some(written)) = udp_session
-                                .send_client_response_for_proxy_session_to_client_tokio(
+                                .send_response_for_target_proxy_session_to_client_tokio(
                                     udp_socket.as_ref(),
                                     session_id,
-                                    client_response,
+                                    &target,
+                                    port,
+                                    &payload,
                                 )
                                 .await
                             {
