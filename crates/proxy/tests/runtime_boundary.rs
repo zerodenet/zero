@@ -2088,18 +2088,25 @@ fn vless_tcp_connect_uses_request_model() {
     assert!(
         adapter.contains("VlessTcpConnectConfig::from_config")
             && adapter.contains("config: vless::VlessTcpConnectConfig")
+            && adapter.contains("config.should_open_mux_pool_for_tcp()")
+            && adapter.contains("config.has_flow()")
+            && !adapter.contains("xtls-rprx-vision")
+            && !adapter.contains("config.flow().is_some()")
             && adapter.contains("config.mux_pool_identity()")
             && adapter.contains("config.wrap_deferred_response_stream(")
             && !adapter.contains("DeferredVlessResponseStream::new")
             && !adapter.contains("MuxIdentity::from_uuid")
             && protocol_outbound.contains("pub struct VlessTcpConnectConfig")
             && protocol_outbound.contains("pub fn from_config")
+            && protocol_outbound.contains("pub fn should_open_mux_pool_for_tcp")
+            && protocol_outbound.contains("pub fn has_flow")
+            && protocol_outbound.contains("FLOW_XTLS_RPRX_VISION")
             && protocol_outbound.contains("pub fn mux_pool_identity")
             && protocol_outbound.contains("pub fn wrap_deferred_response_stream")
             && protocol_outbound.contains("DeferredVlessResponseStream::new")
             && protocol_outbound.contains("parse_uuid")
             && protocol_outbound.contains("parse_flow"),
-        "VLESS adapter should ask protocols/vless to parse outbound identity/flow config, build MUX identity, and wrap deferred response streams"
+        "VLESS adapter should ask protocols/vless to parse outbound identity/flow config, classify flow behavior, build MUX identity, and wrap deferred response streams"
     );
 }
 

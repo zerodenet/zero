@@ -188,6 +188,16 @@ impl VlessTcpConnectConfig {
         self.flow
     }
 
+    #[cfg(feature = "reality")]
+    pub fn should_open_mux_pool_for_tcp(&self) -> bool {
+        self.flow == Some(crate::flow::FLOW_XTLS_RPRX_VISION)
+    }
+
+    #[cfg(feature = "reality")]
+    pub fn has_flow(&self) -> bool {
+        self.flow.is_some()
+    }
+
     pub fn mux_pool_identity(&self) -> crate::mux_pool::MuxIdentity {
         crate::mux_pool::MuxIdentity::from_uuid(self.id)
     }

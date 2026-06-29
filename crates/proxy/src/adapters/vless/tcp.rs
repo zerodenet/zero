@@ -50,7 +50,7 @@ impl VlessAdapter {
             error,
             upstream_endpoint: Some(((*server).to_string(), *port)),
         })?;
-        if *flow == Some("xtls-rprx-vision") {
+        if config.should_open_mux_pool_for_tcp() {
             return self
                 .mux_pool
                 .open_stream(VlessMuxOpenRequest {
@@ -223,7 +223,7 @@ async fn apply_tcp_hop(
     config: vless::VlessTcpConnectConfig,
 ) -> Result<TcpRelayStream, EngineError> {
     use zero_traits::TcpTunnelProtocol;
-    if config.flow().is_some() {
+    if config.has_flow() {
         <vless::VlessOutbound as TcpTunnelProtocol<vless::VlessFlowTcpTunnelTarget>>::establish_tcp_tunnel(
             &vless::VlessOutbound,
             &mut stream,
