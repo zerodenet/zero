@@ -301,18 +301,19 @@ impl Proxy {
                 dg = conn.read_datagram() => {
                     match dg {
                         Ok(data) => {
-                            if let Ok(request) = udp_session.decode_dispatch_parts(&data) {
+                            if let Ok(view) = udp_session.decode_dispatch_view(&data) {
+                                let (target, port, payload, client_session_id) = view.pipe_parts();
                                 let _ = UdpPipe::new(&proxy, &mut dispatch)
                                     .dispatch(UdpPipeInput {
-                                        target: request.target,
-                                        port: request.port,
-                                        payload: &request.payload,
+                                        target: target.clone(),
+                                        port,
+                                        payload,
                                         protocol: ProtocolType::Hysteria2,
                                         auth: None,
-                                        client_session_id: request.client_session_id,
+                                        client_session_id,
                                     })
                                     .await.inspect(|sid| {
-                                    udp_session.record_proxy_session(*sid, request.request_session_id);
+                                    udp_session.record_proxy_session_for_view(*sid, &view);
                                 }).inspect_err(|e| {
                                     warn!(error = %e, "h2 udp dispatch failed");
                                 });

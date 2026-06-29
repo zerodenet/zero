@@ -105,6 +105,35 @@ pub struct Hysteria2InboundUdpDispatchParts {
     pub client_session_id: Option<u64>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Hysteria2InboundUdpDispatchView {
+    parts: Hysteria2InboundUdpDispatchParts,
+}
+
+impl Hysteria2InboundUdpDispatchView {
+    pub fn pipe_parts(&self) -> (&Address, u16, &[u8], Option<u64>) {
+        (
+            &self.parts.target,
+            self.parts.port,
+            &self.parts.payload,
+            self.parts.client_session_id,
+        )
+    }
+
+    pub fn into_pipe_parts(self) -> (Address, u16, Vec<u8>, Option<u64>) {
+        (
+            self.parts.target,
+            self.parts.port,
+            self.parts.payload,
+            self.parts.client_session_id,
+        )
+    }
+
+    fn request_session_id(&self) -> u16 {
+        self.parts.request_session_id
+    }
+}
+
 impl Hysteria2InboundUdpRequest {
     fn from_packet(packet: Hysteria2UdpPacket) -> Self {
         let (session_id, _, target, port, payload) = packet.into_parts();
@@ -147,6 +176,12 @@ impl Hysteria2InboundUdpRequest {
             client_session_id: None,
         }
     }
+
+    pub fn into_dispatch_view(self) -> Hysteria2InboundUdpDispatchView {
+        Hysteria2InboundUdpDispatchView {
+            parts: self.into_dispatch_parts(),
+        }
+    }
 }
 
 /// Stateful inbound UDP bridge for Hysteria2 datagram sessions.
@@ -177,9 +212,25 @@ impl Hysteria2InboundUdpSession {
             .map(Hysteria2InboundUdpRequest::into_dispatch_parts)
     }
 
+    pub fn decode_dispatch_view(
+        &self,
+        data: &[u8],
+    ) -> Result<Hysteria2InboundUdpDispatchView, Error> {
+        self.decode_request(data)
+            .map(Hysteria2InboundUdpRequest::into_dispatch_view)
+    }
+
     pub fn record_proxy_session(&mut self, proxy_session_id: u64, request_session_id: u16) {
         self.h2_sessions_by_proxy_session
             .insert(proxy_session_id, request_session_id);
+    }
+
+    pub fn record_proxy_session_for_view(
+        &mut self,
+        proxy_session_id: u64,
+        view: &Hysteria2InboundUdpDispatchView,
+    ) {
+        self.record_proxy_session(proxy_session_id, view.request_session_id());
     }
 
     pub fn send_response(
