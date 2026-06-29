@@ -16,11 +16,19 @@ impl TrojanAdapter {
     ) {
         let p = proxy.clone();
         listeners.spawn(async move {
-            let (profile, tls) = match &inbound.protocol {
-                InboundProtocolConfig::Trojan { password, tls, .. } => (
-                    trojan::TrojanInboundProfile::from_config_parts(password.clone()),
-                    tls.clone(),
-                ),
+            let (profile, tls_cfg) = match &inbound.protocol {
+                InboundProtocolConfig::Trojan { password, tls, .. } => {
+                    let tls_cfg = tls.clone().ok_or_else(|| {
+                        EngineError::Io(std::io::Error::new(
+                            std::io::ErrorKind::InvalidInput,
+                            "trojan requires TLS",
+                        ))
+                    })?;
+                    (
+                        trojan::TrojanInboundProfile::from_config_parts(password.clone()),
+                        tls_cfg,
+                    )
+                }
                 _ => {
                     return Err(EngineError::Io(std::io::Error::new(
                         std::io::ErrorKind::InvalidInput,
@@ -28,12 +36,14 @@ impl TrojanAdapter {
                     )));
                 }
             };
+            let tls_acceptor =
+                crate::transport::build_tls_acceptor(&tls_cfg, p.config.source_dir())?;
             crate::inbound::run_trojan_listener_with_bound(
                 &p,
                 crate::inbound::trojan::TrojanInboundRequest {
                     inbound,
                     profile,
-                    tls,
+                    tls_acceptor,
                 },
                 bound.into_tcp(),
                 shutdown_rx,

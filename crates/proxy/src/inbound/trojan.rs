@@ -24,11 +24,10 @@ use crate::runtime::udp_flow::helpers::{
 use crate::runtime::Proxy;
 use crate::transport::TcpRelayStream;
 
-#[derive(Debug)]
 pub(crate) struct TrojanInboundRequest {
     pub(crate) inbound: InboundConfig,
     pub(crate) profile: TrojanInboundProfile,
-    pub(crate) tls: Option<zero_config::TlsConfig>,
+    pub(crate) tls_acceptor: crate::transport::TlsAcceptor,
 }
 
 /// `AsyncSocket` for a rustls TLS stream over TcpRelayStream.
@@ -105,21 +104,14 @@ pub(crate) async fn run_trojan_listener_with_bound(
     let TrojanInboundRequest {
         inbound,
         profile,
-        tls: tls_cfg,
+        tls_acceptor,
     } = request;
-    let tls_cfg = tls_cfg.ok_or_else(|| {
-        EngineError::Io(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "trojan requires TLS",
-        ))
-    })?;
-    let acceptor = crate::transport::build_tls_acceptor(&tls_cfg, proxy.config.source_dir())?;
     let tag = inbound.tag.clone();
 
     let handler = TrojanInboundHandler {
         trojan_inbound: TrojanInbound,
         profile,
-        tls_acceptor: acceptor,
+        tls_acceptor,
     };
 
     info!(inbound_tag = %tag, protocol = "trojan", listen = %listener.local_addr()?, "started");

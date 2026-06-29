@@ -1338,15 +1338,21 @@ fn trojan_inbound_uses_adapter_request_model() {
     );
     assert!(
         inbound.contains("pub(crate) profile: TrojanInboundProfile")
+            && inbound.contains("pub(crate) tls_acceptor: crate::transport::TlsAcceptor")
             && inbound.contains("profile: TrojanInboundProfile")
             && inbound.contains("self.profile.accept(self.trojan_inbound, &mut sock)")
             && inbound.contains("self.profile.inbound_auth()")
             && !inbound.contains("pub(crate) password: String")
             && !inbound.contains("password: String")
+            && !inbound.contains("pub(crate) tls: Option<zero_config::TlsConfig>")
+            && !inbound.contains("build_tls_acceptor")
+            && !inbound.contains("zero_config::TlsConfig")
             && !inbound.contains("std::slice::from_ref(&self.password)")
             && adapter.contains("TrojanInboundProfile::from_config_parts")
+            && adapter.contains("crate::transport::build_tls_acceptor")
+            && adapter.contains("tls_acceptor")
             && !adapter.contains("password.clone(), tls.clone()"),
-        "Trojan inbound listener should receive a protocol-owned profile instead of raw password"
+        "Trojan inbound listener should receive protocol-owned profile plus adapter-built TLS acceptor instead of raw password/TLS config"
     );
 }
 
