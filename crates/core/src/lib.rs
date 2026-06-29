@@ -13,4 +13,4 @@ pub use address::{Address, AddressFamily};
 pub use error::Error;
 
 pub use session::{Network, ProtocolType, Session, SessionAuth};
-pub use udp::UdpFlowPacket;
+pub use udp::{InboundUdpDispatch, UdpFlowPacket};

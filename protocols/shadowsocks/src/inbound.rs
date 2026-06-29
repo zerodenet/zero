@@ -8,9 +8,9 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 #[cfg(feature = "crypto")]
 use zero_core::Address;
-use zero_core::ProtocolType;
 #[cfg(feature = "crypto")]
 use zero_core::{Error, Network, Session, SessionAuth};
+use zero_core::{InboundUdpDispatch, ProtocolType};
 #[cfg(feature = "crypto")]
 use zero_traits::{DatagramCodec, UdpDatagramFraming};
 
@@ -224,6 +224,16 @@ impl ShadowsocksInboundUdpDispatchParts {
     pub fn into_parts(self) -> (Address, u16, Vec<u8>, Option<u64>) {
         (self.target, self.port, self.payload, self.client_session_id)
     }
+
+    pub fn into_inbound_dispatch(self) -> InboundUdpDispatch {
+        InboundUdpDispatch::new(
+            ProtocolType::Shadowsocks,
+            self.target,
+            self.port,
+            self.payload,
+            self.client_session_id,
+        )
+    }
 }
 
 #[cfg(feature = "crypto")]
@@ -436,6 +446,14 @@ impl ShadowsocksInboundUdpSession {
             .map(ShadowsocksInboundUdpPacket::into_dispatch_parts)
     }
 
+    pub fn decode_inbound_dispatch(
+        &mut self,
+        datagram: &[u8],
+    ) -> Result<InboundUdpDispatch, Error> {
+        self.decode_dispatch_parts(datagram)
+            .map(ShadowsocksInboundUdpDispatchParts::into_inbound_dispatch)
+    }
+
     pub fn encode_response_to_client(
         &self,
         client_session_id: Option<u64>,
@@ -518,10 +536,10 @@ impl ShadowsocksInboundUdpSession {
     pub fn record_dispatch_success(
         &mut self,
         proxy_session_id: u64,
-        dispatch_parts: &ShadowsocksInboundUdpDispatchParts,
+        client_session_id: Option<u64>,
         client: std::net::SocketAddr,
     ) {
-        self.record_client_session(proxy_session_id, dispatch_parts.client_session_id, client);
+        self.record_client_session(proxy_session_id, client_session_id, client);
     }
 
     pub async fn send_proxy_session_response_to_client_tokio(

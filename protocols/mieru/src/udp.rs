@@ -14,7 +14,7 @@ use std::collections::HashMap;
 #[cfg(feature = "crypto")]
 use std::net::SocketAddr;
 
-use zero_core::{Address, Error, ProtocolType};
+use zero_core::{Address, Error, InboundUdpDispatch, ProtocolType};
 use zero_traits::DatagramCodec;
 #[cfg(feature = "crypto")]
 use zero_traits::IpAddress;
@@ -125,6 +125,16 @@ impl MieruInboundUdpDispatchParts {
     pub fn into_pipe_parts(self) -> (Address, u16, Vec<u8>, Option<u64>) {
         self.into_parts()
     }
+
+    pub fn into_inbound_dispatch(self) -> InboundUdpDispatch {
+        InboundUdpDispatch::new(
+            ProtocolType::Mieru,
+            self.target,
+            self.port,
+            self.payload,
+            self.client_session_id,
+        )
+    }
 }
 
 impl MieruInboundUdpRequest {
@@ -231,6 +241,19 @@ impl MieruInboundUdpSession {
             return Ok(None);
         }
         self.decode_dispatch_parts(&buf[..n]).map(Some)
+    }
+
+    pub async fn read_inbound_dispatch_tokio<R>(
+        &self,
+        reader: &mut R,
+        buf: &mut [u8],
+    ) -> Result<Option<InboundUdpDispatch>, Error>
+    where
+        R: tokio::io::AsyncRead + Unpin,
+    {
+        self.read_dispatch_parts_tokio(reader, buf)
+            .await
+            .map(|parts| parts.map(MieruInboundUdpDispatchParts::into_inbound_dispatch))
     }
 
     pub fn record_target(&mut self, sender: SocketAddr, target: Address, port: u16) {

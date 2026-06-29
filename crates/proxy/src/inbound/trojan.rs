@@ -196,20 +196,15 @@ impl Proxy {
                     );
                     break;
                 }
-                packet = udp_session.read_dispatch_parts(&mut client) => {
+                packet = udp_session.read_inbound_dispatch(&mut client) => {
                     match packet {
-                        Ok(parts) => {
+                        Ok(inbound_dispatch) => {
                             last_activity = TokioInstant::now();
-                            let (target, port, payload, client_session_id) = parts.pipe_parts();
                             if let Err(error) = UdpPipe::new(self, &mut dispatch)
-                                .dispatch(UdpPipeInput {
-                                    target: target.clone(),
-                                    port,
-                                    payload,
-                                    protocol: parts.protocol(),
-                                    auth: auth.as_ref(),
-                                    client_session_id,
-                                })
+                                .dispatch(UdpPipeInput::from_inbound_dispatch(
+                                    &inbound_dispatch,
+                                    auth.as_ref(),
+                                ))
                                 .await
                             {
                                 warn!(error = %error, "failed to process trojan udp packet");

@@ -36,28 +36,23 @@ impl Proxy {
                     };
                     let packet = &buf[..n];
 
-                    let dispatch_parts = match udp_session.decode_dispatch_parts(packet) {
-                        Ok(dispatch_parts) => dispatch_parts,
+                    let inbound_dispatch = match udp_session.decode_inbound_dispatch(packet) {
+                        Ok(inbound_dispatch) => inbound_dispatch,
                         Err(_) => continue,
                     };
 
                     let sa = profile.inbound_auth();
-                    let (target, port, payload, client_session_id) = dispatch_parts.pipe_parts();
                     match UdpPipe::new(self, &mut dispatch)
-                        .dispatch(UdpPipeInput {
-                            target: target.clone(),
-                            port,
-                            payload,
-                            protocol: dispatch_parts.protocol(),
-                            auth: Some(&sa),
-                            client_session_id,
-                        })
+                        .dispatch(UdpPipeInput::from_inbound_dispatch(
+                            &inbound_dispatch,
+                            Some(&sa),
+                        ))
                         .await
                     {
                         Ok(session_id) => {
                             udp_session.record_dispatch_success(
                                 session_id,
-                                &dispatch_parts,
+                                inbound_dispatch.client_session_id(),
                                 client_addr,
                             );
                         }

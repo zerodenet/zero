@@ -216,22 +216,16 @@ impl Proxy {
                     );
                     break;
                 }
-                read = udp_session.read_dispatch_parts_tokio(&mut client, &mut read_buf) => {
+                read = udp_session.read_inbound_dispatch_tokio(&mut client, &mut read_buf) => {
                     match read {
                         Ok(None) => break,
-                        Ok(Some(dispatch_parts)) => {
+                        Ok(Some(inbound_dispatch)) => {
                             last_activity = TokioInstant::now();
-                            let (target, port, payload, client_session_id) =
-                                dispatch_parts.pipe_parts();
                             if let Err(error) = UdpPipe::new(self, &mut dispatch)
-                                .dispatch(UdpPipeInput {
-                                    target: target.clone(),
-                                    port,
-                                    payload,
-                                    protocol: dispatch_parts.protocol(),
-                                    auth: auth.as_ref(),
-                                    client_session_id,
-                                })
+                                .dispatch(UdpPipeInput::from_inbound_dispatch(
+                                    &inbound_dispatch,
+                                    auth.as_ref(),
+                                ))
                                 .await
                             {
                                 tracing::warn!(error = %error, "failed to process mieru udp packet");

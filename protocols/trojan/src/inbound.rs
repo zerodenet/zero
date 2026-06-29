@@ -2,7 +2,7 @@
 
 #[cfg(feature = "tokio")]
 use std::net::SocketAddr;
-use zero_core::{Address, Error, Network, ProtocolType, Session, SessionAuth};
+use zero_core::{Address, Error, InboundUdpDispatch, Network, ProtocolType, Session, SessionAuth};
 use zero_traits::{AsyncSocket, IpAddress};
 
 use super::outbound::TrojanUdpPacket;
@@ -98,6 +98,16 @@ impl TrojanInboundUdpDispatchParts {
     pub fn into_pipe_parts(self) -> (zero_core::Address, u16, Vec<u8>, Option<u64>) {
         (self.target, self.port, self.payload, self.client_session_id)
     }
+
+    pub fn into_inbound_dispatch(self) -> InboundUdpDispatch {
+        InboundUdpDispatch::new(
+            ProtocolType::Trojan,
+            self.target,
+            self.port,
+            self.payload,
+            self.client_session_id,
+        )
+    }
 }
 
 impl TrojanInboundUdpRequest {
@@ -167,6 +177,18 @@ impl TrojanInboundUdpSession {
         self.read_request(stream)
             .await
             .map(TrojanInboundUdpRequest::into_dispatch_parts)
+    }
+
+    pub async fn read_inbound_dispatch<S>(
+        &self,
+        stream: &mut S,
+    ) -> Result<InboundUdpDispatch, Error>
+    where
+        S: AsyncSocket,
+    {
+        self.read_dispatch_parts(stream)
+            .await
+            .map(TrojanInboundUdpDispatchParts::into_inbound_dispatch)
     }
 
     pub async fn write_response<S>(
