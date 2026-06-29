@@ -16,7 +16,7 @@ impl MieruAdapter {
     ) {
         let p = proxy.clone();
         listeners.spawn(async move {
-            let users = match &inbound.protocol {
+            let profile = match &inbound.protocol {
                 InboundProtocolConfig::Mieru { users } => users
                     .iter()
                     .map(|user| (user.username.clone(), user.password.clone()))
@@ -28,9 +28,10 @@ impl MieruAdapter {
                     )));
                 }
             };
+            let profile = mieru::MieruInboundProfile::from_config(profile);
             crate::inbound::run_mieru_listener_with_bound(
                 &p,
-                crate::inbound::mieru::MieruInboundRequest { inbound, users },
+                crate::inbound::mieru::MieruInboundRequest { inbound, profile },
                 bound.into_tcp(),
                 shutdown_rx,
             )

@@ -3,7 +3,7 @@
 use std::net::SocketAddr;
 
 use async_trait::async_trait;
-use mieru::MieruInbound;
+use mieru::{MieruInbound, MieruInboundProfile};
 use tokio::io::AsyncReadExt;
 use tokio::select;
 use tokio::sync::watch;
@@ -29,7 +29,7 @@ type MieruClientStream = mieru::MieruInboundStream<TcpRelayStream>;
 #[derive(Debug)]
 pub(crate) struct MieruInboundRequest {
     pub(crate) inbound: InboundConfig,
-    pub(crate) users: Vec<(String, String)>,
+    pub(crate) profile: MieruInboundProfile,
 }
 
 // Handler.
@@ -37,7 +37,7 @@ pub(crate) struct MieruInboundRequest {
 #[derive(Clone)]
 pub(crate) struct MieruInboundHandler {
     mieru_inbound: MieruInbound,
-    users: Vec<(String, String)>,
+    profile: MieruInboundProfile,
 }
 
 #[async_trait]
@@ -50,14 +50,14 @@ impl InboundProtocol for MieruInboundHandler {
     ) -> Result<(Session, Self::ClientStream), EngineError> {
         let mut metered = crate::transport::MeteredStream::new(stream);
         let accept = self
-            .mieru_inbound
-            .accept_request(&mut metered, &self.users)
+            .profile
+            .accept_request(&self.mieru_inbound, &mut metered)
             .await?;
 
         let mut client = mieru::MieruInboundStream::new(metered.into_inner(), accept);
 
         let mut session = client.accept_tunneled_socks5_session().await?;
-        session.apply_auth(self.mieru_inbound.inbound_auth());
+        session.apply_auth(self.profile.inbound_auth());
 
         Ok((session, client))
     }
@@ -88,12 +88,12 @@ pub(crate) async fn run_mieru_listener_with_bound(
     listener: zero_platform_tokio::TokioListener,
     mut shutdown: watch::Receiver<bool>,
 ) -> Result<(), EngineError> {
-    let MieruInboundRequest { inbound, users } = request;
+    let MieruInboundRequest { inbound, profile } = request;
     let local_addr = listener.local_addr()?;
 
     let handler = MieruInboundHandler {
         mieru_inbound: MieruInbound,
-        users,
+        profile,
     };
 
     let mut connections: JoinSet<Result<(), EngineError>> = JoinSet::new();

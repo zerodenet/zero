@@ -944,6 +944,18 @@ fn mieru_inbound_uses_adapter_request_model() {
         adapter.contains("InboundProtocolConfig::Mieru") && adapter.contains("MieruInboundRequest"),
         "Mieru adapter should extract Mieru config and pass MieruInboundRequest"
     );
+    assert!(
+        inbound.contains("pub(crate) profile: MieruInboundProfile")
+            && inbound.contains("profile: MieruInboundProfile")
+            && inbound.contains(".profile")
+            && inbound.contains(".accept_request(&self.mieru_inbound, &mut metered)")
+            && inbound.contains("self.profile.inbound_auth()")
+            && !inbound.contains("pub(crate) users: Vec<(String, String)>")
+            && !inbound.contains("users: Vec<(String, String)>")
+            && !inbound.contains("accept_request(&mut metered, &self.users)")
+            && adapter.contains("MieruInboundProfile::from_config"),
+        "Mieru inbound listener should receive a protocol-owned profile instead of raw user/password tuples"
+    );
 }
 
 #[test]
@@ -1050,7 +1062,7 @@ fn inbound_auth_identity_stays_in_protocol_crates() {
         (
             "src/inbound/mieru.rs",
             mieru_inbound.as_str(),
-            "self.mieru_inbound.inbound_auth()",
+            "self.profile.inbound_auth()",
         ),
     ] {
         assert!(

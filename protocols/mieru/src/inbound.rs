@@ -21,6 +21,29 @@ use crate::session::MieruSession;
 #[derive(Debug, Default, Clone)]
 pub struct MieruInbound;
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MieruInboundProfile {
+    users: Vec<(String, String)>,
+}
+
+impl MieruInboundProfile {
+    pub fn from_config(users: Vec<(String, String)>) -> Self {
+        Self { users }
+    }
+
+    pub fn inbound_auth(&self) -> SessionAuth {
+        MieruInbound.inbound_auth()
+    }
+
+    pub async fn accept_request<S: AsyncSocket>(
+        &self,
+        inbound: &MieruInbound,
+        stream: &mut S,
+    ) -> Result<MieruAccept, Error> {
+        inbound.accept_request(stream, &self.users).await
+    }
+}
+
 /// Result of accepting a mieru TCP connection.
 ///
 /// The mieru session is target-agnostic: it is an encrypted tunnel. The proxy
