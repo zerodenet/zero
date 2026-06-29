@@ -29,10 +29,10 @@ fn parse_inbound_profile(
 
 fn parse_reality_profile(inbound: &InboundConfig) -> Option<vless::VlessRealityServerProfile> {
     inbound.protocol.vless_reality().map(|reality| {
-        vless::VlessRealityServerProfile::new(
+        vless::VlessRealityServerProfile::from_config_parts(
             reality.private_key.clone(),
             reality.short_ids.clone(),
-            reality.server_name.as_deref(),
+            reality.server_name.clone(),
             reality.cipher_suites.clone(),
         )
     })

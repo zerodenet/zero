@@ -1330,7 +1330,8 @@ fn vless_inbound_users_are_adapter_parsed() {
             && model.contains("fallback: Option<Box<zero_config::FallbackConfig>>")
             && adapter.contains("parse_transport_config")
             && adapter.contains("parse_reality_profile")
-            && adapter.contains("VlessRealityServerProfile::new")
+            && adapter.contains("VlessRealityServerProfile::from_config_parts")
+            && !adapter.contains("VlessRealityServerProfile::new")
             && protocol_inbound.contains("pub struct VlessInboundProfile"),
         "VLESS inbound request model should live in inbound/vless/model.rs"
     );
@@ -1340,6 +1341,7 @@ fn vless_inbound_users_are_adapter_parsed() {
     assert!(
         helpers.contains("profile.upgrade_server(stream).await")
             && protocol_reality.contains("pub struct VlessRealityServerProfile")
+            && protocol_reality.contains("pub fn from_config_parts")
             && protocol_reality.contains("pub async fn upgrade_server")
             && protocol_reality.contains("RealityServerOptions")
             && protocol_reality.contains("private_key: &self.private_key")

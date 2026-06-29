@@ -49,6 +49,20 @@ impl VlessRealityServerProfile {
         }
     }
 
+    pub fn from_config_parts(
+        private_key: impl Into<String>,
+        short_ids: Vec<String>,
+        server_name: Option<String>,
+        cipher_suites: Vec<String>,
+    ) -> Self {
+        Self::new(
+            private_key,
+            short_ids,
+            server_name.as_deref(),
+            cipher_suites,
+        )
+    }
+
     pub fn server_name(&self) -> &str {
         &self.server_name
     }
