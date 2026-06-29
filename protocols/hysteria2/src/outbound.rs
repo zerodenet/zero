@@ -29,6 +29,10 @@ impl Hysteria2OutboundProfile {
         }
     }
 
+    pub fn from_config_password(password: &str, client_fingerprint: Option<&str>) -> Self {
+        Self::from_config_parts(password, client_fingerprint)
+    }
+
     pub fn client_fingerprint(&self) -> Option<&str> {
         self.client_fingerprint.as_deref()
     }
