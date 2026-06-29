@@ -1008,7 +1008,9 @@ fn mieru_inbound_uses_adapter_request_model() {
             && !inbound.contains("pub(crate) users: Vec<(String, String)>")
             && !inbound.contains("users: Vec<(String, String)>")
             && !inbound.contains("accept_request(&mut metered, &self.users)")
-            && adapter.contains("MieruInboundProfile::from_config"),
+            && adapter.contains("MieruInboundProfile::from_config_parts")
+            && !adapter.contains(".collect::<Vec<_>>()")
+            && !adapter.contains("MieruInboundProfile::from_config(profile)"),
         "Mieru inbound listener should receive a protocol-owned profile instead of raw user/password tuples"
     );
 }

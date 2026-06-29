@@ -31,6 +31,13 @@ impl MieruInboundProfile {
         Self { users }
     }
 
+    pub fn from_config_parts<I>(users: I) -> Self
+    where
+        I: IntoIterator<Item = (String, String)>,
+    {
+        Self::from_config(users.into_iter().collect())
+    }
+
     pub fn inbound_auth(&self) -> SessionAuth {
         MieruInbound.inbound_auth()
     }
