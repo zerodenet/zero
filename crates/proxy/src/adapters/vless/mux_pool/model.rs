@@ -22,3 +22,17 @@ pub(crate) struct VlessMuxOpenRequest<'a> {
     pub(crate) reality: Option<&'a RealityConfig>,
     pub(crate) max_concurrency: u32,
 }
+
+impl VlessMuxOpenRequest<'_> {
+    pub(crate) fn pool_key(&self) -> PoolKey {
+        PoolKey::from_config_parts(
+            self.server.to_owned(),
+            self.port,
+            self.identity.clone(),
+            self.tls.and_then(|tls| tls.server_name.as_deref()),
+            self.reality.map(|reality| reality.public_key.as_str()),
+            self.reality
+                .and_then(|reality| reality.server_name.as_deref()),
+        )
+    }
+}

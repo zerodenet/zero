@@ -49,15 +49,7 @@ impl VmessMuxConnectionPool {
         request: VmessMuxOpenRequest<'_>,
         network: Network,
     ) -> Result<TcpRelayStream, EngineError> {
-        let key = vmess::mux::VmessMuxPoolKey::from_config_parts(
-            request.server.clone(),
-            request.port,
-            request.identity.clone(),
-            request.tls.and_then(|tls| tls.server_name.as_deref()),
-            request.ws.map(|ws| ws.path.as_str()),
-            request.grpc.map(|grpc| grpc.service_names.clone()),
-        )
-        .map_err(|error| {
+        let key = request.pool_key().map_err(|error| {
             EngineError::Io(std::io::Error::new(std::io::ErrorKind::InvalidInput, error))
         })?;
 

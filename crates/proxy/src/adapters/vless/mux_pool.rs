@@ -48,16 +48,7 @@ impl MuxConnectionPool {
         &self,
         request: &VlessMuxOpenRequest<'_>,
     ) -> Result<Arc<MuxPoolConn>, EngineError> {
-        let key = PoolKey::from_config_parts(
-            request.server.to_owned(),
-            request.port,
-            request.identity.clone(),
-            request.tls.and_then(|tls| tls.server_name.as_deref()),
-            request.reality.map(|reality| reality.public_key.as_str()),
-            request
-                .reality
-                .and_then(|reality| reality.server_name.as_deref()),
-        );
+        let key = request.pool_key();
 
         let conn = {
             let pool = self.pool.lock().unwrap();
