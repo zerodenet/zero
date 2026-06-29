@@ -1760,6 +1760,9 @@ fn hysteria2_tcp_udp_connect_glue_lives_in_adapter_connector() {
 fn trojan_tcp_connect_uses_request_model() {
     let outbound = manifest_dir().join("src/outbound/trojan.rs");
     let adapter = read("src/adapters/trojan/tcp.rs");
+    let protocol_outbound =
+        fs::read_to_string(repo_root().join("protocols/trojan/src/outbound.rs"))
+            .expect("read trojan protocol outbound source");
 
     assert!(
         !outbound.exists(),
@@ -1775,6 +1778,16 @@ fn trojan_tcp_connect_uses_request_model() {
             && adapter.contains("trojan_tcp_tls_config(")
             && adapter.contains("trojan_tls_options("),
         "Trojan adapter TCP glue should share the Trojan transport TLS opening path with UDP while keeping config/profile conversion outside runtime"
+    );
+    assert!(
+        adapter.contains("TrojanTcpTunnelTarget::new")
+            && !adapter.contains("TrojanTcpTunnelTarget {"),
+        "Trojan adapter TCP glue should use protocol-owned target construction"
+    );
+    assert!(
+        protocol_outbound.contains("impl<'a> TrojanTcpTunnelTarget<'a>")
+            && protocol_outbound.contains("pub fn new(session: &'a Session, password: &'a str)"),
+        "Trojan protocol crate should own TCP target construction"
     );
 }
 

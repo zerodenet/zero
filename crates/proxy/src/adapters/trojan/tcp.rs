@@ -113,7 +113,7 @@ async fn connect_tcp(request: TrojanTcpConnect<'_>) -> Result<TcpRelayStream, En
     trojan::TrojanOutbound
         .establish_tcp_tunnel(
             &mut metered,
-            &trojan::TrojanTcpTunnelTarget { session, password },
+            &trojan::TrojanTcpTunnelTarget::new(session, password),
         )
         .await?;
     metered.flush().await?;
@@ -165,7 +165,7 @@ async fn apply_tcp_hop(
     trojan::TrojanOutbound
         .establish_tcp_tunnel(
             &mut stream,
-            &trojan::TrojanTcpTunnelTarget { session, password },
+            &trojan::TrojanTcpTunnelTarget::new(session, password),
         )
         .await
         .map_err(|error| EngineError::Io(std::io::Error::other(error)))?;

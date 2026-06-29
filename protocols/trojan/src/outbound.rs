@@ -48,6 +48,12 @@ pub struct TrojanTcpTunnelTarget<'a> {
     pub password: &'a str,
 }
 
+impl<'a> TrojanTcpTunnelTarget<'a> {
+    pub fn new(session: &'a Session, password: &'a str) -> Self {
+        Self { session, password }
+    }
+}
+
 impl<'a> TcpTunnelProtocol<TrojanTcpTunnelTarget<'a>> for TrojanOutbound {
     type Error = Error;
 
