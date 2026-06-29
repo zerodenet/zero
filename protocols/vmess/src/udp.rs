@@ -463,34 +463,34 @@ impl VmessInboundUdpSession {
             .await
     }
 
-    pub fn send_mux_response(
+    pub fn write_mux_response(
         &self,
-        write_tx: &mpsc::UnboundedSender<Vec<u8>>,
+        writer: &crate::VmessInboundMuxWriter,
         mux_session_id: u16,
         target: &Address,
         port: u16,
         payload: &[u8],
     ) -> Result<usize, Error> {
-        VmessInboundUdpCodec.send_mux_response(
-            write_tx,
+        let frame = VmessInboundUdpCodec.encode_mux_response_for_state(
             mux_session_id,
             self.state,
             target,
             port,
             payload,
-        )
+        )?;
+        writer.frame(frame)
     }
 
-    pub fn send_mux_response_to_ip(
+    pub fn write_mux_response_to_ip(
         &self,
-        write_tx: &mpsc::UnboundedSender<Vec<u8>>,
+        writer: &crate::VmessInboundMuxWriter,
         mux_session_id: u16,
         ip: IpAddress,
         port: u16,
         payload: &[u8],
     ) -> Result<usize, Error> {
         let target = address_from_ip(ip);
-        self.send_mux_response(write_tx, mux_session_id, &target, port, payload)
+        self.write_mux_response(writer, mux_session_id, &target, port, payload)
     }
 }
 

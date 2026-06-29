@@ -28,6 +28,7 @@ impl Proxy {
     ) -> Result<(), EngineError> {
         let (mut reader, mut writer) = tokio::io::split(client);
         let (write_tx, mut write_rx) = mpsc::unbounded_channel::<Vec<u8>>();
+        let mux_writer = vmess::VmessInboundMuxWriter::new(write_tx.clone());
         let mut mux_tasks: JoinSet<()> = JoinSet::new();
         let mux_session = vmess::VmessInboundMuxSession::new();
         let mut streams: std::collections::HashMap<u16, mpsc::UnboundedSender<Vec<u8>>> =
@@ -56,32 +57,27 @@ impl Proxy {
 
         loop {
             select! {
-                event = mux_session.next_event(&mut reader) => {
-                    let event = match event {
-                        Ok(event) => event,
+                action = mux_session.next_action(&mut reader) => {
+                    let action = match action {
+                        Ok(action) => action,
                         Err(error) => {
                             warn!(error = %error, "vmess mux frame read failed");
                             break;
                         }
                     };
 
-                    match event {
-                        vmess::VmessMuxServerEvent::KeepAlive => continue,
-                        event @ vmess::VmessMuxServerEvent::NewStream { .. } => {
-                            let Some(session) = event.new_stream_session() else {
-                                continue;
-                            };
-                            let vmess::VmessMuxServerEvent::NewStream {
+                    match action {
+                        vmess::VmessInboundMuxAction::KeepAlive => continue,
+                        vmess::VmessInboundMuxAction::OpenStream {
                             session_id,
-                            payload,
-                            ..
-                            } = event else {
-                                unreachable!();
-                            };
+                            session,
+                            initial_payload,
+                        } => {
+                            let session = *session;
                             let (up_tx, up_rx) = mpsc::unbounded_channel::<Vec<u8>>();
                             streams.insert(session_id, up_tx.clone());
-                            if !payload.is_empty() {
-                                let _ = up_tx.send(payload);
+                            if !initial_payload.is_empty() {
+                                let _ = up_tx.send(initial_payload);
                             }
                             match session.network {
                                 Network::Tcp => {
@@ -91,7 +87,7 @@ impl Proxy {
                                         target: session.target,
                                         port: session.port,
                                         up_rx,
-                                        write_tx: write_tx.clone(),
+                                        writer: mux_writer.clone(),
                                         inbound_tag: inbound_tag.to_owned(),
                                     })
                                 }
@@ -102,13 +98,13 @@ impl Proxy {
                                         default_target: session.target,
                                         default_port: session.port,
                                         up_rx,
-                                        write_tx: write_tx.clone(),
+                                        writer: mux_writer.clone(),
                                         inbound_tag: inbound_tag.to_owned(),
                                     })
                                 }
                             }
                         }
-                        vmess::VmessMuxServerEvent::Data {
+                        vmess::VmessInboundMuxAction::Data {
                             session_id,
                             payload,
                         } => {
@@ -118,12 +114,12 @@ impl Proxy {
                                 }
                             }
                         }
-                        vmess::VmessMuxServerEvent::End { session_id } => {
+                        vmess::VmessInboundMuxAction::End { session_id } => {
                             if let Some(tx) = streams.remove(&session_id) {
                                 let _ = tx.send(Vec::new());
                             }
                         }
-                        vmess::VmessMuxServerEvent::Unknown { .. } => {}
+                        vmess::VmessInboundMuxAction::Unknown { .. } => {}
                     }
                 }
                 Some(joined) = mux_tasks.join_next(), if !mux_tasks.is_empty() => {
@@ -149,7 +145,7 @@ impl Proxy {
             target,
             port,
             up_rx,
-            write_tx,
+            writer,
             inbound_tag,
         } = request;
         let mut up_rx = up_rx;
@@ -163,7 +159,7 @@ impl Proxy {
                 Ok(route) => route,
                 Err(error) => {
                     warn!(%error, mux_session_id, "vmess mux dispatch failed");
-                    let _ = vmess::VmessInboundMuxSession::new().queue_end(&write_tx, mux_session_id);
+                    let _ = writer.end(mux_session_id);
                     return;
                 }
             };
@@ -188,7 +184,7 @@ impl Proxy {
                         match read {
                             Ok(0) => break,
                             Ok(n) => {
-                                match vmess::VmessInboundMuxSession::new().queue_data(&write_tx, mux_session_id, &buf[..n]) {
+                                match writer.data(mux_session_id, &buf[..n]) {
                                     Ok(_) => {}
                                     Err(error) => {
                                         warn!(%error, mux_session_id, "vmess mux response encode failed");
@@ -204,7 +200,7 @@ impl Proxy {
                     }
                 }
             }
-            let _ = vmess::VmessInboundMuxSession::new().queue_end(&write_tx, mux_session_id);
+            let _ = writer.end(mux_session_id);
         });
     }
 
@@ -215,7 +211,7 @@ impl Proxy {
             default_target,
             default_port,
             up_rx,
-            write_tx,
+            writer,
             inbound_tag,
         } = request;
         let mut up_rx = up_rx;
@@ -227,7 +223,7 @@ impl Proxy {
                 Ok(dispatch) => dispatch,
                 Err(error) => {
                     warn!(%error, mux_session_id, "vmess mux udp dispatch init failed");
-                    let _ = vmess::VmessInboundMuxSession::new().queue_end(&write_tx, mux_session_id);
+                    let _ = writer.end(mux_session_id);
                     return;
                 }
             };
@@ -275,8 +271,8 @@ impl Proxy {
                                 let ip = zero_platform_tokio::socket_addr_to_ip(sender);
                                 let session_id = dispatch.direct_response_session_id(sender);
                                 record_udp_inbound_response_rx(&proxy, session_id, n);
-                                match udp_session.send_mux_response_to_ip(
-                                    &write_tx,
+                                match udp_session.write_mux_response_to_ip(
+                                    &writer,
                                     mux_session_id,
                                     ip,
                                     sender.port(),
@@ -306,8 +302,8 @@ impl Proxy {
                                 let (target, port, payload) = pkt.into_parts();
                                 let session_id = udp_response_session_id(&dispatch, &target, port);
                                 record_udp_inbound_response_rx(&proxy, session_id, payload.len());
-                                match udp_session.send_mux_response(
-                                    &write_tx,
+                                match udp_session.write_mux_response(
+                                    &writer,
                                     mux_session_id,
                                     &target,
                                     port,
@@ -331,8 +327,8 @@ impl Proxy {
                             Ok(Ok((target, port, payload, session_id))) => {
                                 last_activity = TokioInstant::now();
                                 record_udp_inbound_response_rx(&proxy, session_id, payload.len());
-                                match udp_session.send_mux_response(
-                                    &write_tx,
+                                match udp_session.write_mux_response(
+                                    &writer,
                                     mux_session_id,
                                     &target,
                                     port,
@@ -357,7 +353,7 @@ impl Proxy {
             for completed in dispatch.finish_all() {
                 log_completed_udp_flow(completed);
             }
-            let _ = vmess::VmessInboundMuxSession::new().queue_end(&write_tx, mux_session_id);
+            let _ = writer.end(mux_session_id);
         });
     }
 

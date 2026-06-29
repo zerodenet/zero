@@ -146,24 +146,24 @@ pub enum VmessMuxServerEvent {
     },
 }
 
-impl VmessMuxServerEvent {
-    pub fn new_stream_session(&self) -> Option<Session> {
-        match self {
-            Self::NewStream {
-                network,
-                target,
-                port,
-                ..
-            } => Some(Session::new(
-                0,
-                target.clone(),
-                *port,
-                *network,
-                ProtocolType::Vmess,
-            )),
-            _ => None,
-        }
-    }
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum VmessInboundMuxAction {
+    KeepAlive,
+    OpenStream {
+        session_id: u16,
+        session: Box<Session>,
+        initial_payload: Vec<u8>,
+    },
+    Data {
+        session_id: u16,
+        payload: Vec<u8>,
+    },
+    End {
+        session_id: u16,
+    },
+    Unknown {
+        session_id: u16,
+    },
 }
 
 pub fn mux_cool_session() -> Session {
@@ -310,28 +310,55 @@ impl VmessInboundMuxSession {
         Self
     }
 
-    pub async fn next_event<R>(&self, reader: &mut R) -> Result<VmessMuxServerEvent, Error>
+    pub async fn next_action<R>(&self, reader: &mut R) -> Result<VmessInboundMuxAction, Error>
     where
         R: tokio::io::AsyncRead + Unpin,
     {
-        read_mux_server_event(reader).await
+        read_mux_server_event(reader).await.map(Into::into)
     }
 
-    pub fn queue_data(
+    pub fn write_data(
         &self,
-        write_tx: &mpsc::UnboundedSender<Vec<u8>>,
+        writer: &VmessInboundMuxWriter,
         session_id: u16,
         payload: &[u8],
     ) -> Result<usize, Error> {
-        queue_keep_stream(write_tx, session_id, payload)
+        writer.data(session_id, payload)
     }
 
-    pub fn queue_end(
+    pub fn write_end(
         &self,
-        write_tx: &mpsc::UnboundedSender<Vec<u8>>,
+        writer: &VmessInboundMuxWriter,
         session_id: u16,
     ) -> Result<usize, Error> {
-        queue_end_stream(write_tx, session_id)
+        writer.end(session_id)
+    }
+}
+
+#[derive(Clone)]
+pub struct VmessInboundMuxWriter {
+    write_tx: mpsc::UnboundedSender<Vec<u8>>,
+}
+
+impl VmessInboundMuxWriter {
+    pub fn new(write_tx: mpsc::UnboundedSender<Vec<u8>>) -> Self {
+        Self { write_tx }
+    }
+
+    pub fn data(&self, session_id: u16, payload: &[u8]) -> Result<usize, Error> {
+        queue_keep_stream(&self.write_tx, session_id, payload)
+    }
+
+    pub fn end(&self, session_id: u16) -> Result<usize, Error> {
+        queue_end_stream(&self.write_tx, session_id)
+    }
+
+    pub(crate) fn frame(&self, frame: Vec<u8>) -> Result<usize, Error> {
+        let len = frame.len();
+        self.write_tx
+            .send(frame)
+            .map_err(|_| Error::Io("failed to queue VMess MUX frame"))?;
+        Ok(len)
     }
 }
 
@@ -441,6 +468,34 @@ impl MuxFrame {
                 session_id: self.session_id,
                 status,
             }),
+        }
+    }
+}
+
+impl From<VmessMuxServerEvent> for VmessInboundMuxAction {
+    fn from(event: VmessMuxServerEvent) -> Self {
+        match event {
+            VmessMuxServerEvent::KeepAlive => Self::KeepAlive,
+            VmessMuxServerEvent::NewStream {
+                session_id,
+                network,
+                target,
+                port,
+                payload,
+            } => Self::OpenStream {
+                session_id,
+                session: Box::new(Session::new(0, target, port, network, ProtocolType::Vmess)),
+                initial_payload: payload,
+            },
+            VmessMuxServerEvent::Data {
+                session_id,
+                payload,
+            } => Self::Data {
+                session_id,
+                payload,
+            },
+            VmessMuxServerEvent::End { session_id } => Self::End { session_id },
+            VmessMuxServerEvent::Unknown { session_id, .. } => Self::Unknown { session_id },
         }
     }
 }

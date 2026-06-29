@@ -4269,12 +4269,13 @@ fn inbound_vmess_mux_task_model_lives_outside_mux_root() {
     );
     assert!(
         root.contains("vmess::VmessInboundMuxSession::new()")
-            && root.contains("mux_session.next_event(&mut reader)")
-            && root.contains("vmess::VmessMuxServerEvent"),
-        "VMess inbound MUX runtime should consume protocol-owned mux server events"
+            && root.contains("mux_session.next_action(&mut reader)")
+            && root.contains("vmess::VmessInboundMuxAction"),
+        "VMess inbound MUX runtime should consume protocol-owned mux actions"
     );
     for forbidden in [
         "vmess::read_mux_stream_frame",
+        "vmess::VmessMuxServerEvent",
         "vmess::MUX_STATUS_",
         ".status == vmess::MUX_STATUS_",
         "frame.status",
@@ -4287,34 +4288,39 @@ fn inbound_vmess_mux_task_model_lives_outside_mux_root() {
     let protocol_mux = fs::read_to_string(repo_root().join("protocols/vmess/src/mux.rs"))
         .expect("read protocols/vmess/src/mux.rs");
     for required in [
+        "VmessInboundMuxAction",
         "VmessInboundMuxSession",
+        "VmessInboundMuxWriter",
         "VmessMuxServerEvent",
-        "pub fn new_stream_session(&self) -> Option<Session>",
         "read_mux_server_event",
-        "pub fn queue_data",
-        "pub fn queue_end",
+        "pub async fn next_action",
+        "pub fn data",
+        "pub fn end",
+        "pub(crate) fn frame",
     ] {
         assert!(
             protocol_mux.contains(required),
-            "protocols/vmess should own VMess MUX server event API `{required}`"
+            "protocols/vmess should own VMess MUX inbound action/writer API `{required}`"
         );
     }
     assert!(
-        protocol_mux.contains("try_into_server_event"),
-        "protocols/vmess should classify raw VMess MUX frames into server events"
+        protocol_mux.contains("try_into_server_event") && protocol_mux.contains("impl From<VmessMuxServerEvent> for VmessInboundMuxAction"),
+        "protocols/vmess should classify raw VMess MUX frames into server events and proxy-facing actions"
     );
     assert!(
-        root.contains("event.new_stream_session()")
+        root.contains("VmessInboundMuxAction::OpenStream")
             && protocol_mux.contains("ProtocolType::Vmess")
             && !root.contains("network,"),
-        "VMess inbound MUX new-stream Session conversion should be protocol-owned"
+        "VMess inbound MUX new-stream Session conversion should be protocol-owned and exposed as an action"
     );
     assert!(
-        root.contains(".queue_end(&write_tx, mux_session_id)")
-            && root.contains(".queue_data(&write_tx, mux_session_id")
+        root.contains(".end(mux_session_id)")
+            && root.contains(".data(mux_session_id")
+            && root.contains("VmessInboundMuxWriter::new")
             && !root.contains("vmess::VmessMuxFrameEncoder")
             && !root.contains("frame_encoder.")
             && !model.contains("VmessMuxFrameEncoder")
+            && !model.contains("mpsc::UnboundedSender<Vec<u8>>")
             && !root.contains("vmess::read_mux_server_event")
             && !root.contains("vmess::queue_mux_end_stream")
             && !root.contains("vmess::queue_mux_keep_stream")
@@ -4393,9 +4399,9 @@ fn vmess_inbound_udp_response_encoding_stays_in_protocol_crate() {
             && mux.contains("vmess::VmessInbound.udp_session")
             && mux.contains("udp_session.decode_request")
             && mux.contains("udp_session.write_response_tokio")
-            && mux.contains("udp_session.send_mux_response")
+            && mux.contains("udp_session.write_mux_response")
             && mux.contains("udp_session.write_response_to_ip_tokio")
-            && mux.contains("udp_session.send_mux_response_to_ip")
+            && mux.contains("udp_session.write_mux_response_to_ip")
             && mux.contains("request.into_dispatch_parts()")
             && mux.contains("pkt.into_parts()")
             && !mux.contains("client_session_id: None")
@@ -4421,8 +4427,8 @@ fn vmess_inbound_udp_response_encoding_stays_in_protocol_crate() {
             && protocol_udp.contains("fn write_response_to_ip_tokio")
             && protocol_udp.contains("fn encode_mux_response")
             && protocol_udp.contains("fn encode_mux_response_for_state")
-            && protocol_udp.contains("fn send_mux_response")
-            && protocol_udp.contains("fn send_mux_response_to_ip")
+            && protocol_udp.contains("fn write_mux_response")
+            && protocol_udp.contains("fn write_mux_response_to_ip")
             && protocol_udp.contains("fn decode_datagram"),
         "VMess inbound UDP packet framing and response mode selection should go through protocols/vmess inbound codec"
     );
