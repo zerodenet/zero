@@ -282,17 +282,14 @@ impl Proxy {
                     match recv {
                         Ok((n, sender)) => {
                             last_activity = TokioInstant::now();
-                            let target = match zero_platform_tokio::socket_addr_to_ip(sender) {
-                                zero_traits::IpAddress::V4(bytes) => zero_core::Address::Ipv4(bytes),
-                                zero_traits::IpAddress::V6(bytes) => zero_core::Address::Ipv6(bytes),
-                            };
+                            let ip = zero_platform_tokio::socket_addr_to_ip(sender);
                             if let Some(sid) = dispatch.direct_response_session_id(sender) {
                                 self.record_session_outbound_rx(sid, n as u64);
                             }
-                            match udp_session.send_mux_response(
+                            match udp_session.send_mux_response_to_ip(
                                 &down_tx,
                                 mux_session_id,
-                                &target,
+                                ip,
                                 sender.port(),
                                 &direct_buf[..n],
                             ) {

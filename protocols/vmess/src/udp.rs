@@ -1,6 +1,6 @@
 use tokio::sync::{broadcast, mpsc, oneshot};
 use zero_core::{Address, Error, Network, ProtocolType, Session};
-use zero_traits::{AsyncSocket, UdpPacketFraming, UdpPacketTunnelProtocol};
+use zero_traits::{AsyncSocket, IpAddress, UdpPacketFraming, UdpPacketTunnelProtocol};
 
 use crate::outbound::{VmessOutbound, VmessOutboundSession};
 use crate::shared::{parse_address_from_bytes, write_address, VmessCipher, CMD_UDP};
@@ -440,6 +440,21 @@ impl VmessInboundUdpSession {
             .await
     }
 
+    pub async fn write_response_to_ip_tokio<W>(
+        &self,
+        writer: &mut W,
+        ip: IpAddress,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<usize, Error>
+    where
+        W: tokio::io::AsyncWrite + Unpin,
+    {
+        let target = address_from_ip(ip);
+        self.write_response_tokio(writer, &target, port, payload)
+            .await
+    }
+
     pub fn send_mux_response(
         &self,
         write_tx: &mpsc::UnboundedSender<Vec<u8>>,
@@ -456,6 +471,25 @@ impl VmessInboundUdpSession {
             port,
             payload,
         )
+    }
+
+    pub fn send_mux_response_to_ip(
+        &self,
+        write_tx: &mpsc::UnboundedSender<Vec<u8>>,
+        mux_session_id: u16,
+        ip: IpAddress,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<usize, Error> {
+        let target = address_from_ip(ip);
+        self.send_mux_response(write_tx, mux_session_id, &target, port, payload)
+    }
+}
+
+fn address_from_ip(ip: IpAddress) -> Address {
+    match ip {
+        IpAddress::V4(bytes) => Address::Ipv4(bytes),
+        IpAddress::V6(bytes) => Address::Ipv6(bytes),
     }
 }
 

@@ -90,19 +90,15 @@ impl Proxy {
                     last_activity = TokioInstant::now();
 
                     let ip = zero_platform_tokio::socket_addr_to_ip(sender);
-                    let target = match ip {
-                        zero_traits::IpAddress::V4(bytes) => zero_core::Address::Ipv4(bytes),
-                        zero_traits::IpAddress::V6(bytes) => zero_core::Address::Ipv6(bytes),
-                    };
                     let port = sender.port();
 
                     if let Some(session_id) = dispatch.direct_response_session_id(sender) {
                         self.record_session_outbound_rx(session_id, n as u64);
                     }
 
-                    match udp_session.write_response_tokio(
+                    match udp_session.write_response_to_ip_tokio(
                         &mut client,
-                        &target,
+                        ip,
                         port,
                         &udp_buffer[..n],
                     ).await {

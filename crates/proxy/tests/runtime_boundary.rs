@@ -4076,6 +4076,8 @@ fn vmess_inbound_udp_response_encoding_stays_in_protocol_crate() {
             && mux.contains("udp_session.decode_request")
             && mux.contains("udp_session.write_response_tokio")
             && mux.contains("udp_session.send_mux_response")
+            && mux.contains("udp_session.write_response_to_ip_tokio")
+            && mux.contains("udp_session.send_mux_response_to_ip")
             && mux.contains("request.into_dispatch_parts()")
             && mux.contains("pkt.into_parts()")
             && !mux.contains("client_session_id: None")
@@ -4083,6 +4085,8 @@ fn vmess_inbound_udp_response_encoding_stays_in_protocol_crate() {
             && !mux.contains("request.payload()")
             && !mux.contains("pkt.target()")
             && !mux.contains("pkt.payload()")
+            && !mux.contains("Address::Ipv4")
+            && !mux.contains("Address::Ipv6")
             && !mux.contains("VmessInboundUdpCodec.encode_response_for_state")
             && !mux.contains("VmessInboundUdpCodec.encode_mux_response_for_state")
             && protocol_udp.contains("struct VmessInboundUdpCodec")
@@ -4096,9 +4100,11 @@ fn vmess_inbound_udp_response_encoding_stays_in_protocol_crate() {
             && protocol_udp.contains("fn encode_response")
             && protocol_udp.contains("fn encode_response_for_state")
             && protocol_udp.contains("fn write_response_tokio")
+            && protocol_udp.contains("fn write_response_to_ip_tokio")
             && protocol_udp.contains("fn encode_mux_response")
             && protocol_udp.contains("fn encode_mux_response_for_state")
             && protocol_udp.contains("fn send_mux_response")
+            && protocol_udp.contains("fn send_mux_response_to_ip")
             && protocol_udp.contains("fn decode_datagram"),
         "VMess inbound UDP packet framing and response mode selection should go through protocols/vmess inbound codec"
     );
@@ -4222,6 +4228,7 @@ fn vless_inbound_udp_packet_framing_stays_in_protocol_crate() {
             && udp_session.contains("vless::VlessInbound.udp_session()")
             && udp_session.contains("udp_session.decode_request")
             && udp_session.contains("udp_session.write_response_tokio")
+            && udp_session.contains("udp_session.write_response_to_ip_tokio")
             && udp_session.contains("request.into_dispatch_parts()")
             && udp_session.contains("pkt.into_parts()")
             && !udp_session.contains("client_session_id: None")
@@ -4229,10 +4236,13 @@ fn vless_inbound_udp_packet_framing_stays_in_protocol_crate() {
             && !udp_session.contains("request.payload()")
             && !udp_session.contains("pkt.target()")
             && !udp_session.contains("pkt.payload()")
+            && !udp_session.contains("zero_core::Address::Ipv4")
+            && !udp_session.contains("zero_core::Address::Ipv6")
             && !udp_session.contains("VlessInboundUdpCodec.encode_response")
             && mux.contains("vless::VlessInbound.udp_session()")
             && mux.contains("udp_session.decode_request")
             && mux.contains("udp_session.send_mux_response")
+            && mux.contains("udp_session.send_mux_response_to_ip")
             && mux.contains("request.into_dispatch_parts()")
             && mux.contains("pkt.into_parts()")
             && !mux.contains("client_session_id: None")
@@ -4240,6 +4250,8 @@ fn vless_inbound_udp_packet_framing_stays_in_protocol_crate() {
             && !mux.contains("request.payload()")
             && !mux.contains("pkt.target()")
             && !mux.contains("pkt.payload()")
+            && !mux.contains("zero_core::Address::Ipv4")
+            && !mux.contains("zero_core::Address::Ipv6")
             && !mux.contains("VlessInboundUdpCodec.encode_mux_response")
             && !udp_session.contains("decode_datagram")
             && !mux.contains("VlessInboundUdpCodec.decode_datagram")
@@ -4253,8 +4265,10 @@ fn vless_inbound_udp_packet_framing_stays_in_protocol_crate() {
             && protocol_shared.contains("fn decode_datagram")
             && protocol_shared.contains("fn encode_response")
             && protocol_shared.contains("fn write_response_tokio")
+            && protocol_shared.contains("fn write_response_to_ip_tokio")
             && protocol_shared.contains("fn encode_mux_response")
-            && protocol_shared.contains("fn send_mux_response"),
+            && protocol_shared.contains("fn send_mux_response")
+            && protocol_shared.contains("fn send_mux_response_to_ip"),
         "VLESS inbound UDP packet framing should go directly through the protocols/vless inbound codec from inbound glue"
     );
     for private_helper in [
