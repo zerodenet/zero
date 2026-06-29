@@ -590,6 +590,12 @@ impl ShadowsocksUdpFlowResume {
         self.managed_socket_flow().into_codec()
     }
 
+    pub fn into_shared_managed_socket_flow_codec(
+        self,
+    ) -> alloc::sync::Arc<dyn DatagramCodec<Address, Error = Error>> {
+        alloc::sync::Arc::new(self.into_managed_socket_flow_codec())
+    }
+
     fn encode_flow_packet(
         &self,
         packet: &ShadowsocksUdpFlowPacket,
