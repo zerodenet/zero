@@ -277,6 +277,13 @@ pub struct Socks5InboundUdpResponseKey {
     port: u16,
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct Socks5UdpClientResponse<'a> {
+    upstream_address: &'a Address,
+    upstream_port: u16,
+    payload: &'a [u8],
+}
+
 impl Socks5InboundUdpResponseKey {
     pub fn target(&self) -> &Address {
         &self.target
@@ -288,6 +295,32 @@ impl Socks5InboundUdpResponseKey {
 
     pub fn into_parts(self) -> (Address, u16) {
         (self.target, self.port)
+    }
+}
+
+impl<'a> Socks5UdpClientResponse<'a> {
+    pub fn new(upstream_address: &'a Address, upstream_port: u16, payload: &'a [u8]) -> Self {
+        Self {
+            upstream_address,
+            upstream_port,
+            payload,
+        }
+    }
+
+    pub fn payload_len(&self) -> usize {
+        self.payload.len()
+    }
+
+    pub fn upstream_address(&self) -> &'a Address {
+        self.upstream_address
+    }
+
+    pub fn upstream_port(&self) -> u16 {
+        self.upstream_port
+    }
+
+    pub fn payload(&self) -> &'a [u8] {
+        self.payload
     }
 }
 
@@ -526,6 +559,25 @@ impl Socks5InboundUdpSession {
             upstream_address,
             upstream_port,
             payload,
+        )
+        .await
+    }
+
+    pub async fn send_client_response<S>(
+        &self,
+        socket: &S,
+        client: SocketAddress,
+        response: Socks5UdpClientResponse<'_>,
+    ) -> Result<usize, Socks5UdpRelayError<S::Error>>
+    where
+        S: DatagramSocket,
+    {
+        self.send_response_to_client_target(
+            socket,
+            client,
+            response.upstream_address(),
+            response.upstream_port(),
+            response.payload(),
         )
         .await
     }

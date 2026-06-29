@@ -56,13 +56,16 @@ async fn forward_upstream_response(
     };
 
     let udp_session = socks5::Socks5Inbound.udp_session();
+    let client_response = socks5::udp::Socks5UdpClientResponse::new(
+        &response.target,
+        response.port,
+        &response.payload,
+    );
     let sent = udp_session
-        .send_response_to_client_target(
+        .send_client_response(
             relay,
             zero_platform_tokio::socket_addr_to_socket_address(client_addr),
-            &response.target,
-            response.port,
-            &response.payload,
+            client_response,
         )
         .await
         .map_err(|error| error.into_mapped(EngineError::from))?;
