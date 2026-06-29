@@ -195,8 +195,7 @@ impl Proxy {
         auth: &Option<zero_core::SessionAuth>,
     ) -> Result<(), EngineError> {
         let udp_session = vless::VlessInbound.udp_session();
-        let request = udp_session.decode_request(packet)?;
-        let request = request.into_dispatch_parts();
+        let request = udp_session.decode_dispatch_parts(packet)?;
 
         UdpPipe::new(proxy, dispatch)
             .dispatch(UdpPipeInput {

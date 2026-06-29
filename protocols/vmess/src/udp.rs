@@ -433,6 +433,14 @@ impl VmessInboundUdpSession {
         Ok(request)
     }
 
+    pub fn decode_dispatch_parts(
+        &mut self,
+        payload: &[u8],
+    ) -> Result<VmessInboundUdpDispatchParts, Error> {
+        self.decode_request(payload)
+            .map(VmessInboundUdpRequest::into_dispatch_parts)
+    }
+
     pub async fn write_response_tokio<W>(
         &self,
         writer: &mut W,

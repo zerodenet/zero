@@ -672,6 +672,14 @@ impl VlessInboundUdpCodec {
             .map(VlessInboundUdpRequest::from_packet)
     }
 
+    pub fn decode_dispatch_parts(
+        &self,
+        packet: &[u8],
+    ) -> Result<VlessInboundUdpDispatchParts, Error> {
+        self.decode_request(packet)
+            .map(VlessInboundUdpRequest::into_dispatch_parts)
+    }
+
     pub fn decode_datagram(&self, packet: &[u8]) -> Result<VlessUdpPacket, Error> {
         decode_inbound_udp_datagram(packet)
     }
@@ -774,6 +782,13 @@ impl VlessInboundUdpSession {
 
     pub fn decode_request(&self, packet: &[u8]) -> Result<VlessInboundUdpRequest, Error> {
         self.codec.decode_request(packet)
+    }
+
+    pub fn decode_dispatch_parts(
+        &self,
+        packet: &[u8],
+    ) -> Result<VlessInboundUdpDispatchParts, Error> {
+        self.codec.decode_dispatch_parts(packet)
     }
 
     #[cfg(feature = "reality")]

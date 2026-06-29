@@ -250,14 +250,13 @@ impl Proxy {
                         break;
                     }
                     last_activity = TokioInstant::now();
-                    let request = match udp_session.decode_request(&payload) {
+                    let request = match udp_session.decode_dispatch_parts(&payload) {
                         Ok(request) => request,
                         Err(error) => {
                             warn!(%error, mux_session_id, "vless mux udp packet parse failed");
                             continue;
                         }
                     };
-                    let request = request.into_dispatch_parts();
                     if let Err(error) = UdpPipe::new(self, &mut dispatch)
                         .dispatch(UdpPipeInput {
                             target: request.target,
