@@ -157,6 +157,14 @@ impl ShadowsocksInboundProfile {
     }
 }
 
+#[cfg(feature = "crypto")]
+pub fn inbound_profile_from_config_cipher_password(
+    cipher_name: &str,
+    password: &str,
+) -> Result<ShadowsocksInboundProfile, Error> {
+    ShadowsocksInboundProfile::from_config_cipher_password(cipher_name, password)
+}
+
 /// Decoded Shadowsocks inbound UDP request.
 #[cfg(feature = "crypto")]
 #[derive(Debug, Clone, PartialEq, Eq)]

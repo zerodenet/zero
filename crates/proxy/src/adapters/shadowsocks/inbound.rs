@@ -19,7 +19,7 @@ impl ShadowsocksAdapter {
             let profile = match &inbound.protocol {
                 InboundProtocolConfig::Shadowsocks {
                     password, cipher, ..
-                } => shadowsocks::ShadowsocksInboundProfile::from_config_cipher_password(
+                } => shadowsocks::inbound_profile_from_config_cipher_password(
                     cipher.as_str(),
                     password.as_str(),
                 )

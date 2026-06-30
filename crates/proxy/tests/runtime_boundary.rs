@@ -1678,13 +1678,15 @@ fn shadowsocks_inbound_uses_adapter_request_model() {
         "Shadowsocks inbound listener should delegate TCP replay state and salt checks to the protocol crate"
     );
     assert!(
-        adapter.contains("ShadowsocksInboundProfile::from_config_cipher_password")
+        adapter.contains("shadowsocks::inbound_profile_from_config_cipher_password")
             && adapter.contains("cipher.as_str()")
             && adapter.contains("password.as_str()")
+            && !adapter.contains("ShadowsocksInboundProfile::from_config_cipher_password")
             && !adapter.contains("ShadowsocksInboundProfile::from_config_parts")
             && !adapter.contains("CipherKind::from_str")
             && !adapter.contains("password.clone()")
             && !adapter.contains("cipher.clone()")
+            && protocol_inbound.contains("pub fn inbound_profile_from_config_cipher_password")
             && protocol_inbound.contains("pub fn from_config_cipher_password"),
         "Shadowsocks adapter should delegate inbound profile validation to the protocol crate"
     );
