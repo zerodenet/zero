@@ -54,6 +54,54 @@ pub enum VmessMuxTransportKey {
     },
 }
 
+pub struct VmessMuxPoolKeyConfig {
+    server: String,
+    port: u16,
+    identity: VmessMuxIdentity,
+    tls_server_name: Option<String>,
+    ws_path: Option<String>,
+    grpc_service_names: Option<Vec<String>>,
+}
+
+impl VmessMuxPoolKeyConfig {
+    pub fn new(server: impl Into<String>, port: u16, identity: VmessMuxIdentity) -> Self {
+        Self {
+            server: server.into(),
+            port,
+            identity,
+            tls_server_name: None,
+            ws_path: None,
+            grpc_service_names: None,
+        }
+    }
+
+    pub fn with_tls_server_name(mut self, server_name: Option<&str>) -> Self {
+        self.tls_server_name = server_name.map(ToOwned::to_owned);
+        self
+    }
+
+    pub fn with_ws_path(mut self, path: Option<&str>) -> Self {
+        self.ws_path = path.map(ToOwned::to_owned);
+        self
+    }
+
+    pub fn with_grpc_service_names(mut self, service_names: Option<Vec<String>>) -> Self {
+        self.grpc_service_names = service_names;
+        self
+    }
+
+    pub fn into_pool_key(self) -> Result<VmessMuxPoolKey, Error> {
+        VmessMuxPoolKey::from_config_parts(
+            self.server,
+            self.port,
+            self.identity,
+            self.tls_server_name.as_deref(),
+            self.ws_path.as_deref(),
+            self.grpc_service_names,
+        )
+    }
+}
+
 impl VmessMuxIdentity {
     pub fn from_parts(id: [u8; 16], cipher_name: String, cipher: VmessCipher) -> Self {
         Self {

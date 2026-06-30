@@ -44,6 +44,50 @@ pub enum TransportKey {
     },
 }
 
+pub struct PoolKeyConfig {
+    server: String,
+    port: u16,
+    identity: MuxIdentity,
+    tls_server_name: Option<String>,
+    reality_public_key: Option<String>,
+    reality_server_name: Option<String>,
+}
+
+impl PoolKeyConfig {
+    pub fn new(server: impl Into<String>, port: u16, identity: MuxIdentity) -> Self {
+        Self {
+            server: server.into(),
+            port,
+            identity,
+            tls_server_name: None,
+            reality_public_key: None,
+            reality_server_name: None,
+        }
+    }
+
+    pub fn with_tls_server_name(mut self, server_name: Option<&str>) -> Self {
+        self.tls_server_name = server_name.map(ToOwned::to_owned);
+        self
+    }
+
+    pub fn with_reality(mut self, public_key: Option<&str>, server_name: Option<&str>) -> Self {
+        self.reality_public_key = public_key.map(ToOwned::to_owned);
+        self.reality_server_name = server_name.map(ToOwned::to_owned);
+        self
+    }
+
+    pub fn into_pool_key(self) -> PoolKey {
+        PoolKey::from_config_parts(
+            self.server,
+            self.port,
+            self.identity,
+            self.tls_server_name.as_deref(),
+            self.reality_public_key.as_deref(),
+            self.reality_server_name.as_deref(),
+        )
+    }
+}
+
 pub fn transport_key_from_config(
     tls_server_name: Option<&str>,
     reality_public_key: Option<&str>,

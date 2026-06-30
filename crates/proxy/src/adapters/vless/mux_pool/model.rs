@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
-use vless::mux_pool::{MuxPoolConn, PoolKey};
+use vless::mux_pool::{MuxPoolConn, PoolKey, PoolKeyConfig};
 use zero_config::{ClientTlsConfig, RealityConfig};
 use zero_core::Session;
 
@@ -25,14 +25,13 @@ pub(crate) struct VlessMuxOpenRequest<'a> {
 
 impl VlessMuxOpenRequest<'_> {
     pub(crate) fn pool_key(&self) -> PoolKey {
-        PoolKey::from_config_parts(
-            self.server.to_owned(),
-            self.port,
-            self.identity.clone(),
-            self.tls.and_then(|tls| tls.server_name.as_deref()),
-            self.reality.map(|reality| reality.public_key.as_str()),
-            self.reality
-                .and_then(|reality| reality.server_name.as_deref()),
-        )
+        PoolKeyConfig::new(self.server, self.port, self.identity.clone())
+            .with_tls_server_name(self.tls.and_then(|tls| tls.server_name.as_deref()))
+            .with_reality(
+                self.reality.map(|reality| reality.public_key.as_str()),
+                self.reality
+                    .and_then(|reality| reality.server_name.as_deref()),
+            )
+            .into_pool_key()
     }
 }

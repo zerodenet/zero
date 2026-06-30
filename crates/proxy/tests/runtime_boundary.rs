@@ -5332,6 +5332,8 @@ fn vmess_mux_pool_receives_adapter_parsed_cipher() {
     let tcp_adapter = read("src/adapters/vmess/tcp.rs");
     let udp_root = read("src/adapters/vmess/udp.rs");
     let udp_flow = read("src/adapters/vmess/udp/flow.rs");
+    let protocol_mux = fs::read_to_string(repo_root().join("protocols/vmess/src/mux.rs"))
+        .expect("read vmess protocol mux source");
     let protocol_outbound = fs::read_to_string(repo_root().join("protocols/vmess/src/outbound.rs"))
         .expect("read vmess protocol outbound source");
 
@@ -5346,10 +5348,13 @@ fn vmess_mux_pool_receives_adapter_parsed_cipher() {
             && !root.contains("key.server")
             && !root.contains("key.port")
             && !root.contains("vmess::mux::VmessMuxPoolKey::from_config_parts")
+            && !model.contains("vmess::mux::VmessMuxPoolKey::from_config_parts")
             && model.contains("fn pool_key(&self)")
-            && model.contains("vmess::mux::VmessMuxPoolKey::from_config_parts")
+            && model.contains("vmess::mux::VmessMuxPoolKeyConfig::new")
+            && model.contains(".into_pool_key()")
             && !root.contains("vmess::mux::VmessMuxPoolKey::from_identity")
             && !root.contains("vmess::mux::transport_key_from_config")
+            && !model.contains("vmess::mux::transport_key_from_config")
             && !root.contains("fn transport_key(")
             && !root.contains("VmessMuxTransportKey::Grpc")
             && !root.contains("VmessMuxTransportKey::Ws")
@@ -5358,6 +5363,13 @@ fn vmess_mux_pool_receives_adapter_parsed_cipher() {
             && !root.contains("path: ws.path.clone()")
             && !model.contains("struct VmessMuxPoolKey"),
         "VMess mux pool request should carry parsed identity and ask protocols/vmess to build transport cache identity"
+    );
+    assert!(
+        protocol_mux.contains("pub struct VmessMuxPoolKeyConfig")
+            && protocol_mux.contains("impl VmessMuxPoolKeyConfig")
+            && protocol_mux.contains("pub fn into_pool_key")
+            && protocol_mux.contains("VmessMuxPoolKey::from_config_parts"),
+        "VMess mux pool key config and transport cache identity construction should live in protocols/vmess"
     );
     assert!(
         !tcp_adapter.contains("VmessCipher::from_name")
@@ -5411,6 +5423,9 @@ fn vless_mux_pool_model_lives_outside_runtime_root() {
     for required in [
         "pub struct MuxIdentity",
         "impl MuxIdentity",
+        "pub struct PoolKeyConfig",
+        "impl PoolKeyConfig",
+        "pub fn into_pool_key",
         "impl PoolKey",
         "pub fn from_identity",
         "pub fn from_config_parts",
@@ -5477,12 +5492,16 @@ fn vless_mux_pool_model_lives_outside_runtime_root() {
     assert!(
         !root.contains("PoolKey::from_identity")
             && !root.contains("PoolKey::from_config_parts")
-            && !root.contains("vless::mux_pool::transport_key_from_config"),
+            && !model.contains("PoolKey::from_config_parts")
+            && !root.contains("vless::mux_pool::transport_key_from_config")
+            && !model.contains("vless::mux_pool::transport_key_from_config"),
         "VLESS adapter mux pool should call protocol-owned pool-key builders instead of composing transport cache identity"
     );
     assert!(
-        model.contains("fn pool_key(&self)") && model.contains("PoolKey::from_config_parts"),
-        "VLESS mux open request should own conversion into protocol pool key"
+        model.contains("fn pool_key(&self)")
+            && model.contains("PoolKeyConfig::new")
+            && model.contains(".into_pool_key()"),
+        "VLESS mux open request should delegate protocol pool key construction to protocol-owned config builders"
     );
     assert!(
         !root.contains("VlessOutbound")

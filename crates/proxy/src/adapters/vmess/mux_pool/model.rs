@@ -20,14 +20,15 @@ pub(crate) struct VmessMuxOpenRequest<'a> {
 
 impl VmessMuxOpenRequest<'_> {
     pub(crate) fn pool_key(&self) -> Result<vmess::mux::VmessMuxPoolKey, Error> {
-        vmess::mux::VmessMuxPoolKey::from_config_parts(
+        vmess::mux::VmessMuxPoolKeyConfig::new(
             self.server.clone(),
             self.port,
             self.identity.clone(),
-            self.tls.and_then(|tls| tls.server_name.as_deref()),
-            self.ws.map(|ws| ws.path.as_str()),
-            self.grpc.map(|grpc| grpc.service_names.clone()),
         )
+        .with_tls_server_name(self.tls.and_then(|tls| tls.server_name.as_deref()))
+        .with_ws_path(self.ws.map(|ws| ws.path.as_str()))
+        .with_grpc_service_names(self.grpc.map(|grpc| grpc.service_names.clone()))
+        .into_pool_key()
     }
 }
 
