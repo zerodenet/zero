@@ -1,5 +1,6 @@
 use zero_engine::EngineError;
 
+use super::protocol_glue;
 use crate::inbound::udp_dispatch::dispatch_inbound_udp_packet;
 use crate::runtime::udp_dispatch::UdpDispatch;
 use crate::runtime::Proxy;
@@ -13,11 +14,7 @@ pub(super) async fn dispatch_packet(
     dispatch: &mut UdpDispatch,
     pending_control_traffic: &mut StreamTraffic,
 ) -> Result<(), EngineError> {
-    let udp_responder = socks5::Socks5Inbound.udp_responder();
-    let Some(request) = udp_responder
-        .decode_dispatch_parts_or_resolve_local_dns(packet, proxy.resolver.as_ref())
-        .await?
-    else {
+    let Some(request) = protocol_glue::decode_dispatch(proxy, packet).await? else {
         return Ok(());
     };
     let protocol_overhead = request.protocol_overhead();

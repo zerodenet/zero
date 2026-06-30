@@ -4,6 +4,7 @@ use tracing::warn;
 use zero_engine::EngineError;
 use zero_platform_tokio::TokioDatagramSocket;
 
+use super::protocol_glue;
 use crate::inbound::udp_response::write_direct_response;
 use crate::runtime::udp_dispatch::UdpDispatch;
 use crate::runtime::udp_flow::helpers::{record_direct_udp_response_parts, UdpDirectResponseParts};
@@ -56,18 +57,15 @@ async fn write_socks5_direct_response(
     client_addr: SocketAddr,
     response: &UdpDirectResponseParts<'_, '_>,
 ) -> Result<usize, EngineError> {
-    let udp_responder = socks5::Socks5Inbound.udp_responder();
     write_direct_response(response, || async {
-        udp_responder
-            .send_client_response_for_target(
-                relay,
-                zero_platform_tokio::socket_addr_to_socket_address(client_addr),
-                &response.target,
-                response.port,
-                response.payload,
-            )
-            .await
-            .map_err(|error| error.into_mapped(EngineError::from))
+        protocol_glue::send_client_response_for_target(
+            relay,
+            client_addr,
+            &response.target,
+            response.port,
+            response.payload,
+        )
+        .await
     })
     .await
 }

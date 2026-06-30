@@ -3,6 +3,7 @@ mod cleanup;
 mod direct_response;
 mod dispatch;
 mod idle_timeout;
+mod protocol_glue;
 mod relay_socket;
 mod setup;
 mod upstream_response;
@@ -34,7 +35,7 @@ impl Proxy {
 
         let mut dispatch = UdpDispatch::new(inbound_tag).await?;
 
-        let mut relay_session = socks5::udp::Socks5InboundUdpRelaySession::new();
+        let mut relay_session = protocol_glue::new_relay_session();
         let mut control_probe = [0_u8; 1];
         let mut packet = vec![0_u8; 64 * 1024];
         let mut direct_buf = vec![0_u8; 64 * 1024];

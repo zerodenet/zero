@@ -7364,6 +7364,7 @@ fn socks5_udp_associate_loop_delegates_dispatch_and_direct_response_framing() {
     let dispatch = read("src/inbound/socks5/udp_associate/dispatch.rs");
     let direct_response = read("src/inbound/socks5/udp_associate/direct_response.rs");
     let idle_timeout = read("src/inbound/socks5/udp_associate/idle_timeout.rs");
+    let protocol_glue = read("src/inbound/socks5/udp_associate/protocol_glue.rs");
     let relay_socket = read("src/inbound/socks5/udp_associate/relay_socket.rs");
     let setup = read("src/inbound/socks5/udp_associate/setup.rs");
     let upstream_response = read("src/inbound/socks5/udp_associate/upstream_response.rs");
@@ -7421,11 +7422,14 @@ fn socks5_udp_associate_loop_delegates_dispatch_and_direct_response_framing() {
     assert!(
         dispatch.contains("async fn dispatch_packet")
             && dispatch.contains("dispatch_inbound_udp_packet")
+            && dispatch.contains("protocol_glue::decode_dispatch")
             && dispatch.contains("request.into_inbound_dispatch()")
+            && dispatch.contains("protocol_overhead.record")
             && !dispatch.contains("let protocol = request.protocol();")
             && !dispatch.contains("UdpPipeInput {")
             && !dispatch.contains("ProtocolType::Socks5")
-            && dispatch.contains(".decode_dispatch_parts_or_resolve_local_dns(")
+            && !dispatch.contains(".decode_dispatch_parts_or_resolve_local_dns(")
+            && protocol_glue.contains(".decode_dispatch_parts_or_resolve_local_dns(")
             && !dispatch.contains(".resolver.resolve("),
         "SOCKS5 UDP packet dispatch should live in inbound/socks5/udp_associate/dispatch.rs"
     );
@@ -7437,18 +7441,23 @@ fn socks5_udp_associate_loop_delegates_dispatch_and_direct_response_framing() {
             && direct_response.contains("write_direct_response")
             && direct_response.contains("UdpDirectResponseParts")
             && read("src/runtime/udp_flow/helpers.rs").contains("direct_response_session_id")
-            && direct_response.contains("socks5::Socks5Inbound.udp_responder()")
-            && direct_response.contains(".send_client_response_for_target")
+            && direct_response.contains("protocol_glue::send_client_response_for_target")
+            && !direct_response.contains("socks5::Socks5Inbound.udp_responder()")
+            && !direct_response.contains(".send_client_response_for_target")
+            && protocol_glue.contains("socks5::Socks5Inbound.udp_responder()")
+            && protocol_glue.contains(".send_client_response_for_target")
             && !direct_response.contains("Socks5UdpClientResponse::new")
             && !direct_response.contains("record_direct_udp_response_received")
             && !direct_response.contains("udp_response_target_from_socket_addr")
-            && direct_response.contains("socket_addr_to_socket_address(client_addr)")
+            && !direct_response.contains("socket_addr_to_socket_address(client_addr)")
+            && protocol_glue.contains("socket_addr_to_socket_address(client_addr)")
             && !direct_response.contains("socket_addr_to_socket_address(sender)")
             && !direct_response.contains("fn socket_address_from_std")
             && !direct_response.contains("fn ip_address_from_std")
             && !direct_response.contains("Socks5UdpRelayEndpoint")
             && !direct_response.contains("Socks5UdpRelayError")
-            && direct_response.contains("into_mapped(EngineError::from)")
+            && !direct_response.contains("into_mapped(EngineError::from)")
+            && protocol_glue.contains("into_mapped(EngineError::from)")
             && !direct_response.contains("address_from_socket_addr(sender)")
             && !direct_response.contains("socket_addr_to_ip(sender)")
             && !direct_response.contains("udp_session.response_frame")
@@ -7462,10 +7471,11 @@ fn socks5_udp_associate_loop_delegates_dispatch_and_direct_response_framing() {
             && chain_response.contains("pub(super) struct ChainResponseRequest")
             && chain_response.contains("struct ForwardChainResponseRequest")
             && chain_response.contains("write_chain_response")
-            && chain_response.contains("socks5::Socks5Inbound.udp_responder()")
-            && chain_response.contains(".send_client_response_for_target")
+            && chain_response.contains("protocol_glue::send_client_response_for_target")
+            && !chain_response.contains("socks5::Socks5Inbound.udp_responder()")
+            && !chain_response.contains(".send_client_response_for_target")
             && !chain_response.contains("Socks5UdpClientResponse::new")
-            && chain_response.contains("socket_addr_to_socket_address(client_addr)")
+            && !chain_response.contains("socket_addr_to_socket_address(client_addr)")
             && !chain_response.contains("use zero_core::Address")
             && !chain_response.contains("socket_addr_to_ip(client_addr)")
             && !chain_response.contains("udp_session.response_frame")
@@ -7492,6 +7502,7 @@ fn socks5_udp_associate_loop_delegates_dispatch_and_direct_response_framing() {
         ("direct_response.rs", &direct_response),
         ("chain_response.rs", &chain_response),
         ("upstream_response.rs", &upstream_response),
+        ("protocol_glue.rs", &protocol_glue),
     ] {
         for forbidden in ["socks5::parse_udp_packet", "socks5::build_udp_packet"] {
             assert!(
@@ -7505,6 +7516,7 @@ fn socks5_udp_associate_loop_delegates_dispatch_and_direct_response_framing() {
         ("direct_response.rs", &direct_response),
         ("chain_response.rs", &chain_response),
         ("upstream_response.rs", &upstream_response),
+        ("protocol_glue.rs", &protocol_glue),
     ] {
         for forbidden in [
             "socks5::decode_udp_associate_request",
@@ -7518,9 +7530,9 @@ fn socks5_udp_associate_loop_delegates_dispatch_and_direct_response_framing() {
         }
     }
     assert!(
-        dispatch.contains("socks5::Socks5Inbound.udp_responder()")
-            && dispatch.contains("udp_responder")
-            && dispatch.contains(".decode_dispatch_parts_or_resolve_local_dns(")
+        protocol_glue.contains("socks5::Socks5Inbound.udp_responder()")
+            && protocol_glue.contains("udp_responder")
+            && protocol_glue.contains(".decode_dispatch_parts_or_resolve_local_dns(")
             && dispatch.contains("request.protocol_overhead()")
             && dispatch.contains("request.into_inbound_dispatch()")
             && dispatch.contains("dispatch_inbound_udp_packet")
@@ -7529,19 +7541,20 @@ fn socks5_udp_associate_loop_delegates_dispatch_and_direct_response_framing() {
             && !dispatch.contains("decode_dispatch_action")
             && !dispatch.contains("udp_packet.into_dispatch_parts()")
             && !dispatch.contains("protocol_overhead_len")
-            && upstream_response.contains("socks5::Socks5Inbound.udp_responder()")
+            && !upstream_response.contains("socks5::Socks5Inbound.udp_responder()")
             && upstream_response.contains("record_upstream_udp_response_received")
-            && upstream_response.contains(".send_client_response_for_target")
+            && upstream_response.contains("protocol_glue::send_client_response_for_target")
+            && !upstream_response.contains(".send_client_response_for_target")
             && !upstream_response.contains("Socks5UdpClientResponse::new")
             && !upstream_response.contains("udp_session.response_session_key_parts")
             && !upstream_response.contains(".send_encoded_response_to_client")
             && !upstream_response.contains("relay.send_to_addr(payload")
             && !upstream_response.contains("udp_session.response_key")
-            && direct_response.contains("socks5::Socks5Inbound.udp_responder()")
+            && !direct_response.contains("socks5::Socks5Inbound.udp_responder()")
             && !direct_response.contains("Socks5UdpClientResponse::new")
-            && direct_response.contains(".send_client_response_for_target")
-            && chain_response.contains("socks5::Socks5Inbound.udp_responder()")
-            && chain_response.contains(".send_client_response_for_target")
+            && direct_response.contains("protocol_glue::send_client_response_for_target")
+            && !chain_response.contains("socks5::Socks5Inbound.udp_responder()")
+            && chain_response.contains("protocol_glue::send_client_response_for_target")
             && !dispatch.contains("Socks5Inbound.udp_session()")
             && !upstream_response.contains("Socks5Inbound.udp_session()")
             && !direct_response.contains("Socks5Inbound.udp_session()")
@@ -7549,7 +7562,8 @@ fn socks5_udp_associate_loop_delegates_dispatch_and_direct_response_framing() {
             && !dispatch.contains("Socks5InboundUdpCodec")
             && !upstream_response.contains("Socks5InboundUdpCodec")
             && !direct_response.contains("Socks5InboundUdpCodec")
-            && !chain_response.contains("Socks5InboundUdpCodec"),
+            && !chain_response.contains("Socks5InboundUdpCodec")
+            && !protocol_glue.contains("Socks5InboundUdpCodec"),
         "SOCKS5 UDP associate dispatch/attribution should use the protocol-owned inbound UDP responder"
     );
     assert!(
@@ -7574,7 +7588,8 @@ fn socks5_udp_associate_loop_delegates_dispatch_and_direct_response_framing() {
             && !upstream_response.contains("response.target()")
             && !upstream_response.contains("response.port()")
             && !upstream_response.contains(".send_response_to_client_target")
-            && !chain_response.contains(".send_response_to_client_target"),
+            && !chain_response.contains(".send_response_to_client_target")
+            && !protocol_glue.contains(".send_response_to_client_target"),
         "SOCKS5 UDP associate dispatch should consume protocol-owned dispatch parts instead of rebuilding session facts"
     );
     let protocol_udp = fs::read_to_string(repo_root().join("protocols/socks5/src/udp.rs"))
@@ -7624,7 +7639,9 @@ fn socks5_udp_associate_loop_delegates_dispatch_and_direct_response_framing() {
         "SOCKS5 inbound UDP dispatch parts should expose a one-shot neutral parts API instead of public fields"
     );
     assert!(
-        associate.contains("Socks5InboundUdpRelaySession::new()")
+        protocol_glue.contains("Socks5InboundUdpRelaySession::new()")
+            && associate.contains("protocol_glue::new_relay_session()")
+            && !associate.contains("Socks5InboundUdpRelaySession::new()")
             && associate.contains(".client()")
             && associate.contains("socket_address_to_socket_addr")
             && associate.contains("relay_session: &mut relay_session")
@@ -7653,7 +7670,8 @@ fn socks5_udp_associate_loop_delegates_dispatch_and_direct_response_framing() {
             !dispatch.contains(forbidden)
                 && !upstream_response.contains(forbidden)
                 && !direct_response.contains(forbidden)
-                && !chain_response.contains(forbidden),
+                && !chain_response.contains(forbidden)
+                && !protocol_glue.contains(forbidden),
             "SOCKS5 UDP associate glue should not rebuild protocol packet accounting/framing detail `{forbidden}`"
         );
     }
