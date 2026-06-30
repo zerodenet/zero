@@ -345,6 +345,11 @@ fn inbound_udp_response_accounting_uses_runtime_helpers() {
             && inbound_response.contains("fn write_direct_response_sync")
             && inbound_response.contains("fn write_upstream_response_sync")
             && inbound_response.contains("fn write_chain_response_sync")
+            && inbound_response.contains("fn write_optional_direct_response")
+            && inbound_response.contains("fn write_optional_chain_response")
+            && inbound_response.contains("fn write_optional_direct_response_sync")
+            && inbound_response.contains("fn write_optional_upstream_response_sync")
+            && inbound_response.contains("fn write_optional_chain_response_sync")
             && inbound_response.contains("response.accounting.record_sent(written)"),
         "stream UDP inbound response write glue should centralize protocol write callbacks plus neutral accounting"
     );
@@ -385,6 +390,40 @@ fn inbound_udp_response_accounting_uses_runtime_helpers() {
         );
     }
 
+    let hysteria2 = read("src/inbound/hysteria2/udp.rs");
+    let datagram_loop = hysteria2
+        .split("async fn hysteria2_datagram_loop")
+        .nth(1)
+        .expect("hysteria2 datagram loop");
+    assert!(
+        datagram_loop.contains("record_upstream_udp_response_received")
+            && datagram_loop.contains("record_direct_udp_response_parts")
+            && datagram_loop.contains("record_chain_udp_response_parts")
+            && datagram_loop.contains("write_optional_direct_response_sync")
+            && datagram_loop.contains("write_optional_upstream_response_sync")
+            && datagram_loop.contains("write_optional_chain_response_sync")
+            && !datagram_loop.contains("response.accounting.record_sent")
+            && datagram_loop.contains("response.accounting.session_id()")
+            && !datagram_loop.contains("udp_response_session_id")
+            && !datagram_loop.contains("UdpInboundResponseAccounting::record_received")
+            && !datagram_loop.contains("record_session_outbound_rx")
+            && !datagram_loop.contains("record_session_inbound_tx")
+            && !datagram_loop.contains("session_id_by_target"),
+        "Hysteria2 datagram loop should use neutral UDP response accounting helpers without affecting TCP stream relay accounting"
+    );
+
+    let shadowsocks = read("src/inbound/shadowsocks/udp.rs");
+    assert!(
+        shadowsocks.contains("record_direct_udp_response_parts")
+            && shadowsocks.contains("record_chain_udp_response_parts")
+            && shadowsocks.contains("write_optional_direct_response")
+            && shadowsocks.contains("write_optional_chain_response")
+            && !shadowsocks.contains("response.accounting.record_sent")
+            && !shadowsocks.contains("record_udp_inbound_response_rx")
+            && !shadowsocks.contains("record_udp_inbound_response_tx"),
+        "Shadowsocks datagram loop should use neutral optional UDP response write helpers"
+    );
+
     for source in [
         "src/inbound/socks5/udp_associate/direct_response.rs",
         "src/inbound/socks5/udp_associate/chain_response.rs",
@@ -409,26 +448,6 @@ fn inbound_udp_response_accounting_uses_runtime_helpers() {
             "{source} should use runtime UDP response helpers instead of querying dispatch response sessions directly"
         );
     }
-
-    let hysteria2 = read("src/inbound/hysteria2/udp.rs");
-    let datagram_loop = hysteria2
-        .split("async fn hysteria2_datagram_loop")
-        .nth(1)
-        .expect("hysteria2 datagram loop");
-    assert!(
-        datagram_loop.contains("record_upstream_udp_response_received")
-            && datagram_loop.contains("record_direct_udp_response_parts")
-            && datagram_loop.contains("record_chain_udp_response_parts")
-            && datagram_loop.contains("response.accounting.record_sent")
-            && datagram_loop.contains("response.accounting.record_sent")
-            && datagram_loop.contains("response.accounting.session_id()")
-            && !datagram_loop.contains("udp_response_session_id")
-            && !datagram_loop.contains("UdpInboundResponseAccounting::record_received")
-            && !datagram_loop.contains("record_session_outbound_rx")
-            && !datagram_loop.contains("record_session_inbound_tx")
-            && !datagram_loop.contains("session_id_by_target"),
-        "Hysteria2 datagram loop should use neutral UDP response accounting helpers without affecting TCP stream relay accounting"
-    );
 
     let vless_udp = read("src/inbound/vless/udp_session.rs");
     let vless_upstream_response = vless_udp
@@ -465,8 +484,6 @@ fn inbound_udp_response_accounting_uses_runtime_helpers() {
     }
 
     for source in [
-        "src/inbound/hysteria2/udp.rs",
-        "src/inbound/shadowsocks/udp.rs",
         "src/inbound/socks5/udp_associate/direct_response.rs",
         "src/inbound/socks5/udp_associate/chain_response.rs",
         "src/inbound/socks5/udp_associate/upstream_response.rs",
@@ -2295,6 +2312,9 @@ fn hysteria2_inbound_uses_adapter_request_model() {
             && !udp.contains("parts.record_dispatch_success")
             && !udp.contains("udp_session.record_dispatched_proxy_session")
             && udp.contains("udp_session.send_client_response_for_target_proxy_session")
+            && udp.contains("write_optional_direct_response_sync")
+            && udp.contains("write_optional_upstream_response_sync")
+            && udp.contains("write_optional_chain_response_sync")
             && !udp.contains("Hysteria2InboundUdpClientResponse::new")
             && udp.contains("record_direct_udp_response_parts")
             && !udp.contains("udp_response_target_from_socket_addr(sender)")
@@ -3725,6 +3745,8 @@ fn shadowsocks_udp_inbound_uses_protocol_codec_not_datagram_primitives() {
             && !udp.contains("udp_session.record_dispatched_client_session")
             && !udp.contains("udp_session.record_client_session")
             && udp.contains(".send_response_for_target_proxy_session_to_client_tokio")
+            && udp.contains("write_optional_direct_response")
+            && udp.contains("write_optional_chain_response")
             && !udp.contains("ShadowsocksInboundUdpClientResponse::new")
             && !udp.contains(".send_response_for_proxy_session_to_client_tokio")
             && !udp.contains(".send_response_for_proxy_session_to_sender_tokio")

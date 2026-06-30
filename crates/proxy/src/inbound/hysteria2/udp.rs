@@ -4,6 +4,10 @@ use tokio::select;
 use tracing::warn;
 use zero_engine::EngineError;
 
+use crate::inbound::udp_response::{
+    write_optional_chain_response_sync, write_optional_direct_response_sync,
+    write_optional_upstream_response_sync,
+};
 use crate::runtime::pipe::{KernelPipe, UdpPipe, UdpPipeInput};
 use crate::runtime::udp_flow::helpers::{
     record_chain_udp_response_parts, record_direct_udp_response_parts,
@@ -58,15 +62,15 @@ impl Proxy {
                         sender,
                         &direct_buf[..n],
                     );
-                    if let Ok(Some(written)) = udp_session.send_client_response_for_target_proxy_session(
-                        &conn,
-                        response.accounting.session_id(),
-                        &response.target,
-                        response.port,
-                        response.payload,
-                    ) {
-                        response.accounting.record_sent(written);
-                    }
+                    let _ = write_optional_direct_response_sync(&response, || {
+                        udp_session.send_client_response_for_target_proxy_session(
+                            &conn,
+                            response.accounting.session_id(),
+                            &response.target,
+                            response.port,
+                            response.payload,
+                        )
+                    });
                 }
 
                 upstream = upstream_udp.recv_response(&mut upstream_buf) => {
@@ -78,15 +82,15 @@ impl Proxy {
                                 proxy.udp_upstream_idle_timeout(),
                                 pkt,
                             );
-                            if let Ok(Some(written)) = udp_session.send_client_response_for_target_proxy_session(
-                                &conn,
-                                response.accounting.session_id(),
-                                &response.target,
-                                response.port,
-                                &response.payload,
-                            ) {
-                                response.accounting.record_sent(written);
-                            }
+                            let _ = write_optional_upstream_response_sync(&response, || {
+                                udp_session.send_client_response_for_target_proxy_session(
+                                    &conn,
+                                    response.accounting.session_id(),
+                                    &response.target,
+                                    response.port,
+                                    &response.payload,
+                                )
+                            });
                         }
                         Err(error) => warn!(error = %error, "h2 upstream response error"),
                     }
@@ -99,15 +103,15 @@ impl Proxy {
                         Ok(Ok((target, port, payload, session_id))) => {
                             let response =
                                 record_chain_udp_response_parts(&proxy, target, port, payload, session_id);
-                            if let Ok(Some(written)) = udp_session.send_client_response_for_target_proxy_session(
-                                &conn,
-                                session_id,
-                                &response.target,
-                                response.port,
-                                &response.payload,
-                            ) {
-                                response.accounting.record_sent(written);
-                            }
+                            let _ = write_optional_chain_response_sync(&response, || {
+                                udp_session.send_client_response_for_target_proxy_session(
+                                    &conn,
+                                    session_id,
+                                    &response.target,
+                                    response.port,
+                                    &response.payload,
+                                )
+                            });
                         }
                         Ok(Err(error)) => warn!(error = %error, "h2 chain response error"),
                         Err(e) => warn!(error = %e, "h2 chain task panicked"),
