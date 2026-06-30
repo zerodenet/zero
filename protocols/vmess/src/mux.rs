@@ -291,6 +291,26 @@ pub enum VmessInboundMuxOpenedKind {
     },
 }
 
+pub trait VmessInboundMuxOpenedHandler {
+    type Error: From<Error>;
+
+    async fn handle_tcp_opened(
+        &mut self,
+        session_id: u16,
+        session: Session,
+        up_rx: mpsc::UnboundedReceiver<Vec<u8>>,
+        writer: VmessInboundMuxWriter,
+    ) -> Result<(), Self::Error>;
+
+    async fn handle_udp_opened(
+        &mut self,
+        session_id: u16,
+        session: Session,
+        up_rx: mpsc::UnboundedReceiver<Vec<u8>>,
+        writer: VmessInboundMuxWriter,
+    ) -> Result<(), Self::Error>;
+}
+
 impl VmessInboundMuxOpenedStream {
     pub fn new(
         session_id: u16,
@@ -642,6 +662,47 @@ impl VmessInboundMuxServer {
 
     pub fn writer(&self) -> VmessInboundMuxWriter {
         self.writer.clone()
+    }
+
+    pub async fn dispatch_next_opened_stream<R, H>(
+        &mut self,
+        reader: &mut R,
+        handler: &mut H,
+    ) -> Result<(), H::Error>
+    where
+        R: tokio::io::AsyncRead + Unpin,
+        H: VmessInboundMuxOpenedHandler,
+    {
+        let Some(opened) = self
+            .read_opened_stream(reader)
+            .await
+            .map_err(H::Error::from)?
+        else {
+            return Ok(());
+        };
+
+        match opened.into_kind() {
+            VmessInboundMuxOpenedKind::Tcp {
+                session_id,
+                session,
+                up_rx,
+            } => {
+                handler
+                    .handle_tcp_opened(session_id, session, up_rx, self.writer())
+                    .await?;
+            }
+            VmessInboundMuxOpenedKind::Udp {
+                session_id,
+                session,
+                up_rx,
+            } => {
+                handler
+                    .handle_udp_opened(session_id, session, up_rx, self.writer())
+                    .await?;
+            }
+        }
+
+        Ok(())
     }
 
     pub fn end_inbound_stream(&self, session_id: u16) -> Result<usize, Error> {

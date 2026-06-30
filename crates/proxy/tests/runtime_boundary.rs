@@ -731,11 +731,7 @@ fn vless_inbound_mux_frame_detail_lives_in_protocol_crate() {
         "VLESS inbound mux identity and encrypted MUX session construction should be hidden behind a protocol-owned context"
     );
 
-    for required in [
-        "VlessInboundMuxContext",
-        "VlessInboundMuxServer",
-        "VlessInboundMuxEvent",
-    ] {
+    for required in ["VlessInboundMuxContext", "VlessInboundMuxServer"] {
         assert!(
             inbound.contains(required),
             "VLESS inbound mux should consume protocol-owned semantic MUX server APIs; missing `{required}`"
@@ -745,6 +741,10 @@ fn vless_inbound_mux_frame_detail_lives_in_protocol_crate() {
             "protocols/vless should own VLESS semantic MUX server API `{required}`"
         );
     }
+    assert!(
+        !inbound.contains("VlessInboundMuxEvent") && protocol_mux.contains("VlessInboundMuxEvent"),
+        "VLESS inbound mux event classification should stay behind the protocol-owned dispatch API"
+    );
     for required in [
         "VlessInboundMuxAction",
         "accept_inbound_stream",
@@ -758,7 +758,9 @@ fn vless_inbound_mux_frame_detail_lives_in_protocol_crate() {
     assert!(
         !inbound.contains("VlessInboundMuxAction")
             && protocol_mux.contains("VlessInboundMuxAction")
-            && inbound.contains("mux_server.next_opened_stream(&mut client)")
+            && inbound.contains("mux_server\n                .dispatch_next_opened_stream(&mut client, &mut handler)")
+            && protocol_mux.contains("pub async fn dispatch_next_opened_stream")
+            && protocol_mux.contains("pub trait VlessInboundMuxOpenedHandler")
             && !inbound.contains(".apply_inbound_action(&mut mux, &mut client, action)"),
         "VLESS inbound mux glue should not match protocol action variants directly"
     );
@@ -803,7 +805,7 @@ fn vless_inbound_mux_frame_detail_lives_in_protocol_crate() {
         protocol_mux.contains("pub fn into_session(self) -> Result<Session, Error>")
             && protocol_mux.contains("ProtocolType::Vless")
             && protocol_mux.contains("impl From<MuxServerEvent> for VlessInboundMuxAction")
-            && inbound.contains("opened.into_kind()")
+            && !inbound.contains("opened.into_kind()")
             && protocol_mux.contains("VlessInboundMuxOpenedKind")
             && protocol_mux.contains("pub fn into_kind")
             && protocol_mux.contains("match session.network")
@@ -833,8 +835,9 @@ fn vless_inbound_mux_frame_detail_lives_in_protocol_crate() {
         );
     }
     assert!(
-        inbound.contains("mux_server.next_opened_stream(&mut client)")
-            && inbound.contains("mux_server.reject_opened_stream(&mut client, sid)")
+        inbound.contains("mux_server\n                .dispatch_next_opened_stream(&mut client, &mut handler)")
+            && !inbound.contains("mux_server.reject_opened_stream(&mut client, sid)")
+            && protocol_mux.contains("self.reject_opened_stream(stream, session_id)")
             && !inbound.contains(".apply_inbound_action(&mut mux, &mut client, action)")
             && !inbound.contains(".send_inbound_downlink(&mut mux, &mut client, downlink)")
             && !inbound.contains(".reject_opened_stream(&mut mux, &mut client, sid)")
@@ -6397,7 +6400,7 @@ fn inbound_vmess_mux_task_models_do_not_live_in_proxy_model() {
     );
     assert!(
         root.contains("vmess::mux::VmessInboundMuxServer::from_tokio_writer(writer)")
-            && root.contains("mux_server.read_opened_stream(&mut reader)")
+            && root.contains("mux_server\n                .dispatch_next_opened_stream(&mut reader, &mut handler)")
             && !root.contains("vmess::mux::VmessInboundMuxSession::new()")
             && !root.contains("mux_session.read_inbound_action(&mut reader)")
             && !root.contains("streams.apply_inbound_action(action)"),
@@ -6423,7 +6426,9 @@ fn inbound_vmess_mux_task_models_do_not_live_in_proxy_model() {
         "VmessInboundMuxWriter",
         "VmessMuxServerEvent",
         "read_mux_server_event",
+        "pub trait VmessInboundMuxOpenedHandler",
         "pub async fn read_inbound_action",
+        "pub async fn dispatch_next_opened_stream",
         "pub fn write_inbound_stream_data",
         "pub fn write_inbound_stream_payload",
         "pub fn end_inbound_stream",
@@ -6441,7 +6446,7 @@ fn inbound_vmess_mux_task_models_do_not_live_in_proxy_model() {
         "protocols/vmess should classify raw VMess MUX frames into server events and proxy-facing actions"
     );
     assert!(
-        root.contains("opened.into_kind()")
+        !root.contains("opened.into_kind()")
             && protocol_mux.contains("VmessInboundMuxOpenedKind")
             && protocol_mux.contains("pub fn into_kind")
             && protocol_mux.contains("match session.network")
@@ -6809,8 +6814,8 @@ fn inbound_vless_mux_task_model_does_not_live_in_proxy_model() {
     );
     assert!(
         root.contains("VlessInboundMuxServer::from_context")
-            && root.contains("mux_server.next_opened_stream(&mut client)")
-            && root.contains("let writer = mux_server.writer()")
+            && root.contains("mux_server\n                .dispatch_next_opened_stream(&mut client, &mut handler)")
+            && !root.contains("let writer = mux_server.writer()")
             && root.contains("writer,")
             && root.contains("vless::mux::relay_inbound_mux_stream")
             && !root.contains("VlessInboundMuxWriter::channel")

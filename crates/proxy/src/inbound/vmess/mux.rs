@@ -1,6 +1,5 @@
 //! VMess inbound: TLS accept, transport dispatch (WS/gRPC), protocol auth, route, TCP relay.
 
-use tokio::select;
 use tokio::task::JoinSet;
 use tracing::{info, warn};
 use zero_engine::EngineError;
@@ -8,6 +7,52 @@ use zero_engine::EngineError;
 use crate::inbound::mux_tcp::{spawn_mux_tcp_stream_task, MuxTcpStreamTask};
 use crate::runtime::Proxy;
 use crate::transport::TcpRelayStream;
+
+struct VmessMuxOpenedHandler<'a> {
+    proxy: &'a Proxy,
+    tasks: &'a mut JoinSet<()>,
+    inbound_tag: &'a str,
+}
+
+impl vmess::mux::VmessInboundMuxOpenedHandler for VmessMuxOpenedHandler<'_> {
+    type Error = EngineError;
+
+    async fn handle_tcp_opened(
+        &mut self,
+        session_id: u16,
+        session: zero_core::Session,
+        up_rx: tokio::sync::mpsc::UnboundedReceiver<Vec<u8>>,
+        writer: vmess::mux::VmessInboundMuxWriter,
+    ) -> Result<(), Self::Error> {
+        self.proxy.spawn_vmess_mux_tcp_stream_task(
+            self.tasks,
+            session_id,
+            session,
+            up_rx,
+            writer,
+            self.inbound_tag.to_owned(),
+        );
+        Ok(())
+    }
+
+    async fn handle_udp_opened(
+        &mut self,
+        session_id: u16,
+        session: zero_core::Session,
+        up_rx: tokio::sync::mpsc::UnboundedReceiver<Vec<u8>>,
+        writer: vmess::mux::VmessInboundMuxWriter,
+    ) -> Result<(), Self::Error> {
+        self.proxy.spawn_vmess_mux_udp_stream_task(
+            self.tasks,
+            session_id,
+            session,
+            up_rx,
+            writer,
+            self.inbound_tag.to_owned(),
+        );
+        Ok(())
+    }
+}
 
 impl Proxy {
     pub(crate) async fn run_vmess_mux_session(
@@ -26,53 +71,22 @@ impl Proxy {
         );
 
         loop {
-            select! {
-                opened = mux_server.read_opened_stream(&mut reader) => {
-                    let opened = match opened {
-                        Ok(opened) => opened,
-                        Err(error) => {
-                            warn!(error = %error, "vmess mux frame read failed");
-                            break;
-                        }
-                    };
+            let mut handler = VmessMuxOpenedHandler {
+                proxy: self,
+                tasks: &mut mux_tasks,
+                inbound_tag,
+            };
+            if let Err(error) = mux_server
+                .dispatch_next_opened_stream(&mut reader, &mut handler)
+                .await
+            {
+                warn!(error = %error, "vmess mux frame read failed");
+                break;
+            }
 
-                    if let Some(opened) = opened {
-                            match opened.into_kind() {
-                                vmess::mux::VmessInboundMuxOpenedKind::Tcp {
-                                    session_id,
-                                    session,
-                                    up_rx,
-                                } => {
-                                    self.spawn_vmess_mux_tcp_stream_task(
-                                        &mut mux_tasks,
-                                        session_id,
-                                        session,
-                                        up_rx,
-                                        mux_server.writer(),
-                                        inbound_tag.to_owned(),
-                                    )
-                                }
-                                vmess::mux::VmessInboundMuxOpenedKind::Udp {
-                                    session_id,
-                                    session,
-                                    up_rx,
-                                } => {
-                                    self.spawn_vmess_mux_udp_stream_task(
-                                        &mut mux_tasks,
-                                        session_id,
-                                        session,
-                                        up_rx,
-                                        mux_server.writer(),
-                                        inbound_tag.to_owned(),
-                                    )
-                                }
-                            }
-                    }
-                }
-                Some(joined) = mux_tasks.join_next(), if !mux_tasks.is_empty() => {
-                    if let Err(error) = joined {
-                        warn!(error = %error, "vmess mux task panicked");
-                    }
+            while let Some(joined) = mux_tasks.try_join_next() {
+                if let Err(error) = joined {
+                    warn!(error = %error, "vmess mux task panicked");
                 }
             }
         }

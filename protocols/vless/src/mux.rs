@@ -236,6 +236,27 @@ pub struct VlessInboundMuxServer {
 }
 
 #[cfg(feature = "reality")]
+pub trait VlessInboundMuxOpenedHandler {
+    type Error: From<Error>;
+
+    async fn handle_tcp_opened(
+        &mut self,
+        session_id: u16,
+        session: Session,
+        up_rx: mpsc::UnboundedReceiver<Vec<u8>>,
+        writer: VlessInboundMuxWriter,
+    ) -> Result<bool, Self::Error>;
+
+    async fn handle_udp_opened(
+        &mut self,
+        session_id: u16,
+        session: Session,
+        up_rx: mpsc::UnboundedReceiver<Vec<u8>>,
+        writer: VlessInboundMuxWriter,
+    ) -> Result<(), Self::Error>;
+}
+
+#[cfg(feature = "reality")]
 impl VlessInboundMuxServer {
     pub fn new(mux: VlessInboundMuxSession) -> Self {
         let (writer, down_rx) = VlessInboundMuxWriter::channel();
@@ -295,6 +316,54 @@ impl VlessInboundMuxServer {
         self.streams
             .reject_opened_stream(&mut self.mux, stream, session_id)
             .await
+    }
+
+    pub async fn dispatch_next_opened_stream<S, H>(
+        &mut self,
+        stream: &mut S,
+        handler: &mut H,
+    ) -> Result<(), H::Error>
+    where
+        S: AsyncSocket,
+        H: VlessInboundMuxOpenedHandler,
+    {
+        let Some(event) = self
+            .next_opened_stream(stream)
+            .await
+            .map_err(H::Error::from)?
+        else {
+            return Ok(());
+        };
+
+        match event {
+            VlessInboundMuxEvent::Opened(opened) => match opened.into_kind() {
+                VlessInboundMuxOpenedKind::Tcp {
+                    session_id,
+                    session,
+                    up_rx,
+                } => {
+                    let accepted = handler
+                        .handle_tcp_opened(session_id, session, up_rx, self.writer())
+                        .await?;
+                    if !accepted {
+                        self.reject_opened_stream(stream, session_id)
+                            .await
+                            .map_err(H::Error::from)?;
+                    }
+                }
+                VlessInboundMuxOpenedKind::Udp {
+                    session_id,
+                    session,
+                    up_rx,
+                } => {
+                    handler
+                        .handle_udp_opened(session_id, session, up_rx, self.writer())
+                        .await?;
+                }
+            },
+        }
+
+        Ok(())
     }
 }
 
