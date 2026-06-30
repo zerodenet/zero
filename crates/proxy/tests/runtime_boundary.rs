@@ -10156,6 +10156,57 @@ fn stream_udp_managers_do_not_rebuild_protocol_cache_keys() {
 }
 
 #[test]
+fn datagram_udp_managers_do_not_rebuild_protocol_cache_keys() {
+    let shadowsocks_managed = read("src/adapters/shadowsocks/udp/managed.rs");
+    let hysteria2_managed = read("src/adapters/hysteria2/udp/managed.rs");
+    let datagram_manager = read("src/runtime/udp_flow/managed/datagram_manager.rs");
+    let managed_cache = read("src/runtime/udp_flow/managed/cache.rs");
+    assert!(
+        datagram_manager.contains("ManagedUdpConnectionCache")
+            && datagram_manager.contains("ManagedDatagramConnectionCache")
+            && datagram_manager.contains(".connector_flow(&resume, endpoint)")
+            && datagram_manager.contains(".into_cache_key()")
+            && datagram_manager.contains(".send_or_insert_pre_sent_key(")
+            && datagram_manager.contains(".send_or_insert_key(")
+            && datagram_manager.contains(".get_or_insert_key(")
+            && !datagram_manager.contains("resume.cache_key(")
+            && !datagram_manager.contains("resume.flow_cache_key(")
+            && !datagram_manager.contains("resume.connector_flow(")
+            && !datagram_manager.contains("endpoint.server.to_string()")
+            && !datagram_manager.contains("format!(\"{}:{}\"")
+            && !datagram_manager.contains("self.upstreams.entries")
+            && !datagram_manager.contains("if let Some(entry) = self.upstreams.get(&cache_key)")
+            && !datagram_manager.contains("self.upstreams.insert(")
+            && !datagram_manager.contains("ManagedUdpConnectionCacheKey")
+            && !datagram_manager.contains("ManagedDatagramConnectionCacheKey")
+            && managed_cache.contains("struct ManagedUdpConnectionCacheKey")
+            && managed_cache.contains("struct ManagedDatagramConnectionCacheKey")
+            && !managed_cache.contains("pub(crate) struct ManagedUdpConnectionCacheKey")
+            && !managed_cache.contains("pub(crate) struct ManagedDatagramConnectionCacheKey"),
+        "datagram UDP managers should consume adapter-built opaque cache keys through neutral cache APIs"
+    );
+    assert!(
+        shadowsocks_managed.contains("shadowsocks::udp::managed_socket_flow_from_resume")
+            && shadowsocks_managed.contains("managed_datagram_socket_connector_flow_from_build")
+            && !shadowsocks_managed.contains("ManagedDatagramSocketConnectorFlow::new")
+            && !shadowsocks_managed.contains("resume.cache_key(")
+            && !shadowsocks_managed.contains("resume.flow_cache_key(")
+            && !shadowsocks_managed.contains("resume.connector_flow(")
+            && !shadowsocks_managed.contains("ShadowsocksUdpCacheKey")
+            && !shadowsocks_managed.contains("ManagedDatagramConnectionCacheKey")
+            && hysteria2_managed.contains("hysteria2::udp::connector_flow_from_resume")
+            && hysteria2_managed.contains("managed_datagram_connector_flow_from_build")
+            && !hysteria2_managed.contains("ManagedDatagramConnectorFlow::new")
+            && !hysteria2_managed.contains("resume.cache_key(")
+            && !hysteria2_managed.contains("resume.flow_cache_key(")
+            && !hysteria2_managed.contains("resume.connector_flow(")
+            && !hysteria2_managed.contains("Hysteria2UdpCacheKey")
+            && !hysteria2_managed.contains("ManagedUdpConnectionCacheKey"),
+        "datagram UDP adapters should delegate cache identity construction to protocol-owned flow builders"
+    );
+}
+
+#[test]
 fn udp_dispatch_cached_flow_fast_path_delegates_to_registered() {
     let dispatch = read("src/runtime/udp_dispatch/dispatch.rs");
     let forward = read("src/runtime/udp_dispatch/forward.rs");
