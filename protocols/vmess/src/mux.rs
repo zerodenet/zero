@@ -356,6 +356,27 @@ pub fn classify_inbound_session(session: &Session) -> VmessInboundSessionKind {
     }
 }
 
+pub trait VmessInboundSessionHandler {
+    type Error;
+
+    async fn handle_tcp_session(&mut self) -> Result<(), Self::Error>;
+
+    async fn handle_udp_session(&mut self) -> Result<(), Self::Error>;
+
+    async fn handle_mux_session(&mut self) -> Result<(), Self::Error>;
+}
+
+pub async fn dispatch_inbound_session<H>(session: &Session, handler: &mut H) -> Result<(), H::Error>
+where
+    H: VmessInboundSessionHandler,
+{
+    match classify_inbound_session(session) {
+        VmessInboundSessionKind::Udp => handler.handle_udp_session().await,
+        VmessInboundSessionKind::Mux => handler.handle_mux_session().await,
+        VmessInboundSessionKind::Tcp => handler.handle_tcp_session().await,
+    }
+}
+
 pub fn encode_frame(
     session_id: u16,
     status: u8,

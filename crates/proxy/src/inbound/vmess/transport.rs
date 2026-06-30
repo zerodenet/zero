@@ -12,6 +12,63 @@ use crate::runtime::inbound_protocol::{serve_inbound, InboundProtocol};
 use crate::runtime::Proxy;
 use crate::transport::TcpRelayStream;
 
+struct VmessAcceptedSessionHandler<'a, H> {
+    proxy: &'a Proxy,
+    session: Option<Session>,
+    client: Option<TcpRelayStream>,
+    handler: &'a H,
+    tag: &'a str,
+    source_addr: Option<std::net::SocketAddr>,
+}
+
+impl<H> vmess::mux::VmessInboundSessionHandler for VmessAcceptedSessionHandler<'_, H>
+where
+    H: InboundProtocol<ClientStream = TcpRelayStream>,
+{
+    type Error = EngineError;
+
+    async fn handle_tcp_session(&mut self) -> Result<(), Self::Error> {
+        serve_inbound(
+            self.proxy,
+            self.session
+                .take()
+                .expect("vmess accepted session is dispatched once"),
+            self.client
+                .take()
+                .expect("vmess accepted client is dispatched once"),
+            self.handler,
+            self.tag,
+            self.source_addr,
+        )
+        .await
+    }
+
+    async fn handle_udp_session(&mut self) -> Result<(), Self::Error> {
+        self.proxy
+            .run_vmess_udp_relay(
+                self.client
+                    .take()
+                    .expect("vmess accepted client is dispatched once"),
+                self.session
+                    .take()
+                    .expect("vmess accepted session is dispatched once"),
+                self.tag,
+            )
+            .await
+    }
+
+    async fn handle_mux_session(&mut self) -> Result<(), Self::Error> {
+        self.proxy
+            .run_vmess_mux_session(
+                self.client
+                    .take()
+                    .expect("vmess accepted client is dispatched once"),
+                self.tag,
+            )
+            .await
+    }
+}
+
 async fn dispatch_vmess_session<H>(
     proxy: &Proxy,
     session: Session,
@@ -23,15 +80,16 @@ async fn dispatch_vmess_session<H>(
 where
     H: InboundProtocol<ClientStream = TcpRelayStream>,
 {
-    match vmess::mux::classify_inbound_session(&session) {
-        vmess::mux::VmessInboundSessionKind::Udp => {
-            proxy.run_vmess_udp_relay(client, session, tag).await
-        }
-        vmess::mux::VmessInboundSessionKind::Mux => proxy.run_vmess_mux_session(client, tag).await,
-        vmess::mux::VmessInboundSessionKind::Tcp => {
-            serve_inbound(proxy, session, client, handler, tag, source_addr).await
-        }
-    }
+    let dispatch_session = session.clone();
+    let mut session_handler = VmessAcceptedSessionHandler {
+        proxy,
+        session: Some(session),
+        client: Some(client),
+        handler,
+        tag,
+        source_addr,
+    };
+    vmess::mux::dispatch_inbound_session(&dispatch_session, &mut session_handler).await
 }
 
 /// Raw TLS path: TLS accept -> VMess auth -> serve_inbound.

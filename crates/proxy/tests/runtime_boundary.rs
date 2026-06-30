@@ -2180,18 +2180,26 @@ fn vless_inbound_users_are_adapter_parsed() {
         "VLESS user store should live in protocols/vless, not proxy inbound helpers"
     );
     assert!(
-        session.contains("vless::classify_inbound_session(&session)")
-            && session.contains("vless::VlessInboundSessionKind::Mux")
-            && session.contains("vless::VlessInboundSessionKind::Udp")
-            && session.contains("vless::VlessInboundSessionKind::Tcp")
+        session.contains("struct VlessAcceptedSessionHandler")
+            && session.contains("impl<S> vless::VlessInboundSessionHandler")
+            && session.contains("async fn handle_tcp_session")
+            && session.contains("async fn handle_udp_session")
+            && session.contains("async fn handle_mux_session")
+            && session.contains("vless::dispatch_inbound_session")
+            && !session.contains("vless::classify_inbound_session(&session)")
+            && !session.contains("vless::VlessInboundSessionKind::Mux")
+            && !session.contains("vless::VlessInboundSessionKind::Udp")
+            && !session.contains("vless::VlessInboundSessionKind::Tcp")
             && !session.contains("session.network")
             && !session.contains("VlessInbound::is_mux_session(&session)")
             && protocol_inbound.contains("pub enum VlessInboundSessionKind")
             && protocol_inbound.contains("pub fn classify_inbound_session")
+            && protocol_inbound.contains("pub trait VlessInboundSessionHandler")
+            && protocol_inbound.contains("pub async fn dispatch_inbound_session")
             && protocol_inbound.contains("VlessInbound::is_mux_session(session)")
             && protocol_inbound.contains("VlessInboundSessionKind::Udp")
             && protocol_inbound.contains("VlessInboundSessionKind::Mux"),
-        "VLESS inbound glue should ask protocols/vless to classify accepted sessions"
+        "VLESS inbound glue should ask protocols/vless to dispatch accepted sessions"
     );
     assert!(
         model.contains("struct VlessInboundRequest")
@@ -6043,18 +6051,26 @@ fn vmess_transport_dispatch_uses_protocol_session_classification() {
 
     assert!(
         transport.contains("dispatch_vmess_session")
-            && transport.contains("vmess::mux::classify_inbound_session(&session)")
-            && transport.contains("vmess::mux::VmessInboundSessionKind::Udp")
-            && transport.contains("vmess::mux::VmessInboundSessionKind::Mux")
-            && transport.contains("vmess::mux::VmessInboundSessionKind::Tcp")
+            && transport.contains("struct VmessAcceptedSessionHandler")
+            && transport.contains("impl<H> vmess::mux::VmessInboundSessionHandler")
+            && transport.contains("async fn handle_tcp_session")
+            && transport.contains("async fn handle_udp_session")
+            && transport.contains("async fn handle_mux_session")
+            && transport.contains("vmess::mux::dispatch_inbound_session")
+            && !transport.contains("vmess::mux::classify_inbound_session(&session)")
+            && !transport.contains("vmess::mux::VmessInboundSessionKind::Udp")
+            && !transport.contains("vmess::mux::VmessInboundSessionKind::Mux")
+            && !transport.contains("vmess::mux::VmessInboundSessionKind::Tcp")
             && !transport.contains("session.network")
             && !transport.contains("Network::Udp")
             && !transport.contains("is_mux_cool_session"),
-        "VMess transport inbound glue should ask protocols/vmess to classify authenticated sessions"
+        "VMess transport inbound glue should ask protocols/vmess to dispatch authenticated sessions"
     );
     assert!(
         protocol_mux.contains("pub enum VmessInboundSessionKind")
             && protocol_mux.contains("pub fn classify_inbound_session")
+            && protocol_mux.contains("pub trait VmessInboundSessionHandler")
+            && protocol_mux.contains("pub async fn dispatch_inbound_session")
             && protocol_mux.contains("VmessInboundSessionKind::Udp")
             && protocol_mux.contains("VmessInboundSessionKind::Mux")
             && protocol_mux.contains("VmessInboundSessionKind::Tcp")

@@ -174,6 +174,27 @@ pub fn classify_inbound_session(session: &Session) -> VlessInboundSessionKind {
     }
 }
 
+pub trait VlessInboundSessionHandler {
+    type Error;
+
+    async fn handle_tcp_session(&mut self) -> Result<(), Self::Error>;
+
+    async fn handle_udp_session(&mut self) -> Result<(), Self::Error>;
+
+    async fn handle_mux_session(&mut self) -> Result<(), Self::Error>;
+}
+
+pub async fn dispatch_inbound_session<H>(session: &Session, handler: &mut H) -> Result<(), H::Error>
+where
+    H: VlessInboundSessionHandler,
+{
+    match classify_inbound_session(session) {
+        VlessInboundSessionKind::Mux => handler.handle_mux_session().await,
+        VlessInboundSessionKind::Udp => handler.handle_udp_session().await,
+        VlessInboundSessionKind::Tcp => handler.handle_tcp_session().await,
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct VlessInboundProfile {
     users: Arc<[VlessConfiguredUser]>,

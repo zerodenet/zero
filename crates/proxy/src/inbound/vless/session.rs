@@ -28,6 +28,74 @@ pub(crate) struct VlessStreamRequest<'a, S> {
     pub(crate) sni: Option<String>,
 }
 
+struct VlessAcceptedSessionHandler<'a, S> {
+    proxy: &'a Proxy,
+    session: Option<zero_core::Session>,
+    client: Option<MeteredStream<S>>,
+    mux_context: Option<vless::mux::VlessInboundMuxContext>,
+    inbound_tag: &'a str,
+    auth: &'a Option<zero_core::SessionAuth>,
+}
+
+impl<S> vless::VlessInboundSessionHandler for VlessAcceptedSessionHandler<'_, S>
+where
+    S: ClientStream + 'static,
+{
+    type Error = EngineError;
+
+    async fn handle_tcp_session(&mut self) -> Result<(), Self::Error> {
+        let client = self
+            .client
+            .take()
+            .expect("vless accepted client is dispatched once");
+        let handler = VlessInboundHandler {
+            vless_inbound: vless::VlessInbound,
+        };
+        let source_addr = client.peer_addr().ok();
+        serve_inbound(
+            self.proxy,
+            self.session
+                .take()
+                .expect("vless accepted session is dispatched once"),
+            TcpRelayStream::new(client.into_inner()),
+            &handler,
+            self.inbound_tag,
+            source_addr,
+        )
+        .await
+    }
+
+    async fn handle_udp_session(&mut self) -> Result<(), Self::Error> {
+        self.proxy
+            .handle_vless_udp_session(
+                self.client
+                    .take()
+                    .expect("vless accepted client is dispatched once"),
+                self.inbound_tag,
+                self.session
+                    .take()
+                    .expect("vless accepted session is dispatched once"),
+                self.auth,
+            )
+            .await
+    }
+
+    async fn handle_mux_session(&mut self) -> Result<(), Self::Error> {
+        self.proxy
+            .handle_vless_mux_session(
+                self.client
+                    .take()
+                    .expect("vless accepted client is dispatched once"),
+                self.inbound_tag,
+                self.mux_context
+                    .take()
+                    .expect("vless accepted mux context is dispatched once"),
+                self.auth,
+            )
+            .await
+    }
+}
+
 impl Proxy {
     pub(crate) async fn run_vless_quic_accept_loop(
         &self,
@@ -232,31 +300,15 @@ impl Proxy {
         session.sni = sni;
 
         let auth = session.auth.clone();
-
-        match vless::classify_inbound_session(&session) {
-            vless::VlessInboundSessionKind::Mux => {
-                self.handle_vless_mux_session(client, inbound_tag, mux_context, &auth)
-                    .await
-            }
-            vless::VlessInboundSessionKind::Udp => {
-                self.handle_vless_udp_session(client, inbound_tag, session, &auth)
-                    .await
-            }
-            vless::VlessInboundSessionKind::Tcp => {
-                let handler = VlessInboundHandler {
-                    vless_inbound: vless::VlessInbound,
-                };
-                let source_addr = client.peer_addr().ok();
-                serve_inbound(
-                    self,
-                    session,
-                    TcpRelayStream::new(client.into_inner()),
-                    &handler,
-                    inbound_tag,
-                    source_addr,
-                )
-                .await
-            }
-        }
+        let dispatch_session = session.clone();
+        let mut session_handler = VlessAcceptedSessionHandler {
+            proxy: self,
+            session: Some(session),
+            client: Some(client),
+            mux_context: Some(mux_context),
+            inbound_tag,
+            auth: &auth,
+        };
+        vless::dispatch_inbound_session(&dispatch_session, &mut session_handler).await
     }
 }
