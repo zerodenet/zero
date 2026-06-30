@@ -1016,6 +1016,8 @@ fn architecture_docs_do_not_describe_removed_proxy_facades() {
         "`protocol_registry/defaults.rs` only wires",
         "`protocol_registry/model.rs` only wires",
         "`protocol_registry/registry.rs` only owns",
+        "move protocol state to src/protocol_runtime",
+        "protocol state in src/protocol_runtime",
     ] {
         assert!(
             !architecture.contains(forbidden),
@@ -8012,7 +8014,7 @@ fn generic_runtime_root_does_not_import_protocol_crates_directly() {
         ] {
             assert!(
                 !content.contains(protocol_crate),
-                "{source} should not import protocol crate `{protocol_crate}` directly; move protocol state to src/protocol_runtime"
+                "{source} should not import protocol crate `{protocol_crate}` directly; keep protocol state in protocols/* or protocol-owned adapter glue"
             );
         }
     }
@@ -8044,7 +8046,7 @@ fn udp_flow_helpers_do_not_depend_on_protocol_runtime() {
 #[test]
 fn udp_packet_path_carrier_snapshot_is_protocol_neutral() {
     let runtime = read("src/runtime/udp_flow/sessions.rs");
-    let protocol_runtime = read("src/runtime/udp_flow/packet_path.rs");
+    let packet_path_runtime = read("src/runtime/udp_flow/packet_path.rs");
     let traits = read("src/runtime/udp_flow/packet_path.rs");
 
     assert!(
@@ -8052,7 +8054,7 @@ fn udp_packet_path_carrier_snapshot_is_protocol_neutral() {
         "protocol-named packet-path carrier snapshots should not be declared in generic runtime UDP flow state"
     );
     assert!(
-        !protocol_runtime.contains("enum UdpPacketPathCarrier"),
+        !packet_path_runtime.contains("enum UdpPacketPathCarrier"),
         "packet-path carrier snapshot storage should not remain a protocol-named enum"
     );
     assert!(
@@ -14109,7 +14111,7 @@ fn adapters_do_not_import_protocol_udp_types_through_runtime_dispatch() {
         ] {
             assert!(
                 !content.contains(forbidden),
-                "{source} should import protocol UDP type directly from protocol_runtime, not `{forbidden}`"
+                "{source} should import protocol UDP types from protocol-owned adapter/protocol modules, not the runtime dispatch facade `{forbidden}`"
             );
         }
     }

@@ -86,7 +86,7 @@ If you change protocol behavior, config parsing, routing, or runtime wiring, run
   - platform abstraction (socket, listener, stream) -> `crates/traits` + `crates/platform/tokio`
   - transport implementations (TLS, QUIC, WS, etc.) -> `crates/transport`
   - concrete protocol implementations -> `protocols/*`
-- Protocol-private config fields (cert/key, cipher, identity/user IDs, etc.) are read and parsed by the protocol's own adapter, never by the proxy runtime directly. Runtime code receives validated protocol values or opaque adapter-built keys, not raw protocol config strings.
+- Protocol-private config fields (cert/key, cipher, identity/user IDs, etc.) are read from config by thin adapters and parsed by protocol-owned constructors/helpers, never by the proxy runtime directly. Runtime code receives validated protocol values or opaque protocol/adapter-built keys, not raw protocol config strings.
 - Port conflict detection is authoritative in config validation (`DuplicateInboundListen`); bind-time errors mean external port occupation only
 - `direct` and `block` target semantics stay inside `zero-engine`; socket-level direct execution stays in `zero-proxy`
 - `mixed` is an inbound multiplexor, not an external protocol, but it is still registered through `MixedAdapter` so runtime code does not special-case it
@@ -106,7 +106,7 @@ If you change protocol behavior, config parsing, routing, or runtime wiring, run
 - Runtime UDP flow facades may create tracked `UdpFlowOutbound` values, but they only register protocol resume state with `ProtocolUdpState` and store the returned opaque managed-flow reference. Runtime flow bookkeeping must not store or import `ProtocolUdpFlowSnapshot`.
 - Existing protocol UDP flow forwarding uses `runtime::udp_flow::protocol_state` only as a dispatch facade. Protocol-specific snapshot extraction, packet I/O, and manager request construction live in protocol-owned adapter modules or `protocols/*`; do not put password/cipher/cache-key/relay-chain unpacking into generic runtime facades.
 - `UdpPacketPathCapability` owns packet-path carrier descriptor/snapshot construction, carrier build, and datagram-source classification. Do not add a monolithic adapter trait for packet-path methods.
-- UDP packet-path cache identity is adapter-built. Packet-path runtime may store opaque `cache_key` / `datagram_cache_key` values and parsed protocol values such as `CipherKind`, but it must not rebuild cache identity from raw protocol-private fields such as Shadowsocks cipher names.
+- UDP packet-path cache identity is protocol/adapter-built. Packet-path runtime may store opaque `cache_key` / `datagram_cache_key` values, but it must not rebuild cache identity from raw protocol-private fields such as Shadowsocks cipher names.
 - Packet-path entry build logic consumes datagram codecs supplied by `UdpDatagramSource`; generic packet-path entry code must not construct protocol-specific datagram codecs directly.
 - Packet-path datagram sources carry only neutral descriptor identity and an adapter-provided datagram codec; packet-path state must not construct protocol-named snapshots directly.
 - Packet-path datagram sources expose a datagram key part for cache identity; `runtime::udp_flow::packet_path_chain::key` must not read protocol-source internals directly.
