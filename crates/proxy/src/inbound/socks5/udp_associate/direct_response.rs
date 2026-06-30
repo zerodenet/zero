@@ -56,9 +56,9 @@ async fn write_socks5_direct_response(
     client_addr: SocketAddr,
     response: &UdpDirectResponseParts<'_, '_>,
 ) -> Result<usize, EngineError> {
-    let udp_session = socks5::Socks5Inbound.udp_session();
+    let udp_responder = socks5::Socks5Inbound.udp_responder();
     write_direct_response(response, || async {
-        udp_session
+        udp_responder
             .send_client_response_for_target(
                 relay,
                 zero_platform_tokio::socket_addr_to_socket_address(client_addr),

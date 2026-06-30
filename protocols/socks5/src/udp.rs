@@ -329,6 +329,11 @@ pub struct Socks5InboundUdpSession {
     codec: Socks5InboundUdpCodec,
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Socks5InboundUdpResponder {
+    session: Socks5InboundUdpSession,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Socks5InboundUdpRelayPacketAction<'a> {
     ClientPacket {
@@ -577,6 +582,49 @@ impl Socks5InboundUdpSession {
             Socks5UdpClientResponse::new(upstream_address, upstream_port, payload),
         )
         .await
+    }
+}
+
+impl Socks5InboundUdpResponder {
+    pub fn new() -> Self {
+        Self {
+            session: Socks5InboundUdpSession::new(),
+        }
+    }
+
+    pub async fn decode_dispatch_parts_or_resolve_local_dns<R>(
+        &self,
+        packet: &[u8],
+        resolver: &R,
+    ) -> Result<Option<Socks5InboundUdpDispatchView>, Error>
+    where
+        R: DnsResolver + ?Sized,
+    {
+        self.session
+            .decode_dispatch_parts_or_resolve_local_dns(packet, resolver)
+            .await
+    }
+
+    pub async fn send_client_response_for_target<S>(
+        &self,
+        socket: &S,
+        client: SocketAddress,
+        upstream_address: &Address,
+        upstream_port: u16,
+        payload: &[u8],
+    ) -> Result<usize, Socks5UdpRelayError<S::Error>>
+    where
+        S: DatagramSocket,
+    {
+        self.session
+            .send_client_response_for_target(
+                socket,
+                client,
+                upstream_address,
+                upstream_port,
+                payload,
+            )
+            .await
     }
 }
 

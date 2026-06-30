@@ -56,9 +56,9 @@ async fn forward_upstream_response(
         return Ok(());
     };
 
-    let udp_session = socks5::Socks5Inbound.udp_session();
+    let udp_responder = socks5::Socks5Inbound.udp_responder();
     write_upstream_response(&response, || async {
-        udp_session
+        udp_responder
             .send_client_response_for_target(
                 relay,
                 zero_platform_tokio::socket_addr_to_socket_address(client_addr),

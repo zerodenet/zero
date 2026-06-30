@@ -12,7 +12,7 @@ use crate::shared::{
     CMD_UDP_ASSOCIATE, METHOD_NOT_ACCEPTABLE, METHOD_NO_AUTH, METHOD_USERNAME_PASSWORD,
     SOCKS5_VERSION, USERPASS_STATUS_FAILURE, USERPASS_STATUS_SUCCESS, USERPASS_VERSION,
 };
-use crate::udp::Socks5InboundUdpSession;
+use crate::udp::{Socks5InboundUdpResponder, Socks5InboundUdpSession};
 
 #[derive(Debug, Default, Clone, Copy)]
 pub struct Socks5Inbound;
@@ -202,6 +202,10 @@ impl Socks5Inbound {
 
     pub fn udp_session(&self) -> Socks5InboundUdpSession {
         Socks5InboundUdpSession::new()
+    }
+
+    pub fn udp_responder(&self) -> Socks5InboundUdpResponder {
+        Socks5InboundUdpResponder::new()
     }
 
     pub async fn accept_request<S>(&self, stream: &mut S) -> Result<Session, Error>
