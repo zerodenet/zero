@@ -1161,6 +1161,119 @@ fn adapters_delegate_protocol_private_config_parsing_to_protocols() {
 }
 
 #[test]
+fn proxy_boundary_todo_completion_invariants_are_locked() {
+    for removed in [
+        "src/protocol_runtime",
+        "src/outbound",
+        "src/protocol_registry.rs",
+    ] {
+        assert!(
+            !manifest_dir().join(removed).exists(),
+            "legacy proxy dumping-ground path `{removed}` must not exist"
+        );
+    }
+
+    let runtime_roots = ["src/runtime", "src/runtime.rs"];
+    for runtime_root in runtime_roots {
+        let sources = if runtime_root.ends_with(".rs") {
+            vec![manifest_dir().join(runtime_root)]
+        } else {
+            rust_sources_under(runtime_root)
+        };
+        for path in sources {
+            let source = relative(&path);
+            let content = fs::read_to_string(&path).expect("read runtime source");
+            for forbidden in [
+                "InboundProtocolConfig::",
+                "OutboundProtocolConfig::",
+                "ResolvedLeafOutbound::",
+                "use socks5::",
+                "use vless::",
+                "use vmess::",
+                "use shadowsocks::",
+                "use trojan::",
+                "use hysteria2::",
+                "use mieru::",
+            ] {
+                assert!(
+                    !content.contains(forbidden),
+                    "{source} should remain protocol-neutral for the TODO boundary; found `{forbidden}`"
+                );
+            }
+        }
+    }
+
+    for path in rust_sources_under("src/adapters") {
+        let source = relative(&path);
+        let content = fs::read_to_string(&path).expect("read adapter source");
+        for forbidden in [
+            "parse_uuid",
+            "parse_flow",
+            "Uuid::parse",
+            "VmessCipher::from_name",
+            "CipherKind::from_str",
+            "sha224",
+            "blake3",
+            "encrypt_packet",
+            "decrypt_packet",
+            "encode_udp_packet",
+            "decode_udp_packet",
+        ] {
+            assert!(
+                !content.contains(forbidden),
+                "{source} should stay a thin adapter bridge and delegate protocol-private parsing/framing; found `{forbidden}`"
+            );
+        }
+    }
+
+    for source in [
+        "src/inbound/datagram_udp.rs",
+        "src/inbound/stream_udp.rs",
+        "src/inbound/mux_udp.rs",
+    ] {
+        let content = read(source);
+        for forbidden in [
+            "read_buf",
+            "pending_dispatch",
+            "client_map",
+            "client_sessions",
+            "CipherKind",
+            "password: &str",
+            "Codec::new",
+            "decode_udp_packet",
+            "encode_udp_packet",
+            "ResponseTarget",
+        ] {
+            assert!(
+                !content.contains(forbidden),
+                "{source} should stay shared inbound UDP orchestration glue, not protocol-private state; found `{forbidden}`"
+            );
+        }
+    }
+
+    let architecture = fs::read_to_string(repo_root().join("docs/project/architecture.md"))
+        .expect("read docs/project/architecture.md");
+    let agents = fs::read_to_string(repo_root().join("AGENTS.md")).expect("read AGENTS.md");
+    for (path, content) in [
+        ("docs/project/architecture.md", architecture.as_str()),
+        ("AGENTS.md", agents.as_str()),
+    ] {
+        for forbidden in [
+            "Protocol identity and cipher config parsing is adapter-owned",
+            "protocol's own adapter",
+            "move protocol state to src/protocol_runtime",
+            "proxy owns response bridge",
+            "代理拥有传输设置、socket 设置、路由、会话生命周期、统计、事件和响应桥接",
+        ] {
+            assert!(
+                !content.contains(forbidden),
+                "{path} should describe the converged proxy/protocol boundary, not stale TODO-era ownership `{forbidden}`"
+            );
+        }
+    }
+}
+
+#[test]
 fn runtime_does_not_match_protocol_config_variants() {
     for path in rust_sources_under("src/runtime") {
         let source = relative(&path);
