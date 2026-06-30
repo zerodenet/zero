@@ -470,6 +470,7 @@ pub struct ShadowsocksInboundUdpSession {
 #[cfg(feature = "crypto")]
 pub struct ShadowsocksInboundUdpResponder {
     session: ShadowsocksInboundUdpSession,
+    pending_client: Option<std::net::SocketAddr>,
 }
 
 #[cfg(feature = "crypto")]
@@ -695,7 +696,10 @@ impl ShadowsocksInboundUdpSession {
 #[cfg(feature = "crypto")]
 impl ShadowsocksInboundUdpResponder {
     pub fn new(session: ShadowsocksInboundUdpSession) -> Self {
-        Self { session }
+        Self {
+            session,
+            pending_client: None,
+        }
     }
 
     pub fn decode_inbound_dispatch(
@@ -703,6 +707,26 @@ impl ShadowsocksInboundUdpResponder {
         datagram: &[u8],
     ) -> Result<InboundUdpDispatch, Error> {
         self.session.decode_inbound_dispatch(datagram)
+    }
+
+    pub async fn read_inbound_dispatch_from_socket_tokio(
+        &mut self,
+        socket: &tokio::net::UdpSocket,
+    ) -> Result<InboundUdpDispatch, Error> {
+        let mut buf = [0u8; 65536];
+        loop {
+            let (n, client) = socket
+                .recv_from(&mut buf)
+                .await
+                .map_err(|_| Error::Io("ss udp recv error"))?;
+            match self.decode_inbound_dispatch(&buf[..n]) {
+                Ok(dispatch) => {
+                    self.pending_client = Some(client);
+                    return Ok(dispatch);
+                }
+                Err(_) => continue,
+            }
+        }
     }
 
     pub fn record_dispatch_success(
@@ -713,6 +737,16 @@ impl ShadowsocksInboundUdpResponder {
     ) {
         self.session
             .record_dispatch_success(proxy_session_id, client_session_id, client);
+    }
+
+    pub fn record_pending_dispatch_success(
+        &mut self,
+        proxy_session_id: u64,
+        client_session_id: Option<u64>,
+    ) {
+        if let Some(client) = self.pending_client.take() {
+            self.record_dispatch_success(proxy_session_id, client_session_id, client);
+        }
     }
 
     pub async fn send_response_for_target_proxy_session_to_client_tokio(

@@ -236,6 +236,7 @@ pub struct Hysteria2InboundUdpSession {
 #[cfg(feature = "tokio")]
 pub struct Hysteria2InboundUdpResponder {
     session: Hysteria2InboundUdpSession,
+    pending_dispatch: Option<Hysteria2InboundUdpTrackedDispatch>,
 }
 
 #[cfg(feature = "tokio")]
@@ -365,14 +366,31 @@ impl Hysteria2InboundUdpSession {
 #[cfg(feature = "tokio")]
 impl Hysteria2InboundUdpResponder {
     pub fn new(session: Hysteria2InboundUdpSession) -> Self {
-        Self { session }
+        Self {
+            session,
+            pending_dispatch: None,
+        }
+    }
+
+    pub async fn read_tracked_inbound_dispatch_from_datagram(
+        &mut self,
+        conn: &quinn::Connection,
+    ) -> Result<Hysteria2InboundUdpTrackedDispatch, Error> {
+        let tracked = self
+            .session
+            .read_inbound_dispatch_from_datagram(conn)
+            .await?;
+        self.pending_dispatch = Some(tracked.clone());
+        Ok(tracked)
     }
 
     pub async fn read_inbound_dispatch_from_datagram(
-        &self,
+        &mut self,
         conn: &quinn::Connection,
-    ) -> Result<Hysteria2InboundUdpTrackedDispatch, Error> {
-        self.session.read_inbound_dispatch_from_datagram(conn).await
+    ) -> Result<InboundUdpDispatch, Error> {
+        self.read_tracked_inbound_dispatch_from_datagram(conn)
+            .await
+            .map(|tracked| tracked.dispatch().clone())
     }
 
     pub fn record_dispatch_success(
@@ -382,6 +400,12 @@ impl Hysteria2InboundUdpResponder {
     ) {
         self.session
             .record_dispatch_success(proxy_session_id, tracked);
+    }
+
+    pub fn record_pending_dispatch_success(&mut self, proxy_session_id: u64) {
+        if let Some(tracked) = self.pending_dispatch.take() {
+            self.record_dispatch_success(proxy_session_id, &tracked);
+        }
     }
 
     pub fn send_response_for_target_proxy_session(

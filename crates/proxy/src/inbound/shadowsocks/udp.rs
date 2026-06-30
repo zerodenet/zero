@@ -1,6 +1,5 @@
 //! Shadowsocks UDP relay: protocol framing and routing through the UDP pipe.
 
-use std::net::SocketAddr;
 use std::sync::Arc;
 
 use shadowsocks::ShadowsocksInboundProfile;
@@ -16,7 +15,6 @@ use crate::runtime::Proxy;
 struct ShadowsocksDatagramUdpResponder {
     inner: shadowsocks::ShadowsocksInboundUdpResponder,
     auth: SessionAuth,
-    pending_client_addr: Option<SocketAddr>,
 }
 
 #[async_trait::async_trait]
@@ -25,20 +23,10 @@ impl DatagramUdpResponder<Arc<UdpSocket>> for ShadowsocksDatagramUdpResponder {
         &mut self,
         udp_socket: &Arc<UdpSocket>,
     ) -> Result<Option<InboundUdpDispatch>, zero_core::Error> {
-        let mut buf = [0u8; 65536];
-        loop {
-            let (n, client_addr) = udp_socket
-                .recv_from(&mut buf)
-                .await
-                .map_err(|_| zero_core::Error::Io("ss udp recv error"))?;
-            match self.inner.decode_inbound_dispatch(&buf[..n]) {
-                Ok(inbound_dispatch) => {
-                    self.pending_client_addr = Some(client_addr);
-                    return Ok(Some(inbound_dispatch));
-                }
-                Err(_) => continue,
-            }
-        }
+        self.inner
+            .read_inbound_dispatch_from_socket_tokio(udp_socket.as_ref())
+            .await
+            .map(Some)
     }
 
     fn auth(&self) -> Option<&SessionAuth> {
@@ -46,13 +34,8 @@ impl DatagramUdpResponder<Arc<UdpSocket>> for ShadowsocksDatagramUdpResponder {
     }
 
     fn on_dispatch_success(&mut self, session_id: u64, dispatch: &InboundUdpDispatch) {
-        if let Some(client_addr) = self.pending_client_addr.take() {
-            self.inner.record_dispatch_success(
-                session_id,
-                dispatch.client_session_id(),
-                client_addr,
-            );
-        }
+        self.inner
+            .record_pending_dispatch_success(session_id, dispatch.client_session_id());
     }
 
     async fn write_response_for_session(
@@ -89,7 +72,6 @@ impl Proxy {
                 responder: ShadowsocksDatagramUdpResponder {
                     inner: profile.udp_responder(),
                     auth: profile.inbound_auth(),
-                    pending_client_addr: None,
                 },
                 inbound_tag,
                 poll_upstream: false,

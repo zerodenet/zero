@@ -10,7 +10,6 @@ use crate::runtime::Proxy;
 
 struct Hysteria2DatagramUdpResponder {
     inner: hysteria2::Hysteria2InboundUdpResponder,
-    pending_dispatch: Option<hysteria2::udp::Hysteria2InboundUdpTrackedDispatch>,
 }
 
 #[async_trait::async_trait]
@@ -19,16 +18,14 @@ impl DatagramUdpResponder<Arc<quinn::Connection>> for Hysteria2DatagramUdpRespon
         &mut self,
         conn: &Arc<quinn::Connection>,
     ) -> Result<Option<InboundUdpDispatch>, zero_core::Error> {
-        let tracked = self.inner.read_inbound_dispatch_from_datagram(conn).await?;
-        let dispatch = tracked.dispatch().clone();
-        self.pending_dispatch = Some(tracked);
-        Ok(Some(dispatch))
+        self.inner
+            .read_inbound_dispatch_from_datagram(conn)
+            .await
+            .map(Some)
     }
 
     fn on_dispatch_success(&mut self, session_id: u64, _dispatch: &InboundUdpDispatch) {
-        if let Some(tracked) = self.pending_dispatch.take() {
-            self.inner.record_dispatch_success(session_id, &tracked);
-        }
+        self.inner.record_pending_dispatch_success(session_id);
     }
 
     async fn write_response_for_session(
@@ -56,7 +53,6 @@ impl Proxy {
                 source: conn,
                 responder: Hysteria2DatagramUdpResponder {
                     inner: hysteria2::Hysteria2Inbound.udp_responder(),
-                    pending_dispatch: None,
                 },
                 inbound_tag: &inbound_tag,
                 poll_upstream: true,
