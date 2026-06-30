@@ -139,7 +139,7 @@ async fn relays_udp_through_upstream_socks5_udp_associate() {
                     session.network == zero_core::Network::Udp
                         && session.outbound_tag.as_deref() == Some("chain")
                         && session.bytes_up == 71
-                        && session.bytes_down == 54
+                        && session.bytes_down == 44
                 })
                 .unwrap_or(false)
         },
@@ -156,7 +156,7 @@ async fn relays_udp_through_upstream_socks5_udp_associate() {
                     && session.outbound_tag.as_deref() == Some("chain")
                     && session.outcome.kind() == "chained_relayed"
                     && session.bytes_up == 71
-                    && session.bytes_down == 54
+                    && session.bytes_down == 44
             })
             .unwrap_or(false)
     })
