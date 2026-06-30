@@ -33,6 +33,8 @@ where
         port: u16,
         payload: &[u8],
     ) -> Result<usize, zero_core::Error>;
+
+    fn record_client_io(&mut self, _proxy: &Proxy, _client: &mut S) {}
 }
 
 pub(crate) struct StreamUdpRelayRequest<'a, S, R> {
@@ -91,6 +93,7 @@ where
                     Ok(None) => break,
                     Ok(Some(inbound_dispatch)) => {
                         last_activity = TokioInstant::now();
+                        responder.record_client_io(proxy, &mut client);
                         if let Err(error) = dispatch_inbound_udp_packet(
                             proxy,
                             &mut dispatch,
@@ -128,6 +131,7 @@ where
                         .await
                 })
                 .await?;
+                responder.record_client_io(proxy, &mut client);
             }
             upstream = upstream_udp.recv_response(&mut upstream_buf) => {
                 match upstream {
@@ -150,6 +154,7 @@ where
                                 .await
                         })
                         .await?;
+                        responder.record_client_io(proxy, &mut client);
                     }
                     Err(error) => {
                         warn!(error = %error, protocol = protocol, "stream udp upstream recv error");
@@ -174,6 +179,7 @@ where
                                 .await
                         })
                         .await?;
+                        responder.record_client_io(proxy, &mut client);
                     }
                     Ok(Err(error)) => warn!(error = %error, protocol = protocol, "stream udp chain response error"),
                     Err(error) => warn!(error = %error, protocol = protocol, "stream udp chain task panicked"),
