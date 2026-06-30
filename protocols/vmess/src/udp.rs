@@ -474,6 +474,12 @@ pub struct VmessInboundUdpSession {
     default_port: u16,
 }
 
+pub struct VmessInboundMuxUdpResponder {
+    session: VmessInboundUdpSession,
+    writer: crate::mux::VmessInboundMuxWriter,
+    mux_session_id: u16,
+}
+
 impl VmessInboundUdpSession {
     pub fn new(default_target: Address, default_port: u16) -> Self {
         Self {
@@ -643,6 +649,43 @@ impl VmessInboundUdpSession {
             mux_session_id,
             VmessInboundUdpClientResponse::new(target, port, payload),
         )
+    }
+}
+
+impl VmessInboundMuxUdpResponder {
+    pub fn new(
+        session: VmessInboundUdpSession,
+        writer: crate::mux::VmessInboundMuxWriter,
+        mux_session_id: u16,
+    ) -> Self {
+        Self {
+            session,
+            writer,
+            mux_session_id,
+        }
+    }
+
+    pub fn decode_inbound_dispatch(&mut self, payload: &[u8]) -> Result<InboundUdpDispatch, Error> {
+        self.session.decode_mux_inbound_dispatch(payload)
+    }
+
+    pub fn write_response_for_target(
+        &self,
+        target: &Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<usize, Error> {
+        self.session.write_mux_client_response_for_target(
+            &self.writer,
+            self.mux_session_id,
+            target,
+            port,
+            payload,
+        )
+    }
+
+    pub fn end_inbound_stream(&self) -> Result<usize, Error> {
+        self.writer.end_inbound_stream(self.mux_session_id)
     }
 }
 

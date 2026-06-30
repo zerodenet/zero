@@ -824,6 +824,13 @@ pub struct VlessInboundUdpSession {
     codec: VlessInboundUdpCodec,
 }
 
+#[cfg(feature = "reality")]
+pub struct VlessInboundMuxUdpResponder {
+    session: VlessInboundUdpSession,
+    writer: crate::mux::VlessInboundMuxWriter,
+    mux_session_id: u16,
+}
+
 impl VlessInboundUdpSession {
     pub fn new() -> Self {
         Self {
@@ -977,6 +984,44 @@ impl VlessInboundUdpSession {
             mux_session_id,
             VlessInboundUdpClientResponse::new(target, port, payload),
         )
+    }
+}
+
+#[cfg(feature = "reality")]
+impl VlessInboundMuxUdpResponder {
+    pub fn new(
+        session: VlessInboundUdpSession,
+        writer: crate::mux::VlessInboundMuxWriter,
+        mux_session_id: u16,
+    ) -> Self {
+        Self {
+            session,
+            writer,
+            mux_session_id,
+        }
+    }
+
+    pub fn decode_inbound_dispatch(&self, payload: &[u8]) -> Result<InboundUdpDispatch, Error> {
+        self.session.decode_mux_inbound_dispatch(payload)
+    }
+
+    pub fn write_response_for_target(
+        &self,
+        target: &Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<usize, Error> {
+        self.session.send_mux_client_response_for_target(
+            &self.writer,
+            self.mux_session_id,
+            target,
+            port,
+            payload,
+        )
+    }
+
+    pub fn end_inbound_stream(&self) -> Result<usize, Error> {
+        self.writer.end_inbound_stream(self.mux_session_id)
     }
 }
 

@@ -23,11 +23,12 @@ impl Proxy {
         auth: Option<&zero_core::SessionAuth>,
     ) {
         let mut up_rx = up_rx;
+        let udp_responder = vless::VlessInbound.mux_udp_responder(writer, mux_session_id);
         let mut dispatch = match UdpDispatch::new(inbound_tag).await {
             Ok(dispatch) => dispatch,
             Err(error) => {
                 warn!(%error, mux_session_id, "vless mux udp dispatch init failed");
-                let _ = writer.end_inbound_stream(mux_session_id);
+                let _ = udp_responder.end_inbound_stream();
                 return;
             }
         };
@@ -35,7 +36,6 @@ impl Proxy {
         let mut last_activity = TokioInstant::now();
         let mut direct_buf = vec![0_u8; 64 * 1024];
         let mut upstream_buf = vec![0_u8; 64 * 1024];
-        let udp_session = vless::VlessInbound.udp_session();
 
         info!(
             inbound_tag = inbound_tag,
@@ -62,7 +62,7 @@ impl Proxy {
                         break;
                     }
                     last_activity = TokioInstant::now();
-                    let inbound_dispatch = match udp_session.decode_mux_inbound_dispatch(&payload) {
+                    let inbound_dispatch = match udp_responder.decode_inbound_dispatch(&payload) {
                         Ok(inbound_dispatch) => inbound_dispatch,
                         Err(error) => {
                             warn!(%error, mux_session_id, "vless mux udp packet parse failed");
@@ -87,9 +87,7 @@ impl Proxy {
                                 &direct_buf[..n],
                             );
                             match write_direct_response_sync(&response, || {
-                                udp_session.send_mux_client_response_for_target(
-                                    &writer,
-                                    mux_session_id,
+                                udp_responder.write_response_for_target(
                                     &response.target,
                                     response.port,
                                     response.payload,
@@ -119,9 +117,7 @@ impl Proxy {
                                 pkt,
                             );
                             match write_upstream_response_sync(&response, || {
-                                udp_session.send_mux_client_response_for_target(
-                                    &writer,
-                                    mux_session_id,
+                                udp_responder.write_response_for_target(
                                     &response.target,
                                     response.port,
                                     &response.payload,
@@ -145,9 +141,7 @@ impl Proxy {
                             let response =
                                 record_chain_udp_response_parts(self, target, port, payload, session_id);
                             match write_chain_response_sync(&response, || {
-                                udp_session.send_mux_client_response_for_target(
-                                    &writer,
-                                    mux_session_id,
+                                udp_responder.write_response_for_target(
                                     &response.target,
                                     response.port,
                                     &response.payload,
@@ -170,6 +164,6 @@ impl Proxy {
         for completed in dispatch.finish_all() {
             log_completed_udp_flow(completed);
         }
-        let _ = writer.end_inbound_stream(mux_session_id);
+        let _ = udp_responder.end_inbound_stream();
     }
 }

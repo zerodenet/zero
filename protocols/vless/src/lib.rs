@@ -44,4 +44,6 @@ pub use reality::{
     generate_reality_key_pair, upgrade_reality_client, upgrade_reality_server,
     RealityClientOptions, RealityServerOptions, RealityTlsStream, VlessRealityServerProfile,
 };
+#[cfg(feature = "reality")]
+pub use shared::VlessInboundMuxUdpResponder;
 pub use shared::{format_uuid, parse_uuid, VlessInboundUdpClientResponse, VLESS_VERSION};

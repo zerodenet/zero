@@ -294,6 +294,15 @@ impl VlessInbound {
         crate::shared::VlessInboundUdpSession::new()
     }
 
+    #[cfg(feature = "reality")]
+    pub fn mux_udp_responder(
+        &self,
+        writer: crate::mux::VlessInboundMuxWriter,
+        mux_session_id: u16,
+    ) -> crate::shared::VlessInboundMuxUdpResponder {
+        crate::shared::VlessInboundMuxUdpResponder::new(self.udp_session(), writer, mux_session_id)
+    }
+
     /// Accept a VLESS connection, authenticate the user, and return both
     /// the session and the raw UUID (needed for MUX stream encryption).
     pub async fn accept_tcp_with_auth_and_id<S, A>(
