@@ -68,7 +68,7 @@ async fn connect_tcp(
         .await?;
     let mut upstream = MeteredStream::new(upstream);
 
-    let profile = socks5::Socks5TcpOutboundProfile::from_config_parts(username, password);
+    let profile = socks5::tcp_outbound_profile_from_config(username, password);
     profile.establish_tcp_tunnel(&mut upstream, session).await?;
     proxy.record_session_outbound_traffic(session.id, upstream.drain_traffic());
 
@@ -82,7 +82,7 @@ async fn apply_tcp_hop(
     username: Option<&str>,
     password: Option<&str>,
 ) -> Result<TcpRelayStream, EngineError> {
-    let profile = socks5::Socks5TcpOutboundProfile::from_config_parts(username, password);
+    let profile = socks5::tcp_outbound_profile_from_config(username, password);
     profile
         .establish_tcp_tunnel(&mut stream, session)
         .await

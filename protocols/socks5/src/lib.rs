@@ -16,7 +16,7 @@ pub use inbound::{
 };
 pub use metadata::Socks5Protocol;
 pub use outbound::{
-    Socks5Outbound, Socks5OutboundAuth, Socks5OwnedOutboundAuth, Socks5TcpOutboundProfile,
-    Socks5TcpTunnelTarget,
+    tcp_outbound_profile_from_config, Socks5Outbound, Socks5OutboundAuth, Socks5OwnedOutboundAuth,
+    Socks5TcpOutboundProfile, Socks5TcpTunnelTarget,
 };
 pub use shared::Socks5Reply;

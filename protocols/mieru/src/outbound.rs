@@ -83,6 +83,13 @@ impl MieruTcpOutboundProfile {
     }
 }
 
+pub fn tcp_outbound_profile_from_config(
+    username: impl Into<String>,
+    password: impl Into<String>,
+) -> MieruTcpOutboundProfile {
+    MieruTcpOutboundProfile::from_config_parts(username, password)
+}
+
 pub struct MieruTcpStream<S> {
     inner: S,
     outbound: MieruOutbound,

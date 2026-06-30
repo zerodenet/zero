@@ -33,8 +33,8 @@ pub use inbound::{
 };
 #[cfg(feature = "crypto")]
 pub use outbound::{
-    establish_tcp_tunnel, MieruOutbound, MieruTcpOutboundProfile, MieruTcpStream, MieruTcpTarget,
-    MieruTcpTunnelTarget,
+    establish_tcp_tunnel, tcp_outbound_profile_from_config, MieruOutbound, MieruTcpOutboundProfile,
+    MieruTcpStream, MieruTcpTarget, MieruTcpTunnelTarget,
 };
 pub use protocol::MieruProtocol;
 #[cfg(feature = "crypto")]

@@ -173,6 +173,13 @@ impl Socks5TcpOutboundProfile {
     }
 }
 
+pub fn tcp_outbound_profile_from_config(
+    username: Option<&str>,
+    password: Option<&str>,
+) -> Socks5TcpOutboundProfile {
+    Socks5TcpOutboundProfile::from_config_parts(username, password)
+}
+
 pub fn outbound_auth<'a>(
     username: Option<&'a str>,
     password: Option<&'a str>,

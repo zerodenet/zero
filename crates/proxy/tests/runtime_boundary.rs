@@ -3371,8 +3371,9 @@ fn socks5_tcp_adapter_uses_protocol_target_model() {
             .expect("read socks5 protocol outbound source");
 
     assert!(
-        adapter.contains("Socks5TcpOutboundProfile::from_config_parts")
+        adapter.contains("socks5::tcp_outbound_profile_from_config")
             && adapter.contains(".establish_tcp_tunnel(")
+            && !adapter.contains("Socks5TcpOutboundProfile::from_config_parts")
             && !adapter.contains("Socks5TcpTunnelTarget::new")
             && !adapter.contains("Socks5TcpTunnelTarget {")
             && !adapter.contains("Socks5OutboundAuth")
@@ -3382,6 +3383,7 @@ fn socks5_tcp_adapter_uses_protocol_target_model() {
     assert!(
         protocol_outbound.contains("pub struct Socks5TcpOutboundProfile")
             && protocol_outbound.contains("pub fn from_config_parts")
+            && protocol_outbound.contains("pub fn tcp_outbound_profile_from_config")
             && protocol_outbound.contains("pub async fn establish_tcp_tunnel")
             && protocol_outbound.contains("impl<'a> Socks5TcpTunnelTarget<'a>")
             && protocol_outbound.contains("pub fn outbound_auth")
@@ -3405,8 +3407,9 @@ fn mieru_tcp_connect_glue_lives_in_adapter_tcp_module() {
     assert!(
         adapter.contains("async fn connect_tcp(")
             && adapter.contains("async fn apply_tcp_hop(")
-            && adapter.contains("MieruTcpOutboundProfile::from_config_parts")
+            && adapter.contains("mieru::tcp_outbound_profile_from_config")
             && adapter.contains(".establish_tcp_tunnel(")
+            && !adapter.contains("MieruTcpOutboundProfile::from_config_parts")
             && !adapter.contains("MieruTcpTunnelTarget::new")
             && !adapter.contains("MieruTcpTunnelTarget {")
             && !adapter.contains("struct MieruTcpStream")
@@ -3419,6 +3422,7 @@ fn mieru_tcp_connect_glue_lives_in_adapter_tcp_module() {
     assert!(
         protocol_outbound.contains("pub struct MieruTcpOutboundProfile")
             && protocol_outbound.contains("pub fn from_config_parts")
+            && protocol_outbound.contains("pub fn tcp_outbound_profile_from_config")
             && protocol_outbound.contains("pub async fn establish_tcp_tunnel")
             && protocol_outbound.contains("pub struct MieruTcpStream")
             && protocol_outbound.contains("pub struct MieruTcpTunnelTarget")

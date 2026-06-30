@@ -67,7 +67,7 @@ async fn connect_tcp(
         .await?;
 
     let stream = TcpRelayStream::new(socket);
-    let profile = mieru::MieruTcpOutboundProfile::from_config_parts(username, password);
+    let profile = mieru::tcp_outbound_profile_from_config(username, password);
     let mieru_stream = profile
         .establish_tcp_tunnel(stream, session)
         .await
@@ -81,7 +81,7 @@ async fn apply_tcp_hop(
     username: &str,
     password: &str,
 ) -> Result<TcpRelayStream, EngineError> {
-    let profile = mieru::MieruTcpOutboundProfile::from_config_parts(username, password);
+    let profile = mieru::tcp_outbound_profile_from_config(username, password);
     let mieru_stream = profile
         .establish_tcp_tunnel(stream, session)
         .await
