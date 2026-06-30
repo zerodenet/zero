@@ -8,6 +8,7 @@ pub(crate) mod mieru;
 #[cfg(feature = "mixed")]
 mod mixed;
 mod mux_tcp;
+mod mux_udp;
 #[cfg(feature = "shadowsocks")]
 pub(crate) mod shadowsocks;
 #[cfg(feature = "socks5")]

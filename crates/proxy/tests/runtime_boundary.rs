@@ -188,6 +188,7 @@ fn runtime_protocol_runtime_references_are_confined_to_facades() {
 fn ordinary_udp_inbounds_submit_packets_through_udp_pipe() {
     let udp_dispatch = read("src/inbound/udp_dispatch.rs");
     let stream_udp = read("src/inbound/stream_udp.rs");
+    let mux_udp = read("src/inbound/mux_udp.rs");
     assert!(
         udp_dispatch.contains("pub(crate) async fn dispatch_inbound_udp_packet")
             && udp_dispatch.contains("UdpPipe::new(proxy, dispatch)")
@@ -200,11 +201,15 @@ fn ordinary_udp_inbounds_submit_packets_through_udp_pipe() {
             && !stream_udp.contains("UdpPipeInput"),
         "shared stream UDP relay glue should submit decoded packets through the inbound UDP dispatch helper"
     );
+    assert!(
+        mux_udp.contains("dispatch_inbound_udp_packet")
+            && !mux_udp.contains("UdpPipe::new")
+            && !mux_udp.contains("UdpPipeInput"),
+        "shared MUX UDP relay glue should submit decoded packets through the inbound UDP dispatch helper"
+    );
 
     for source in [
         "src/inbound/socks5/udp_associate/dispatch.rs",
-        "src/inbound/vless/mux_udp.rs",
-        "src/inbound/vmess/mux_udp.rs",
         "src/inbound/shadowsocks/udp.rs",
         "src/inbound/hysteria2/udp.rs",
     ] {
@@ -236,6 +241,26 @@ fn ordinary_udp_inbounds_submit_packets_through_udp_pipe() {
                 && !content.contains("UdpPipe::new")
                 && !content.contains("UdpPipeInput"),
             "{source} should delegate stream UDP packet submission to shared stream UDP relay glue"
+        );
+        assert!(
+            !content.contains("UdpDispatch::dispatch"),
+            "{source} should not call the UDP dispatch state machine directly"
+        );
+    }
+
+    for source in [
+        "src/inbound/vless/mux_udp.rs",
+        "src/inbound/vmess/mux_udp.rs",
+    ] {
+        let content = read(source);
+        assert!(
+            content.contains("run_mux_udp_relay")
+                && content.contains("MuxUdpRelayRequest")
+                && content.contains("MuxUdpResponder")
+                && !content.contains("dispatch_inbound_udp_packet")
+                && !content.contains("UdpPipe::new")
+                && !content.contains("UdpPipeInput"),
+            "{source} should delegate MUX UDP packet submission to shared MUX UDP relay glue"
         );
         assert!(
             !content.contains("UdpDispatch::dispatch"),
@@ -362,6 +387,7 @@ fn inbound_udp_response_accounting_uses_runtime_helpers() {
     let helper = read("src/runtime/udp_flow/helpers.rs");
     let inbound_response = read("src/inbound/udp_response.rs");
     let stream_udp = read("src/inbound/stream_udp.rs");
+    let mux_udp = read("src/inbound/mux_udp.rs");
     assert!(
         helper.contains("fn record_udp_inbound_response_rx")
             && helper.contains("fn record_udp_inbound_response_tx")
@@ -415,6 +441,18 @@ fn inbound_udp_response_accounting_uses_runtime_helpers() {
             && stream_udp.contains("log_completed_udp_flow"),
         "shared stream UDP relay glue should own direct/upstream/chain response accounting and writes for stream-carried UDP inbounds"
     );
+    assert!(
+        mux_udp.contains("record_direct_udp_response_parts")
+            && mux_udp.contains("record_upstream_udp_response_received")
+            && mux_udp.contains("record_chain_udp_response_parts")
+            && mux_udp.contains("write_direct_response_sync")
+            && mux_udp.contains("write_upstream_response_sync")
+            && mux_udp.contains("write_chain_response_sync")
+            && mux_udp.contains("wait_for_upstream_idle")
+            && mux_udp.contains("dispatch.finish_all()")
+            && mux_udp.contains("log_completed_udp_flow"),
+        "shared MUX UDP relay glue should own direct/upstream/chain response accounting and synchronous writes for MUX UDP inbounds"
+    );
 
     for source in [
         "src/inbound/vless/udp_session.rs",
@@ -442,14 +480,15 @@ fn inbound_udp_response_accounting_uses_runtime_helpers() {
     ] {
         let content = read(source);
         assert!(
-            content.contains("write_direct_response_sync")
-                && content.contains("write_upstream_response_sync")
-                && content.contains("write_chain_response_sync")
-                && content.contains("record_direct_udp_response_parts")
-                && content.contains("record_upstream_udp_response_received")
-                && content.contains("record_chain_udp_response_parts")
+            content.contains("run_mux_udp_relay")
+                && !content.contains("write_direct_response_sync")
+                && !content.contains("write_upstream_response_sync")
+                && !content.contains("write_chain_response_sync")
+                && !content.contains("record_direct_udp_response_parts")
+                && !content.contains("record_upstream_udp_response_received")
+                && !content.contains("record_chain_udp_response_parts")
                 && !content.contains("response.accounting.record_sent"),
-            "{source} should write MUX UDP responses through the neutral synchronous inbound response helpers"
+            "{source} should delegate MUX UDP response accounting and writes to shared MUX UDP relay glue"
         );
     }
 
@@ -513,11 +552,8 @@ fn inbound_udp_response_accounting_uses_runtime_helpers() {
         );
     }
 
-    for source in [
-        "src/inbound/vless/mux_udp.rs",
-        "src/inbound/vmess/mux_udp.rs",
-        "src/inbound/hysteria2/udp.rs",
-    ] {
+    {
+        let source = "src/inbound/hysteria2/udp.rs";
         let content = read(source);
         assert!(
             content.contains("record_upstream_udp_response_received")
@@ -550,8 +586,6 @@ fn inbound_udp_response_accounting_uses_runtime_helpers() {
     }
 
     for source in [
-        "src/inbound/vless/mux_udp.rs",
-        "src/inbound/vmess/mux_udp.rs",
         "src/inbound/hysteria2/udp.rs",
         "src/inbound/shadowsocks/udp.rs",
         "src/inbound/socks5/udp_associate/direct_response.rs",
@@ -566,8 +600,6 @@ fn inbound_udp_response_accounting_uses_runtime_helpers() {
     }
 
     for source in [
-        "src/inbound/vless/mux_udp.rs",
-        "src/inbound/vmess/mux_udp.rs",
         "src/inbound/hysteria2/udp.rs",
         "src/inbound/shadowsocks/udp.rs",
         "src/inbound/socks5/udp_associate/chain_response.rs",
@@ -1810,6 +1842,7 @@ fn inbound_auth_identity_stays_in_protocol_crates() {
 #[test]
 fn stream_udp_inbound_direct_responses_use_client_response_models() {
     let stream_udp = read("src/inbound/stream_udp.rs");
+    let mux_udp = read("src/inbound/mux_udp.rs");
     let trojan_udp_inbound = read("src/inbound/trojan/udp.rs");
     let mieru_udp_inbound = read("src/inbound/mieru/udp.rs");
     let hysteria2_inbound = read("src/inbound/hysteria2/udp.rs");
@@ -1901,7 +1934,6 @@ fn stream_udp_inbound_direct_responses_use_client_response_models() {
     );
     assert!(
         !vless_udp_inbound.contains("record_direct_udp_response_parts")
-            && vless_mux_inbound.contains("record_direct_udp_response_parts")
             && !vless_udp_inbound.contains("udp_response_target_from_socket_addr(sender)")
             && !vless_mux_inbound.contains("udp_response_target_from_socket_addr(sender)")
             && !vless_udp_inbound.contains("VlessInboundUdpClientResponse::new")
@@ -1920,13 +1952,18 @@ fn stream_udp_inbound_direct_responses_use_client_response_models() {
             && !vless_udp_inbound.contains("write_chain_response")
             && vless_udp_inbound.contains("record_client_io")
             && vless_udp_inbound.contains("record_session_inbound_traffic(self.session_id")
+            && !vless_mux_inbound.contains("record_direct_udp_response_parts")
             && vless_mux_inbound.contains("vless::VlessInbound.mux_udp_responder")
-            && vless_mux_inbound.contains("udp_responder.write_response_for_target")
-            && vless_mux_inbound.contains("udp_responder.end_inbound_stream")
+            && vless_mux_inbound.contains("impl MuxUdpResponder for VlessMuxUdpResponder")
+            && vless_mux_inbound.contains("self.inner.write_response_for_target")
+            && vless_mux_inbound.contains("self.inner.end_inbound_stream")
             && !vless_mux_inbound.contains(".send_mux_client_response_for_target")
-            && vless_mux_inbound.contains("write_direct_response_sync")
-            && vless_mux_inbound.contains("write_upstream_response_sync")
-            && vless_mux_inbound.contains("write_chain_response_sync")
+            && mux_udp.contains("write_direct_response_sync")
+            && mux_udp.contains("write_upstream_response_sync")
+            && mux_udp.contains("write_chain_response_sync")
+            && !vless_mux_inbound.contains("write_direct_response_sync")
+            && !vless_mux_inbound.contains("write_upstream_response_sync")
+            && !vless_mux_inbound.contains("write_chain_response_sync")
             && !vless_udp_inbound.contains("write_response_to_socket_addr_tokio")
             && !vless_mux_inbound.contains("send_mux_response_to_socket_addr")
             && vless_protocol.contains("pub async fn write_client_response_tokio")
@@ -1944,7 +1981,6 @@ fn stream_udp_inbound_direct_responses_use_client_response_models() {
     );
     assert!(
         !vmess_udp_inbound.contains("record_direct_udp_response_parts")
-            && vmess_mux_inbound.contains("record_direct_udp_response_parts")
             && !vmess_udp_inbound.contains("udp_response_target_from_socket_addr(sender)")
             && !vmess_mux_inbound.contains("udp_response_target_from_socket_addr(sender)")
             && !vmess_udp_inbound.contains("VmessInboundUdpClientResponse::new")
@@ -1961,13 +1997,18 @@ fn stream_udp_inbound_direct_responses_use_client_response_models() {
             && !vmess_udp_inbound.contains("write_direct_response")
             && !vmess_udp_inbound.contains("write_upstream_response")
             && !vmess_udp_inbound.contains("write_chain_response")
+            && !vmess_mux_inbound.contains("record_direct_udp_response_parts")
             && vmess_mux_inbound.contains("vmess::VmessInbound.mux_udp_responder_for")
-            && vmess_mux_inbound.contains("udp_responder.write_response_for_target")
-            && vmess_mux_inbound.contains("udp_responder.end_inbound_stream")
+            && vmess_mux_inbound.contains("impl MuxUdpResponder for VmessMuxUdpResponder")
+            && vmess_mux_inbound.contains("self.inner.write_response_for_target")
+            && vmess_mux_inbound.contains("self.inner.end_inbound_stream")
             && !vmess_mux_inbound.contains(".write_mux_client_response_for_target")
-            && vmess_mux_inbound.contains("write_direct_response_sync")
-            && vmess_mux_inbound.contains("write_upstream_response_sync")
-            && vmess_mux_inbound.contains("write_chain_response_sync")
+            && mux_udp.contains("write_direct_response_sync")
+            && mux_udp.contains("write_upstream_response_sync")
+            && mux_udp.contains("write_chain_response_sync")
+            && !vmess_mux_inbound.contains("write_direct_response_sync")
+            && !vmess_mux_inbound.contains("write_upstream_response_sync")
+            && !vmess_mux_inbound.contains("write_chain_response_sync")
             && !vmess_udp_inbound.contains("write_response_to_socket_addr_tokio")
             && !vmess_mux_inbound.contains("write_mux_response_to_socket_addr")
             && vmess_protocol.contains("pub async fn write_client_response_tokio")
@@ -5978,8 +6019,9 @@ fn inbound_vmess_mux_task_models_do_not_live_in_proxy_model() {
             && !root.contains("run_vmess_udp_relay")
             && !root.contains("vmess mux udp dispatch init failed")
             && !root.contains("udp_session.write_mux_response_to_socket_addr")
-            && mux_udp.contains("vmess mux udp dispatch init failed")
-            && mux_udp.contains("record_direct_udp_response_parts"),
+            && mux_udp.contains("run_mux_udp_relay")
+            && mux_udp.contains("VmessMuxUdpResponder")
+            && !mux_udp.contains("record_direct_udp_response_parts"),
         "VMess inbound MUX root should delegate UDP relay glue to src/inbound/vmess/*udp*.rs modules"
     );
     assert!(
@@ -6160,6 +6202,7 @@ fn vmess_transport_dispatch_uses_protocol_session_classification() {
 fn vmess_inbound_udp_response_encoding_stays_in_protocol_crate() {
     let helper_path = manifest_dir().join("src/inbound/vmess/helpers.rs");
     let stream_udp = read("src/inbound/stream_udp.rs");
+    let shared_mux_udp = read("src/inbound/mux_udp.rs");
     let mux = read("src/inbound/vmess/mux.rs");
     let mux_udp = read("src/inbound/vmess/mux_udp.rs");
     let udp_session = read("src/inbound/vmess/udp_session.rs");
@@ -6191,7 +6234,8 @@ fn vmess_inbound_udp_response_encoding_stays_in_protocol_crate() {
             && !mux.contains("udp_response::decode_socks5_upstream_response")
             && stream_udp.contains("upstream_udp.recv_response")
             && !udp_session.contains("upstream_udp.recv_response")
-            && mux_udp.contains("upstream_udp.recv_response")
+            && shared_mux_udp.contains("upstream_udp.recv_response")
+            && !mux_udp.contains("upstream_udp.recv_response")
             && !mux.contains("&pkt.target")
             && !mux.contains("pkt.port,")
             && !mux.contains("&pkt.payload")
@@ -6241,10 +6285,11 @@ fn vmess_inbound_udp_response_encoding_stays_in_protocol_crate() {
             && udp_session.contains("vmess::VmessInbound.udp_responder_for(&session)")
             && mux_udp.contains("vmess::VmessInbound.mux_udp_responder_for")
             && udp_session.contains(".read_inbound_dispatch_tokio(client")
-            && mux_udp.contains("udp_responder.decode_inbound_dispatch")
+            && mux_udp.contains("self.inner.decode_inbound_dispatch")
             && stream_udp.contains("dispatch_inbound_udp_packet")
             && !udp_session.contains("dispatch_inbound_udp_packet")
-            && mux_udp.contains("dispatch_inbound_udp_packet")
+            && shared_mux_udp.contains("dispatch_inbound_udp_packet")
+            && !mux_udp.contains("dispatch_inbound_udp_packet")
             && !mux.contains("decode_dispatch_parts(&payload)")
             && !mux.contains("client.read(&mut client_buf)")
             && !mux.contains("decode_dispatch_parts(&client_buf[..n])")
@@ -6261,11 +6306,15 @@ fn vmess_inbound_udp_response_encoding_stays_in_protocol_crate() {
             && !udp_session.contains("record_direct_udp_response_parts")
             && !udp_session.contains("udp_response_target_from_socket_addr(sender)")
             && !udp_session.contains("udp_session.write_response_to_socket_addr_tokio")
-            && mux_udp.contains("udp_responder.write_response_for_target")
-            && mux_udp.contains("write_direct_response_sync")
-            && mux_udp.contains("write_upstream_response_sync")
-            && mux_udp.contains("write_chain_response_sync")
-            && mux_udp.contains("record_direct_udp_response_parts")
+            && mux_udp.contains("self.inner.write_response_for_target")
+            && shared_mux_udp.contains("write_direct_response_sync")
+            && shared_mux_udp.contains("write_upstream_response_sync")
+            && shared_mux_udp.contains("write_chain_response_sync")
+            && !mux_udp.contains("write_direct_response_sync")
+            && !mux_udp.contains("write_upstream_response_sync")
+            && !mux_udp.contains("write_chain_response_sync")
+            && shared_mux_udp.contains("record_direct_udp_response_parts")
+            && !mux_udp.contains("record_direct_udp_response_parts")
             && !mux_udp.contains("udp_response_target_from_socket_addr(sender)")
             && !mux_udp.contains("udp_session.write_mux_response_to_socket_addr")
             && !udp_session.contains("udp_session(session.target.clone(), session.port)")
@@ -6278,7 +6327,8 @@ fn vmess_inbound_udp_response_encoding_stays_in_protocol_crate() {
             && !mux.contains("request.into_dispatch_parts()")
             && stream_udp.contains("record_upstream_udp_response_received")
             && !udp_session.contains("record_upstream_udp_response_received")
-            && mux_udp.contains("record_upstream_udp_response_received")
+            && shared_mux_udp.contains("record_upstream_udp_response_received")
+            && !mux_udp.contains("record_upstream_udp_response_received")
             && !udp_session.contains("VmessInboundUdpClientResponse::new")
             && !mux_udp.contains("VmessInboundUdpClientResponse::new")
             && !udp_session.contains("udp_session.write_response_tokio(\n")
@@ -6338,13 +6388,14 @@ fn vmess_inbound_udp_response_encoding_stays_in_protocol_crate() {
         mux.contains("spawn_vmess_mux_udp_stream_task")
             && !mux.contains("vmess mux udp direct response send failed")
             && !mux.contains("udp_session.write_mux_response_to_socket_addr")
-            && mux_udp.contains("vmess mux udp direct response send failed")
+            && shared_mux_udp.contains("mux udp direct response encode failed")
             && mux_udp.contains("vmess::VmessInbound.mux_udp_responder_for")
-            && mux_udp.contains("udp_responder.write_response_for_target")
+            && mux_udp.contains("self.inner.write_response_for_target")
             && !mux_udp.contains("udp_session.write_mux_client_response")
             && !mux_udp.contains("udp_session.write_mux_response_to_socket_addr")
-            && mux_udp.contains("dispatch_inbound_udp_packet"),
-        "VMess MUX root should only spawn UDP sub-stream glue while src/inbound/vmess/mux_udp.rs owns MUX UDP dispatch"
+            && shared_mux_udp.contains("dispatch_inbound_udp_packet")
+            && !mux_udp.contains("dispatch_inbound_udp_packet"),
+        "VMess MUX root should only spawn UDP sub-stream glue while shared MUX UDP glue owns MUX UDP dispatch"
     );
     for private_helper in [
         "decode_inbound_udp_datagram",
@@ -6382,6 +6433,7 @@ fn vmess_inbound_udp_response_encoding_stays_in_protocol_crate() {
 #[test]
 fn inbound_vless_mux_task_model_does_not_live_in_proxy_model() {
     let root = read("src/inbound/vless/mux.rs");
+    let shared_mux_udp = read("src/inbound/mux_udp.rs");
     let mux_udp = read("src/inbound/vless/mux_udp.rs");
     let model = read("src/inbound/vless/model.rs");
     let protocol_mux = fs::read_to_string(repo_root().join("protocols/vless/src/mux.rs"))
@@ -6441,8 +6493,10 @@ fn inbound_vless_mux_task_model_does_not_live_in_proxy_model() {
         root.contains("spawn_vless_mux_udp_stream_task")
             && !root.contains("vless mux udp dispatch init failed")
             && !root.contains("record_direct_udp_response_received")
-            && mux_udp.contains("vless mux udp dispatch init failed")
-            && mux_udp.contains("record_direct_udp_response_parts"),
+            && shared_mux_udp.contains("mux udp dispatch init failed")
+            && shared_mux_udp.contains("record_direct_udp_response_parts")
+            && mux_udp.contains("run_mux_udp_relay")
+            && !mux_udp.contains("record_direct_udp_response_parts"),
         "VLESS inbound MUX root should delegate UDP sub-stream dispatch to src/inbound/vless/mux_udp.rs"
     );
 }
@@ -6451,6 +6505,7 @@ fn inbound_vless_mux_task_model_does_not_live_in_proxy_model() {
 fn vless_inbound_udp_packet_framing_stays_in_protocol_crate() {
     let helper = read("src/inbound/vless/helpers.rs");
     let stream_udp = read("src/inbound/stream_udp.rs");
+    let shared_mux_udp = read("src/inbound/mux_udp.rs");
     let udp_session = read("src/inbound/vless/udp_session.rs");
     let mux_root = read("src/inbound/vless/mux.rs");
     let mux = read("src/inbound/vless/mux_udp.rs");
@@ -6498,7 +6553,8 @@ fn vless_inbound_udp_packet_framing_stays_in_protocol_crate() {
         !mux.contains("socks5::parse_udp_packet")
             && !mux.contains("socks5::decode_udp_associate_response")
             && !mux.contains("udp_response::decode_socks5_upstream_response")
-            && mux.contains("upstream_udp.recv_response")
+            && shared_mux_udp.contains("upstream_udp.recv_response")
+            && !mux.contains("upstream_udp.recv_response")
             && !mux.contains("&pkt.target")
             && !mux.contains("pkt.port,")
             && !mux.contains("&pkt.payload")
@@ -6569,18 +6625,25 @@ fn vless_inbound_udp_packet_framing_stays_in_protocol_crate() {
             && !udp_session.contains("zero_core::Address::Ipv4")
             && !udp_session.contains("zero_core::Address::Ipv6")
             && !udp_session.contains("VlessInboundUdpCodec.encode_response")
+            && mux.contains("run_mux_udp_relay")
+            && mux.contains("impl MuxUdpResponder for VlessMuxUdpResponder")
             && mux.contains("vless::VlessInbound.mux_udp_responder")
-            && mux.contains("udp_responder.decode_inbound_dispatch")
-            && mux.contains("dispatch_inbound_udp_packet")
+            && mux.contains("self.inner.decode_inbound_dispatch")
+            && shared_mux_udp.contains("dispatch_inbound_udp_packet")
+            && !mux.contains("dispatch_inbound_udp_packet")
             && !mux.contains("decode_dispatch_parts(&payload)")
-            && mux.contains("udp_responder.write_response_for_target")
-            && mux.contains("write_direct_response_sync")
-            && mux.contains("write_upstream_response_sync")
-            && mux.contains("write_chain_response_sync")
-            && mux.contains("record_direct_udp_response_parts")
+            && mux.contains("self.inner.write_response_for_target")
+            && shared_mux_udp.contains("write_direct_response_sync")
+            && shared_mux_udp.contains("write_upstream_response_sync")
+            && shared_mux_udp.contains("write_chain_response_sync")
+            && !mux.contains("write_direct_response_sync")
+            && !mux.contains("write_upstream_response_sync")
+            && !mux.contains("write_chain_response_sync")
+            && shared_mux_udp.contains("record_direct_udp_response_parts")
+            && !mux.contains("record_direct_udp_response_parts")
             && !mux.contains("udp_response_target_from_socket_addr(sender)")
             && !mux.contains("udp_session.send_mux_response_to_socket_addr")
-            && mux.contains("udp_responder.end_inbound_stream")
+            && mux.contains("self.inner.end_inbound_stream")
             && !mux.contains(".send_mux_client_response_for_target")
             && !mux.contains("writer.end_inbound_stream")
             && !mux.contains(".send_inbound_downlink(")
@@ -6594,7 +6657,8 @@ fn vless_inbound_udp_packet_framing_stays_in_protocol_crate() {
             && !mux.contains("request.pipe_parts()")
             && !mux.contains("request.into_parts()")
             && !mux.contains("request.into_dispatch_parts()")
-            && mux.contains("record_upstream_udp_response_received")
+            && shared_mux_udp.contains("record_upstream_udp_response_received")
+            && !mux.contains("record_upstream_udp_response_received")
             && !mux.contains("VlessInboundUdpClientResponse::new")
             && !mux.contains("udp_session.send_mux_response(\n")
             && !mux.contains("client_session_id: None")
@@ -6648,10 +6712,12 @@ fn vless_inbound_udp_packet_framing_stays_in_protocol_crate() {
             && !mux_root.contains("UdpPipe::new")
             && !mux_root.contains("vless::VlessInbound.udp_session()")
             && !mux_root.contains("record_direct_udp_response_received")
-            && mux.contains("dispatch_inbound_udp_packet")
+            && shared_mux_udp.contains("dispatch_inbound_udp_packet")
+            && !mux.contains("dispatch_inbound_udp_packet")
+            && mux.contains("run_mux_udp_relay")
             && mux.contains("vless::VlessInbound.mux_udp_responder")
             && !mux.contains("vless::VlessInbound.udp_session()"),
-        "VLESS MUX root should only spawn UDP sub-stream glue while src/inbound/vless/mux_udp.rs owns UDP dispatch"
+        "VLESS MUX root should only spawn UDP sub-stream glue while shared MUX UDP glue owns UDP dispatch"
     );
     for private_helper in [
         "decode_inbound_udp_datagram",
