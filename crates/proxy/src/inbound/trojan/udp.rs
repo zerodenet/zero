@@ -27,7 +27,7 @@ impl Proxy {
         let auth = session.auth.clone();
         let mut last_activity = TokioInstant::now();
         let timeout = self.udp_upstream_idle_timeout();
-        let udp_session = trojan::TrojanInbound.udp_session();
+        let udp_responder = trojan::TrojanInbound.udp_responder();
 
         info!(
             inbound_tag = inbound_tag,
@@ -50,7 +50,7 @@ impl Proxy {
                     );
                     break;
                 }
-                packet = udp_session.read_inbound_dispatch(&mut client) => {
+                packet = udp_responder.read_inbound_dispatch(&mut client) => {
                     match packet {
                         Ok(inbound_dispatch) => {
                             last_activity = TokioInstant::now();
@@ -82,8 +82,8 @@ impl Proxy {
                         &direct_buf[..n],
                     );
                     write_direct_response(&response, || async {
-                        udp_session
-                            .write_client_response_for_target(
+                        udp_responder
+                            .write_response_for_target(
                                 &mut client,
                                 &response.target,
                                 response.port,
@@ -104,8 +104,8 @@ impl Proxy {
                                 pkt,
                             );
                             write_upstream_response(&response, || async {
-                                udp_session
-                                    .write_client_response_for_target(
+                                udp_responder
+                                    .write_response_for_target(
                                         &mut client,
                                         &response.target,
                                         response.port,
@@ -128,8 +128,8 @@ impl Proxy {
                             let response =
                                 record_chain_udp_response_parts(self, target, port, payload, session_id);
                             write_chain_response(&response, || async {
-                                udp_session
-                                    .write_client_response_for_target(
+                                udp_responder
+                                    .write_response_for_target(
                                         &mut client,
                                         &response.target,
                                         response.port,

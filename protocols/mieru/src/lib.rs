@@ -36,3 +36,5 @@ pub use outbound::{
     MieruTcpTunnelTarget,
 };
 pub use protocol::MieruProtocol;
+#[cfg(feature = "crypto")]
+pub use udp::MieruInboundUdpResponder;

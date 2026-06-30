@@ -183,6 +183,11 @@ pub struct TrojanInboundUdpSession {
     codec: TrojanInboundUdpCodec,
 }
 
+#[derive(Debug, Default, Clone, Copy)]
+pub struct TrojanInboundUdpResponder {
+    session: TrojanInboundUdpSession,
+}
+
 impl TrojanInboundUdpSession {
     pub fn new() -> Self {
         Self::default()
@@ -272,6 +277,37 @@ impl TrojanInboundUdpSession {
     }
 }
 
+impl TrojanInboundUdpResponder {
+    pub fn new(session: TrojanInboundUdpSession) -> Self {
+        Self { session }
+    }
+
+    pub async fn read_inbound_dispatch<S>(
+        &self,
+        stream: &mut S,
+    ) -> Result<InboundUdpDispatch, Error>
+    where
+        S: AsyncSocket,
+    {
+        self.session.read_inbound_dispatch(stream).await
+    }
+
+    pub async fn write_response_for_target<S>(
+        &self,
+        stream: &mut S,
+        target: &Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<usize, Error>
+    where
+        S: AsyncSocket,
+    {
+        self.session
+            .write_client_response_for_target(stream, target, port, payload)
+            .await
+    }
+}
+
 #[derive(Debug, Default, Clone, Copy)]
 pub struct TrojanInboundUdpCodec;
 
@@ -311,6 +347,10 @@ impl TrojanInbound {
 
     pub fn udp_session(&self) -> TrojanInboundUdpSession {
         TrojanInboundUdpSession::new()
+    }
+
+    pub fn udp_responder(&self) -> TrojanInboundUdpResponder {
+        TrojanInboundUdpResponder::new(self.udp_session())
     }
 
     /// Accept a Trojan TCP connection.
