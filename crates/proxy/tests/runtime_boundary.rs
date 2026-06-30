@@ -1139,6 +1139,72 @@ fn tcp_runtime_does_not_match_protocol_outbound_results() {
 }
 
 #[test]
+fn tcp_relay_chain_runtime_uses_inventory_for_all_protocol_hops() {
+    let tcp_dispatch = read("src/runtime/tcp_dispatch.rs");
+    let inventory_tcp = read("src/inventory/tcp.rs");
+
+    assert!(
+        tcp_dispatch.contains("async fn dispatch_tcp_relay_chain")
+            && tcp_dispatch.contains("pub(crate) async fn dispatch_tcp_relay_prefix")
+            && tcp_dispatch.contains("async fn apply_hop_protocol")
+            && tcp_dispatch.contains(".dispatch_tcp_relay_prefix(chain).await?")
+            && tcp_dispatch.contains("apply_hop_protocol(self, carrier.stream, &final_hop, session)")
+            && tcp_dispatch.contains("apply_hop_protocol(self, stream, &current_hop, &session_for_next)")
+            && tcp_dispatch.contains(".apply_tcp_relay_hop(proxy, stream, session, hop)")
+            && tcp_dispatch.contains("EstablishedTcpOutbound::relay(stream)")
+            && tcp_dispatch.contains(".into_relay_stream()"),
+        "TCP relay chain runtime should normalize the first hop and delegate every protocol hop through ProtocolInventory"
+    );
+    assert!(
+        inventory_tcp.contains("pub(crate) async fn apply_tcp_relay_hop(")
+            && inventory_tcp.contains("self.registry.find_outbound_leaf(leaf)?")
+            && inventory_tcp.contains("TcpOutboundCapability::apply_relay_hop(")
+            && inventory_tcp.contains("OutboundAdapterContext::new(proxy)")
+            && !tcp_dispatch.contains("TcpOutboundCapability::apply_relay_hop")
+            && !tcp_dispatch.contains("self.registry.find_outbound_leaf")
+            && !tcp_dispatch.contains("find_outbound_leaf(hop")
+            && !tcp_dispatch.contains("find_outbound_leaf(&final_hop"),
+        "TCP relay hop adapter resolution should live only in ProtocolInventory"
+    );
+    for forbidden in [
+        "ResolvedLeafOutbound::Socks5",
+        "ResolvedLeafOutbound::Vless",
+        "ResolvedLeafOutbound::Vmess",
+        "ResolvedLeafOutbound::Trojan",
+        "ResolvedLeafOutbound::Mieru",
+        "ResolvedLeafOutbound::Shadowsocks",
+        "ResolvedLeafOutbound::Hysteria2",
+        "connect_upstream_socks5",
+        "connect_upstream_vless",
+        "connect_upstream_vmess",
+        "connect_upstream_trojan",
+        "connect_upstream_mieru",
+        "connect_upstream_shadowsocks",
+        "open_hysteria2_quic_connection",
+        "apply_tcp_hop(",
+        ".apply_relay_hop(",
+    ] {
+        assert!(
+            !tcp_dispatch.contains(forbidden),
+            "TCP relay runtime should not call protocol-specific relay hop detail `{forbidden}`"
+        );
+    }
+    assert!(
+        tcp_dispatch.contains("fn relay_next_session(endpoint: OutboundEndpoint<'_>) -> Session")
+            && tcp_dispatch.contains("zero_core::Network::Tcp")
+            && tcp_dispatch.contains("zero_core::ProtocolType::Unknown")
+            && !tcp_dispatch.contains("ProtocolType::Socks5")
+            && !tcp_dispatch.contains("ProtocolType::Vless")
+            && !tcp_dispatch.contains("ProtocolType::Vmess")
+            && !tcp_dispatch.contains("ProtocolType::Trojan")
+            && !tcp_dispatch.contains("ProtocolType::Mieru")
+            && !tcp_dispatch.contains("ProtocolType::Shadowsocks")
+            && !tcp_dispatch.contains("ProtocolType::Hysteria2"),
+        "TCP relay next-hop sessions should stay protocol-neutral"
+    );
+}
+
+#[test]
 fn udp_single_hop_runtime_does_not_resolve_outbound_adapter_objects() {
     let udp_start = read("src/runtime/udp_dispatch/start/mod.rs");
     let inventory_udp_leaf = read("src/inventory/udp/leaf.rs");
