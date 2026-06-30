@@ -354,6 +354,21 @@ pub struct Socks5InboundUdpRelaySession {
     client: Option<SocketAddress>,
 }
 
+pub trait Socks5InboundUdpRelayPacketHandler {
+    type Error;
+
+    async fn handle_client_packet(&mut self, payload: &[u8]) -> Result<(), Self::Error>;
+
+    async fn handle_peer_response(
+        &mut self,
+        client: SocketAddress,
+        sender: SocketAddress,
+        payload: &[u8],
+    ) -> Result<(), Self::Error>;
+
+    async fn handle_unexpected_sender(&mut self, sender: SocketAddress) -> Result<(), Self::Error>;
+}
+
 impl Socks5InboundUdpRelaySession {
     pub fn new() -> Self {
         Self::default()
@@ -382,6 +397,30 @@ impl Socks5InboundUdpRelaySession {
                 payload,
             },
             None => Socks5InboundUdpRelayPacketAction::UnexpectedSender { sender },
+        }
+    }
+
+    pub async fn handle_packet<H>(
+        &mut self,
+        sender: SocketAddress,
+        payload: &[u8],
+        handler: &mut H,
+    ) -> Result<(), H::Error>
+    where
+        H: Socks5InboundUdpRelayPacketHandler,
+    {
+        match self.classify_packet(sender, payload) {
+            Socks5InboundUdpRelayPacketAction::ClientPacket { payload } => {
+                handler.handle_client_packet(payload).await
+            }
+            Socks5InboundUdpRelayPacketAction::PeerResponse {
+                client,
+                sender,
+                payload,
+            } => handler.handle_peer_response(client, sender, payload).await,
+            Socks5InboundUdpRelayPacketAction::UnexpectedSender { sender } => {
+                handler.handle_unexpected_sender(sender).await
+            }
         }
     }
 }
