@@ -7,7 +7,6 @@ use crate::transport::{ClientStream, MeteredStream};
 
 struct VlessStreamUdpResponder {
     inner: vless::VlessInboundUdpResponder,
-    read_buf: Vec<u8>,
     session_id: u64,
 }
 
@@ -20,9 +19,7 @@ where
         &mut self,
         client: &mut MeteredStream<S>,
     ) -> Result<Option<InboundUdpDispatch>, zero_core::Error> {
-        self.inner
-            .read_inbound_dispatch_tokio(client, &mut self.read_buf)
-            .await
+        self.inner.read_inbound_dispatch_tokio(client).await
     }
 
     async fn write_response_for_target(
@@ -62,7 +59,6 @@ impl Proxy {
                 client,
                 responder: VlessStreamUdpResponder {
                     inner: vless::VlessInbound.udp_responder(),
-                    read_buf: vec![0_u8; 64 * 1024],
                     session_id: session.id,
                 },
                 session: &session,

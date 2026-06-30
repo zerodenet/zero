@@ -8,7 +8,6 @@ use crate::transport::TcpRelayStream;
 
 struct VmessStreamUdpResponder {
     inner: vmess::VmessInboundUdpResponder,
-    read_buf: Vec<u8>,
 }
 
 #[async_trait::async_trait]
@@ -17,9 +16,7 @@ impl StreamUdpResponder<TcpRelayStream> for VmessStreamUdpResponder {
         &mut self,
         client: &mut TcpRelayStream,
     ) -> Result<Option<InboundUdpDispatch>, zero_core::Error> {
-        self.inner
-            .read_inbound_dispatch_tokio(client, &mut self.read_buf)
-            .await
+        self.inner.read_inbound_dispatch_tokio(client).await
     }
 
     async fn write_response_for_target(
@@ -49,7 +46,6 @@ impl Proxy {
                 client,
                 responder: VmessStreamUdpResponder {
                     inner: vmess::VmessInbound.udp_responder_for(&session),
-                    read_buf: vec![0_u8; 64 * 1024],
                 },
                 session: &session,
                 inbound_tag,

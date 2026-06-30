@@ -8,7 +8,6 @@ use crate::runtime::Proxy;
 
 struct MieruStreamUdpResponder {
     inner: mieru::MieruInboundUdpResponder,
-    read_buf: [u8; 65536],
 }
 
 #[async_trait::async_trait]
@@ -17,9 +16,7 @@ impl StreamUdpResponder<MieruClientStream> for MieruStreamUdpResponder {
         &mut self,
         client: &mut MieruClientStream,
     ) -> Result<Option<InboundUdpDispatch>, zero_core::Error> {
-        self.inner
-            .read_inbound_dispatch_tokio(client, &mut self.read_buf)
-            .await
+        self.inner.read_inbound_dispatch_tokio(client).await
     }
 
     async fn write_response_for_target(
@@ -49,7 +46,6 @@ impl Proxy {
                 client,
                 responder: MieruStreamUdpResponder {
                     inner: mieru::MieruInbound.udp_responder(),
-                    read_buf: [0; 65536],
                 },
                 session,
                 inbound_tag,
