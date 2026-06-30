@@ -2,6 +2,9 @@ use tokio::select;
 use tokio::time::Instant as TokioInstant;
 use tracing::{info, warn};
 
+use crate::inbound::udp_response::{
+    write_chain_response_sync, write_direct_response_sync, write_upstream_response_sync,
+};
 use crate::runtime::pipe::{KernelPipe, UdpPipe, UdpPipeInput};
 use crate::runtime::udp_dispatch::UdpDispatch;
 use crate::runtime::udp_flow::helpers::{
@@ -86,16 +89,16 @@ impl Proxy {
                                 sender,
                                 &direct_buf[..n],
                             );
-                            match udp_session.send_mux_client_response_for_target(
-                                &writer,
-                                mux_session_id,
-                                &response.target,
-                                response.port,
-                                response.payload,
-                            ) {
-                                Ok(frame_len) => {
-                                    response.accounting.record_sent(frame_len);
-                                }
+                            match write_direct_response_sync(&response, || {
+                                udp_session.send_mux_client_response_for_target(
+                                    &writer,
+                                    mux_session_id,
+                                    &response.target,
+                                    response.port,
+                                    response.payload,
+                                )
+                            }) {
+                                Ok(_) => {}
                                 Err(error) => {
                                     warn!(%error, mux_session_id, "vless mux udp direct response encode failed");
                                     break;
@@ -118,16 +121,16 @@ impl Proxy {
                                 timeout,
                                 pkt,
                             );
-                            match udp_session.send_mux_client_response_for_target(
-                                &writer,
-                                mux_session_id,
-                                &response.target,
-                                response.port,
-                                &response.payload,
-                            ) {
-                                Ok(frame_len) => {
-                                    response.accounting.record_sent(frame_len);
-                                }
+                            match write_upstream_response_sync(&response, || {
+                                udp_session.send_mux_client_response_for_target(
+                                    &writer,
+                                    mux_session_id,
+                                    &response.target,
+                                    response.port,
+                                    &response.payload,
+                                )
+                            }) {
+                                Ok(_) => {}
                                 Err(error) => {
                                     warn!(%error, mux_session_id, "vless mux udp upstream response encode failed");
                                     break;
@@ -144,16 +147,16 @@ impl Proxy {
                             last_activity = TokioInstant::now();
                             let response =
                                 record_chain_udp_response_parts(self, target, port, payload, session_id);
-                            match udp_session.send_mux_client_response_for_target(
-                                &writer,
-                                mux_session_id,
-                                &response.target,
-                                response.port,
-                                &response.payload,
-                            ) {
-                                Ok(frame_len) => {
-                                    response.accounting.record_sent(frame_len);
-                                }
+                            match write_chain_response_sync(&response, || {
+                                udp_session.send_mux_client_response_for_target(
+                                    &writer,
+                                    mux_session_id,
+                                    &response.target,
+                                    response.port,
+                                    &response.payload,
+                                )
+                            }) {
+                                Ok(_) => {}
                                 Err(error) => {
                                     warn!(%error, mux_session_id, "vless mux udp chain response encode failed");
                                     break;

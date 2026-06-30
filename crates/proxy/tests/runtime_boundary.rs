@@ -342,6 +342,9 @@ fn inbound_udp_response_accounting_uses_runtime_helpers() {
         inbound_response.contains("fn write_direct_response")
             && inbound_response.contains("fn write_upstream_response")
             && inbound_response.contains("fn write_chain_response")
+            && inbound_response.contains("fn write_direct_response_sync")
+            && inbound_response.contains("fn write_upstream_response_sync")
+            && inbound_response.contains("fn write_chain_response_sync")
             && inbound_response.contains("response.accounting.record_sent(written)"),
         "stream UDP inbound response write glue should centralize protocol write callbacks plus neutral accounting"
     );
@@ -368,6 +371,21 @@ fn inbound_udp_response_accounting_uses_runtime_helpers() {
     for source in [
         "src/inbound/vless/mux_udp.rs",
         "src/inbound/vmess/mux_udp.rs",
+    ] {
+        let content = read(source);
+        assert!(
+            content.contains("write_direct_response_sync")
+                && content.contains("write_upstream_response_sync")
+                && content.contains("write_chain_response_sync")
+                && content.contains("record_direct_udp_response_parts")
+                && content.contains("record_upstream_udp_response_received")
+                && content.contains("record_chain_udp_response_parts")
+                && !content.contains("response.accounting.record_sent"),
+            "{source} should write MUX UDP responses through the neutral synchronous inbound response helpers"
+        );
+    }
+
+    for source in [
         "src/inbound/socks5/udp_associate/direct_response.rs",
         "src/inbound/socks5/udp_associate/chain_response.rs",
         "src/inbound/socks5/udp_associate/upstream_response.rs",
@@ -447,8 +465,6 @@ fn inbound_udp_response_accounting_uses_runtime_helpers() {
     }
 
     for source in [
-        "src/inbound/vless/mux_udp.rs",
-        "src/inbound/vmess/mux_udp.rs",
         "src/inbound/hysteria2/udp.rs",
         "src/inbound/shadowsocks/udp.rs",
         "src/inbound/socks5/udp_associate/direct_response.rs",
@@ -1779,6 +1795,9 @@ fn stream_udp_inbound_direct_responses_use_client_response_models() {
             && vless_udp_inbound.contains("write_upstream_response")
             && vless_udp_inbound.contains("write_chain_response")
             && vless_mux_inbound.contains(".send_mux_client_response_for_target")
+            && vless_mux_inbound.contains("write_direct_response_sync")
+            && vless_mux_inbound.contains("write_upstream_response_sync")
+            && vless_mux_inbound.contains("write_chain_response_sync")
             && !vless_udp_inbound.contains("write_response_to_socket_addr_tokio")
             && !vless_mux_inbound.contains("send_mux_response_to_socket_addr")
             && vless_protocol.contains("pub async fn write_client_response_tokio")
@@ -1802,6 +1821,9 @@ fn stream_udp_inbound_direct_responses_use_client_response_models() {
             && vmess_udp_inbound.contains("write_upstream_response")
             && vmess_udp_inbound.contains("write_chain_response")
             && vmess_mux_inbound.contains(".write_mux_client_response_for_target")
+            && vmess_mux_inbound.contains("write_direct_response_sync")
+            && vmess_mux_inbound.contains("write_upstream_response_sync")
+            && vmess_mux_inbound.contains("write_chain_response_sync")
             && !vmess_udp_inbound.contains("write_response_to_socket_addr_tokio")
             && !vmess_mux_inbound.contains("write_mux_response_to_socket_addr")
             && vmess_protocol.contains("pub async fn write_client_response_tokio")
@@ -5999,6 +6021,9 @@ fn vmess_inbound_udp_response_encoding_stays_in_protocol_crate() {
             && !udp_session.contains("udp_response_target_from_socket_addr(sender)")
             && !udp_session.contains("udp_session.write_response_to_socket_addr_tokio")
             && mux_udp.contains(".write_mux_client_response_for_target")
+            && mux_udp.contains("write_direct_response_sync")
+            && mux_udp.contains("write_upstream_response_sync")
+            && mux_udp.contains("write_chain_response_sync")
             && mux_udp.contains("record_direct_udp_response_parts")
             && !mux_udp.contains("udp_response_target_from_socket_addr(sender)")
             && !mux_udp.contains("udp_session.write_mux_response_to_socket_addr")
@@ -6281,6 +6306,9 @@ fn vless_inbound_udp_packet_framing_stays_in_protocol_crate() {
             && mux.contains("UdpPipeInput::from_inbound_dispatch")
             && !mux.contains("decode_dispatch_parts(&payload)")
             && mux.contains(".send_mux_client_response_for_target")
+            && mux.contains("write_direct_response_sync")
+            && mux.contains("write_upstream_response_sync")
+            && mux.contains("write_chain_response_sync")
             && mux.contains("record_direct_udp_response_parts")
             && !mux.contains("udp_response_target_from_socket_addr(sender)")
             && !mux.contains("udp_session.send_mux_response_to_socket_addr")

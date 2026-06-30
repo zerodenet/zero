@@ -4,6 +4,9 @@ use tokio::time::Instant as TokioInstant;
 use tracing::warn;
 use zero_core::Session;
 
+use crate::inbound::udp_response::{
+    write_chain_response_sync, write_direct_response_sync, write_upstream_response_sync,
+};
 use crate::runtime::pipe::{KernelPipe, UdpPipe, UdpPipeInput};
 use crate::runtime::udp_dispatch::UdpDispatch;
 use crate::runtime::udp_flow::helpers::{
@@ -76,16 +79,16 @@ impl Proxy {
                                     sender,
                                     &direct_buf[..n],
                                 );
-                                match udp_session.write_mux_client_response_for_target(
-                                    &writer,
-                                    mux_session_id,
-                                    &response.target,
-                                    response.port,
-                                    response.payload,
-                                ) {
-                                    Ok(frame_len) => {
-                                        response.accounting.record_sent(frame_len);
-                                    }
+                                match write_direct_response_sync(&response, || {
+                                    udp_session.write_mux_client_response_for_target(
+                                        &writer,
+                                        mux_session_id,
+                                        &response.target,
+                                        response.port,
+                                        response.payload,
+                                    )
+                                }) {
+                                    Ok(_) => {}
                                     Err(error) => {
                                         warn!(%error, mux_session_id, "vmess mux udp direct response send failed");
                                         break;
@@ -108,16 +111,16 @@ impl Proxy {
                                     timeout,
                                     pkt,
                                 );
-                                match udp_session.write_mux_client_response_for_target(
-                                    &writer,
-                                    mux_session_id,
-                                    &response.target,
-                                    response.port,
-                                    &response.payload,
-                                ) {
-                                    Ok(frame_len) => {
-                                        response.accounting.record_sent(frame_len);
-                                    }
+                                match write_upstream_response_sync(&response, || {
+                                    udp_session.write_mux_client_response_for_target(
+                                        &writer,
+                                        mux_session_id,
+                                        &response.target,
+                                        response.port,
+                                        &response.payload,
+                                    )
+                                }) {
+                                    Ok(_) => {}
                                     Err(error) => {
                                         warn!(%error, mux_session_id, "vmess mux udp upstream response send failed");
                                         break;
@@ -134,16 +137,16 @@ impl Proxy {
                                 last_activity = TokioInstant::now();
                                 let response =
                                     record_chain_udp_response_parts(&proxy, target, port, payload, session_id);
-                                match udp_session.write_mux_client_response_for_target(
-                                    &writer,
-                                    mux_session_id,
-                                    &response.target,
-                                    response.port,
-                                    &response.payload,
-                                ) {
-                                    Ok(frame_len) => {
-                                        response.accounting.record_sent(frame_len);
-                                    }
+                                match write_chain_response_sync(&response, || {
+                                    udp_session.write_mux_client_response_for_target(
+                                        &writer,
+                                        mux_session_id,
+                                        &response.target,
+                                        response.port,
+                                        &response.payload,
+                                    )
+                                }) {
+                                    Ok(_) => {}
                                     Err(error) => {
                                         warn!(%error, mux_session_id, "vmess mux udp chain response send failed");
                                         break;
