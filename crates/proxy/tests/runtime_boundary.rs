@@ -1676,6 +1676,7 @@ fn shadowsocks_inbound_uses_adapter_request_model() {
     assert!(
         udp.contains("async fn ss_udp_relay_loop")
             && !udp.contains("struct SsProtocolResponse")
+            && udp.contains("udp_responder")
             && udp.contains(".send_response_for_target_proxy_session_to_client_tokio")
             && !udp.contains("ShadowsocksInboundUdpClientResponse::new")
             && !udp.contains(".send_response_for_proxy_session_to_sender_tokio")
@@ -1689,7 +1690,8 @@ fn shadowsocks_inbound_uses_adapter_request_model() {
     );
     assert!(
         udp.contains("ShadowsocksInboundProfile")
-            && udp.contains("profile.udp_session()")
+            && udp.contains("profile.udp_responder()")
+            && !udp.contains("profile.udp_session()")
             && udp.contains("profile.inbound_auth()")
             && !udp.contains("profile.principal_key()")
             && !udp.contains("CipherKind")
@@ -3786,14 +3788,16 @@ fn shadowsocks_udp_inbound_uses_protocol_codec_not_datagram_primitives() {
         .and_then(|content| content.split("impl ShadowsocksInboundUdpResponse").next())
         .expect("Shadowsocks inbound UDP response struct section");
     assert!(
-        udp.contains("profile.udp_session()")
-            && udp.contains("udp_session.decode_inbound_dispatch")
+        udp.contains("profile.udp_responder()")
+            && !udp.contains("profile.udp_session()")
+            && udp.contains("udp_responder.decode_inbound_dispatch")
             && udp.contains("dispatch_inbound_udp_packet")
             && !udp.contains("request.into_dispatch_parts().into_parts()")
-            && udp.contains("udp_session.record_dispatch_success")
+            && udp.contains("udp_responder.record_dispatch_success")
             && !udp.contains("dispatch_parts.record_dispatch_success")
             && !udp.contains("udp_session.record_dispatched_client_session")
             && !udp.contains("udp_session.record_client_session")
+            && udp.contains("udp_responder")
             && udp.contains(".send_response_for_target_proxy_session_to_client_tokio")
             && udp.contains("write_optional_direct_response")
             && udp.contains("write_optional_chain_response")
@@ -3818,6 +3822,8 @@ fn shadowsocks_udp_inbound_uses_protocol_codec_not_datagram_primitives() {
             && !udp.contains("udp_session.encode_response_to_client")
             && protocol_inbound.contains("struct ShadowsocksInboundUdpCodec")
             && protocol_inbound.contains("struct ShadowsocksInboundUdpSession")
+            && protocol_inbound.contains("struct ShadowsocksInboundUdpResponder")
+            && protocol_inbound.contains("impl ShadowsocksInboundUdpResponder")
             && protocol_inbound.contains("fn decode_request")
             && protocol_inbound.contains("fn decode_dispatch_parts")
             && protocol_inbound.contains("fn decode_inbound_dispatch")

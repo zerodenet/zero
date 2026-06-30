@@ -134,6 +134,10 @@ impl ShadowsocksInboundProfile {
         ShadowsocksInboundUdpSession::new(self.udp_codec())
     }
 
+    pub fn udp_responder(&self) -> ShadowsocksInboundUdpResponder {
+        ShadowsocksInboundUdpResponder::new(self.udp_session())
+    }
+
     pub async fn accept_request<S: zero_traits::AsyncSocket>(
         &self,
         inbound: &ShadowsocksInbound,
@@ -456,6 +460,11 @@ pub struct ShadowsocksInboundUdpSession {
 }
 
 #[cfg(feature = "crypto")]
+pub struct ShadowsocksInboundUdpResponder {
+    session: ShadowsocksInboundUdpSession,
+}
+
+#[cfg(feature = "crypto")]
 impl ShadowsocksInboundUdpSession {
     pub fn new(codec: ShadowsocksInboundUdpCodec) -> Self {
         Self {
@@ -672,6 +681,49 @@ impl ShadowsocksInboundUdpSession {
             target,
             port,
         )
+    }
+}
+
+#[cfg(feature = "crypto")]
+impl ShadowsocksInboundUdpResponder {
+    pub fn new(session: ShadowsocksInboundUdpSession) -> Self {
+        Self { session }
+    }
+
+    pub fn decode_inbound_dispatch(
+        &mut self,
+        datagram: &[u8],
+    ) -> Result<InboundUdpDispatch, Error> {
+        self.session.decode_inbound_dispatch(datagram)
+    }
+
+    pub fn record_dispatch_success(
+        &mut self,
+        proxy_session_id: u64,
+        client_session_id: Option<u64>,
+        client: std::net::SocketAddr,
+    ) {
+        self.session
+            .record_dispatch_success(proxy_session_id, client_session_id, client);
+    }
+
+    pub async fn send_response_for_target_proxy_session_to_client_tokio(
+        &self,
+        socket: &tokio::net::UdpSocket,
+        proxy_session_id: Option<u64>,
+        target: &Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<Option<usize>, Error> {
+        self.session
+            .send_response_for_target_proxy_session_to_client_tokio(
+                socket,
+                proxy_session_id,
+                target,
+                port,
+                payload,
+            )
+            .await
     }
 }
 

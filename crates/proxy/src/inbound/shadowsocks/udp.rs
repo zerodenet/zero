@@ -22,7 +22,7 @@ impl Proxy {
         profile: ShadowsocksInboundProfile,
     ) -> Result<(), EngineError> {
         let mut dispatch = crate::runtime::udp_dispatch::UdpDispatch::new(inbound_tag).await?;
-        let mut udp_session = profile.udp_session();
+        let mut udp_responder = profile.udp_responder();
         let mut buf = [0u8; 65536];
         let mut direct_buf = [0u8; 65536];
 
@@ -37,7 +37,7 @@ impl Proxy {
                     };
                     let packet = &buf[..n];
 
-                    let inbound_dispatch = match udp_session.decode_inbound_dispatch(packet) {
+                    let inbound_dispatch = match udp_responder.decode_inbound_dispatch(packet) {
                         Ok(inbound_dispatch) => inbound_dispatch,
                         Err(_) => continue,
                     };
@@ -52,7 +52,7 @@ impl Proxy {
                     .await
                     {
                         Ok(session_id) => {
-                            udp_session.record_dispatch_success(
+                            udp_responder.record_dispatch_success(
                                 session_id,
                                 inbound_dispatch.client_session_id(),
                                 client_addr,
@@ -73,7 +73,7 @@ impl Proxy {
                         &direct_buf[..n],
                     );
                     let _ = write_optional_direct_response(&response, || async {
-                        udp_session
+                        udp_responder
                             .send_response_for_target_proxy_session_to_client_tokio(
                                 udp_socket.as_ref(),
                                 response.accounting.session_id(),
@@ -92,7 +92,7 @@ impl Proxy {
                             let response =
                                 record_chain_udp_response_parts(self, target, port, payload, session_id);
                             let _ = write_optional_chain_response(&response, || async {
-                                udp_session
+                                udp_responder
                                     .send_response_for_target_proxy_session_to_client_tokio(
                                         udp_socket.as_ref(),
                                         session_id,

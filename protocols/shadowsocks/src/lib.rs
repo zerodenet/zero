@@ -13,7 +13,10 @@ pub mod udp;
 
 pub use inbound::ShadowsocksInbound;
 #[cfg(feature = "crypto")]
-pub use inbound::{ShadowsocksAccept, ShadowsocksInboundProfile, ShadowsocksInboundTcpState};
+pub use inbound::{
+    ShadowsocksAccept, ShadowsocksInboundProfile, ShadowsocksInboundTcpState,
+    ShadowsocksInboundUdpResponder,
+};
 pub use metadata::ShadowsocksProtocol;
 pub use outbound::ShadowsocksOutbound;
 #[cfg(feature = "crypto")]
