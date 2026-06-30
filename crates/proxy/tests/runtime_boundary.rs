@@ -320,10 +320,12 @@ fn inbound_udp_response_accounting_uses_runtime_helpers() {
             && helper.contains("fn session_id(")
             && helper.contains("struct UdpUpstreamResponseParts")
             && helper.contains("struct UdpDirectResponseParts")
+            && helper.contains("struct UdpChainResponseParts")
             && helper.contains("fn record_upstream_udp_response_received")
             && helper.contains("fn record_direct_udp_response_received")
             && helper.contains("fn record_direct_udp_response_parts")
             && helper.contains("fn record_chain_udp_response_received")
+            && helper.contains("fn record_chain_udp_response_parts")
             && helper.contains("direct_response_session_id")
             && helper.contains("record_udp_upstream_packet_received")
             && helper.contains("touch_upstream_idle")
@@ -351,6 +353,7 @@ fn inbound_udp_response_accounting_uses_runtime_helpers() {
         assert!(
             (content.contains("record_direct_udp_response_parts")
                 || content.contains("record_direct_udp_response_received")
+                || content.contains("record_chain_udp_response_parts")
                 || content.contains("record_chain_udp_response_received")
                 || content.contains("record_upstream_udp_response_received")
                 || content.contains("UdpInboundResponseAccounting::record_received"))
@@ -374,7 +377,7 @@ fn inbound_udp_response_accounting_uses_runtime_helpers() {
     assert!(
         datagram_loop.contains("record_upstream_udp_response_received")
             && datagram_loop.contains("record_direct_udp_response_parts")
-            && datagram_loop.contains("record_chain_udp_response_received")
+            && datagram_loop.contains("record_chain_udp_response_parts")
             && datagram_loop.contains("response.accounting.record_sent")
             && datagram_loop.contains("response.accounting.record_sent")
             && datagram_loop.contains("response.accounting.session_id()")
@@ -437,6 +440,7 @@ fn inbound_udp_response_accounting_uses_runtime_helpers() {
         assert!(
             (content.contains("record_direct_udp_response_parts")
                 || content.contains("record_direct_udp_response_received")
+                || content.contains("record_chain_udp_response_parts")
                 || content.contains("record_chain_udp_response_received")
                 || content.contains("record_upstream_udp_response_received")
                 || content.contains("UdpInboundResponseAccounting::record_received"))
@@ -464,6 +468,25 @@ fn inbound_udp_response_accounting_uses_runtime_helpers() {
                 && !content.contains("udp_response_target_from_socket_addr(sender)")
                 && !content.contains("record_direct_udp_response_received"),
             "{source} should consume neutral direct response parts instead of open-coding sender target conversion"
+        );
+    }
+
+    for source in [
+        "src/inbound/vless/udp_session.rs",
+        "src/inbound/vless/mux_udp.rs",
+        "src/inbound/vmess/udp_session.rs",
+        "src/inbound/vmess/mux_udp.rs",
+        "src/inbound/trojan/udp.rs",
+        "src/inbound/mieru/udp.rs",
+        "src/inbound/hysteria2/udp.rs",
+        "src/inbound/shadowsocks/udp.rs",
+        "src/inbound/socks5/udp_associate/chain_response.rs",
+    ] {
+        let content = read(source);
+        assert!(
+            content.contains("record_chain_udp_response_parts")
+                && !content.contains("record_chain_udp_response_received"),
+            "{source} should consume neutral chain response parts instead of open-coding chain response accounting"
         );
     }
 
@@ -6440,7 +6463,7 @@ fn trojan_inbound_udp_packet_framing_stays_in_protocol_crate() {
             && !inbound.contains("parts.into_pipe_parts()")
             && inbound.contains(".write_client_response_for_target")
             && inbound.contains("let written = udp_session")
-            && inbound.contains("response_accounting.record_sent(written)")
+            && inbound.contains("response.accounting.record_sent(written)")
             && !inbound.contains("response_accounting.record_sent(n)")
             && !inbound.contains("let payload_len = payload.len()")
             && !inbound.contains("response_accounting.record_sent(payload_len)")

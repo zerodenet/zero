@@ -3,7 +3,7 @@ use std::net::SocketAddr;
 use tracing::warn;
 use zero_platform_tokio::TokioDatagramSocket;
 
-use crate::runtime::udp_flow::helpers::record_chain_udp_response_received;
+use crate::runtime::udp_flow::helpers::{record_chain_udp_response_parts, UdpChainResponseParts};
 use crate::runtime::udp_flow::packet_path::ChainTask;
 use crate::runtime::Proxy;
 
@@ -13,15 +13,13 @@ pub(super) async fn handle_chain_result(
 ) {
     match chain_result {
         Ok(Ok((target, port, payload, session_id))) => {
+            let response =
+                record_chain_udp_response_parts(request.proxy, target, port, payload, session_id);
             forward_chain_response(ForwardChainResponseRequest {
-                proxy: request.proxy,
                 relay: request.relay,
                 client_addr: request.client_addr,
                 inbound_tag: request.inbound_tag,
-                target,
-                port,
-                payload,
-                session_id,
+                response,
             })
             .await;
         }
@@ -42,23 +40,13 @@ pub(super) struct ChainResponseRequest<'a> {
 }
 
 struct ForwardChainResponseRequest<'a> {
-    proxy: &'a Proxy,
     relay: &'a TokioDatagramSocket,
     client_addr: Option<SocketAddr>,
     inbound_tag: &'a str,
-    target: zero_core::Address,
-    port: u16,
-    payload: Vec<u8>,
-    session_id: Option<u64>,
+    response: UdpChainResponseParts<'a>,
 }
 
 async fn forward_chain_response(request: ForwardChainResponseRequest<'_>) {
-    let response_accounting = record_chain_udp_response_received(
-        request.proxy,
-        request.session_id,
-        request.payload.len(),
-    );
-
     let Some(client_addr) = request.client_addr else {
         return;
     };
@@ -68,21 +56,21 @@ async fn forward_chain_response(request: ForwardChainResponseRequest<'_>) {
         .send_client_response_for_target(
             request.relay,
             zero_platform_tokio::socket_addr_to_socket_address(client_addr),
-            &request.target,
-            request.port,
-            &request.payload,
+            &request.response.target,
+            request.response.port,
+            &request.response.payload,
         )
         .await
     {
         Ok(sent) => {
-            response_accounting.record_sent(sent);
+            request.response.accounting.record_sent(sent);
         }
         Err(error) => {
             warn!(
                 inbound_tag = request.inbound_tag,
                 protocol = "socks5_udp",
-                target = ?request.target,
-                port = request.port,
+                target = ?request.response.target,
+                port = request.response.port,
                 error = ?error,
                 "failed to send SOCKS5 UDP chain response to client"
             );

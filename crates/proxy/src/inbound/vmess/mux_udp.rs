@@ -7,7 +7,7 @@ use zero_core::Session;
 use crate::runtime::pipe::{KernelPipe, UdpPipe, UdpPipeInput};
 use crate::runtime::udp_dispatch::UdpDispatch;
 use crate::runtime::udp_flow::helpers::{
-    log_completed_udp_flow, record_chain_udp_response_received, record_direct_udp_response_parts,
+    log_completed_udp_flow, record_chain_udp_response_parts, record_direct_udp_response_parts,
     record_upstream_udp_response_received, wait_for_upstream_idle,
 };
 use crate::runtime::Proxy;
@@ -132,21 +132,17 @@ impl Proxy {
                         match chain_result {
                             Ok(Ok((target, port, payload, session_id))) => {
                                 last_activity = TokioInstant::now();
-                                let response_accounting =
-                                    record_chain_udp_response_received(
-                                        &proxy,
-                                        session_id,
-                                        payload.len(),
-                                    );
+                                let response =
+                                    record_chain_udp_response_parts(&proxy, target, port, payload, session_id);
                                 match udp_session.write_mux_client_response_for_target(
                                     &writer,
                                     mux_session_id,
-                                    &target,
-                                    port,
-                                    &payload,
+                                    &response.target,
+                                    response.port,
+                                    &response.payload,
                                 ) {
                                     Ok(frame_len) => {
-                                        response_accounting.record_sent(frame_len);
+                                        response.accounting.record_sent(frame_len);
                                     }
                                     Err(error) => {
                                         warn!(%error, mux_session_id, "vmess mux udp chain response send failed");

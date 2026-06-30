@@ -9,7 +9,7 @@ use zero_engine::EngineError;
 
 use crate::runtime::pipe::{KernelPipe, UdpPipe, UdpPipeInput};
 use crate::runtime::udp_flow::helpers::{
-    record_chain_udp_response_received, record_direct_udp_response_parts,
+    record_chain_udp_response_parts, record_direct_udp_response_parts,
 };
 use crate::runtime::Proxy;
 
@@ -87,22 +87,19 @@ impl Proxy {
                 Some(chain_result) = chain_tasks.join_next() => {
                     match chain_result {
                         Ok(Ok((target, port, payload, session_id))) => {
-                            let response_accounting = record_chain_udp_response_received(
-                                self,
-                                session_id,
-                                payload.len(),
-                            );
+                            let response =
+                                record_chain_udp_response_parts(self, target, port, payload, session_id);
                             if let Ok(Some(written)) = udp_session
                                 .send_response_for_target_proxy_session_to_client_tokio(
                                     udp_socket.as_ref(),
                                     session_id,
-                                    &target,
-                                    port,
-                                    &payload,
+                                    &response.target,
+                                    response.port,
+                                    &response.payload,
                                 )
                                 .await
                             {
-                                response_accounting.record_sent(written);
+                                response.accounting.record_sent(written);
                             }
                         }
                         Ok(Err(error)) => {

@@ -7,7 +7,7 @@ use zero_engine::EngineError;
 use crate::runtime::pipe::{KernelPipe, UdpPipe, UdpPipeInput};
 use crate::runtime::udp_dispatch::UdpDispatch;
 use crate::runtime::udp_flow::helpers::{
-    log_completed_udp_flow, record_chain_udp_response_received, record_direct_udp_response_parts,
+    log_completed_udp_flow, record_chain_udp_response_parts, record_direct_udp_response_parts,
     record_upstream_udp_response_received, wait_for_upstream_idle,
 };
 use crate::runtime::Proxy;
@@ -117,21 +117,17 @@ impl Proxy {
                     match chain_result {
                         Ok(Ok((target, port, payload, session_id))) => {
                             last_activity = TokioInstant::now();
-                            let response_accounting =
-                                record_chain_udp_response_received(
-                                    self,
-                                    session_id,
-                                    payload.len(),
-                                );
+                            let response =
+                                record_chain_udp_response_parts(self, target, port, payload, session_id);
                             let written = udp_session
                                 .write_client_response_for_target(
                                     &mut client,
-                                    &target,
-                                    port,
-                                    &payload,
+                                    &response.target,
+                                    response.port,
+                                    &response.payload,
                                 )
                                 .await?;
-                            response_accounting.record_sent(written);
+                            response.accounting.record_sent(written);
                         }
                         Ok(Err(error)) => warn!(error = %error, "trojan udp chain response error"),
                         Err(error) => warn!(error = %error, "trojan udp chain task panicked"),

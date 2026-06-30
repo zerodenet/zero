@@ -6,7 +6,7 @@ use zero_engine::EngineError;
 
 use crate::runtime::pipe::{KernelPipe, UdpPipe, UdpPipeInput};
 use crate::runtime::udp_flow::helpers::{
-    record_chain_udp_response_received, record_direct_udp_response_parts,
+    record_chain_udp_response_parts, record_direct_udp_response_parts,
     record_upstream_udp_response_received, wait_for_upstream_idle,
 };
 use crate::runtime::Proxy;
@@ -97,20 +97,16 @@ impl Proxy {
                 Some(chain_result) = chain_tasks.join_next() => {
                     match chain_result {
                         Ok(Ok((target, port, payload, session_id))) => {
-                            let response_accounting =
-                                record_chain_udp_response_received(
-                                    &proxy,
-                                    session_id,
-                                    payload.len(),
-                                );
+                            let response =
+                                record_chain_udp_response_parts(&proxy, target, port, payload, session_id);
                             if let Ok(Some(written)) = udp_session.send_client_response_for_target_proxy_session(
                                 &conn,
                                 session_id,
-                                &target,
-                                port,
-                                &payload,
+                                &response.target,
+                                response.port,
+                                &response.payload,
                             ) {
-                                response_accounting.record_sent(written);
+                                response.accounting.record_sent(written);
                             }
                         }
                         Ok(Err(error)) => warn!(error = %error, "h2 chain response error"),
