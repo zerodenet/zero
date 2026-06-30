@@ -19,6 +19,51 @@ use crate::transport::TcpRelayStream;
 
 type MieruClientStream = mieru::MieruInboundStream<TcpRelayStream>;
 
+struct MieruAcceptedSessionHandler<'a> {
+    proxy: &'a Proxy,
+    session: Option<Session>,
+    client: Option<MieruClientStream>,
+    handler: &'a MieruInboundHandler,
+    tag: &'a str,
+    source_addr: Option<std::net::SocketAddr>,
+}
+
+impl mieru::MieruInboundSessionHandler for MieruAcceptedSessionHandler<'_> {
+    type Error = EngineError;
+
+    async fn handle_tcp_session(&mut self) -> Result<(), Self::Error> {
+        serve_inbound(
+            self.proxy,
+            self.session
+                .take()
+                .expect("mieru accepted session is dispatched once"),
+            self.client
+                .take()
+                .expect("mieru accepted client is dispatched once"),
+            self.handler,
+            self.tag,
+            self.source_addr,
+        )
+        .await
+    }
+
+    async fn handle_udp_session(&mut self) -> Result<(), Self::Error> {
+        let session = self
+            .session
+            .take()
+            .expect("mieru accepted session is dispatched once");
+        self.proxy
+            .run_mieru_udp_relay(
+                self.client
+                    .take()
+                    .expect("mieru accepted client is dispatched once"),
+                &session,
+                self.tag,
+            )
+            .await
+    }
+}
+
 #[derive(Debug)]
 pub(crate) struct MieruInboundRequest {
     pub(crate) inbound: InboundConfig,
@@ -117,22 +162,20 @@ pub(crate) async fn run_mieru_listener_with_bound(
                         connections.spawn(async move {
                             match handler.accept(stream.into()).await {
                                 Ok((session, client)) => {
-                                    let _ = match mieru::classify_inbound_session(&session) {
-                                        mieru::MieruInboundSessionKind::Udp => {
-                                            engine.run_mieru_udp_relay(client, &session, &tag).await
-                                        }
-                                        mieru::MieruInboundSessionKind::Tcp => {
-                                            serve_inbound(
-                                                &engine,
-                                                session,
-                                                client,
-                                                &handler,
-                                                &tag,
-                                                source_addr,
-                                            )
-                                            .await
-                                        }
+                                    let dispatch_session = session.clone();
+                                    let mut session_handler = MieruAcceptedSessionHandler {
+                                        proxy: &engine,
+                                        session: Some(session),
+                                        client: Some(client),
+                                        handler: &handler,
+                                        tag: &tag,
+                                        source_addr,
                                     };
+                                    let _ = mieru::dispatch_inbound_session(
+                                        &dispatch_session,
+                                        &mut session_handler,
+                                    )
+                                    .await;
                                 }
                                 Err(error) => {
                                     log_listener_connection_error(

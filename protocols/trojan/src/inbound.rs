@@ -64,6 +64,24 @@ pub fn classify_inbound_session(session: &Session) -> TrojanInboundSessionKind {
     }
 }
 
+pub trait TrojanInboundSessionHandler {
+    type Error;
+
+    async fn handle_tcp_session(&mut self) -> Result<(), Self::Error>;
+
+    async fn handle_udp_session(&mut self) -> Result<(), Self::Error>;
+}
+
+pub async fn dispatch_inbound_session<H>(session: &Session, handler: &mut H) -> Result<(), H::Error>
+where
+    H: TrojanInboundSessionHandler,
+{
+    match classify_inbound_session(session) {
+        TrojanInboundSessionKind::Udp => handler.handle_udp_session().await,
+        TrojanInboundSessionKind::Tcp => handler.handle_tcp_session().await,
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TrojanInboundUdpRequest {
     target: zero_core::Address,

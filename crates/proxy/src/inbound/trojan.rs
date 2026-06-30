@@ -18,6 +18,49 @@ use crate::runtime::inbound_protocol::{serve_inbound, InboundProtocol};
 use crate::runtime::Proxy;
 use crate::transport::{AsyncSocketStream, TcpRelayStream};
 
+struct TrojanAcceptedSessionHandler<'a> {
+    proxy: &'a Proxy,
+    session: Option<Session>,
+    client: Option<TcpRelayStream>,
+    handler: &'a TrojanInboundHandler,
+    tag: &'a str,
+    source_addr: Option<std::net::SocketAddr>,
+}
+
+impl trojan::TrojanInboundSessionHandler for TrojanAcceptedSessionHandler<'_> {
+    type Error = EngineError;
+
+    async fn handle_tcp_session(&mut self) -> Result<(), Self::Error> {
+        serve_inbound(
+            self.proxy,
+            self.session
+                .take()
+                .expect("trojan accepted session is dispatched once"),
+            self.client
+                .take()
+                .expect("trojan accepted client is dispatched once"),
+            self.handler,
+            self.tag,
+            self.source_addr,
+        )
+        .await
+    }
+
+    async fn handle_udp_session(&mut self) -> Result<(), Self::Error> {
+        self.proxy
+            .run_trojan_udp_relay(
+                self.client
+                    .take()
+                    .expect("trojan accepted client is dispatched once"),
+                self.session
+                    .take()
+                    .expect("trojan accepted session is dispatched once"),
+                self.tag,
+            )
+            .await
+    }
+}
+
 pub(crate) struct TrojanInboundRequest {
     pub(crate) inbound: InboundConfig,
     pub(crate) profile: TrojanInboundProfile,
@@ -107,14 +150,20 @@ pub(crate) async fn run_trojan_listener_with_bound(
                 conns.spawn(async move {
                     match h.accept(s.into()).await {
                         Ok((session, client)) => {
-                            let result = match trojan::classify_inbound_session(&session) {
-                                trojan::TrojanInboundSessionKind::Udp => {
-                                    p.run_trojan_udp_relay(client, session, &t).await
-                                }
-                                trojan::TrojanInboundSessionKind::Tcp => {
-                                    serve_inbound(&p, session, client, &h, &t, source_addr).await
-                                }
+                            let dispatch_session = session.clone();
+                            let mut session_handler = TrojanAcceptedSessionHandler {
+                                proxy: &p,
+                                session: Some(session),
+                                client: Some(client),
+                                handler: &h,
+                                tag: &t,
+                                source_addr,
                             };
+                            let result = trojan::dispatch_inbound_session(
+                                &dispatch_session,
+                                &mut session_handler,
+                            )
+                            .await;
                             if let Err(e) = result {
                                 if !matches!(&e, EngineError::Io(io) if matches!(io.kind(),
                                     io::ErrorKind::UnexpectedEof | io::ErrorKind::ConnectionReset | io::ErrorKind::BrokenPipe))

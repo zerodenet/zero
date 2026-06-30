@@ -111,6 +111,24 @@ pub fn classify_inbound_session(session: &Session) -> MieruInboundSessionKind {
     }
 }
 
+pub trait MieruInboundSessionHandler {
+    type Error;
+
+    async fn handle_tcp_session(&mut self) -> Result<(), Self::Error>;
+
+    async fn handle_udp_session(&mut self) -> Result<(), Self::Error>;
+}
+
+pub async fn dispatch_inbound_session<H>(session: &Session, handler: &mut H) -> Result<(), H::Error>
+where
+    H: MieruInboundSessionHandler,
+{
+    match classify_inbound_session(session) {
+        MieruInboundSessionKind::Udp => handler.handle_udp_session().await,
+        MieruInboundSessionKind::Tcp => handler.handle_tcp_session().await,
+    }
+}
+
 fn segment_wire_len(segment: &Segment, has_nonce: bool) -> usize {
     let nonce_len = if has_nonce { 24 } else { 0 };
     let meta_len = METADATA_LEN + 16;

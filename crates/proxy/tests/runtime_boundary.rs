@@ -1601,15 +1601,24 @@ fn mieru_inbound_uses_adapter_request_model() {
         "Mieru inbound listener should receive a protocol-owned profile instead of raw user/password tuples"
     );
     assert!(
-        inbound.contains("mieru::classify_inbound_session(&session)")
-            && inbound.contains("mieru::MieruInboundSessionKind::Udp")
-            && inbound.contains("mieru::MieruInboundSessionKind::Tcp")
+        inbound.contains("struct MieruAcceptedSessionHandler")
+            && inbound.contains("impl mieru::MieruInboundSessionHandler")
+            && inbound.contains("async fn handle_tcp_session")
+            && inbound.contains("async fn handle_udp_session")
+            && inbound.contains("mieru::dispatch_inbound_session")
+            && !inbound.contains("mieru::classify_inbound_session(&session)")
+            && !inbound.contains("mieru::MieruInboundSessionKind::Udp")
+            && !inbound.contains("mieru::MieruInboundSessionKind::Tcp")
             && !inbound.contains("session.network")
             && protocol_inbound.contains("pub enum MieruInboundSessionKind")
             && protocol_inbound.contains("pub fn classify_inbound_session")
+            && protocol_inbound.contains("pub trait MieruInboundSessionHandler")
+            && protocol_inbound.contains("pub async fn dispatch_inbound_session")
             && protocol_lib.contains("classify_inbound_session")
+            && protocol_lib.contains("dispatch_inbound_session")
+            && protocol_lib.contains("MieruInboundSessionHandler")
             && protocol_lib.contains("MieruInboundSessionKind"),
-        "Mieru inbound glue should ask protocols/mieru to classify accepted sessions"
+        "Mieru inbound glue should ask protocols/mieru to dispatch accepted sessions"
     );
 }
 
@@ -1956,15 +1965,24 @@ fn trojan_inbound_uses_adapter_request_model() {
         "Trojan inbound listener should receive protocol-owned profile plus adapter-built TLS acceptor instead of raw password/TLS config"
     );
     assert!(
-        inbound.contains("trojan::classify_inbound_session(&session)")
-            && inbound.contains("trojan::TrojanInboundSessionKind::Udp")
-            && inbound.contains("trojan::TrojanInboundSessionKind::Tcp")
+        inbound.contains("struct TrojanAcceptedSessionHandler")
+            && inbound.contains("impl trojan::TrojanInboundSessionHandler")
+            && inbound.contains("async fn handle_tcp_session")
+            && inbound.contains("async fn handle_udp_session")
+            && inbound.contains("trojan::dispatch_inbound_session")
+            && !inbound.contains("trojan::classify_inbound_session(&session)")
+            && !inbound.contains("trojan::TrojanInboundSessionKind::Udp")
+            && !inbound.contains("trojan::TrojanInboundSessionKind::Tcp")
             && !inbound.contains("session.network")
             && protocol_inbound.contains("pub enum TrojanInboundSessionKind")
             && protocol_inbound.contains("pub fn classify_inbound_session")
+            && protocol_inbound.contains("pub trait TrojanInboundSessionHandler")
+            && protocol_inbound.contains("pub async fn dispatch_inbound_session")
             && protocol_lib.contains("classify_inbound_session")
+            && protocol_lib.contains("dispatch_inbound_session")
+            && protocol_lib.contains("TrojanInboundSessionHandler")
             && protocol_lib.contains("TrojanInboundSessionKind"),
-        "Trojan inbound glue should ask protocols/trojan to classify accepted sessions"
+        "Trojan inbound glue should ask protocols/trojan to dispatch accepted sessions"
     );
 }
 
