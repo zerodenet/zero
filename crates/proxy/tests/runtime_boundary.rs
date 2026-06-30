@@ -1546,6 +1546,21 @@ fn socks5_inbound_uses_adapter_request_model() {
         "SOCKS5 inbound TCP response reply selection should stay behind protocol-owned semantic response methods"
     );
     assert!(
+        inbound.contains("dispatch_socks5_request")
+            && inbound.contains("impl socks5::Socks5RequestHandler")
+            && inbound.contains("async fn handle_connect")
+            && inbound.contains("async fn handle_udp_associate")
+            && mixed.contains("dispatch_socks5_request")
+            && !inbound.contains("Socks5Request::Connect")
+            && !inbound.contains("Socks5Request::UdpAssociate")
+            && !mixed.contains("Socks5Request::Connect")
+            && !mixed.contains("Socks5Request::UdpAssociate")
+            && !mixed.contains("use socks5::Socks5Request")
+            && protocol_inbound.contains("pub trait Socks5RequestHandler")
+            && protocol_inbound.contains("pub async fn dispatch_request"),
+        "SOCKS5 and mixed inbound glue should ask protocols/socks5 to dispatch accepted SOCKS5 commands"
+    );
+    assert!(
         protocol_inbound.contains("pub async fn send_success_response")
             && protocol_inbound.contains("pub async fn send_blocked_response")
             && protocol_inbound.contains("pub async fn send_upstream_failure_response")

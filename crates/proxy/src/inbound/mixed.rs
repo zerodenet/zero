@@ -1,4 +1,3 @@
-use socks5::Socks5Request;
 use tokio::sync::watch;
 use tokio::task::JoinSet;
 use tracing::{error, info};
@@ -12,7 +11,7 @@ use crate::runtime::Proxy;
 use crate::transport::{MeteredStream, PrefixedSocket, TcpRelayStream};
 
 use super::http_connect::HttpConnectInboundHandler;
-use super::socks5::Socks5InboundHandler;
+use super::socks5::{dispatch_socks5_request, Socks5InboundHandler};
 
 pub(crate) struct MixedInboundRequest {
     pub(crate) inbound: zero_config::InboundConfig,
@@ -77,15 +76,14 @@ pub(crate) async fn run_mixed_listener_with_bound(
                                 );
                                 match socks5_h.accept_command(&mut metered).await
                                 {
-                                    Ok(Socks5Request::Connect(session)) => {
-                                        let _ = serve_inbound(
-                                            &engine, *session, metered.into_inner(),
-                                            &socks5_h, &tag, source_addr,
-                                        ).await;
-                                    }
-                                    Ok(Socks5Request::UdpAssociate(request)) => {
-                                        let _ = engine.handle_socks5_udp_associate(
-                                            metered, &tag, request,
+                                    Ok(request) => {
+                                        let _ = dispatch_socks5_request(
+                                            &engine,
+                                            request,
+                                            metered,
+                                            &socks5_h,
+                                            &tag,
+                                            source_addr,
                                         ).await;
                                     }
                                     Err(err) => {

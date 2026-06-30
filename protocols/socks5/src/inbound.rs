@@ -23,6 +23,27 @@ pub enum Socks5Request {
     UdpAssociate(Socks5UdpAssociateRequest),
 }
 
+pub trait Socks5RequestHandler {
+    type Error;
+
+    async fn handle_connect(&mut self, session: Session) -> Result<(), Self::Error>;
+
+    async fn handle_udp_associate(
+        &mut self,
+        request: Socks5UdpAssociateRequest,
+    ) -> Result<(), Self::Error>;
+}
+
+pub async fn dispatch_request<H>(request: Socks5Request, handler: &mut H) -> Result<(), H::Error>
+where
+    H: Socks5RequestHandler,
+{
+    match request {
+        Socks5Request::Connect(session) => handler.handle_connect(*session).await,
+        Socks5Request::UdpAssociate(request) => handler.handle_udp_associate(request).await,
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Socks5UdpAssociateRequest {
     pub client_hint: Address,
@@ -212,13 +233,28 @@ impl Socks5Inbound {
     where
         S: AsyncSocket,
     {
-        match self.accept_command(stream).await? {
-            Socks5Request::Connect(session) => Ok(*session),
-            Socks5Request::UdpAssociate(_) => {
-                write_reply(stream, Socks5Reply::CommandNotSupported).await?;
-                Err(Error::Unsupported("SOCKS5 command is not supported"))
-            }
-        }
+        self.accept_request_with_auth(stream, &NoSocks5PasswordAuth)
+            .await
+    }
+
+    pub async fn accept_request_with_auth<S, A>(
+        &self,
+        stream: &mut S,
+        auth: &A,
+    ) -> Result<Session, Error>
+    where
+        S: AsyncSocket,
+        A: Socks5PasswordAuth,
+    {
+        let mut handler = Socks5TcpRequestHandler {
+            stream,
+            session: None,
+        };
+        let request = self.accept_command_with_auth(handler.stream, auth).await?;
+        dispatch_request(request, &mut handler).await?;
+        handler
+            .session
+            .ok_or(Error::Protocol("SOCKS5 connect request was not accepted"))
     }
 
     pub async fn accept_command<S>(&self, stream: &mut S) -> Result<Socks5Request, Error>
@@ -340,6 +376,31 @@ impl Socks5Inbound {
         self.send_response(stream, Socks5Reply::Succeeded).await?;
 
         Ok(session)
+    }
+}
+
+struct Socks5TcpRequestHandler<'a, S> {
+    stream: &'a mut S,
+    session: Option<Session>,
+}
+
+impl<S> Socks5RequestHandler for Socks5TcpRequestHandler<'_, S>
+where
+    S: AsyncSocket,
+{
+    type Error = Error;
+
+    async fn handle_connect(&mut self, session: Session) -> Result<(), Self::Error> {
+        self.session = Some(session);
+        Ok(())
+    }
+
+    async fn handle_udp_associate(
+        &mut self,
+        _request: Socks5UdpAssociateRequest,
+    ) -> Result<(), Self::Error> {
+        write_reply(self.stream, Socks5Reply::CommandNotSupported).await?;
+        Err(Error::Unsupported("SOCKS5 command is not supported"))
     }
 }
 

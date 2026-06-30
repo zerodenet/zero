@@ -44,6 +44,66 @@ impl Socks5InboundHandler {
     }
 }
 
+pub(super) async fn dispatch_socks5_request(
+    proxy: &Proxy,
+    request: Socks5Request,
+    metered: MeteredStream<TcpRelayStream>,
+    handler: &Socks5InboundHandler,
+    inbound_tag: &str,
+    source_addr: Option<std::net::SocketAddr>,
+) -> Result<(), EngineError> {
+    let mut request_handler = Socks5AcceptedRequestHandler {
+        proxy,
+        metered: Some(metered),
+        handler,
+        inbound_tag,
+        source_addr,
+    };
+    socks5::dispatch_request(request, &mut request_handler).await
+}
+
+struct Socks5AcceptedRequestHandler<'a> {
+    proxy: &'a Proxy,
+    metered: Option<MeteredStream<TcpRelayStream>>,
+    handler: &'a Socks5InboundHandler,
+    inbound_tag: &'a str,
+    source_addr: Option<std::net::SocketAddr>,
+}
+
+impl socks5::Socks5RequestHandler for Socks5AcceptedRequestHandler<'_> {
+    type Error = EngineError;
+
+    async fn handle_connect(&mut self, session: Session) -> Result<(), Self::Error> {
+        serve_inbound(
+            self.proxy,
+            session,
+            self.metered
+                .take()
+                .expect("socks5 accepted stream is dispatched once")
+                .into_inner(),
+            self.handler,
+            self.inbound_tag,
+            self.source_addr,
+        )
+        .await
+    }
+
+    async fn handle_udp_associate(
+        &mut self,
+        request: socks5::udp::Socks5UdpAssociateRequest,
+    ) -> Result<(), Self::Error> {
+        self.proxy
+            .handle_socks5_udp_associate(
+                self.metered
+                    .take()
+                    .expect("socks5 accepted stream is dispatched once"),
+                self.inbound_tag,
+                request,
+            )
+            .await
+    }
+}
+
 #[async_trait]
 impl InboundProtocol for Socks5InboundHandler {
     type ClientStream = TcpRelayStream;
@@ -53,13 +113,11 @@ impl InboundProtocol for Socks5InboundHandler {
         stream: TcpRelayStream,
     ) -> Result<(Session, Self::ClientStream), EngineError> {
         let mut metered = MeteredStream::new(stream);
-        match self.accept_command(&mut metered).await? {
-            Socks5Request::Connect(session) => Ok((*session, metered.into_inner())),
-            Socks5Request::UdpAssociate(_) => Err(EngineError::Io(std::io::Error::new(
-                std::io::ErrorKind::Unsupported,
-                "UDP ASSOCIATE - dispatch from listener",
-            ))),
-        }
+        let session = self
+            .socks5_inbound
+            .accept_request_with_auth(&mut metered, &self.auth)
+            .await?;
+        Ok((session, metered.into_inner()))
     }
 
     async fn send_ok(&self, client: &mut TcpRelayStream) -> Result<(), EngineError> {
@@ -131,21 +189,15 @@ pub(crate) async fn run_socks5_listener_with_bound(
                         connections.spawn(async move {
                             let mut metered = MeteredStream::new(TcpRelayStream::from(stream));
                             match handler.accept_command(&mut metered).await {
-                                Ok(Socks5Request::Connect(session)) => {
-                                    let _ = serve_inbound(
+                                Ok(request) => {
+                                    let _ = dispatch_socks5_request(
                                         &engine,
-                                        *session,
-                                        metered.into_inner(),
+                                        request,
+                                        metered,
                                         &handler,
                                         &tag,
                                         source_addr,
-                                    )
-                                    .await;
-                                }
-                                Ok(Socks5Request::UdpAssociate(request)) => {
-                                    let _ = engine
-                                        .handle_socks5_udp_associate(metered, &tag, request)
-                                        .await;
+                                    ).await;
                                 }
                                 Err(err) => {
                                     let engine_err = EngineError::from(err);
