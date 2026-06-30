@@ -1030,6 +1030,9 @@ fn architecture_docs_do_not_describe_removed_proxy_facades() {
         "`protocol_registry/defaults/mod.rs` only wires",
         "`protocol_registry/model/mod.rs` only wires",
         "`protocol_registry/registry/mod.rs` only owns",
+        "`crates/proxy/src/inbound/{datagram_udp,stream_udp,mux_udp}.rs` own only route submission",
+        "Protocol-specific responders own request decoding, response encoding, protocol session tracking, and read buffers",
+        "they must not hold protocol-private pending dispatch state, client maps, codec state, or responder read buffers",
     ] {
         assert!(
             architecture.contains(expected),

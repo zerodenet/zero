@@ -108,6 +108,16 @@ Protocol UDP types, codecs, managers, packet-path builders, flow resumes, and in
 Protocol stream/datagram codecs own protocol crypto/framing state. For example, Mieru inbound data-phase encryption/decryption and UDP associate packet decode/response encoding live in `protocols/mieru::udp`, Shadowsocks inbound UDP decode/replay/response encoding lives in `protocols/shadowsocks::udp`, and Trojan inbound UDP stream packet read/write helpers live in `protocols/trojan::udp`; `zero-proxy` only wraps those codecs as Tokio stream/socket adapters and must not hold their cipher/session primitives or build/parse protocol frames directly.
 VMess inbound UDP request payload mode detection/parsing and response packet encoding live in `protocols/vmess::udp`; VLESS inbound UDP packet parsing and response/MUX response encoding live in `protocols/vless::udp`. Proxy inbound glue delegates packet wrapping/parsing to inbound-specific protocol sessions and must not name protocol-private UDP codec, dispatch, packet, response, or response-target models.
 
+Inbound UDP follows the same ownership rule for both datagram and stream-backed protocols.
+`crates/proxy/src/inbound/{datagram_udp,stream_udp,mux_udp}.rs` own only route submission, response accounting, task polling, and relay-loop orchestration.
+Protocol-specific responders own request decoding, response encoding, protocol session tracking, and read buffers:
+
+- Shadowsocks and Hysteria2 datagram responders keep client/protocol session tracking inside `protocols/shadowsocks` and `protocols/hysteria2`.
+- VLESS, VMess, Mieru, and Trojan stream responders keep packet I/O and response framing inside their protocol crates.
+- Proxy protocol-named inbound modules may construct a responder and pass it into shared glue, but they must not hold protocol-private pending dispatch state, client maps, codec state, or responder read buffers.
+
+Adding an inbound-capable protocol therefore means adding protocol-owned inbound/UDP responder APIs, a thin `crates/proxy/src/inbound/<protocol>` glue module that feeds `serve_inbound()` or the shared UDP relay glue, an adapter capability implementation, and registration in `register.rs`.
+
 ### 内核管道和入站协议管道
 
 代理运行时围绕一个通用内核管道边界组织：
