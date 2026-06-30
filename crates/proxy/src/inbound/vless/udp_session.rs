@@ -2,6 +2,9 @@ use tokio::select;
 use tokio::time::Instant as TokioInstant;
 use tracing::{info, warn};
 
+use crate::inbound::udp_response::{
+    write_chain_response, write_direct_response, write_upstream_response,
+};
 use crate::runtime::pipe::{KernelPipe, UdpPipe, UdpPipeInput};
 use crate::runtime::udp_dispatch::UdpDispatch;
 use crate::runtime::udp_flow::helpers::{
@@ -98,17 +101,19 @@ impl Proxy {
                         sender,
                         &udp_buffer[..n],
                     );
-                    match udp_session
-                        .write_client_response_for_target_tokio(
-                            &mut client,
-                            &response.target,
-                            response.port,
-                            response.payload,
-                        )
-                        .await
+                    match write_direct_response(&response, || async {
+                        udp_session
+                            .write_client_response_for_target_tokio(
+                                &mut client,
+                                &response.target,
+                                response.port,
+                                response.payload,
+                            )
+                            .await
+                    })
+                    .await
                     {
-                        Ok(written) => {
-                            response.accounting.record_sent(written);
+                        Ok(_) => {
                             self.record_session_inbound_traffic(0, client.drain_traffic());
                         }
                         Err(error) => {
@@ -131,17 +136,19 @@ impl Proxy {
                                 timeout,
                                 pkt,
                             );
-                            match udp_session
-                                .write_client_response_for_target_tokio(
-                                    &mut client,
-                                    &response.target,
-                                    response.port,
-                                    &response.payload,
-                                )
-                                .await
+                            match write_upstream_response(&response, || async {
+                                udp_session
+                                    .write_client_response_for_target_tokio(
+                                        &mut client,
+                                        &response.target,
+                                        response.port,
+                                        &response.payload,
+                                    )
+                                    .await
+                            })
+                            .await
                             {
-                                Ok(written) => {
-                                    response.accounting.record_sent(written);
+                                Ok(_) => {
                                     proxy.record_session_inbound_traffic(0, client.drain_traffic());
                                 }
                                 Err(error) => {
@@ -166,17 +173,19 @@ impl Proxy {
                             last_activity = TokioInstant::now();
                             let response =
                                 record_chain_udp_response_parts(&proxy, target, port, payload, session_id);
-                            match udp_session
-                                .write_client_response_for_target_tokio(
-                                    &mut client,
-                                    &response.target,
-                                    response.port,
-                                    &response.payload,
-                                )
-                                .await
+                            match write_chain_response(&response, || async {
+                                udp_session
+                                    .write_client_response_for_target_tokio(
+                                        &mut client,
+                                        &response.target,
+                                        response.port,
+                                        &response.payload,
+                                    )
+                                    .await
+                            })
+                            .await
                             {
-                                Ok(written) => {
-                                    response.accounting.record_sent(written);
+                                Ok(_) => {
                                     proxy.record_session_inbound_traffic(0, client.drain_traffic());
                                 }
                                 Err(error) => {

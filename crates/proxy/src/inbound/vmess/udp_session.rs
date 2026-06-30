@@ -4,6 +4,9 @@ use tracing::{info, warn};
 use zero_core::Session;
 use zero_engine::EngineError;
 
+use crate::inbound::udp_response::{
+    write_chain_response, write_direct_response, write_upstream_response,
+};
 use crate::runtime::pipe::{KernelPipe, UdpPipe, UdpPipeInput};
 use crate::runtime::udp_dispatch::UdpDispatch;
 use crate::runtime::udp_flow::helpers::{
@@ -78,15 +81,17 @@ impl Proxy {
                         sender,
                         &direct_buf[..n],
                     );
-                    let written = udp_session
-                        .write_client_response_for_target_tokio(
-                            &mut client,
-                            &response.target,
-                            response.port,
-                            response.payload,
-                        )
-                        .await?;
-                    response.accounting.record_sent(written);
+                    write_direct_response(&response, || async {
+                        udp_session
+                            .write_client_response_for_target_tokio(
+                                &mut client,
+                                &response.target,
+                                response.port,
+                                response.payload,
+                            )
+                            .await
+                    })
+                    .await?;
                 }
                 upstream = upstream_udp.recv_response(&mut upstream_buf) => {
                     match upstream {
@@ -98,15 +103,17 @@ impl Proxy {
                                 self.udp_upstream_idle_timeout(),
                                 pkt,
                             );
-                            let written = udp_session
-                                .write_client_response_for_target_tokio(
-                                    &mut client,
-                                    &response.target,
-                                    response.port,
-                                    &response.payload,
-                                )
-                                .await?;
-                            response.accounting.record_sent(written);
+                            write_upstream_response(&response, || async {
+                                udp_session
+                                    .write_client_response_for_target_tokio(
+                                        &mut client,
+                                        &response.target,
+                                        response.port,
+                                        &response.payload,
+                                    )
+                                    .await
+                            })
+                            .await?;
                         }
                         Err(error) => {
                             warn!(error = %error, "vmess udp socks5 upstream recv error");
@@ -120,15 +127,17 @@ impl Proxy {
                             last_activity = TokioInstant::now();
                             let response =
                                 record_chain_udp_response_parts(self, target, port, payload, session_id);
-                            let written = udp_session
-                                .write_client_response_for_target_tokio(
-                                    &mut client,
-                                    &response.target,
-                                    response.port,
-                                    &response.payload,
-                                )
-                                .await?;
-                            response.accounting.record_sent(written);
+                            write_chain_response(&response, || async {
+                                udp_session
+                                    .write_client_response_for_target_tokio(
+                                        &mut client,
+                                        &response.target,
+                                        response.port,
+                                        &response.payload,
+                                    )
+                                    .await
+                            })
+                            .await?;
                         }
                         Ok(Err(error)) => warn!(error = %error, "vmess udp chain response error"),
                         Err(error) => warn!(error = %error, "vmess udp chain task panicked"),
