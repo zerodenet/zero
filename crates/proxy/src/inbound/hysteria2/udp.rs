@@ -1,19 +1,48 @@
 use std::sync::Arc;
 
-use tokio::select;
-use tracing::warn;
+use zero_core::InboundUdpDispatch;
 use zero_engine::EngineError;
 
-use crate::inbound::udp_dispatch::dispatch_inbound_udp_packet;
-use crate::inbound::udp_response::{
-    write_optional_chain_response_sync, write_optional_direct_response_sync,
-    write_optional_upstream_response_sync,
-};
-use crate::runtime::udp_flow::helpers::{
-    record_chain_udp_response_parts, record_direct_udp_response_parts,
-    record_upstream_udp_response_received, wait_for_upstream_idle,
+use crate::inbound::datagram_udp::{
+    run_datagram_udp_relay, DatagramUdpRelayRequest, DatagramUdpResponder,
 };
 use crate::runtime::Proxy;
+
+struct Hysteria2DatagramUdpResponder {
+    inner: hysteria2::Hysteria2InboundUdpResponder,
+    pending_dispatch: Option<hysteria2::udp::Hysteria2InboundUdpTrackedDispatch>,
+}
+
+#[async_trait::async_trait]
+impl DatagramUdpResponder<Arc<quinn::Connection>> for Hysteria2DatagramUdpResponder {
+    async fn read_inbound_dispatch(
+        &mut self,
+        conn: &Arc<quinn::Connection>,
+    ) -> Result<Option<InboundUdpDispatch>, zero_core::Error> {
+        let tracked = self.inner.read_inbound_dispatch_from_datagram(conn).await?;
+        let dispatch = tracked.dispatch().clone();
+        self.pending_dispatch = Some(tracked);
+        Ok(Some(dispatch))
+    }
+
+    fn on_dispatch_success(&mut self, session_id: u64, _dispatch: &InboundUdpDispatch) {
+        if let Some(tracked) = self.pending_dispatch.take() {
+            self.inner.record_dispatch_success(session_id, &tracked);
+        }
+    }
+
+    async fn write_response_for_session(
+        &mut self,
+        conn: &Arc<quinn::Connection>,
+        session_id: Option<u64>,
+        target: &zero_core::Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<Option<usize>, zero_core::Error> {
+        self.inner
+            .send_response_for_target_proxy_session(conn, session_id, target, port, payload)
+    }
+}
 
 impl Proxy {
     pub(super) async fn hysteria2_datagram_loop(
@@ -21,104 +50,18 @@ impl Proxy {
         inbound_tag: String,
         proxy: Proxy,
     ) -> Result<(), EngineError> {
-        let mut dispatch = crate::runtime::udp_dispatch::UdpDispatch::new(&inbound_tag).await?;
-        let mut udp_responder = hysteria2::Hysteria2Inbound.udp_responder();
-
-        let mut direct_buf = [0u8; 65536];
-        let mut upstream_buf = [0u8; 65536];
-
-        loop {
-            let (direct_sock, upstream_udp, socks5_idle, chain_tasks) = dispatch.poll_refs();
-
-            select! {
-                dg = udp_responder.read_inbound_dispatch_from_datagram(&conn) => {
-                    match dg {
-                        Ok(tracked) => {
-                            let _ = dispatch_inbound_udp_packet(
-                                    &proxy,
-                                    &mut dispatch,
-                                    tracked.dispatch(),
-                                    None,
-                                )
-                                .await
-                                .inspect(|sid| {
-                                    udp_responder.record_dispatch_success(*sid, &tracked);
-                                })
-                                .inspect_err(|e| {
-                                    warn!(error = %e, "h2 udp dispatch failed");
-                                });
-                        }
-                        Err(e) => {
-                            warn!(error = %e, "hysteria2 datagram read/decode error");
-                            break Ok(());
-                        }
-                    }
-                }
-
-                recv = direct_sock.recv_from_addr(&mut direct_buf) => {
-                    let (n, sender) = recv?;
-                    let response = record_direct_udp_response_parts(
-                        &proxy,
-                        &dispatch,
-                        sender,
-                        &direct_buf[..n],
-                    );
-                    let _ = write_optional_direct_response_sync(&response, || {
-                        udp_responder.send_response_for_target_proxy_session(
-                            &conn,
-                            response.accounting.session_id(),
-                            &response.target,
-                            response.port,
-                            response.payload,
-                        )
-                    });
-                }
-
-                upstream = upstream_udp.recv_response(&mut upstream_buf) => {
-                    match upstream {
-                        Ok(pkt) => {
-                            let response = record_upstream_udp_response_received(
-                                &proxy,
-                                &mut dispatch,
-                                proxy.udp_upstream_idle_timeout(),
-                                pkt,
-                            );
-                            let _ = write_optional_upstream_response_sync(&response, || {
-                                udp_responder.send_response_for_target_proxy_session(
-                                    &conn,
-                                    response.accounting.session_id(),
-                                    &response.target,
-                                    response.port,
-                                    &response.payload,
-                                )
-                            });
-                        }
-                        Err(error) => warn!(error = %error, "h2 upstream response error"),
-                    }
-                }
-
-                _ = wait_for_upstream_idle(socks5_idle) => {}
-
-                Some(chain_result) = chain_tasks.join_next() => {
-                    match chain_result {
-                        Ok(Ok((target, port, payload, session_id))) => {
-                            let response =
-                                record_chain_udp_response_parts(&proxy, target, port, payload, session_id);
-                            let _ = write_optional_chain_response_sync(&response, || {
-                                udp_responder.send_response_for_target_proxy_session(
-                                    &conn,
-                                    session_id,
-                                    &response.target,
-                                    response.port,
-                                    &response.payload,
-                                )
-                            });
-                        }
-                        Ok(Err(error)) => warn!(error = %error, "h2 chain response error"),
-                        Err(e) => warn!(error = %e, "h2 chain task panicked"),
-                    }
-                }
-            }
-        }
+        run_datagram_udp_relay(
+            &proxy,
+            DatagramUdpRelayRequest {
+                source: conn,
+                responder: Hysteria2DatagramUdpResponder {
+                    inner: hysteria2::Hysteria2Inbound.udp_responder(),
+                    pending_dispatch: None,
+                },
+                inbound_tag: &inbound_tag,
+                poll_upstream: true,
+            },
+        )
+        .await
     }
 }

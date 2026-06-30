@@ -1,3 +1,4 @@
+mod datagram_udp;
 pub(crate) mod direct;
 #[cfg(feature = "http_connect")]
 mod http_connect;

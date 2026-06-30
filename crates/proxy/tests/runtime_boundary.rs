@@ -187,6 +187,7 @@ fn runtime_protocol_runtime_references_are_confined_to_facades() {
 #[test]
 fn ordinary_udp_inbounds_submit_packets_through_udp_pipe() {
     let udp_dispatch = read("src/inbound/udp_dispatch.rs");
+    let datagram_udp = read("src/inbound/datagram_udp.rs");
     let stream_udp = read("src/inbound/stream_udp.rs");
     let mux_udp = read("src/inbound/mux_udp.rs");
     assert!(
@@ -207,18 +208,41 @@ fn ordinary_udp_inbounds_submit_packets_through_udp_pipe() {
             && !mux_udp.contains("UdpPipeInput"),
         "shared MUX UDP relay glue should submit decoded packets through the inbound UDP dispatch helper"
     );
+    assert!(
+        datagram_udp.contains("dispatch_inbound_udp_packet")
+            && !datagram_udp.contains("UdpPipe::new")
+            && !datagram_udp.contains("UdpPipeInput"),
+        "shared datagram UDP relay glue should submit decoded packets through the inbound UDP dispatch helper"
+    );
 
-    for source in [
-        "src/inbound/socks5/udp_associate/dispatch.rs",
-        "src/inbound/shadowsocks/udp.rs",
-        "src/inbound/hysteria2/udp.rs",
-    ] {
+    {
+        let source = "src/inbound/socks5/udp_associate/dispatch.rs";
         let content = read(source);
         assert!(
             content.contains("dispatch_inbound_udp_packet")
                 && !content.contains("UdpPipe::new")
                 && !content.contains("UdpPipeInput"),
             "{source} should submit inbound UDP packets through the shared inbound UDP dispatch helper"
+        );
+        assert!(
+            !content.contains("UdpDispatch::dispatch"),
+            "{source} should not call the UDP dispatch state machine directly"
+        );
+    }
+
+    for source in [
+        "src/inbound/shadowsocks/udp.rs",
+        "src/inbound/hysteria2/udp.rs",
+    ] {
+        let content = read(source);
+        assert!(
+            content.contains("run_datagram_udp_relay")
+                && content.contains("DatagramUdpRelayRequest")
+                && content.contains("DatagramUdpResponder")
+                && !content.contains("dispatch_inbound_udp_packet")
+                && !content.contains("UdpPipe::new")
+                && !content.contains("UdpPipeInput"),
+            "{source} should delegate datagram UDP packet submission to shared datagram UDP relay glue"
         );
         assert!(
             !content.contains("UdpDispatch::dispatch"),
@@ -386,6 +410,7 @@ fn inbound_udp_glue_does_not_name_protocol_private_packet_models() {
 fn inbound_udp_response_accounting_uses_runtime_helpers() {
     let helper = read("src/runtime/udp_flow/helpers.rs");
     let inbound_response = read("src/inbound/udp_response.rs");
+    let datagram_udp = read("src/inbound/datagram_udp.rs");
     let stream_udp = read("src/inbound/stream_udp.rs");
     let mux_udp = read("src/inbound/mux_udp.rs");
     assert!(
@@ -422,10 +447,11 @@ fn inbound_udp_response_accounting_uses_runtime_helpers() {
             && inbound_response.contains("fn write_upstream_response_sync")
             && inbound_response.contains("fn write_chain_response_sync")
             && inbound_response.contains("fn write_optional_direct_response")
+            && inbound_response.contains("fn write_optional_upstream_response")
             && inbound_response.contains("fn write_optional_chain_response")
-            && inbound_response.contains("fn write_optional_direct_response_sync")
-            && inbound_response.contains("fn write_optional_upstream_response_sync")
-            && inbound_response.contains("fn write_optional_chain_response_sync")
+            && !inbound_response.contains("fn write_optional_direct_response_sync")
+            && !inbound_response.contains("fn write_optional_upstream_response_sync")
+            && !inbound_response.contains("fn write_optional_chain_response_sync")
             && inbound_response.contains("response.accounting.record_sent(written)"),
         "stream UDP inbound response write glue should centralize protocol write callbacks plus neutral accounting"
     );
@@ -452,6 +478,18 @@ fn inbound_udp_response_accounting_uses_runtime_helpers() {
             && mux_udp.contains("dispatch.finish_all()")
             && mux_udp.contains("log_completed_udp_flow"),
         "shared MUX UDP relay glue should own direct/upstream/chain response accounting and synchronous writes for MUX UDP inbounds"
+    );
+    assert!(
+        datagram_udp.contains("record_direct_udp_response_parts")
+            && datagram_udp.contains("record_upstream_udp_response_received")
+            && datagram_udp.contains("record_chain_udp_response_parts")
+            && datagram_udp.contains("write_optional_direct_response")
+            && datagram_udp.contains("write_optional_upstream_response")
+            && datagram_udp.contains("write_optional_chain_response")
+            && datagram_udp.contains("wait_for_upstream_idle")
+            && datagram_udp.contains("dispatch.finish_all()")
+            && datagram_udp.contains("log_completed_udp_flow"),
+        "shared datagram UDP relay glue should own datagram direct/upstream/chain response accounting and writes"
     );
 
     for source in [
@@ -492,39 +530,23 @@ fn inbound_udp_response_accounting_uses_runtime_helpers() {
         );
     }
 
-    let hysteria2 = read("src/inbound/hysteria2/udp.rs");
-    let datagram_loop = hysteria2
-        .split("async fn hysteria2_datagram_loop")
-        .nth(1)
-        .expect("hysteria2 datagram loop");
-    assert!(
-        datagram_loop.contains("record_upstream_udp_response_received")
-            && datagram_loop.contains("record_direct_udp_response_parts")
-            && datagram_loop.contains("record_chain_udp_response_parts")
-            && datagram_loop.contains("write_optional_direct_response_sync")
-            && datagram_loop.contains("write_optional_upstream_response_sync")
-            && datagram_loop.contains("write_optional_chain_response_sync")
-            && !datagram_loop.contains("response.accounting.record_sent")
-            && datagram_loop.contains("response.accounting.session_id()")
-            && !datagram_loop.contains("udp_response_session_id")
-            && !datagram_loop.contains("UdpInboundResponseAccounting::record_received")
-            && !datagram_loop.contains("record_session_outbound_rx")
-            && !datagram_loop.contains("record_session_inbound_tx")
-            && !datagram_loop.contains("session_id_by_target"),
-        "Hysteria2 datagram loop should use neutral UDP response accounting helpers without affecting TCP stream relay accounting"
-    );
-
-    let shadowsocks = read("src/inbound/shadowsocks/udp.rs");
-    assert!(
-        shadowsocks.contains("record_direct_udp_response_parts")
-            && shadowsocks.contains("record_chain_udp_response_parts")
-            && shadowsocks.contains("write_optional_direct_response")
-            && shadowsocks.contains("write_optional_chain_response")
-            && !shadowsocks.contains("response.accounting.record_sent")
-            && !shadowsocks.contains("record_udp_inbound_response_rx")
-            && !shadowsocks.contains("record_udp_inbound_response_tx"),
-        "Shadowsocks datagram loop should use neutral optional UDP response write helpers"
-    );
+    for source in [
+        "src/inbound/hysteria2/udp.rs",
+        "src/inbound/shadowsocks/udp.rs",
+    ] {
+        let content = read(source);
+        assert!(
+            content.contains("run_datagram_udp_relay")
+                && !content.contains("record_upstream_udp_response_received")
+                && !content.contains("record_direct_udp_response_parts")
+                && !content.contains("record_chain_udp_response_parts")
+                && !content.contains("write_optional_direct_response")
+                && !content.contains("write_optional_upstream_response")
+                && !content.contains("write_optional_chain_response")
+                && !content.contains("response.accounting.record_sent"),
+            "{source} should delegate datagram UDP response accounting and writes to shared datagram UDP relay glue"
+        );
+    }
 
     for source in [
         "src/inbound/socks5/udp_associate/direct_response.rs",
@@ -552,16 +574,12 @@ fn inbound_udp_response_accounting_uses_runtime_helpers() {
         );
     }
 
-    {
-        let source = "src/inbound/hysteria2/udp.rs";
-        let content = read(source);
-        assert!(
-            content.contains("record_upstream_udp_response_received")
-                && !content.contains("record_udp_upstream_packet_received")
-                && !content.contains("udp_response_session_id"),
-            "{source} should consume registered upstream UDP responses through the neutral runtime helper"
-        );
-    }
+    assert!(
+        datagram_udp.contains("record_upstream_udp_response_received")
+            && !datagram_udp.contains("record_udp_upstream_packet_received")
+            && !datagram_udp.contains("udp_response_session_id"),
+        "shared datagram UDP glue should consume registered upstream UDP responses through the neutral runtime helper"
+    );
 
     for source in [
         "src/inbound/socks5/udp_associate/direct_response.rs",
@@ -585,11 +603,8 @@ fn inbound_udp_response_accounting_uses_runtime_helpers() {
         );
     }
 
-    for source in [
-        "src/inbound/hysteria2/udp.rs",
-        "src/inbound/shadowsocks/udp.rs",
-        "src/inbound/socks5/udp_associate/direct_response.rs",
-    ] {
+    {
+        let source = "src/inbound/socks5/udp_associate/direct_response.rs";
         let content = read(source);
         assert!(
             content.contains("record_direct_udp_response_parts")
@@ -599,11 +614,8 @@ fn inbound_udp_response_accounting_uses_runtime_helpers() {
         );
     }
 
-    for source in [
-        "src/inbound/hysteria2/udp.rs",
-        "src/inbound/shadowsocks/udp.rs",
-        "src/inbound/socks5/udp_associate/chain_response.rs",
-    ] {
+    {
+        let source = "src/inbound/socks5/udp_associate/chain_response.rs";
         let content = read(source);
         assert!(
             content.contains("record_chain_udp_response_parts")
@@ -1759,7 +1771,7 @@ fn shadowsocks_inbound_uses_adapter_request_model() {
     assert!(
         udp.contains("async fn ss_udp_relay_loop")
             && !udp.contains("struct SsProtocolResponse")
-            && udp.contains("udp_responder")
+            && udp.contains("ShadowsocksDatagramUdpResponder")
             && udp.contains(".send_response_for_target_proxy_session_to_client_tokio")
             && !udp.contains("ShadowsocksInboundUdpClientResponse::new")
             && !udp.contains(".send_response_for_proxy_session_to_sender_tokio")
@@ -1768,7 +1780,8 @@ fn shadowsocks_inbound_uses_adapter_request_model() {
             && !udp.contains(".send_proxy_session_response_to_client_tokio")
             && !udp.contains("response_datagram_for_proxy_session")
             && !udp.contains("address_from_socket_addr(sender)")
-            && udp.contains("dispatch_inbound_udp_packet"),
+            && udp.contains("run_datagram_udp_relay")
+            && !udp.contains("dispatch_inbound_udp_packet"),
         "Shadowsocks UDP relay should live in src/inbound/shadowsocks/udp.rs, route through the shared UDP dispatch helper, and delegate response framing to protocols/shadowsocks"
     );
     assert!(
@@ -1916,11 +1929,13 @@ fn stream_udp_inbound_direct_responses_use_client_response_models() {
         "Mieru inbound UDP direct response glue should pass neutral target data to protocol-owned response APIs"
     );
     assert!(
-        hysteria2_inbound.contains("record_direct_udp_response_parts")
+        !hysteria2_inbound.contains("record_direct_udp_response_parts")
             && !hysteria2_inbound.contains("udp_response_target_from_socket_addr(sender)")
             && !hysteria2_inbound.contains("Hysteria2InboundUdpClientResponse::new")
+            && hysteria2_inbound.contains("run_datagram_udp_relay")
+            && hysteria2_inbound.contains("impl DatagramUdpResponder<Arc<quinn::Connection>>")
             && hysteria2_inbound.contains("hysteria2::Hysteria2Inbound.udp_responder()")
-            && hysteria2_inbound.contains("udp_responder")
+            && hysteria2_inbound.contains("self.inner")
             && hysteria2_inbound.contains(".send_response_for_target_proxy_session")
             && !hysteria2_inbound.contains("udp_session.send_client_response_for_target_proxy_session")
             && !hysteria2_inbound.contains("send_response_to_socket_addr_for_proxy_session")
@@ -2364,6 +2379,7 @@ fn vless_inbound_users_are_adapter_parsed() {
 fn hysteria2_inbound_uses_adapter_request_model() {
     let inbound = read("src/inbound/hysteria2.rs");
     let udp = read("src/inbound/hysteria2/udp.rs");
+    let datagram_udp = read("src/inbound/datagram_udp.rs");
     let adapter = read("src/adapters/hysteria2/inbound.rs");
     let protocol_udp = fs::read_to_string(repo_root().join("protocols/hysteria2/src/udp.rs"))
         .expect("read hysteria2 protocol udp source");
@@ -2489,8 +2505,13 @@ fn hysteria2_inbound_uses_adapter_request_model() {
     assert!(
         udp.contains("hysteria2::Hysteria2Inbound.udp_responder()")
             && !udp.contains("hysteria2::Hysteria2Inbound.udp_session()")
-            && udp.contains("udp_responder.read_inbound_dispatch_from_datagram")
-            && udp.contains("dispatch_inbound_udp_packet")
+            && udp.contains("impl DatagramUdpResponder<Arc<quinn::Connection>>")
+            && udp.contains("self.inner.read_inbound_dispatch_from_datagram")
+            && udp.contains("pending_dispatch")
+            && udp.contains("hysteria2::udp::Hysteria2InboundUdpTrackedDispatch")
+            && udp.contains("run_datagram_udp_relay")
+            && udp.contains("DatagramUdpRelayRequest")
+            && !udp.contains("dispatch_inbound_udp_packet")
             && !udp.contains("udp_session.read_dispatch_view_from_datagram")
             && !udp.contains("conn.read_datagram")
             && !udp.contains("udp_session.decode_dispatch_view")
@@ -2500,16 +2521,18 @@ fn hysteria2_inbound_uses_adapter_request_model() {
             && !udp.contains("udp_session.record_proxy_session_for_parts")
             && !udp.contains("parts.request_session_id()")
             && !udp.contains("request_session_id")
-            && udp.contains("udp_responder.record_dispatch_success(*sid, &tracked)")
+            && udp.contains("self.inner.record_dispatch_success(session_id, &tracked)")
             && !udp.contains("parts.record_dispatch_success")
             && !udp.contains("udp_session.record_dispatched_proxy_session")
-            && udp.contains("udp_responder.send_response_for_target_proxy_session")
+            && udp.contains(".send_response_for_target_proxy_session")
             && !udp.contains("udp_session.send_client_response_for_target_proxy_session")
-            && udp.contains("write_optional_direct_response_sync")
-            && udp.contains("write_optional_upstream_response_sync")
-            && udp.contains("write_optional_chain_response_sync")
+            && !udp.contains("write_optional_direct_response")
+            && !udp.contains("write_optional_upstream_response")
+            && !udp.contains("write_optional_chain_response")
             && !udp.contains("Hysteria2InboundUdpClientResponse::new")
-            && udp.contains("record_direct_udp_response_parts")
+            && !udp.contains("record_direct_udp_response_parts")
+            && !udp.contains("record_upstream_udp_response_received")
+            && !udp.contains("record_chain_udp_response_parts")
             && !udp.contains("udp_response_target_from_socket_addr(sender)")
             && !udp.contains("udp_session.send_response_to_socket_addr_for_proxy_session")
             && !udp.contains("if let Some(sid) = session_id")
@@ -2525,10 +2548,21 @@ fn hysteria2_inbound_uses_adapter_request_model() {
             && !udp.contains("parts.client_session_id")
             && !udp.contains("parts.pipe_parts()")
             && !udp.contains("parts.into_pipe_parts()")
-            && udp.contains("UdpDispatch::new(&inbound_tag)")
-            && udp.contains("dispatch.poll_refs()")
-            && udp.contains("upstream_udp.recv_response")
-            && udp.contains("wait_for_upstream_idle(socks5_idle)")
+            && !udp.contains("UdpDispatch::new")
+            && !udp.contains("dispatch.poll_refs()")
+            && !udp.contains("upstream_udp.recv_response")
+            && !udp.contains("wait_for_upstream_idle")
+            && datagram_udp.contains("UdpDispatch::new(inbound_tag)")
+            && datagram_udp.contains("dispatch.poll_refs()")
+            && datagram_udp.contains("upstream_udp.recv_response")
+            && datagram_udp.contains("wait_for_upstream_idle(socks5_idle)")
+            && datagram_udp.contains("dispatch_inbound_udp_packet")
+            && datagram_udp.contains("record_direct_udp_response_parts")
+            && datagram_udp.contains("record_upstream_udp_response_received")
+            && datagram_udp.contains("record_chain_udp_response_parts")
+            && datagram_udp.contains("write_optional_direct_response")
+            && datagram_udp.contains("write_optional_upstream_response")
+            && datagram_udp.contains("write_optional_chain_response")
             && !udp.contains("tokio::net::UdpSocket::bind")
             && !udp.contains("failed to bind UDP socket")
             && !udp.contains("resolver: Arc<zero_dns::DnsSystem>")
@@ -3943,17 +3977,18 @@ fn shadowsocks_udp_inbound_uses_protocol_codec_not_datagram_primitives() {
     assert!(
         udp.contains("profile.udp_responder()")
             && !udp.contains("profile.udp_session()")
-            && udp.contains("udp_responder.decode_inbound_dispatch")
-            && udp.contains("dispatch_inbound_udp_packet")
+            && udp.contains("self.inner.decode_inbound_dispatch")
+            && udp.contains("run_datagram_udp_relay")
+            && !udp.contains("dispatch_inbound_udp_packet")
             && !udp.contains("request.into_dispatch_parts().into_parts()")
-            && udp.contains("udp_responder.record_dispatch_success")
+            && udp.contains("self.inner.record_dispatch_success")
             && !udp.contains("dispatch_parts.record_dispatch_success")
             && !udp.contains("udp_session.record_dispatched_client_session")
             && !udp.contains("udp_session.record_client_session")
-            && udp.contains("udp_responder")
+            && udp.contains("self.inner")
             && udp.contains(".send_response_for_target_proxy_session_to_client_tokio")
-            && udp.contains("write_optional_direct_response")
-            && udp.contains("write_optional_chain_response")
+            && !udp.contains("write_optional_direct_response")
+            && !udp.contains("write_optional_chain_response")
             && !udp.contains("ShadowsocksInboundUdpClientResponse::new")
             && !udp.contains(".send_response_for_proxy_session_to_client_tokio")
             && !udp.contains(".send_response_for_proxy_session_to_sender_tokio")

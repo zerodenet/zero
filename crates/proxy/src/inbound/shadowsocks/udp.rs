@@ -1,18 +1,79 @@
 //! Shadowsocks UDP relay: protocol framing and routing through the UDP pipe.
 
+use std::net::SocketAddr;
 use std::sync::Arc;
 
 use shadowsocks::ShadowsocksInboundProfile;
 use tokio::net::UdpSocket;
-use tracing::warn;
+use zero_core::{InboundUdpDispatch, SessionAuth};
 use zero_engine::EngineError;
 
-use crate::inbound::udp_dispatch::dispatch_inbound_udp_packet;
-use crate::inbound::udp_response::{write_optional_chain_response, write_optional_direct_response};
-use crate::runtime::udp_flow::helpers::{
-    record_chain_udp_response_parts, record_direct_udp_response_parts,
+use crate::inbound::datagram_udp::{
+    run_datagram_udp_relay, DatagramUdpRelayRequest, DatagramUdpResponder,
 };
 use crate::runtime::Proxy;
+
+struct ShadowsocksDatagramUdpResponder {
+    inner: shadowsocks::ShadowsocksInboundUdpResponder,
+    auth: SessionAuth,
+    pending_client_addr: Option<SocketAddr>,
+}
+
+#[async_trait::async_trait]
+impl DatagramUdpResponder<Arc<UdpSocket>> for ShadowsocksDatagramUdpResponder {
+    async fn read_inbound_dispatch(
+        &mut self,
+        udp_socket: &Arc<UdpSocket>,
+    ) -> Result<Option<InboundUdpDispatch>, zero_core::Error> {
+        let mut buf = [0u8; 65536];
+        loop {
+            let (n, client_addr) = udp_socket
+                .recv_from(&mut buf)
+                .await
+                .map_err(|_| zero_core::Error::Io("ss udp recv error"))?;
+            match self.inner.decode_inbound_dispatch(&buf[..n]) {
+                Ok(inbound_dispatch) => {
+                    self.pending_client_addr = Some(client_addr);
+                    return Ok(Some(inbound_dispatch));
+                }
+                Err(_) => continue,
+            }
+        }
+    }
+
+    fn auth(&self) -> Option<&SessionAuth> {
+        Some(&self.auth)
+    }
+
+    fn on_dispatch_success(&mut self, session_id: u64, dispatch: &InboundUdpDispatch) {
+        if let Some(client_addr) = self.pending_client_addr.take() {
+            self.inner.record_dispatch_success(
+                session_id,
+                dispatch.client_session_id(),
+                client_addr,
+            );
+        }
+    }
+
+    async fn write_response_for_session(
+        &mut self,
+        udp_socket: &Arc<UdpSocket>,
+        session_id: Option<u64>,
+        target: &zero_core::Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<Option<usize>, zero_core::Error> {
+        self.inner
+            .send_response_for_target_proxy_session_to_client_tokio(
+                udp_socket.as_ref(),
+                session_id,
+                target,
+                port,
+                payload,
+            )
+            .await
+    }
+}
 
 impl Proxy {
     pub(crate) async fn ss_udp_relay_loop(
@@ -21,98 +82,19 @@ impl Proxy {
         inbound_tag: &str,
         profile: ShadowsocksInboundProfile,
     ) -> Result<(), EngineError> {
-        let mut dispatch = crate::runtime::udp_dispatch::UdpDispatch::new(inbound_tag).await?;
-        let mut udp_responder = profile.udp_responder();
-        let mut buf = [0u8; 65536];
-        let mut direct_buf = [0u8; 65536];
-
-        loop {
-            let (direct_sock, chain_tasks) = dispatch.poll_sockets();
-
-            tokio::select! {
-                recv = udp_socket.recv_from(&mut buf) => {
-                    let (n, client_addr) = match recv {
-                        Ok(r) => r,
-                        Err(e) => { warn!(error = %e, "ss udp recv error"); break Ok(()); }
-                    };
-                    let packet = &buf[..n];
-
-                    let inbound_dispatch = match udp_responder.decode_inbound_dispatch(packet) {
-                        Ok(inbound_dispatch) => inbound_dispatch,
-                        Err(_) => continue,
-                    };
-
-                    let sa = profile.inbound_auth();
-                    match dispatch_inbound_udp_packet(
-                        self,
-                        &mut dispatch,
-                        &inbound_dispatch,
-                        Some(&sa),
-                    )
-                    .await
-                    {
-                        Ok(session_id) => {
-                            udp_responder.record_dispatch_success(
-                                session_id,
-                                inbound_dispatch.client_session_id(),
-                                client_addr,
-                            );
-                        }
-                        Err(error) => {
-                            warn!(error = %error, "ss udp dispatch failed");
-                        }
-                    }
-                }
-
-                recv = direct_sock.recv_from_addr(&mut direct_buf) => {
-                    let (n, sender) = recv?;
-                    let response = record_direct_udp_response_parts(
-                        self,
-                        &dispatch,
-                        sender,
-                        &direct_buf[..n],
-                    );
-                    let _ = write_optional_direct_response(&response, || async {
-                        udp_responder
-                            .send_response_for_target_proxy_session_to_client_tokio(
-                                udp_socket.as_ref(),
-                                response.accounting.session_id(),
-                                &response.target,
-                                response.port,
-                                response.payload,
-                            )
-                            .await
-                    })
-                    .await;
-                }
-
-                Some(chain_result) = chain_tasks.join_next() => {
-                    match chain_result {
-                        Ok(Ok((target, port, payload, session_id))) => {
-                            let response =
-                                record_chain_udp_response_parts(self, target, port, payload, session_id);
-                            let _ = write_optional_chain_response(&response, || async {
-                                udp_responder
-                                    .send_response_for_target_proxy_session_to_client_tokio(
-                                        udp_socket.as_ref(),
-                                        session_id,
-                                        &response.target,
-                                        response.port,
-                                        &response.payload,
-                                    )
-                                    .await
-                            })
-                            .await;
-                        }
-                        Ok(Err(error)) => {
-                            warn!(error = %error, "ss chain response error");
-                        }
-                        Err(e) => {
-                            warn!(error = %e, "ss chain task panicked");
-                        }
-                    }
-                }
-            }
-        }
+        run_datagram_udp_relay(
+            self,
+            DatagramUdpRelayRequest {
+                source: udp_socket,
+                responder: ShadowsocksDatagramUdpResponder {
+                    inner: profile.udp_responder(),
+                    auth: profile.inbound_auth(),
+                    pending_client_addr: None,
+                },
+                inbound_tag,
+                poll_upstream: false,
+            },
+        )
+        .await
     }
 }

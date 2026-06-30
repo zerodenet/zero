@@ -44,20 +44,6 @@ where
     Ok(written)
 }
 
-pub(crate) fn write_optional_direct_response_sync<F, E>(
-    response: &UdpDirectResponseParts<'_, '_>,
-    write: F,
-) -> Result<Option<usize>, E>
-where
-    F: FnOnce() -> Result<Option<usize>, E>,
-{
-    let written = write()?;
-    if let Some(written) = written {
-        response.accounting.record_sent(written);
-    }
-    Ok(written)
-}
-
 pub(crate) async fn write_upstream_response<F, Fut, E>(
     response: &UdpUpstreamResponseParts<'_>,
     write: F,
@@ -83,14 +69,15 @@ where
     Ok(written)
 }
 
-pub(crate) fn write_optional_upstream_response_sync<F, E>(
+pub(crate) async fn write_optional_upstream_response<F, Fut, E>(
     response: &UdpUpstreamResponseParts<'_>,
     write: F,
 ) -> Result<Option<usize>, E>
 where
-    F: FnOnce() -> Result<Option<usize>, E>,
+    F: FnOnce() -> Fut,
+    Fut: Future<Output = Result<Option<usize>, E>>,
 {
-    let written = write()?;
+    let written = write().await?;
     if let Some(written) = written {
         response.accounting.record_sent(written);
     }
@@ -134,19 +121,5 @@ where
 {
     let written = write()?;
     response.accounting.record_sent(written);
-    Ok(written)
-}
-
-pub(crate) fn write_optional_chain_response_sync<F, E>(
-    response: &UdpChainResponseParts<'_>,
-    write: F,
-) -> Result<Option<usize>, E>
-where
-    F: FnOnce() -> Result<Option<usize>, E>,
-{
-    let written = write()?;
-    if let Some(written) = written {
-        response.accounting.record_sent(written);
-    }
     Ok(written)
 }
