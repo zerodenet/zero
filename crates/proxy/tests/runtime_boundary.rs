@@ -1970,8 +1970,9 @@ fn trojan_inbound_uses_adapter_request_model() {
             && !inbound.contains("build_tls_acceptor")
             && !inbound.contains("zero_config::TlsConfig")
             && !inbound.contains("std::slice::from_ref(&self.password)")
-            && adapter.contains("TrojanInboundProfile::from_config_password")
+            && adapter.contains("trojan::inbound_profile_from_config_password")
             && adapter.contains("password.as_str()")
+            && !adapter.contains("TrojanInboundProfile::from_config_password")
             && !adapter.contains("TrojanInboundProfile::from_config_parts")
             && adapter.contains("crate::transport::build_tls_acceptor")
             && adapter.contains("tls_acceptor")
@@ -2305,8 +2306,9 @@ fn hysteria2_inbound_uses_adapter_request_model() {
             && !inbound.contains("pub(crate) password: String")
             && !adapter.contains("up_bps")
             && !adapter.contains("down_bps")
-            && adapter.contains("Hysteria2InboundProfile::from_config_password")
+            && adapter.contains("hysteria2::inbound_profile_from_config_password")
             && adapter.contains("password.as_str()")
+            && !adapter.contains("Hysteria2InboundProfile::from_config_password")
             && !adapter.contains("password.clone()")
             && !adapter.contains("Hysteria2InboundProfile::from_config_parts"),
         "Hysteria2 inbound listener should receive only protocol-owned profile data, not raw password or unused rate-limit config"
@@ -3120,7 +3122,8 @@ fn hysteria2_tcp_udp_connect_glue_lives_in_adapter_connector() {
             && connector.contains("quic_profile: Hysteria2QuicProfile")
             && !connector.contains("client_fingerprint: Option<String>")
             && connector.contains("hysteria2::Hysteria2OutboundProfile")
-            && connector.contains("Hysteria2OutboundProfile::from_config_password")
+            && connector.contains("hysteria2::outbound_profile_from_config_password")
+            && !connector.contains("Hysteria2OutboundProfile::from_config_password")
             && !connector.contains("password: String")
             && !connector.contains("Hysteria2Outbound\n            .authenticate_connection")
             && !connector.contains("authenticate_with_password")
@@ -3133,6 +3136,7 @@ fn hysteria2_tcp_udp_connect_glue_lives_in_adapter_connector() {
             && protocol_outbound.contains("struct Hysteria2OutboundProfile")
             && protocol_outbound.contains("pub fn from_config_parts")
             && protocol_outbound.contains("pub fn from_config_password(")
+            && protocol_outbound.contains("pub fn outbound_profile_from_config_password")
             && protocol_outbound.contains("export_keying_material")
             && protocol_outbound.contains("pub async fn establish_tcp_connect")
             && protocol_outbound.contains("self.send_tcp_connect(stream, session).await?")
@@ -3164,8 +3168,10 @@ fn trojan_tcp_connect_uses_request_model() {
         "Trojan adapter TCP glue should share the Trojan transport TLS opening path with UDP while keeping TLS opening outside runtime"
     );
     assert!(
-        adapter.contains("TrojanTcpOutboundProfile::from_config_password")
-            && adapter.contains("TrojanTcpTlsProfile::from_config_parts")
+        adapter.contains("trojan::tcp_outbound_profile_from_config_password")
+            && adapter.contains("trojan::tcp_tls_profile_from_config")
+            && !adapter.contains("TrojanTcpOutboundProfile::from_config_password")
+            && !adapter.contains("TrojanTcpTlsProfile::from_config_parts")
             && adapter.contains("TrojanTlsProfile::from_parts")
             && !adapter.contains("password.to_owned()")
             && !adapter.contains("ClientTlsConfig")
@@ -3183,6 +3189,8 @@ fn trojan_tcp_connect_uses_request_model() {
             && protocol_outbound.contains("pub fn client_fingerprint(&self) -> Option<&str>")
             && protocol_outbound.contains("pub fn from_config_parts")
             && protocol_outbound.contains("pub fn from_config_password(password: &str)")
+            && protocol_outbound.contains("pub fn tcp_outbound_profile_from_config_password")
+            && protocol_outbound.contains("pub fn tcp_tls_profile_from_config")
             && protocol_outbound.contains("pub async fn establish_tcp_tunnel")
             && protocol_outbound.contains("impl<'a> TrojanTcpTunnelTarget<'a>")
             && protocol_outbound.contains("pub fn new(session: &'a Session, password: &'a str)"),

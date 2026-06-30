@@ -52,6 +52,14 @@ impl Hysteria2OutboundProfile {
     }
 }
 
+#[cfg(feature = "crypto")]
+pub fn outbound_profile_from_config_password(
+    password: &str,
+    client_fingerprint: Option<&str>,
+) -> Hysteria2OutboundProfile {
+    Hysteria2OutboundProfile::from_config_password(password, client_fingerprint)
+}
+
 impl Hysteria2Outbound {
     pub fn protocol(&self) -> ProtocolType {
         ProtocolType::Hysteria2

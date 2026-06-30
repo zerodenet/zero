@@ -45,6 +45,10 @@ impl TrojanInboundProfile {
     }
 }
 
+pub fn inbound_profile_from_config_password(password: impl Into<String>) -> TrojanInboundProfile {
+    TrojanInboundProfile::from_config_password(password)
+}
+
 /// Result of accepting a Trojan connection.
 pub struct TrojanAccept {
     pub session: Session,

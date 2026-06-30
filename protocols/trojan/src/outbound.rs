@@ -83,6 +83,18 @@ impl TrojanTcpTlsProfile {
     }
 }
 
+pub fn tcp_outbound_profile_from_config_password(password: &str) -> TrojanTcpOutboundProfile {
+    TrojanTcpOutboundProfile::from_config_password(password)
+}
+
+pub fn tcp_tls_profile_from_config(
+    sni: Option<&str>,
+    insecure: bool,
+    client_fingerprint: Option<&str>,
+) -> TrojanTcpTlsProfile {
+    TrojanTcpTlsProfile::from_config_parts(sni, insecure, client_fingerprint)
+}
+
 impl TrojanOutbound {
     pub fn protocol(&self) -> ProtocolType {
         ProtocolType::Trojan

@@ -100,12 +100,12 @@ async fn connect_tcp(request: TrojanTcpConnect<'_>) -> Result<TcpRelayStream, En
         trojan_tls_options(
             proxy,
             server,
-            trojan::TrojanTcpTlsProfile::from_config_parts(sni, insecure, client_fingerprint),
+            trojan::tcp_tls_profile_from_config(sni, insecure, client_fingerprint),
         ),
     )
     .await?;
     let mut metered = MeteredStream::new(tls_stream);
-    let profile = trojan::TrojanTcpOutboundProfile::from_config_password(password);
+    let profile = trojan::tcp_outbound_profile_from_config_password(password);
     profile.establish_tcp_tunnel(&mut metered, session).await?;
     metered.flush().await?;
     let traffic = metered.drain_traffic();
@@ -142,7 +142,7 @@ async fn apply_tcp_hop(
     session: &Session,
     password: &str,
 ) -> Result<TcpRelayStream, EngineError> {
-    let profile = trojan::TrojanTcpOutboundProfile::from_config_password(password);
+    let profile = trojan::tcp_outbound_profile_from_config_password(password);
     profile
         .establish_tcp_tunnel(&mut stream, session)
         .await

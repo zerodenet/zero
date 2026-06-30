@@ -105,6 +105,11 @@ impl Hysteria2InboundProfile {
     }
 }
 
+#[cfg(feature = "crypto")]
+pub fn inbound_profile_from_config_password(password: &str) -> Hysteria2InboundProfile {
+    Hysteria2InboundProfile::from_config_password(password)
+}
+
 /// Trait for looking up Hysteria2 users by password validation.
 pub trait Hysteria2UserStore {
     fn validate_password(&self, hmac: &[u8; 32], salt: &[u8; 32]) -> Option<&Hysteria2User>;

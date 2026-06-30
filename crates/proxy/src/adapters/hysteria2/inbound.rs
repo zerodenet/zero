@@ -44,7 +44,7 @@ impl Hysteria2Adapter {
         listeners.spawn(async move {
             let profile = match &inbound.protocol {
                 InboundProtocolConfig::Hysteria2 { password, .. } => {
-                    hysteria2::Hysteria2InboundProfile::from_config_password(password.as_str())
+                    hysteria2::inbound_profile_from_config_password(password.as_str())
                 }
                 _ => {
                     return Err(EngineError::Io(std::io::Error::new(

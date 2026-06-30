@@ -25,7 +25,7 @@ impl TrojanAdapter {
                         ))
                     })?;
                     (
-                        trojan::TrojanInboundProfile::from_config_password(password.as_str()),
+                        trojan::inbound_profile_from_config_password(password.as_str()),
                         tls_cfg,
                     )
                 }

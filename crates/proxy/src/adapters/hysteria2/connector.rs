@@ -164,8 +164,7 @@ pub(super) async fn connect_tcp(
     password: &str,
     client_fingerprint: Option<&str>,
 ) -> Result<TcpRelayStream, EngineError> {
-    let profile =
-        hysteria2::Hysteria2OutboundProfile::from_config_password(password, client_fingerprint);
+    let profile = hysteria2::outbound_profile_from_config_password(password, client_fingerprint);
     let connector = Hysteria2Connector::new(server, port, profile.client_fingerprint());
     let stream = connector.connect(session, &profile).await?;
     Ok(TcpRelayStream::new(stream))
