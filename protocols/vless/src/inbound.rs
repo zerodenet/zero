@@ -295,6 +295,11 @@ impl VlessInbound {
     }
 
     #[cfg(feature = "reality")]
+    pub fn udp_responder(&self) -> crate::shared::VlessInboundUdpResponder {
+        crate::shared::VlessInboundUdpResponder::new(self.udp_session())
+    }
+
+    #[cfg(feature = "reality")]
     pub fn mux_udp_responder(
         &self,
         writer: crate::mux::VlessInboundMuxWriter,

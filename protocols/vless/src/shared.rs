@@ -825,6 +825,11 @@ pub struct VlessInboundUdpSession {
 }
 
 #[cfg(feature = "reality")]
+pub struct VlessInboundUdpResponder {
+    session: VlessInboundUdpSession,
+}
+
+#[cfg(feature = "reality")]
 pub struct VlessInboundMuxUdpResponder {
     session: VlessInboundUdpSession,
     writer: crate::mux::VlessInboundMuxWriter,
@@ -984,6 +989,39 @@ impl VlessInboundUdpSession {
             mux_session_id,
             VlessInboundUdpClientResponse::new(target, port, payload),
         )
+    }
+}
+
+#[cfg(feature = "reality")]
+impl VlessInboundUdpResponder {
+    pub fn new(session: VlessInboundUdpSession) -> Self {
+        Self { session }
+    }
+
+    pub async fn read_inbound_dispatch_tokio<R>(
+        &self,
+        reader: &mut R,
+        buf: &mut [u8],
+    ) -> Result<Option<InboundUdpDispatch>, Error>
+    where
+        R: tokio::io::AsyncRead + Unpin,
+    {
+        self.session.read_inbound_dispatch_tokio(reader, buf).await
+    }
+
+    pub async fn write_response_for_target_tokio<W>(
+        &self,
+        writer: &mut W,
+        target: &Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<usize, Error>
+    where
+        W: tokio::io::AsyncWrite + Unpin,
+    {
+        self.session
+            .write_client_response_for_target_tokio(writer, target, port, payload)
+            .await
     }
 }
 

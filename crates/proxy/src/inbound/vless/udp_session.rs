@@ -43,7 +43,7 @@ impl Proxy {
         let mut udp_buffer = vec![0_u8; 64 * 1024];
         let mut upstream_buffer = vec![0_u8; 64 * 1024];
         let proxy = self.clone();
-        let udp_session = vless::VlessInbound.udp_session();
+        let udp_responder = vless::VlessInbound.udp_responder();
 
         loop {
             // Split dispatch into disjoint borrows so select! can pin
@@ -61,7 +61,7 @@ impl Proxy {
                     );
                     break;
                 }
-                read = udp_session.read_inbound_dispatch_tokio(&mut client, &mut buffer) => {
+                read = udp_responder.read_inbound_dispatch_tokio(&mut client, &mut buffer) => {
                     match read {
                         Ok(None) => break,
                         Ok(Some(inbound_dispatch)) => {
@@ -103,8 +103,8 @@ impl Proxy {
                         &udp_buffer[..n],
                     );
                     match write_direct_response(&response, || async {
-                        udp_session
-                            .write_client_response_for_target_tokio(
+                        udp_responder
+                            .write_response_for_target_tokio(
                                 &mut client,
                                 &response.target,
                                 response.port,
@@ -138,8 +138,8 @@ impl Proxy {
                                 pkt,
                             );
                             match write_upstream_response(&response, || async {
-                                udp_session
-                                    .write_client_response_for_target_tokio(
+                                udp_responder
+                                    .write_response_for_target_tokio(
                                         &mut client,
                                         &response.target,
                                         response.port,
@@ -175,8 +175,8 @@ impl Proxy {
                             let response =
                                 record_chain_udp_response_parts(&proxy, target, port, payload, session_id);
                             match write_chain_response(&response, || async {
-                                udp_session
-                                    .write_client_response_for_target_tokio(
+                                udp_responder
+                                    .write_response_for_target_tokio(
                                         &mut client,
                                         &response.target,
                                         response.port,

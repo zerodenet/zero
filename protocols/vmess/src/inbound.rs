@@ -196,6 +196,10 @@ impl VmessInbound {
         self.udp_session(session.target.clone(), session.port)
     }
 
+    pub fn udp_responder_for(&self, session: &Session) -> crate::udp::VmessInboundUdpResponder {
+        crate::udp::VmessInboundUdpResponder::new(self.udp_session_for(session))
+    }
+
     pub fn mux_udp_responder_for(
         &self,
         session: &Session,

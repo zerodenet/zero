@@ -46,4 +46,6 @@ pub use reality::{
 };
 #[cfg(feature = "reality")]
 pub use shared::VlessInboundMuxUdpResponder;
+#[cfg(feature = "reality")]
+pub use shared::VlessInboundUdpResponder;
 pub use shared::{format_uuid, parse_uuid, VlessInboundUdpClientResponse, VLESS_VERSION};

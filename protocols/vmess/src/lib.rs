@@ -22,4 +22,6 @@ pub use shared::{
     MUX_COOL_PORT, VERSION,
 };
 pub use stream::{wrap_tcp_inbound_stream, VmessAeadStream};
-pub use udp::{VmessInboundMuxUdpResponder, VmessInboundUdpClientResponse};
+pub use udp::{
+    VmessInboundMuxUdpResponder, VmessInboundUdpClientResponse, VmessInboundUdpResponder,
+};
