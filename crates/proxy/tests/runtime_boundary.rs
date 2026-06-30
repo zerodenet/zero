@@ -821,6 +821,40 @@ fn outbound_root_is_facade_only() {
 }
 
 #[test]
+fn architecture_docs_do_not_describe_removed_proxy_facades() {
+    let architecture = fs::read_to_string(repo_root().join("docs/project/architecture.md"))
+        .expect("read docs/project/architecture.md");
+
+    for forbidden in [
+        "`outbound/mod.rs` only declares",
+        "Helper logic lives in `outbound/<protocol>.rs`",
+        "`protocol_registry.rs` only re-exports",
+        "`protocol_registry/defaults.rs` only wires",
+        "`protocol_registry/model.rs` only wires",
+        "`protocol_registry/registry.rs` only owns",
+    ] {
+        assert!(
+            !architecture.contains(forbidden),
+            "docs/project/architecture.md should not describe removed proxy facade `{forbidden}`"
+        );
+    }
+
+    for expected in [
+        "`src/outbound/` does not exist",
+        "`src/adapters/<protocol>/tcp.rs`",
+        "`protocol_registry/mod.rs` only re-exports",
+        "`protocol_registry/defaults/mod.rs` only wires",
+        "`protocol_registry/model/mod.rs` only wires",
+        "`protocol_registry/registry/mod.rs` only owns",
+    ] {
+        assert!(
+            architecture.contains(expected),
+            "docs/project/architecture.md should document current proxy boundary `{expected}`"
+        );
+    }
+}
+
+#[test]
 fn runtime_does_not_match_protocol_config_variants() {
     for path in rust_sources_under("src/runtime") {
         let source = relative(&path);

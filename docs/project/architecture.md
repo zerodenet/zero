@@ -75,11 +75,11 @@ Adapters call `crate::inbound::run_<protocol>_listener_with_bound`; `Proxy` does
 
 - `adapters/mod.rs` only declares concrete adapter modules and re-exports adapter types. Registry construction and protocol dispatch stay outside this facade.
 - `inbound/mod.rs` only declares inbound listener modules and re-exports `run_<protocol>_listener_with_bound` entrypoints. Request models and listener/session logic stay in protocol-local inbound modules.
-- `outbound/mod.rs` only declares crate-private per-protocol outbound helper modules. Helper logic lives in `outbound/<protocol>.rs` and is called only by adapter TCP modules.
-- `protocol_registry.rs` only re-exports focused capability traits, adapter contexts, registry models, and registry.
-- `protocol_registry/defaults.rs` only wires default helper modules. TCP bind defaults live in `defaults/bind.rs`; unsupported error construction lives in `defaults/errors.rs`.
-- `protocol_registry/model.rs` only wires registry model modules. Inbound bind/spawn models live in `model/inbound.rs`; outbound runtime facts live in `model/outbound.rs`.
-- `protocol_registry/registry.rs` only owns the registry struct and submodule wiring. The low-level register helper lives in `registry/build.rs`; compiled protocol collection lives in `src/register.rs`; inbound dispatch, outbound dispatch, metadata, support lookup, and validation live in `registry/{inbound,outbound,metadata,support,validation}.rs`.
+- `src/outbound/` does not exist. Per-protocol TCP outbound glue lives in `src/adapters/<protocol>/tcp.rs` after extracting the leaf variant; protocol handshake/session details live in `protocols/*`.
+- `protocol_registry/mod.rs` only re-exports focused capability traits, adapter contexts, registry models, and registry.
+- `protocol_registry/defaults/mod.rs` only wires default helper modules. TCP bind defaults live in `defaults/bind.rs`; unsupported error construction lives in `defaults/errors.rs`.
+- `protocol_registry/model/mod.rs` only wires registry model modules. Inbound bind/spawn models live in `model/inbound.rs`; outbound runtime facts live in `model/outbound.rs`.
+- `protocol_registry/registry/mod.rs` only owns the registry struct and submodule wiring. The low-level register helper lives in `registry/build.rs`; compiled protocol collection lives in `src/register.rs`; inbound dispatch, outbound dispatch, metadata, support lookup, validation, and runtime fact lookup live in `registry/{inbound,outbound,metadata,support,validation,runtime}.rs`.
 - `protocol_registry/registry/tests/mod.rs` only wires registry test modules. Shared fixtures live in `registry/tests/fixtures.rs`; inbound coverage lives in `registry/tests/inbound.rs`; outbound and `block` kernel fact coverage live in `registry/tests/outbound.rs`.
 - `inventory.rs` only owns the runtime-facing `ProtocolInventory` shell. Inbound, TCP, UDP, metadata, direct connector access, and runtime-fact lookups live in sibling modules.
 - `inventory/protocols.rs` exposes only neutral proxy-owned protocol helpers such as the direct connector; concrete protocol object construction stays in protocol-local integration code or the compiled registration surface.
