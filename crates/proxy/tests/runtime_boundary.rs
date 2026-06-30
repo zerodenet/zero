@@ -591,19 +591,23 @@ fn ordinary_tcp_inbounds_use_tcp_pipe_for_route_execution() {
 
     let vless = read("src/inbound/vless/mux.rs");
     let vmess = read("src/inbound/vmess/mux.rs");
+    let mux_tcp = read("src/inbound/mux_tcp.rs");
     assert!(
         vless.contains("TcpPipe::new") && vless.contains("TcpPipeInput"),
-        "VLESS MUX sub-streams should route through TcpPipe"
+        "VLESS MUX sub-streams keep local TcpPipe glue because dispatch failure must reject on the active client stream"
     );
     assert!(
         !vless.contains("dispatch_tcp_outbound"),
         "VLESS inbound should not bypass TcpPipe through TCP outbound helpers"
     );
     assert!(
-        vmess.contains("TcpPipe::new")
-            && vmess.contains("TcpPipeInput")
-            && !vmess.contains("dispatch_tcp("),
-        "VMess MUX sub-streams should route through TcpPipe"
+        vmess.contains("spawn_mux_tcp_stream_task")
+            && !vmess.contains("TcpPipe::new")
+            && !vmess.contains("TcpPipeInput")
+            && !vmess.contains("dispatch_tcp(")
+            && mux_tcp.contains("TcpPipe::new(&proxy)")
+            && mux_tcp.contains("TcpPipeInput"),
+        "VMess MUX sub-streams should route through the shared MUX TCP pipe glue"
     );
 }
 
@@ -5760,6 +5764,7 @@ fn h2_udp_stream_pump_uses_protocol_flow_resume_boundary() {
 fn inbound_vmess_mux_task_models_do_not_live_in_proxy_model() {
     let root = read("src/inbound/vmess/mux.rs");
     let mux_udp = read("src/inbound/vmess/mux_udp.rs");
+    let mux_tcp = read("src/inbound/mux_tcp.rs");
     let model = read("src/inbound/vmess/model.rs");
 
     for forbidden in [
@@ -5795,6 +5800,16 @@ fn inbound_vmess_mux_task_models_do_not_live_in_proxy_model() {
             && mux_udp.contains("vmess mux udp dispatch init failed")
             && mux_udp.contains("record_direct_udp_response_parts"),
         "VMess inbound MUX root should delegate UDP relay glue to src/inbound/vmess/*udp*.rs modules"
+    );
+    assert!(
+        root.contains("spawn_mux_tcp_stream_task")
+            && !root.contains("TcpPipe")
+            && !root.contains("TcpPipeInput")
+            && mux_tcp.contains("pub(crate) fn spawn_mux_tcp_stream_task")
+            && mux_tcp.contains("TcpPipe::new(&proxy)")
+            && mux_tcp.contains("close_stream().await")
+            && mux_tcp.contains("relay_stream(mux_session_id, uplink, upstream).await"),
+        "VMess inbound MUX root should delegate TCP sub-stream route/dispatch glue to inbound/mux_tcp.rs"
     );
     assert!(
         root.contains("vmess::mux::VmessInboundMuxServer::from_tokio_writer(writer)")

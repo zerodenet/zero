@@ -3,10 +3,9 @@
 use tokio::select;
 use tokio::task::JoinSet;
 use tracing::{info, warn};
-use zero_core::Session;
 use zero_engine::EngineError;
 
-use crate::runtime::pipe::{KernelPipe, TcpPipe, TcpPipeInput};
+use crate::inbound::mux_tcp::spawn_mux_tcp_stream_task;
 use crate::runtime::Proxy;
 use crate::transport::TcpRelayStream;
 
@@ -86,35 +85,30 @@ impl Proxy {
         Ok(())
     }
 
-    pub(crate) fn spawn_vmess_mux_tcp_stream_task(
+    fn spawn_vmess_mux_tcp_stream_task(
         &self,
         tasks: &mut JoinSet<()>,
         mux_session_id: u16,
-        session: Session,
+        session: zero_core::Session,
         up_rx: tokio::sync::mpsc::UnboundedReceiver<Vec<u8>>,
         writer: vmess::mux::VmessInboundMuxWriter,
         inbound_tag: String,
     ) {
-        let proxy = self.clone();
-        tasks.spawn(async move {
-            let mut session = session;
-            proxy.prepare_session(&mut session, &inbound_tag, None);
-
-            let upstream = match TcpPipe::new(&proxy)
-                .dispatch(TcpPipeInput {
-                    session: &mut session,
-                })
-                .await
-            {
-                Ok(result) => result.upstream,
-                Err(error) => {
-                    warn!(%error, mux_session_id, "vmess mux dispatch failed");
-                    let _ = writer.end_inbound_stream(mux_session_id);
-                    return;
-                }
-            };
-
-            vmess::mux::relay_inbound_mux_stream(mux_session_id, up_rx, writer, upstream).await;
-        });
+        let close_writer = writer.clone();
+        spawn_mux_tcp_stream_task(
+            self,
+            tasks,
+            mux_session_id,
+            session,
+            up_rx,
+            move || async move {
+                let _ = close_writer.end_inbound_stream(mux_session_id);
+            },
+            move |session_id, up_rx, upstream| async move {
+                vmess::mux::relay_inbound_mux_stream(session_id, up_rx, writer, upstream).await;
+            },
+            inbound_tag,
+            "vmess_mux",
+        );
     }
 }

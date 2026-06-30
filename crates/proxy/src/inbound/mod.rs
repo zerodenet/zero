@@ -7,6 +7,7 @@ pub(crate) mod hysteria2;
 pub(crate) mod mieru;
 #[cfg(feature = "mixed")]
 mod mixed;
+mod mux_tcp;
 #[cfg(feature = "shadowsocks")]
 pub(crate) mod shadowsocks;
 #[cfg(feature = "socks5")]
