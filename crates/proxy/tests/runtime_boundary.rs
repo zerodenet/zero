@@ -437,11 +437,12 @@ fn inbound_udp_response_accounting_uses_runtime_helpers() {
                 || content.contains("record_chain_udp_response_received")
                 || content.contains("record_upstream_udp_response_received")
                 || content.contains("UdpInboundResponseAccounting::record_received"))
-                && (content.contains("response_accounting.record_sent")
-                    || content.contains("response.accounting.record_sent"))
+                && content.contains("write_")
+                && !content.contains("response_accounting.record_sent")
+                && !content.contains("response.accounting.record_sent")
                 && !content.contains("record_session_outbound_rx")
                 && !content.contains("record_session_inbound_tx"),
-            "{source} should use neutral UDP inbound response accounting helpers"
+            "{source} should use neutral UDP inbound response accounting and write helpers"
         );
         assert!(
             !content.contains("session_id_by_target"),
@@ -496,11 +497,12 @@ fn inbound_udp_response_accounting_uses_runtime_helpers() {
                 || content.contains("record_chain_udp_response_received")
                 || content.contains("record_upstream_udp_response_received")
                 || content.contains("UdpInboundResponseAccounting::record_received"))
-                && (content.contains("response_accounting.record_sent")
-                    || content.contains("response.accounting.record_sent"))
+                && content.contains("write_")
+                && !content.contains("response_accounting.record_sent")
+                && !content.contains("response.accounting.record_sent")
                 && !content.contains("record_udp_inbound_response_rx")
                 && !content.contains("record_udp_inbound_response_tx"),
-            "{source} should use the neutral UDP inbound response accounting object instead of open-coding rx/tx pairs"
+            "{source} should use neutral UDP response write helpers instead of open-coding rx/tx or tx accounting"
         );
     }
 
@@ -7049,10 +7051,11 @@ fn socks5_udp_associate_loop_delegates_dispatch_and_direct_response_framing() {
         "SOCKS5 UDP packet dispatch should live in inbound/socks5/udp_associate/dispatch.rs"
     );
     assert!(
-        direct_response.contains("async fn forward_direct_udp_response")
+        direct_response.contains("async fn write_socks5_direct_response")
             && direct_response.contains("async fn forward_relay_socket_response")
             && direct_response.contains("async fn forward_dispatch_socket_response")
             && direct_response.contains("record_direct_udp_response_parts")
+            && direct_response.contains("write_direct_response")
             && direct_response.contains("UdpDirectResponseParts")
             && read("src/runtime/udp_flow/helpers.rs").contains("direct_response_session_id")
             && direct_response.contains("socks5::Socks5Inbound.udp_session()")
@@ -7078,6 +7081,7 @@ fn socks5_udp_associate_loop_delegates_dispatch_and_direct_response_framing() {
         chain_response.contains("async fn handle_chain_result")
             && chain_response.contains("pub(super) struct ChainResponseRequest")
             && chain_response.contains("struct ForwardChainResponseRequest")
+            && chain_response.contains("write_chain_response")
             && chain_response.contains("socks5::Socks5Inbound.udp_session()")
             && chain_response.contains(".send_client_response_for_target")
             && !chain_response.contains("Socks5UdpClientResponse::new")
@@ -7090,6 +7094,11 @@ fn socks5_udp_associate_loop_delegates_dispatch_and_direct_response_framing() {
             && chain_response.contains("failed to send SOCKS5 UDP chain response to client")
             && chain_response.contains("chain response task panicked"),
         "SOCKS5 UDP chain response result handling should live in proxy while framing stays behind protocol helpers"
+    );
+    assert!(
+        upstream_response.contains("write_upstream_response")
+            && !upstream_response.contains("response.accounting.record_sent"),
+        "SOCKS5 UDP upstream response writes should share neutral response accounting glue"
     );
     assert!(
         setup.contains("send_success_response_with_bound")

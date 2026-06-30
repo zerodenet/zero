@@ -1,31 +1,29 @@
 use std::future::Future;
 
-use zero_core::Error;
-
 use crate::runtime::udp_flow::helpers::{
     UdpChainResponseParts, UdpDirectResponseParts, UdpUpstreamResponseParts,
 };
 
-pub(crate) async fn write_direct_response<F, Fut>(
+pub(crate) async fn write_direct_response<F, Fut, E>(
     response: &UdpDirectResponseParts<'_, '_>,
     write: F,
-) -> Result<usize, Error>
+) -> Result<usize, E>
 where
     F: FnOnce() -> Fut,
-    Fut: Future<Output = Result<usize, Error>>,
+    Fut: Future<Output = Result<usize, E>>,
 {
     let written = write().await?;
     response.accounting.record_sent(written);
     Ok(written)
 }
 
-pub(crate) async fn write_optional_direct_response<F, Fut>(
+pub(crate) async fn write_optional_direct_response<F, Fut, E>(
     response: &UdpDirectResponseParts<'_, '_>,
     write: F,
-) -> Result<Option<usize>, Error>
+) -> Result<Option<usize>, E>
 where
     F: FnOnce() -> Fut,
-    Fut: Future<Output = Result<Option<usize>, Error>>,
+    Fut: Future<Output = Result<Option<usize>, E>>,
 {
     let written = write().await?;
     if let Some(written) = written {
@@ -34,24 +32,24 @@ where
     Ok(written)
 }
 
-pub(crate) fn write_direct_response_sync<F>(
+pub(crate) fn write_direct_response_sync<F, E>(
     response: &UdpDirectResponseParts<'_, '_>,
     write: F,
-) -> Result<usize, Error>
+) -> Result<usize, E>
 where
-    F: FnOnce() -> Result<usize, Error>,
+    F: FnOnce() -> Result<usize, E>,
 {
     let written = write()?;
     response.accounting.record_sent(written);
     Ok(written)
 }
 
-pub(crate) fn write_optional_direct_response_sync<F>(
+pub(crate) fn write_optional_direct_response_sync<F, E>(
     response: &UdpDirectResponseParts<'_, '_>,
     write: F,
-) -> Result<Option<usize>, Error>
+) -> Result<Option<usize>, E>
 where
-    F: FnOnce() -> Result<Option<usize>, Error>,
+    F: FnOnce() -> Result<Option<usize>, E>,
 {
     let written = write()?;
     if let Some(written) = written {
@@ -60,37 +58,37 @@ where
     Ok(written)
 }
 
-pub(crate) async fn write_upstream_response<F, Fut>(
+pub(crate) async fn write_upstream_response<F, Fut, E>(
     response: &UdpUpstreamResponseParts<'_>,
     write: F,
-) -> Result<usize, Error>
+) -> Result<usize, E>
 where
     F: FnOnce() -> Fut,
-    Fut: Future<Output = Result<usize, Error>>,
+    Fut: Future<Output = Result<usize, E>>,
 {
     let written = write().await?;
     response.accounting.record_sent(written);
     Ok(written)
 }
 
-pub(crate) fn write_upstream_response_sync<F>(
+pub(crate) fn write_upstream_response_sync<F, E>(
     response: &UdpUpstreamResponseParts<'_>,
     write: F,
-) -> Result<usize, Error>
+) -> Result<usize, E>
 where
-    F: FnOnce() -> Result<usize, Error>,
+    F: FnOnce() -> Result<usize, E>,
 {
     let written = write()?;
     response.accounting.record_sent(written);
     Ok(written)
 }
 
-pub(crate) fn write_optional_upstream_response_sync<F>(
+pub(crate) fn write_optional_upstream_response_sync<F, E>(
     response: &UdpUpstreamResponseParts<'_>,
     write: F,
-) -> Result<Option<usize>, Error>
+) -> Result<Option<usize>, E>
 where
-    F: FnOnce() -> Result<Option<usize>, Error>,
+    F: FnOnce() -> Result<Option<usize>, E>,
 {
     let written = write()?;
     if let Some(written) = written {
@@ -99,26 +97,26 @@ where
     Ok(written)
 }
 
-pub(crate) async fn write_chain_response<F, Fut>(
+pub(crate) async fn write_chain_response<F, Fut, E>(
     response: &UdpChainResponseParts<'_>,
     write: F,
-) -> Result<usize, Error>
+) -> Result<usize, E>
 where
     F: FnOnce() -> Fut,
-    Fut: Future<Output = Result<usize, Error>>,
+    Fut: Future<Output = Result<usize, E>>,
 {
     let written = write().await?;
     response.accounting.record_sent(written);
     Ok(written)
 }
 
-pub(crate) async fn write_optional_chain_response<F, Fut>(
+pub(crate) async fn write_optional_chain_response<F, Fut, E>(
     response: &UdpChainResponseParts<'_>,
     write: F,
-) -> Result<Option<usize>, Error>
+) -> Result<Option<usize>, E>
 where
     F: FnOnce() -> Fut,
-    Fut: Future<Output = Result<Option<usize>, Error>>,
+    Fut: Future<Output = Result<Option<usize>, E>>,
 {
     let written = write().await?;
     if let Some(written) = written {
@@ -127,24 +125,24 @@ where
     Ok(written)
 }
 
-pub(crate) fn write_chain_response_sync<F>(
+pub(crate) fn write_chain_response_sync<F, E>(
     response: &UdpChainResponseParts<'_>,
     write: F,
-) -> Result<usize, Error>
+) -> Result<usize, E>
 where
-    F: FnOnce() -> Result<usize, Error>,
+    F: FnOnce() -> Result<usize, E>,
 {
     let written = write()?;
     response.accounting.record_sent(written);
     Ok(written)
 }
 
-pub(crate) fn write_optional_chain_response_sync<F>(
+pub(crate) fn write_optional_chain_response_sync<F, E>(
     response: &UdpChainResponseParts<'_>,
     write: F,
-) -> Result<Option<usize>, Error>
+) -> Result<Option<usize>, E>
 where
-    F: FnOnce() -> Result<Option<usize>, Error>,
+    F: FnOnce() -> Result<Option<usize>, E>,
 {
     let written = write()?;
     if let Some(written) = written {

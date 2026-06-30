@@ -1,8 +1,10 @@
 use std::net::SocketAddr;
 
 use tracing::warn;
+use zero_engine::EngineError;
 use zero_platform_tokio::TokioDatagramSocket;
 
+use crate::inbound::udp_response::write_chain_response;
 use crate::runtime::udp_flow::helpers::{record_chain_udp_response_parts, UdpChainResponseParts};
 use crate::runtime::udp_flow::packet_path::ChainTask;
 use crate::runtime::Proxy;
@@ -52,19 +54,21 @@ async fn forward_chain_response(request: ForwardChainResponseRequest<'_>) {
     };
 
     let udp_session = socks5::Socks5Inbound.udp_session();
-    match udp_session
-        .send_client_response_for_target(
-            request.relay,
-            zero_platform_tokio::socket_addr_to_socket_address(client_addr),
-            &request.response.target,
-            request.response.port,
-            &request.response.payload,
-        )
-        .await
+    match write_chain_response(&request.response, || async {
+        udp_session
+            .send_client_response_for_target(
+                request.relay,
+                zero_platform_tokio::socket_addr_to_socket_address(client_addr),
+                &request.response.target,
+                request.response.port,
+                &request.response.payload,
+            )
+            .await
+            .map_err(|error| error.into_mapped(EngineError::from))
+    })
+    .await
     {
-        Ok(sent) => {
-            request.response.accounting.record_sent(sent);
-        }
+        Ok(_) => {}
         Err(error) => {
             warn!(
                 inbound_tag = request.inbound_tag,

@@ -3,6 +3,7 @@ use std::net::SocketAddr;
 use zero_engine::EngineError;
 use zero_platform_tokio::TokioDatagramSocket;
 
+use crate::inbound::udp_response::write_upstream_response;
 use crate::logging::log_udp_upstream_association_dropped;
 use crate::runtime::udp_dispatch::UdpDispatch;
 use crate::runtime::udp_flow::helpers::record_upstream_udp_response_received;
@@ -56,17 +57,19 @@ async fn forward_upstream_response(
     };
 
     let udp_session = socks5::Socks5Inbound.udp_session();
-    let sent = udp_session
-        .send_client_response_for_target(
-            relay,
-            zero_platform_tokio::socket_addr_to_socket_address(client_addr),
-            &response.target,
-            response.port,
-            &response.payload,
-        )
-        .await
-        .map_err(|error| error.into_mapped(EngineError::from))?;
-    response.accounting.record_sent(sent);
+    write_upstream_response(&response, || async {
+        udp_session
+            .send_client_response_for_target(
+                relay,
+                zero_platform_tokio::socket_addr_to_socket_address(client_addr),
+                &response.target,
+                response.port,
+                &response.payload,
+            )
+            .await
+            .map_err(|error| error.into_mapped(EngineError::from))
+    })
+    .await?;
 
     Ok(())
 }
