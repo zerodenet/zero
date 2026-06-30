@@ -37,6 +37,8 @@ pub struct RuntimeSnapshot {
     #[serde(default)]
     pub udp_upstream_idle_timeout_seconds: u64,
     #[serde(default)]
+    pub udp_enabled: bool,
+    #[serde(default)]
     pub log_level: String,
     #[serde(default)]
     pub log_files: Vec<String>,
@@ -83,6 +85,8 @@ pub struct ListenerSnapshot {
     pub listen_address: String,
     #[serde(default)]
     pub listen_port: u16,
+    #[serde(default)]
+    pub udp_enabled: bool,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -95,6 +99,8 @@ pub struct OutboundTargetSnapshot {
     pub server: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub port: Option<u16>,
+    #[serde(default)]
+    pub udp_enabled: bool,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]

@@ -16,6 +16,9 @@ use support::{
 use support::{spawn_http_probe_server, wait_for, wait_for_group_selection};
 
 #[cfg(feature = "socks5")]
+#[path = "socks5_udp/rejects_udp_when_inbound_policy_disabled.rs"]
+mod rejects_udp_when_inbound_policy_disabled;
+#[cfg(feature = "socks5")]
 #[path = "socks5_udp/relays_udp_through_fallback_group_when_primary_unreachable.rs"]
 mod relays_udp_through_fallback_group_when_primary_unreachable;
 #[cfg(all(feature = "socks5", feature = "hysteria2"))]

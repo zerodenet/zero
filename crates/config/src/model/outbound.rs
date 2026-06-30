@@ -6,6 +6,8 @@ use serde::{Deserialize, Serialize};
 pub struct OutboundConfig {
     pub tag: String,
     pub protocol: OutboundProtocolConfig,
+    #[serde(default)]
+    pub udp: UdpPolicyConfig,
 }
 
 impl OutboundConfig {

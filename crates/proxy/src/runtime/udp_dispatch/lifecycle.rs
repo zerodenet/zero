@@ -53,6 +53,10 @@ impl UdpDispatch {
         &self.direct_socket
     }
 
+    pub(crate) fn inbound_tag(&self) -> &str {
+        &self.inbound_tag
+    }
+
     /// Send a direct UDP packet through the dispatch-owned socket.
     pub(crate) async fn send_direct_packet(
         &self,

@@ -1061,6 +1061,40 @@ fn runtime_idle_timeout_defaults_to_thirty_seconds() {
     .expect("config should parse");
 
     assert_eq!(config.runtime.udp_upstream_idle_timeout_seconds, 30);
+    assert!(config.runtime.udp.enabled);
+}
+
+#[test]
+fn parses_udp_policy_overrides() {
+    let config = RuntimeConfig::parse(
+        r#"{
+            "runtime": { "udp": { "enabled": false } },
+            "inbounds": [
+                {
+                    "tag": "socks-in",
+                    "listen": { "address": "127.0.0.1", "port": 1080 },
+                    "udp": { "enabled": false },
+                    "protocol": { "type": "socks5" }
+                }
+            ],
+            "outbounds": [
+                {
+                    "tag": "direct",
+                    "udp": { "enabled": false },
+                    "protocol": { "type": "direct" }
+                }
+            ],
+            "route": {
+                "rules": [],
+                "final": { "type": "route", "outbound": "direct" }
+            }
+        }"#,
+    )
+    .expect("config should parse");
+
+    assert!(!config.runtime.udp.enabled);
+    assert!(!config.inbounds[0].udp.enabled);
+    assert!(!config.outbounds[0].udp.enabled);
 }
 
 #[test]

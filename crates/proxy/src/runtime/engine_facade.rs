@@ -198,6 +198,26 @@ impl Proxy {
         self.engine.check_outbound_health(tag)
     }
 
+    pub(crate) fn udp_enabled_for_inbound(&self, inbound_tag: &str) -> bool {
+        let config = self.engine.config();
+        config.runtime.udp.enabled
+            && config
+                .inbounds
+                .iter()
+                .find(|inbound| inbound.tag == inbound_tag)
+                .map(|inbound| inbound.udp.enabled)
+                .unwrap_or(true)
+    }
+
+    pub(crate) fn udp_enabled_for_outbound(&self, outbound_tag: Option<&str>) -> bool {
+        let config = self.engine.config();
+        config.runtime.udp.enabled
+            && outbound_tag
+                .and_then(|tag| config.outbounds.iter().find(|outbound| outbound.tag == tag))
+                .map(|outbound| outbound.udp.enabled)
+                .unwrap_or(true)
+    }
+
     pub(crate) fn record_outbound_failure(&self, tag: &str) {
         self.engine.record_outbound_failure(tag);
     }

@@ -2687,7 +2687,7 @@ fn vless_inbound_users_are_protocol_parsed() {
 
 #[test]
 fn hysteria2_inbound_uses_adapter_request_model() {
-    let inbound = read("src/inbound/hysteria2.rs");
+    let inbound = read("src/inbound/hysteria2.rs").replace("\r\n", "\n");
     let udp = read("src/inbound/hysteria2/udp.rs");
     let datagram_udp = read("src/inbound/datagram_udp.rs");
     let adapter = read("src/adapters/hysteria2/inbound.rs");
@@ -2696,7 +2696,8 @@ fn hysteria2_inbound_uses_adapter_request_model() {
     let protocol_dispatch_parts = struct_block(&protocol_udp, "Hysteria2InboundUdpDispatchParts");
     let protocol_inbound =
         fs::read_to_string(repo_root().join("protocols/hysteria2/src/inbound.rs"))
-            .expect("read hysteria2 protocol inbound source");
+            .expect("read hysteria2 protocol inbound source")
+            .replace("\r\n", "\n");
     let protocol_shared = fs::read_to_string(repo_root().join("protocols/hysteria2/src/shared.rs"))
         .expect("read hysteria2 protocol shared source");
     let protocol_lib = fs::read_to_string(repo_root().join("protocols/hysteria2/src/lib.rs"))

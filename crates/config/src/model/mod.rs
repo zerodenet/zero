@@ -76,6 +76,8 @@ pub struct RuntimeOptionsConfig {
     #[serde(default = "default_udp_upstream_idle_timeout_seconds")]
     pub udp_upstream_idle_timeout_seconds: u64,
     #[serde(default)]
+    pub udp: UdpPolicyConfig,
+    #[serde(default)]
     pub log: LogConfig,
     /// Optional DNS subsystem configuration. Omit for system resolver.
     #[serde(default)]
@@ -86,6 +88,7 @@ impl Default for RuntimeOptionsConfig {
     fn default() -> Self {
         Self {
             udp_upstream_idle_timeout_seconds: default_udp_upstream_idle_timeout_seconds(),
+            udp: UdpPolicyConfig::default(),
             log: LogConfig::default(),
             dns: None,
         }
@@ -94,6 +97,25 @@ impl Default for RuntimeOptionsConfig {
 
 const fn default_udp_upstream_idle_timeout_seconds() -> u64 {
     30
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct UdpPolicyConfig {
+    #[serde(default = "default_udp_enabled")]
+    pub enabled: bool,
+}
+
+impl Default for UdpPolicyConfig {
+    fn default() -> Self {
+        Self {
+            enabled: default_udp_enabled(),
+        }
+    }
+}
+
+const fn default_udp_enabled() -> bool {
+    true
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]

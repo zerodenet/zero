@@ -36,6 +36,17 @@ impl UdpDispatch {
                 error,
                 upstream: None,
             })?;
+        if !proxy.udp_enabled_for_outbound(runtime.udp_policy_tag) {
+            return Err(FlowFailure {
+                stage: "udp_policy",
+                error: zero_engine::EngineError::Io(std::io::Error::other(
+                    "udp disabled for outbound",
+                )),
+                upstream: runtime
+                    .endpoint
+                    .map(|endpoint| (endpoint.server.to_owned(), endpoint.port)),
+            });
+        }
         if matches!(
             runtime.tcp_path,
             crate::runtime::orchestration::TcpPathCategory::Block

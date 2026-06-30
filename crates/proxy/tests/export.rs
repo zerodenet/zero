@@ -100,11 +100,14 @@ async fn exports_serializable_engine_status_view() {
     assert_eq!(exported.config.listeners.len(), 1);
     assert_eq!(exported.config.listeners[0].tag, "socks-in");
     assert_eq!(exported.config.listeners[0].protocol, "socks5");
+    assert!(exported.config.listeners[0].udp_enabled);
     assert_eq!(exported.config.outbounds.len(), 1);
     assert_eq!(exported.config.outbounds[0].tag, "chain");
     assert_eq!(exported.config.outbounds[0].protocol, "socks5");
+    assert!(exported.config.outbounds[0].udp_enabled);
     assert!(exported.config.outbound_groups.is_empty());
     assert_eq!(exported.runtime.udp_upstream_idle_timeout_seconds, 30);
+    assert!(exported.runtime.udp_enabled);
     assert_eq!(exported.runtime.active_sessions.len(), 1);
     assert_eq!(exported.runtime.active_sessions[0].target.family, "ipv4");
     assert_eq!(exported.runtime.active_sessions[0].protocol, "socks5");
@@ -187,6 +190,42 @@ fn exports_custom_udp_upstream_idle_timeout_from_config() {
     let exported = engine.export_runtime();
 
     assert_eq!(exported.udp_upstream_idle_timeout_seconds, 9);
+}
+
+#[test]
+fn exports_udp_policy_from_config() {
+    let config = RuntimeConfig::parse(
+        r#"{
+            "runtime": { "udp": { "enabled": false } },
+            "inbounds": [
+                {
+                    "tag": "socks-in",
+                    "listen": { "address": "127.0.0.1", "port": 1080 },
+                    "udp": { "enabled": false },
+                    "protocol": { "type": "socks5" }
+                }
+            ],
+            "outbounds": [
+                {
+                    "tag": "direct",
+                    "udp": { "enabled": false },
+                    "protocol": { "type": "direct" }
+                }
+            ],
+            "route": {
+                "rules": [],
+                "final": { "type": "route", "outbound": "direct" }
+            }
+        }"#,
+    )
+    .expect("parse config");
+
+    let engine = Engine::new(config).expect("build engine");
+    let exported = engine.export_status();
+
+    assert!(!exported.runtime.udp_enabled);
+    assert!(!exported.config.listeners[0].udp_enabled);
+    assert!(!exported.config.outbounds[0].udp_enabled);
 }
 
 #[test]

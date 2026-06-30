@@ -11,6 +11,12 @@ pub(crate) async fn dispatch_inbound_udp_packet(
     inbound_dispatch: &InboundUdpDispatch,
     auth: Option<&SessionAuth>,
 ) -> Result<u64, EngineError> {
+    if !proxy.udp_enabled_for_inbound(dispatch.inbound_tag()) {
+        return Err(EngineError::Io(std::io::Error::other(
+            "udp disabled for inbound",
+        )));
+    }
+
     UdpPipe::new(proxy, dispatch)
         .dispatch(UdpPipeInput::from_inbound_dispatch(inbound_dispatch, auth))
         .await

@@ -45,6 +45,7 @@ impl ProtocolRegistry {
                 health_tag: None,
                 endpoint: None,
                 kernel_tag: *tag,
+                udp_policy_tag: *tag,
             });
         }
 

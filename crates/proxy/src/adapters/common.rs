@@ -46,6 +46,7 @@ pub(super) fn direct_leaf_runtime<'a>(
             health_tag: None,
             endpoint: None,
             kernel_tag: *tag,
+            udp_policy_tag: *tag,
         }),
         _ => None,
     }
@@ -85,5 +86,6 @@ pub(super) fn proxy_leaf_runtime<'a>(
         health_tag: Some(tag),
         endpoint: Some(OutboundEndpoint { server, port }),
         kernel_tag: None,
+        udp_policy_tag: Some(tag),
     })
 }

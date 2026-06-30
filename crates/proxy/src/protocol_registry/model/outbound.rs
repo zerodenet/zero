@@ -11,4 +11,5 @@ pub(crate) struct OutboundLeafRuntime<'a> {
     pub(crate) health_tag: Option<&'a str>,
     pub(crate) endpoint: Option<OutboundEndpoint<'a>>,
     pub(crate) kernel_tag: Option<&'a str>,
+    pub(crate) udp_policy_tag: Option<&'a str>,
 }

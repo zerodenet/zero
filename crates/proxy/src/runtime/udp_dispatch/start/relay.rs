@@ -13,6 +13,28 @@ impl UdpDispatch {
         session: &Session,
         payload: &[u8],
     ) -> Result<FlowStartResult, FlowFailure> {
+        for leaf in &chain {
+            let runtime = proxy
+                .protocols
+                .outbound_leaf_runtime(leaf)
+                .map_err(|error| FlowFailure {
+                    stage: "outbound_leaf_runtime",
+                    error,
+                    upstream: None,
+                })?;
+            if !proxy.udp_enabled_for_outbound(runtime.udp_policy_tag) {
+                return Err(FlowFailure {
+                    stage: "udp_policy",
+                    error: zero_engine::EngineError::Io(std::io::Error::other(
+                        "udp disabled for relay chain outbound",
+                    )),
+                    upstream: runtime
+                        .endpoint
+                        .map(|endpoint| (endpoint.server.to_owned(), endpoint.port)),
+                });
+            }
+        }
+
         // Datagram-over-packet-path: carrier provides a raw send/recv channel,
         // datagram encodes through it. Resolve both positions via the adapter
         // registry; no match on the protocol enum.
