@@ -1,6 +1,6 @@
 use zero_engine::EngineError;
 
-use crate::runtime::pipe::{KernelPipe, UdpPipe, UdpPipeInput};
+use crate::inbound::udp_dispatch::dispatch_inbound_udp_packet;
 use crate::runtime::udp_dispatch::UdpDispatch;
 use crate::runtime::Proxy;
 use crate::transport::StreamTraffic;
@@ -24,9 +24,7 @@ pub(super) async fn dispatch_packet(
     let inbound_dispatch = request.into_inbound_dispatch();
 
     // Generic dispatch.
-    let session_id = UdpPipe::new(proxy, dispatch)
-        .dispatch(UdpPipeInput::from_inbound_dispatch(&inbound_dispatch, None))
-        .await?;
+    let session_id = dispatch_inbound_udp_packet(proxy, dispatch, &inbound_dispatch, None).await?;
 
     // Record protocol-specific overhead: TCP control traffic and
     // SOCKS5 framing bytes (payload is already tracked by dispatch).

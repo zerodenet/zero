@@ -16,6 +16,7 @@ mod system;
 #[cfg(feature = "trojan")]
 pub(crate) mod trojan;
 mod tun;
+mod udp_dispatch;
 mod udp_response;
 #[cfg(feature = "vless")]
 pub(crate) mod vless;

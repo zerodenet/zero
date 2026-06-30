@@ -4,11 +4,11 @@ use tokio::select;
 use tracing::warn;
 use zero_engine::EngineError;
 
+use crate::inbound::udp_dispatch::dispatch_inbound_udp_packet;
 use crate::inbound::udp_response::{
     write_optional_chain_response_sync, write_optional_direct_response_sync,
     write_optional_upstream_response_sync,
 };
-use crate::runtime::pipe::{KernelPipe, UdpPipe, UdpPipeInput};
 use crate::runtime::udp_flow::helpers::{
     record_chain_udp_response_parts, record_direct_udp_response_parts,
     record_upstream_udp_response_received, wait_for_upstream_idle,
@@ -34,11 +34,12 @@ impl Proxy {
                 dg = udp_session.read_inbound_dispatch_from_datagram(&conn) => {
                     match dg {
                         Ok(tracked) => {
-                            let _ = UdpPipe::new(&proxy, &mut dispatch)
-                                .dispatch(UdpPipeInput::from_inbound_dispatch(
+                            let _ = dispatch_inbound_udp_packet(
+                                    &proxy,
+                                    &mut dispatch,
                                     tracked.dispatch(),
                                     None,
-                                ))
+                                )
                                 .await
                                 .inspect(|sid| {
                                     udp_session.record_dispatch_success(*sid, &tracked);

@@ -7,8 +7,8 @@ use tokio::net::UdpSocket;
 use tracing::warn;
 use zero_engine::EngineError;
 
+use crate::inbound::udp_dispatch::dispatch_inbound_udp_packet;
 use crate::inbound::udp_response::{write_optional_chain_response, write_optional_direct_response};
-use crate::runtime::pipe::{KernelPipe, UdpPipe, UdpPipeInput};
 use crate::runtime::udp_flow::helpers::{
     record_chain_udp_response_parts, record_direct_udp_response_parts,
 };
@@ -43,12 +43,13 @@ impl Proxy {
                     };
 
                     let sa = profile.inbound_auth();
-                    match UdpPipe::new(self, &mut dispatch)
-                        .dispatch(UdpPipeInput::from_inbound_dispatch(
-                            &inbound_dispatch,
-                            Some(&sa),
-                        ))
-                        .await
+                    match dispatch_inbound_udp_packet(
+                        self,
+                        &mut dispatch,
+                        &inbound_dispatch,
+                        Some(&sa),
+                    )
+                    .await
                     {
                         Ok(session_id) => {
                             udp_session.record_dispatch_success(

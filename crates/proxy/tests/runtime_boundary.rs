@@ -186,6 +186,14 @@ fn runtime_protocol_runtime_references_are_confined_to_facades() {
 
 #[test]
 fn ordinary_udp_inbounds_submit_packets_through_udp_pipe() {
+    let udp_dispatch = read("src/inbound/udp_dispatch.rs");
+    assert!(
+        udp_dispatch.contains("pub(crate) async fn dispatch_inbound_udp_packet")
+            && udp_dispatch.contains("UdpPipe::new(proxy, dispatch)")
+            && udp_dispatch.contains("UdpPipeInput::from_inbound_dispatch"),
+        "shared inbound UDP dispatch helper should own UdpPipe submission"
+    );
+
     for source in [
         "src/inbound/socks5/udp_associate/dispatch.rs",
         "src/inbound/vless/udp_session.rs",
@@ -199,8 +207,10 @@ fn ordinary_udp_inbounds_submit_packets_through_udp_pipe() {
     ] {
         let content = read(source);
         assert!(
-            content.contains("UdpPipe::new") && content.contains("UdpPipeInput"),
-            "{source} should submit inbound UDP packets through UdpPipe"
+            content.contains("dispatch_inbound_udp_packet")
+                && !content.contains("UdpPipe::new")
+                && !content.contains("UdpPipeInput"),
+            "{source} should submit inbound UDP packets through the shared inbound UDP dispatch helper"
         );
         assert!(
             !content.contains("UdpDispatch::dispatch"),
@@ -1674,8 +1684,8 @@ fn shadowsocks_inbound_uses_adapter_request_model() {
             && !udp.contains(".send_proxy_session_response_to_client_tokio")
             && !udp.contains("response_datagram_for_proxy_session")
             && !udp.contains("address_from_socket_addr(sender)")
-            && udp.contains("UdpPipe::new"),
-        "Shadowsocks UDP relay should live in src/inbound/shadowsocks/udp.rs, route through UdpPipe, and delegate response framing to protocols/shadowsocks"
+            && udp.contains("dispatch_inbound_udp_packet"),
+        "Shadowsocks UDP relay should live in src/inbound/shadowsocks/udp.rs, route through the shared UDP dispatch helper, and delegate response framing to protocols/shadowsocks"
     );
     assert!(
         udp.contains("ShadowsocksInboundProfile")
@@ -2304,7 +2314,7 @@ fn hysteria2_inbound_uses_adapter_request_model() {
     assert!(
         udp.contains("hysteria2::Hysteria2Inbound.udp_session()")
             && udp.contains("udp_session.read_inbound_dispatch_from_datagram")
-            && udp.contains("UdpPipeInput::from_inbound_dispatch")
+            && udp.contains("dispatch_inbound_udp_packet")
             && !udp.contains("udp_session.read_dispatch_view_from_datagram")
             && !udp.contains("conn.read_datagram")
             && !udp.contains("udp_session.decode_dispatch_view")
@@ -3744,7 +3754,7 @@ fn shadowsocks_udp_inbound_uses_protocol_codec_not_datagram_primitives() {
     assert!(
         udp.contains("profile.udp_session()")
             && udp.contains("udp_session.decode_inbound_dispatch")
-            && udp.contains("UdpPipeInput::from_inbound_dispatch")
+            && udp.contains("dispatch_inbound_udp_packet")
             && !udp.contains("request.into_dispatch_parts().into_parts()")
             && udp.contains("udp_session.record_dispatch_success")
             && !udp.contains("dispatch_parts.record_dispatch_success")
@@ -6049,8 +6059,8 @@ fn vmess_inbound_udp_response_encoding_stays_in_protocol_crate() {
             && mux_udp.contains("vmess::VmessInbound.udp_session_for(&session)")
             && udp_session.contains("udp_session.read_inbound_dispatch_tokio")
             && mux_udp.contains("udp_session.decode_mux_inbound_dispatch")
-            && udp_session.contains("UdpPipeInput::from_inbound_dispatch")
-            && mux_udp.contains("UdpPipeInput::from_inbound_dispatch")
+            && udp_session.contains("dispatch_inbound_udp_packet")
+            && mux_udp.contains("dispatch_inbound_udp_packet")
             && !mux.contains("decode_dispatch_parts(&payload)")
             && !mux.contains("client.read(&mut client_buf)")
             && !mux.contains("decode_dispatch_parts(&client_buf[..n])")
@@ -6135,7 +6145,7 @@ fn vmess_inbound_udp_response_encoding_stays_in_protocol_crate() {
             && mux_udp.contains("vmess mux udp direct response send failed")
             && mux_udp.contains("udp_session.write_mux_client_response")
             && !mux_udp.contains("udp_session.write_mux_response_to_socket_addr")
-            && mux_udp.contains("UdpPipe::new"),
+            && mux_udp.contains("dispatch_inbound_udp_packet"),
         "VMess MUX root should only spawn UDP sub-stream glue while src/inbound/vmess/mux_udp.rs owns MUX UDP dispatch"
     );
     for private_helper in [
@@ -6313,7 +6323,7 @@ fn vless_inbound_udp_packet_framing_stays_in_protocol_crate() {
             && !mux.contains("vless::VlessInboundUdpCodec")
             && udp_session.contains("vless::VlessInbound.udp_session()")
             && udp_session.contains("udp_session.read_inbound_dispatch_tokio")
-            && udp_session.contains("UdpPipeInput::from_inbound_dispatch")
+            && udp_session.contains("dispatch_inbound_udp_packet")
             && !udp_session.contains("udp_session.decode_dispatch_parts")
             && !udp_session.contains("client.read(&mut buffer)")
             && !udp_session.contains("decode_dispatch_parts(&buffer[..n])")
@@ -6344,7 +6354,7 @@ fn vless_inbound_udp_packet_framing_stays_in_protocol_crate() {
             && !udp_session.contains("VlessInboundUdpCodec.encode_response")
             && mux.contains("vless::VlessInbound.udp_session()")
             && mux.contains("udp_session.decode_mux_inbound_dispatch")
-            && mux.contains("UdpPipeInput::from_inbound_dispatch")
+            && mux.contains("dispatch_inbound_udp_packet")
             && !mux.contains("decode_dispatch_parts(&payload)")
             && mux.contains(".send_mux_client_response_for_target")
             && mux.contains("write_direct_response_sync")
@@ -6414,7 +6424,7 @@ fn vless_inbound_udp_packet_framing_stays_in_protocol_crate() {
             && !mux_root.contains("UdpPipe::new")
             && !mux_root.contains("vless::VlessInbound.udp_session()")
             && !mux_root.contains("record_direct_udp_response_received")
-            && mux.contains("UdpPipe::new")
+            && mux.contains("dispatch_inbound_udp_packet")
             && mux.contains("vless::VlessInbound.udp_session()"),
         "VLESS MUX root should only spawn UDP sub-stream glue while src/inbound/vless/mux_udp.rs owns UDP dispatch"
     );
@@ -6563,7 +6573,7 @@ fn trojan_inbound_udp_packet_framing_stays_in_protocol_crate() {
     assert!(
         inbound.contains("trojan::TrojanInbound.udp_session()")
             && inbound.contains("udp_session.read_inbound_dispatch(&mut client)")
-            && inbound.contains("UdpPipeInput::from_inbound_dispatch")
+            && inbound.contains("dispatch_inbound_udp_packet")
             && !inbound.contains("udp_session.read_dispatch_view(&mut client)")
             && !inbound.contains("view.pipe_parts()")
             && !inbound.contains("parts.pipe_parts()")
@@ -6775,7 +6785,7 @@ fn mieru_inbound_udp_packet_framing_stays_in_protocol_crate() {
     assert!(
         inbound.contains("mieru::MieruInbound.udp_session()")
             && inbound.contains("udp_session.read_inbound_dispatch_tokio")
-            && inbound.contains("UdpPipeInput::from_inbound_dispatch")
+            && inbound.contains("dispatch_inbound_udp_packet")
             && !inbound.contains("udp_session.read_dispatch_view_tokio")
             && !inbound.contains("udp_session.decode_dispatch_view")
             && !inbound.contains("client.read(&mut read_buf)")
@@ -6784,7 +6794,7 @@ fn mieru_inbound_udp_packet_framing_stays_in_protocol_crate() {
             && !inbound.contains("dispatch_parts.pipe_parts()")
             && !inbound.contains("dispatch_parts.into_parts()")
             && !inbound.contains("request.into_dispatch_parts().into_parts()")
-            && inbound.contains("UdpPipe::new(self, &mut dispatch)")
+            && inbound.contains("dispatch_inbound_udp_packet")
             && !inbound.contains("protocol: dispatch_parts.protocol()")
             && !inbound.contains("protocol: zero_core::ProtocolType::Mieru")
             && !inbound.contains("tokio::net::UdpSocket::bind")
@@ -7058,7 +7068,7 @@ fn socks5_udp_associate_loop_delegates_dispatch_and_direct_response_framing() {
 
     assert!(
         dispatch.contains("async fn dispatch_packet")
-            && dispatch.contains("UdpPipeInput::from_inbound_dispatch")
+            && dispatch.contains("dispatch_inbound_udp_packet")
             && dispatch.contains("request.into_inbound_dispatch()")
             && !dispatch.contains("let protocol = request.protocol();")
             && !dispatch.contains("UdpPipeInput {")
@@ -7159,7 +7169,7 @@ fn socks5_udp_associate_loop_delegates_dispatch_and_direct_response_framing() {
             && dispatch.contains(".decode_dispatch_parts_or_resolve_local_dns(")
             && dispatch.contains("request.protocol_overhead()")
             && dispatch.contains("request.into_inbound_dispatch()")
-            && dispatch.contains("UdpPipeInput::from_inbound_dispatch")
+            && dispatch.contains("dispatch_inbound_udp_packet")
             && dispatch.contains("protocol_overhead.record")
             && !dispatch.contains("Socks5InboundUdpDispatchAction")
             && !dispatch.contains("decode_dispatch_action")

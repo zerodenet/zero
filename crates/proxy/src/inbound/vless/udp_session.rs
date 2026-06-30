@@ -2,10 +2,10 @@ use tokio::select;
 use tokio::time::Instant as TokioInstant;
 use tracing::{info, warn};
 
+use crate::inbound::udp_dispatch::dispatch_inbound_udp_packet;
 use crate::inbound::udp_response::{
     write_chain_response, write_direct_response, write_upstream_response,
 };
-use crate::runtime::pipe::{KernelPipe, UdpPipe, UdpPipeInput};
 use crate::runtime::udp_dispatch::UdpDispatch;
 use crate::runtime::udp_flow::helpers::{
     log_completed_udp_flow, record_chain_udp_response_parts, record_direct_udp_response_parts,
@@ -68,12 +68,13 @@ impl Proxy {
                             last_activity = TokioInstant::now();
                             self.record_session_inbound_traffic(0, client.drain_traffic());
 
-                            if let Err(error) = UdpPipe::new(&proxy, &mut dispatch)
-                                .dispatch(UdpPipeInput::from_inbound_dispatch(
-                                    &inbound_dispatch,
-                                    auth.as_ref(),
-                                ))
-                                .await
+                            if let Err(error) = dispatch_inbound_udp_packet(
+                                &proxy,
+                                &mut dispatch,
+                                &inbound_dispatch,
+                                auth.as_ref(),
+                            )
+                            .await
                             {
                                 warn!(
                                     error = %error,

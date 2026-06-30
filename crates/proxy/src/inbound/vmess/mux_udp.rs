@@ -4,10 +4,10 @@ use tokio::time::Instant as TokioInstant;
 use tracing::warn;
 use zero_core::Session;
 
+use crate::inbound::udp_dispatch::dispatch_inbound_udp_packet;
 use crate::inbound::udp_response::{
     write_chain_response_sync, write_direct_response_sync, write_upstream_response_sync,
 };
-use crate::runtime::pipe::{KernelPipe, UdpPipe, UdpPipeInput};
 use crate::runtime::udp_dispatch::UdpDispatch;
 use crate::runtime::udp_flow::helpers::{
     log_completed_udp_flow, record_chain_udp_response_parts, record_direct_udp_response_parts,
@@ -59,12 +59,9 @@ impl Proxy {
                                 break;
                             }
                         };
-                        if let Err(error) = UdpPipe::new(&proxy, &mut dispatch)
-                            .dispatch(UdpPipeInput::from_inbound_dispatch(
-                                &inbound_dispatch,
-                                None,
-                            ))
-                            .await
+                        if let Err(error) =
+                            dispatch_inbound_udp_packet(&proxy, &mut dispatch, &inbound_dispatch, None)
+                                .await
                         {
                                 warn!(%error, mux_session_id, "vmess mux udp packet dispatch failed");
                         }

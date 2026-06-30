@@ -4,10 +4,10 @@ use zero_core::Session;
 use zero_engine::EngineError;
 
 use super::MieruClientStream;
+use crate::inbound::udp_dispatch::dispatch_inbound_udp_packet;
 use crate::inbound::udp_response::{
     write_chain_response, write_direct_response, write_upstream_response,
 };
-use crate::runtime::pipe::{KernelPipe, UdpPipe, UdpPipeInput};
 use crate::runtime::udp_flow::helpers::{
     log_completed_udp_flow, record_chain_udp_response_parts, record_direct_udp_response_parts,
     record_upstream_udp_response_received, wait_for_upstream_idle,
@@ -55,12 +55,13 @@ impl Proxy {
                         Ok(None) => break,
                         Ok(Some(inbound_dispatch)) => {
                             last_activity = TokioInstant::now();
-                            if let Err(error) = UdpPipe::new(self, &mut dispatch)
-                                .dispatch(UdpPipeInput::from_inbound_dispatch(
-                                    &inbound_dispatch,
-                                    auth.as_ref(),
-                                ))
-                                .await
+                            if let Err(error) = dispatch_inbound_udp_packet(
+                                self,
+                                &mut dispatch,
+                                &inbound_dispatch,
+                                auth.as_ref(),
+                            )
+                            .await
                             {
                                 warn!(error = %error, "failed to process mieru udp packet");
                             }
