@@ -5,9 +5,7 @@ use zero_engine::EngineError;
 use zero_platform_tokio::TokioDatagramSocket;
 
 use crate::runtime::udp_dispatch::UdpDispatch;
-use crate::runtime::udp_flow::helpers::{
-    record_direct_udp_response_received, udp_response_target_from_socket_addr,
-};
+use crate::runtime::udp_flow::helpers::{record_direct_udp_response_parts, UdpDirectResponseParts};
 use crate::runtime::Proxy;
 
 pub(super) async fn forward_relay_socket_response(
@@ -18,10 +16,9 @@ pub(super) async fn forward_relay_socket_response(
     sender: SocketAddr,
     payload: &[u8],
 ) -> Result<(), EngineError> {
-    let response_accounting =
-        record_direct_udp_response_received(proxy, dispatch, sender, payload.len());
-    let sent = forward_direct_udp_response(relay, client_addr, sender, payload).await?;
-    response_accounting.record_sent(sent);
+    let response = record_direct_udp_response_parts(proxy, dispatch, sender, payload);
+    let sent = forward_direct_udp_response(relay, client_addr, &response).await?;
+    response.accounting.record_sent(sent);
 
     Ok(())
 }
@@ -39,12 +36,11 @@ pub(super) async fn forward_dispatch_socket_response(
         return;
     };
 
-    let response_accounting =
-        record_direct_udp_response_received(proxy, dispatch, sender, payload.len());
+    let response = record_direct_udp_response_parts(proxy, dispatch, sender, payload);
 
-    match forward_direct_udp_response(relay, client_addr, sender, payload).await {
+    match forward_direct_udp_response(relay, client_addr, &response).await {
         Ok(sent) => {
-            response_accounting.record_sent(sent);
+            response.accounting.record_sent(sent);
         }
         Err(error) => {
             warn!(
@@ -60,18 +56,16 @@ pub(super) async fn forward_dispatch_socket_response(
 pub(super) async fn forward_direct_udp_response(
     relay: &TokioDatagramSocket,
     client_addr: SocketAddr,
-    sender: SocketAddr,
-    payload: &[u8],
+    response: &UdpDirectResponseParts<'_, '_>,
 ) -> Result<usize, EngineError> {
     let udp_session = socks5::Socks5Inbound.udp_session();
-    let (target, port) = udp_response_target_from_socket_addr(sender);
     udp_session
         .send_client_response_for_target(
             relay,
             zero_platform_tokio::socket_addr_to_socket_address(client_addr),
-            &target,
-            port,
-            payload,
+            &response.target,
+            response.port,
+            response.payload,
         )
         .await
         .map_err(|error| error.into_mapped(EngineError::from))

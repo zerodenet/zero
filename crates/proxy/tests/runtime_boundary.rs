@@ -461,6 +461,7 @@ fn inbound_udp_response_accounting_uses_runtime_helpers() {
         "src/inbound/mieru/udp.rs",
         "src/inbound/hysteria2/udp.rs",
         "src/inbound/shadowsocks/udp.rs",
+        "src/inbound/socks5/udp_associate/direct_response.rs",
     ] {
         let content = read(source);
         assert!(
@@ -6958,12 +6959,14 @@ fn socks5_udp_associate_loop_delegates_dispatch_and_direct_response_framing() {
         direct_response.contains("async fn forward_direct_udp_response")
             && direct_response.contains("async fn forward_relay_socket_response")
             && direct_response.contains("async fn forward_dispatch_socket_response")
-            && direct_response.contains("record_direct_udp_response_received")
+            && direct_response.contains("record_direct_udp_response_parts")
+            && direct_response.contains("UdpDirectResponseParts")
             && read("src/runtime/udp_flow/helpers.rs").contains("direct_response_session_id")
             && direct_response.contains("socks5::Socks5Inbound.udp_session()")
             && direct_response.contains(".send_client_response_for_target")
             && !direct_response.contains("Socks5UdpClientResponse::new")
-            && direct_response.contains("udp_response_target_from_socket_addr")
+            && !direct_response.contains("record_direct_udp_response_received")
+            && !direct_response.contains("udp_response_target_from_socket_addr")
             && direct_response.contains("socket_addr_to_socket_address(client_addr)")
             && !direct_response.contains("socket_addr_to_socket_address(sender)")
             && !direct_response.contains("fn socket_address_from_std")
