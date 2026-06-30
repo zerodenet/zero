@@ -1095,6 +1095,70 @@ fn project_docs_keep_protocol_response_framing_protocol_owned() {
 }
 
 #[test]
+fn adapters_delegate_protocol_private_config_parsing_to_protocols() {
+    let adapters = rust_sources_under("src/adapters");
+    for path in adapters {
+        let source = relative(&path);
+        let content = fs::read_to_string(&path).expect("read adapter source");
+        for forbidden in [
+            "parse_uuid",
+            "parse_flow",
+            "Uuid::parse",
+            "VmessCipher::from_name",
+            "CipherKind::from_str",
+            "sha224",
+            "blake3",
+            "encrypt_packet",
+            "decrypt_packet",
+            "encode_udp_packet",
+            "decode_udp_packet",
+        ] {
+            assert!(
+                !content.contains(forbidden),
+                "{source} should delegate protocol-private config parsing and crypto/framing details to protocols/*; found `{forbidden}`"
+            );
+        }
+    }
+
+    for (source, required) in [
+        (
+            "src/adapters/vmess/tcp.rs",
+            "vmess::tcp_connect_config_from_config",
+        ),
+        (
+            "src/adapters/vmess/udp/flow.rs",
+            "vmess::udp::udp_flow_config_from_config",
+        ),
+        (
+            "src/adapters/vless/tcp.rs",
+            "vless::tcp_connect_config_from_config",
+        ),
+        (
+            "src/adapters/vless/udp/flow.rs",
+            "vless::udp::udp_flow_config_from_config",
+        ),
+        (
+            "src/adapters/shadowsocks/tcp.rs",
+            "shadowsocks::tcp_connect_config_from_config",
+        ),
+        (
+            "src/adapters/shadowsocks/udp/flow.rs",
+            "shadowsocks::udp::udp_flow_resume_from_config",
+        ),
+        (
+            "src/adapters/shadowsocks/udp/packet_path.rs",
+            "shadowsocks::udp::udp_packet_path_datagram_source_build_from_config",
+        ),
+    ] {
+        let content = read(source);
+        assert!(
+            content.contains(required),
+            "{source} should call protocol-owned config builder `{required}`"
+        );
+    }
+}
+
+#[test]
 fn runtime_does_not_match_protocol_config_variants() {
     for path in rust_sources_under("src/runtime") {
         let source = relative(&path);
@@ -2275,7 +2339,7 @@ fn vmess_inbound_uses_adapter_request_model() {
     ] {
         assert!(
             !inbound.contains(forbidden) && !model.contains(forbidden),
-            "VMess inbound listener/model should receive adapter-parsed users; found `{forbidden}`"
+            "VMess inbound listener/model should receive protocol-built users; found `{forbidden}`"
         );
         assert!(
             !adapter.contains(forbidden) && protocol_inbound.contains(forbidden),
@@ -2342,7 +2406,7 @@ fn vmess_inbound_uses_adapter_request_model() {
 }
 
 #[test]
-fn vless_inbound_users_are_adapter_parsed() {
+fn vless_inbound_users_are_protocol_parsed() {
     let listener = read("src/inbound/vless/listener.rs");
     let model = read("src/inbound/vless/model.rs");
     let session = read("src/inbound/vless/session.rs");
@@ -2374,7 +2438,7 @@ fn vless_inbound_users_are_adapter_parsed() {
             !listener.contains(forbidden)
                 && !session.contains(forbidden)
                 && !helpers.contains(forbidden),
-            "VLESS inbound listener/session/helpers should receive adapter-parsed protocol values; found `{forbidden}`"
+            "VLESS inbound listener/session/helpers should receive protocol-built values; found `{forbidden}`"
         );
     }
     let required = "vless::inbound_profile_from_config_users";
@@ -3533,7 +3597,7 @@ fn vmess_tcp_connect_uses_request_model() {
     ] {
         assert!(
             !adapter.contains(forbidden),
-            "VMess outbound TCP helper should receive adapter-parsed identity and transport-built streams; found `{forbidden}`"
+            "VMess outbound TCP helper should receive protocol-built identity and transport-built streams; found `{forbidden}`"
         );
     }
     for adapter_owned in [
@@ -5698,7 +5762,7 @@ fn vmess_mux_pool_transport_opening_lives_in_transport_crate() {
 }
 
 #[test]
-fn vmess_mux_pool_receives_adapter_parsed_cipher() {
+fn vmess_mux_pool_receives_protocol_parsed_cipher() {
     let root = read("src/adapters/vmess/mux_pool.rs");
     let model = read("src/adapters/vmess/mux_pool/model.rs");
     let tcp_adapter = read("src/adapters/vmess/tcp.rs");
@@ -5711,7 +5775,7 @@ fn vmess_mux_pool_receives_adapter_parsed_cipher() {
 
     assert!(
         !root.contains("VmessCipher::from_name"),
-        "VMess mux pool should receive parsed cipher values from adapter-owned paths"
+        "VMess mux pool should receive parsed cipher values from protocol-owned config builders"
     );
     assert!(
         model.contains("identity: vmess::mux::VmessMuxIdentity")
@@ -12983,7 +13047,7 @@ fn shadowsocks_udp_state_model_lives_outside_manager() {
 }
 
 #[test]
-fn shadowsocks_udp_flow_cipher_is_adapter_parsed() {
+fn shadowsocks_udp_flow_cipher_is_protocol_parsed() {
     let adapter = read("src/adapters/shadowsocks/udp.rs");
     let adapter_flow = read("src/adapters/shadowsocks/udp/flow.rs");
     let flows = read("src/runtime/udp_flow/managed/flow.rs");
@@ -13151,7 +13215,7 @@ fn shadowsocks_udp_flow_cipher_is_adapter_parsed() {
 }
 
 #[test]
-fn shadowsocks_packet_path_cipher_is_adapter_parsed() {
+fn shadowsocks_packet_path_cipher_is_protocol_parsed() {
     let adapter = read("src/adapters/shadowsocks/udp.rs");
     let adapter_flow = read("src/adapters/shadowsocks/udp/flow.rs");
     let adapter_packet_path = read("src/adapters/shadowsocks/udp/packet_path.rs");
@@ -13262,7 +13326,7 @@ fn shadowsocks_packet_path_cipher_is_adapter_parsed() {
     for source in [&carrier, &entry] {
         assert!(
             !source.contains("CipherKind::from_str"),
-            "packet-path chain should receive adapter-parsed Shadowsocks cipher values"
+            "packet-path chain should receive protocol-parsed Shadowsocks cipher values"
         );
     }
     assert!(
