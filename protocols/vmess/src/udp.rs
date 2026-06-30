@@ -665,17 +665,6 @@ impl VmessInboundUdpResponder {
         }
     }
 
-    pub async fn read_inbound_dispatch_with_buffer_tokio<R>(
-        &mut self,
-        reader: &mut R,
-        buf: &mut [u8],
-    ) -> Result<Option<InboundUdpDispatch>, Error>
-    where
-        R: tokio::io::AsyncRead + Unpin,
-    {
-        self.session.read_inbound_dispatch_tokio(reader, buf).await
-    }
-
     pub async fn read_inbound_dispatch_tokio<R>(
         &mut self,
         reader: &mut R,

@@ -1992,7 +1992,7 @@ fn stream_udp_inbound_direct_responses_use_client_response_models() {
             && mieru_protocol.contains("pub struct MieruInboundUdpResponder")
             && mieru_protocol.contains("impl MieruInboundUdpResponder")
             && mieru_protocol.contains("read_buf: [u8; 65536]")
-            && mieru_protocol.contains("read_inbound_dispatch_with_buffer_tokio")
+            && !mieru_protocol.contains("read_inbound_dispatch_with_buffer_tokio")
             && !mieru_protocol.contains("pub async fn write_response_for_sender_tokio")
             && !mieru_protocol.contains("fn address_from_socket_addr"),
         "Mieru inbound UDP direct response glue should pass neutral target data to protocol-owned response APIs"
@@ -2056,7 +2056,7 @@ fn stream_udp_inbound_direct_responses_use_client_response_models() {
             && vless_protocol.contains("pub struct VlessInboundUdpResponder")
             && vless_protocol.contains("impl VlessInboundUdpResponder")
             && vless_protocol.contains("read_buf: Vec<u8>")
-            && vless_protocol.contains("read_inbound_dispatch_with_buffer_tokio")
+            && !vless_protocol.contains("read_inbound_dispatch_with_buffer_tokio")
             && vless_protocol.contains("pub struct VlessInboundMuxUdpResponder")
             && vless_protocol.contains("impl VlessInboundMuxUdpResponder")
             && vless_protocol.contains("pub fn send_mux_client_response")
@@ -2104,7 +2104,7 @@ fn stream_udp_inbound_direct_responses_use_client_response_models() {
             && vmess_protocol.contains("pub struct VmessInboundUdpResponder")
             && vmess_protocol.contains("impl VmessInboundUdpResponder")
             && vmess_protocol.contains("read_buf: Vec<u8>")
-            && vmess_protocol.contains("read_inbound_dispatch_with_buffer_tokio")
+            && !vmess_protocol.contains("read_inbound_dispatch_with_buffer_tokio")
             && vmess_protocol.contains("pub struct VmessInboundMuxUdpResponder")
             && vmess_protocol.contains("impl VmessInboundMuxUdpResponder")
             && vmess_protocol.contains("pub fn write_mux_client_response")
