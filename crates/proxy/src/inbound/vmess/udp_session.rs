@@ -7,9 +7,8 @@ use zero_engine::EngineError;
 use crate::runtime::pipe::{KernelPipe, UdpPipe, UdpPipeInput};
 use crate::runtime::udp_dispatch::UdpDispatch;
 use crate::runtime::udp_flow::helpers::{
-    log_completed_udp_flow, record_chain_udp_response_received,
-    record_direct_udp_response_received, record_upstream_udp_response_received,
-    udp_response_target_from_socket_addr, wait_for_upstream_idle,
+    log_completed_udp_flow, record_chain_udp_response_received, record_direct_udp_response_parts,
+    record_upstream_udp_response_received, wait_for_upstream_idle,
 };
 use crate::runtime::Proxy;
 use crate::transport::TcpRelayStream;
@@ -73,18 +72,21 @@ impl Proxy {
                 recv = direct_sock.recv_from_addr(&mut direct_buf) => {
                     let (n, sender) = recv?;
                     last_activity = TokioInstant::now();
-                    let response_accounting =
-                        record_direct_udp_response_received(self, &dispatch, sender, n);
-                    let (target, port) = udp_response_target_from_socket_addr(sender);
+                    let response = record_direct_udp_response_parts(
+                        self,
+                        &dispatch,
+                        sender,
+                        &direct_buf[..n],
+                    );
                     let written = udp_session
                         .write_client_response_for_target_tokio(
                             &mut client,
-                            &target,
-                            port,
-                            &direct_buf[..n],
+                            &response.target,
+                            response.port,
+                            response.payload,
                         )
                         .await?;
-                    response_accounting.record_sent(written);
+                    response.accounting.record_sent(written);
                 }
                 upstream = upstream_udp.recv_response(&mut upstream_buf) => {
                     match upstream {

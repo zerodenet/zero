@@ -5,9 +5,8 @@ use tracing::{info, warn};
 use crate::runtime::pipe::{KernelPipe, UdpPipe, UdpPipeInput};
 use crate::runtime::udp_dispatch::UdpDispatch;
 use crate::runtime::udp_flow::helpers::{
-    log_completed_udp_flow, record_chain_udp_response_received,
-    record_direct_udp_response_received, record_upstream_udp_response_received,
-    udp_response_target_from_socket_addr, wait_for_upstream_idle,
+    log_completed_udp_flow, record_chain_udp_response_received, record_direct_udp_response_parts,
+    record_upstream_udp_response_received, wait_for_upstream_idle,
 };
 use crate::runtime::Proxy;
 use crate::transport::{ClientStream, MeteredStream};
@@ -93,21 +92,23 @@ impl Proxy {
                     let (n, sender) = recv?;
                     last_activity = TokioInstant::now();
 
-                    let response_accounting =
-                        record_direct_udp_response_received(self, &dispatch, sender, n);
-
-                    let (target, port) = udp_response_target_from_socket_addr(sender);
+                    let response = record_direct_udp_response_parts(
+                        self,
+                        &dispatch,
+                        sender,
+                        &udp_buffer[..n],
+                    );
                     match udp_session
                         .write_client_response_for_target_tokio(
                             &mut client,
-                            &target,
-                            port,
-                            &udp_buffer[..n],
+                            &response.target,
+                            response.port,
+                            response.payload,
                         )
                         .await
                     {
                         Ok(written) => {
-                            response_accounting.record_sent(written);
+                            response.accounting.record_sent(written);
                             self.record_session_inbound_traffic(0, client.drain_traffic());
                         }
                         Err(error) => {

@@ -6,9 +6,8 @@ use zero_engine::EngineError;
 
 use crate::runtime::pipe::{KernelPipe, UdpPipe, UdpPipeInput};
 use crate::runtime::udp_flow::helpers::{
-    record_chain_udp_response_received, record_direct_udp_response_received,
-    record_upstream_udp_response_received, udp_response_target_from_socket_addr,
-    wait_for_upstream_idle,
+    record_chain_udp_response_received, record_direct_udp_response_parts,
+    record_upstream_udp_response_received, wait_for_upstream_idle,
 };
 use crate::runtime::Proxy;
 
@@ -53,17 +52,20 @@ impl Proxy {
 
                 recv = direct_sock.recv_from_addr(&mut direct_buf) => {
                     let (n, sender) = recv?;
-                    let response_accounting =
-                        record_direct_udp_response_received(&proxy, &dispatch, sender, n);
-                    let (target, port) = udp_response_target_from_socket_addr(sender);
+                    let response = record_direct_udp_response_parts(
+                        &proxy,
+                        &dispatch,
+                        sender,
+                        &direct_buf[..n],
+                    );
                     if let Ok(Some(written)) = udp_session.send_client_response_for_target_proxy_session(
                         &conn,
-                        response_accounting.session_id(),
-                        &target,
-                        port,
-                        &direct_buf[..n],
+                        response.accounting.session_id(),
+                        &response.target,
+                        response.port,
+                        response.payload,
                     ) {
-                        response_accounting.record_sent(written);
+                        response.accounting.record_sent(written);
                     }
                 }
 

@@ -7,9 +7,8 @@ use zero_core::Session;
 use crate::runtime::pipe::{KernelPipe, UdpPipe, UdpPipeInput};
 use crate::runtime::udp_dispatch::UdpDispatch;
 use crate::runtime::udp_flow::helpers::{
-    log_completed_udp_flow, record_chain_udp_response_received,
-    record_direct_udp_response_received, record_upstream_udp_response_received,
-    udp_response_target_from_socket_addr, wait_for_upstream_idle,
+    log_completed_udp_flow, record_chain_udp_response_received, record_direct_udp_response_parts,
+    record_upstream_udp_response_received, wait_for_upstream_idle,
 };
 use crate::runtime::Proxy;
 
@@ -71,18 +70,21 @@ impl Proxy {
                         match recv {
                             Ok((n, sender)) => {
                                 last_activity = TokioInstant::now();
-                                let response_accounting =
-                                    record_direct_udp_response_received(&proxy, &dispatch, sender, n);
-                                let (target, port) = udp_response_target_from_socket_addr(sender);
+                                let response = record_direct_udp_response_parts(
+                                    &proxy,
+                                    &dispatch,
+                                    sender,
+                                    &direct_buf[..n],
+                                );
                                 match udp_session.write_mux_client_response_for_target(
                                     &writer,
                                     mux_session_id,
-                                    &target,
-                                    port,
-                                    &direct_buf[..n],
+                                    &response.target,
+                                    response.port,
+                                    response.payload,
                                 ) {
                                     Ok(frame_len) => {
-                                        response_accounting.record_sent(frame_len);
+                                        response.accounting.record_sent(frame_len);
                                     }
                                     Err(error) => {
                                         warn!(%error, mux_session_id, "vmess mux udp direct response send failed");

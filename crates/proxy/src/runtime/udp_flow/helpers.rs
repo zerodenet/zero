@@ -89,6 +89,13 @@ pub(crate) struct UdpUpstreamResponseParts<'a> {
     pub(crate) accounting: UdpInboundResponseAccounting<'a>,
 }
 
+pub(crate) struct UdpDirectResponseParts<'proxy, 'payload> {
+    pub(crate) target: Address,
+    pub(crate) port: u16,
+    pub(crate) payload: &'payload [u8],
+    pub(crate) accounting: UdpInboundResponseAccounting<'proxy>,
+}
+
 pub(crate) fn record_upstream_udp_response_received<'a>(
     proxy: &'a Proxy,
     dispatch: &mut UdpDispatch,
@@ -122,6 +129,22 @@ pub(crate) fn record_direct_udp_response_received<'a>(
 ) -> UdpInboundResponseAccounting<'a> {
     let session_id = dispatch.direct_response_session_id(sender);
     UdpInboundResponseAccounting::record_received(proxy, session_id, payload_len)
+}
+
+pub(crate) fn record_direct_udp_response_parts<'proxy, 'payload>(
+    proxy: &'proxy Proxy,
+    dispatch: &UdpDispatch,
+    sender: SocketAddr,
+    payload: &'payload [u8],
+) -> UdpDirectResponseParts<'proxy, 'payload> {
+    let accounting = record_direct_udp_response_received(proxy, dispatch, sender, payload.len());
+    let (target, port) = udp_response_target_from_socket_addr(sender);
+    UdpDirectResponseParts {
+        target,
+        port,
+        payload,
+        accounting,
+    }
 }
 
 pub(crate) fn record_chain_udp_response_received(
