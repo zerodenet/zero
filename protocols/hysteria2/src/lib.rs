@@ -16,3 +16,5 @@ pub use metadata::Hysteria2Protocol;
 pub use outbound::Hysteria2Outbound;
 #[cfg(feature = "crypto")]
 pub use outbound::Hysteria2OutboundProfile;
+#[cfg(feature = "tokio")]
+pub use udp::Hysteria2InboundUdpResponder;

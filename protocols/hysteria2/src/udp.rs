@@ -234,6 +234,11 @@ pub struct Hysteria2InboundUdpSession {
 }
 
 #[cfg(feature = "tokio")]
+pub struct Hysteria2InboundUdpResponder {
+    session: Hysteria2InboundUdpSession,
+}
+
+#[cfg(feature = "tokio")]
 impl Hysteria2InboundUdpSession {
     pub fn new() -> Self {
         Self {
@@ -353,6 +358,46 @@ impl Hysteria2InboundUdpSession {
             conn,
             proxy_session_id,
             Hysteria2InboundUdpClientResponse::new(target, port, payload),
+        )
+    }
+}
+
+#[cfg(feature = "tokio")]
+impl Hysteria2InboundUdpResponder {
+    pub fn new(session: Hysteria2InboundUdpSession) -> Self {
+        Self { session }
+    }
+
+    pub async fn read_inbound_dispatch_from_datagram(
+        &self,
+        conn: &quinn::Connection,
+    ) -> Result<Hysteria2InboundUdpTrackedDispatch, Error> {
+        self.session.read_inbound_dispatch_from_datagram(conn).await
+    }
+
+    pub fn record_dispatch_success(
+        &mut self,
+        proxy_session_id: u64,
+        tracked: &Hysteria2InboundUdpTrackedDispatch,
+    ) {
+        self.session
+            .record_dispatch_success(proxy_session_id, tracked);
+    }
+
+    pub fn send_response_for_target_proxy_session(
+        &self,
+        conn: &quinn::Connection,
+        proxy_session_id: Option<u64>,
+        target: &Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<Option<usize>, Error> {
+        self.session.send_client_response_for_target_proxy_session(
+            conn,
+            proxy_session_id,
+            target,
+            port,
+            payload,
         )
     }
 }

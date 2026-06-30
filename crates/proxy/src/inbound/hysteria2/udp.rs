@@ -22,7 +22,7 @@ impl Proxy {
         proxy: Proxy,
     ) -> Result<(), EngineError> {
         let mut dispatch = crate::runtime::udp_dispatch::UdpDispatch::new(&inbound_tag).await?;
-        let mut udp_session = hysteria2::Hysteria2Inbound.udp_session();
+        let mut udp_responder = hysteria2::Hysteria2Inbound.udp_responder();
 
         let mut direct_buf = [0u8; 65536];
         let mut upstream_buf = [0u8; 65536];
@@ -31,7 +31,7 @@ impl Proxy {
             let (direct_sock, upstream_udp, socks5_idle, chain_tasks) = dispatch.poll_refs();
 
             select! {
-                dg = udp_session.read_inbound_dispatch_from_datagram(&conn) => {
+                dg = udp_responder.read_inbound_dispatch_from_datagram(&conn) => {
                     match dg {
                         Ok(tracked) => {
                             let _ = dispatch_inbound_udp_packet(
@@ -42,7 +42,7 @@ impl Proxy {
                                 )
                                 .await
                                 .inspect(|sid| {
-                                    udp_session.record_dispatch_success(*sid, &tracked);
+                                    udp_responder.record_dispatch_success(*sid, &tracked);
                                 })
                                 .inspect_err(|e| {
                                     warn!(error = %e, "h2 udp dispatch failed");
@@ -64,7 +64,7 @@ impl Proxy {
                         &direct_buf[..n],
                     );
                     let _ = write_optional_direct_response_sync(&response, || {
-                        udp_session.send_client_response_for_target_proxy_session(
+                        udp_responder.send_response_for_target_proxy_session(
                             &conn,
                             response.accounting.session_id(),
                             &response.target,
@@ -84,7 +84,7 @@ impl Proxy {
                                 pkt,
                             );
                             let _ = write_optional_upstream_response_sync(&response, || {
-                                udp_session.send_client_response_for_target_proxy_session(
+                                udp_responder.send_response_for_target_proxy_session(
                                     &conn,
                                     response.accounting.session_id(),
                                     &response.target,
@@ -105,7 +105,7 @@ impl Proxy {
                             let response =
                                 record_chain_udp_response_parts(&proxy, target, port, payload, session_id);
                             let _ = write_optional_chain_response_sync(&response, || {
-                                udp_session.send_client_response_for_target_proxy_session(
+                                udp_responder.send_response_for_target_proxy_session(
                                     &conn,
                                     session_id,
                                     &response.target,

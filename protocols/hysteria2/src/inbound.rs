@@ -120,6 +120,11 @@ impl Hysteria2Inbound {
         crate::udp::Hysteria2InboundUdpSession::new()
     }
 
+    #[cfg(feature = "tokio")]
+    pub fn udp_responder(&self) -> crate::udp::Hysteria2InboundUdpResponder {
+        crate::udp::Hysteria2InboundUdpResponder::new(self.udp_session())
+    }
+
     pub fn accept_tcp_connect_header(&self, header: &[u8]) -> Result<Session, Error> {
         let (target, port) = crate::shared::parse_tcp_connect_header(header)?;
         Ok(Session::new(
