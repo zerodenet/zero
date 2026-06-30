@@ -12,6 +12,7 @@ mod mux_tcp;
 pub(crate) mod shadowsocks;
 #[cfg(feature = "socks5")]
 mod socks5;
+mod stream_udp;
 mod system;
 #[cfg(feature = "trojan")]
 pub(crate) mod trojan;

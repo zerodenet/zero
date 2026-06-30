@@ -1,162 +1,62 @@
-use tokio::select;
-use tokio::time::Instant as TokioInstant;
-use tracing::{info, warn};
+use zero_core::InboundUdpDispatch;
 use zero_core::Session;
 use zero_engine::EngineError;
 
-use crate::inbound::udp_dispatch::dispatch_inbound_udp_packet;
-use crate::inbound::udp_response::{
-    write_chain_response, write_direct_response, write_upstream_response,
-};
-use crate::runtime::udp_dispatch::UdpDispatch;
-use crate::runtime::udp_flow::helpers::{
-    log_completed_udp_flow, record_chain_udp_response_parts, record_direct_udp_response_parts,
-    record_upstream_udp_response_received, wait_for_upstream_idle,
-};
+use crate::inbound::stream_udp::{run_stream_udp_relay, StreamUdpRelayRequest, StreamUdpResponder};
 use crate::runtime::Proxy;
 use crate::transport::TcpRelayStream;
+
+struct VmessStreamUdpResponder {
+    inner: vmess::VmessInboundUdpResponder,
+    read_buf: Vec<u8>,
+}
+
+#[async_trait::async_trait]
+impl StreamUdpResponder<TcpRelayStream> for VmessStreamUdpResponder {
+    async fn read_inbound_dispatch(
+        &mut self,
+        client: &mut TcpRelayStream,
+    ) -> Result<Option<InboundUdpDispatch>, zero_core::Error> {
+        self.inner
+            .read_inbound_dispatch_tokio(client, &mut self.read_buf)
+            .await
+    }
+
+    async fn write_response_for_target(
+        &mut self,
+        client: &mut TcpRelayStream,
+        target: &zero_core::Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<usize, zero_core::Error> {
+        self.inner
+            .write_response_for_target_tokio(client, target, port, payload)
+            .await
+    }
+}
 
 impl Proxy {
     pub(crate) async fn run_vmess_udp_relay(
         &self,
-        mut client: TcpRelayStream,
+        client: TcpRelayStream,
         session: Session,
         inbound_tag: &str,
     ) -> Result<(), EngineError> {
-        let mut dispatch = UdpDispatch::new(inbound_tag).await?;
-        let auth = session.auth.clone();
-        let mut udp_responder = vmess::VmessInbound.udp_responder_for(&session);
-        let mut last_activity = TokioInstant::now();
-        let timeout = self.udp_upstream_idle_timeout();
-
-        info!(
-            inbound_tag = inbound_tag,
-            protocol = "vmess_udp",
-            "vmess udp session started"
-        );
-
-        let mut client_buf = vec![0_u8; 64 * 1024];
-        let mut direct_buf = vec![0_u8; 64 * 1024];
-        let mut upstream_buf = vec![0_u8; 64 * 1024];
-
-        loop {
-            let (direct_sock, upstream_udp, socks5_idle, chain_tasks) = dispatch.poll_refs();
-
-            select! {
-                _ = tokio::time::sleep_until(last_activity + timeout) => {
-                    info!(
-                        inbound_tag = inbound_tag,
-                        protocol = "vmess_udp",
-                        "vmess udp session idle timeout"
-                    );
-                    break;
-                }
-                read = udp_responder.read_inbound_dispatch_tokio(&mut client, &mut client_buf) => {
-                    match read {
-                        Ok(None) => break,
-                        Ok(Some(inbound_dispatch)) => {
-                            last_activity = TokioInstant::now();
-                            if let Err(error) = dispatch_inbound_udp_packet(
-                                self,
-                                &mut dispatch,
-                                &inbound_dispatch,
-                                auth.as_ref(),
-                            )
-                            .await
-                            {
-                                warn!(error = %error, "failed to process vmess udp packet");
-                            }
-                        }
-                        Err(error) => {
-                            warn!(error = %error, "vmess udp client read/decode error");
-                            break;
-                        }
-                    }
-                }
-                recv = direct_sock.recv_from_addr(&mut direct_buf) => {
-                    let (n, sender) = recv?;
-                    last_activity = TokioInstant::now();
-                    let response = record_direct_udp_response_parts(
-                        self,
-                        &dispatch,
-                        sender,
-                        &direct_buf[..n],
-                    );
-                    write_direct_response(&response, || async {
-                        udp_responder
-                            .write_response_for_target_tokio(
-                                &mut client,
-                                &response.target,
-                                response.port,
-                                response.payload,
-                            )
-                            .await
-                    })
-                    .await?;
-                }
-                upstream = upstream_udp.recv_response(&mut upstream_buf) => {
-                    match upstream {
-                        Ok(pkt) => {
-                            last_activity = TokioInstant::now();
-                            let response = record_upstream_udp_response_received(
-                                self,
-                                &mut dispatch,
-                                self.udp_upstream_idle_timeout(),
-                                pkt,
-                            );
-                            write_upstream_response(&response, || async {
-                                udp_responder
-                                    .write_response_for_target_tokio(
-                                        &mut client,
-                                        &response.target,
-                                        response.port,
-                                        &response.payload,
-                                    )
-                                    .await
-                            })
-                            .await?;
-                        }
-                        Err(error) => {
-                            warn!(error = %error, "vmess udp socks5 upstream recv error");
-                        }
-                    }
-                }
-                _ = wait_for_upstream_idle(socks5_idle) => {}
-                Some(chain_result) = chain_tasks.join_next() => {
-                    match chain_result {
-                        Ok(Ok((target, port, payload, session_id))) => {
-                            last_activity = TokioInstant::now();
-                            let response =
-                                record_chain_udp_response_parts(self, target, port, payload, session_id);
-                            write_chain_response(&response, || async {
-                                udp_responder
-                                    .write_response_for_target_tokio(
-                                        &mut client,
-                                        &response.target,
-                                        response.port,
-                                        &response.payload,
-                                    )
-                                    .await
-                            })
-                            .await?;
-                        }
-                        Ok(Err(error)) => warn!(error = %error, "vmess udp chain response error"),
-                        Err(error) => warn!(error = %error, "vmess udp chain task panicked"),
-                    }
-                }
-            }
-        }
-
-        for completed in dispatch.finish_all() {
-            log_completed_udp_flow(completed);
-        }
-
-        info!(
-            inbound_tag = inbound_tag,
-            protocol = "vmess_udp",
-            "vmess udp session ended"
-        );
-
-        Ok(())
+        let auth = session.auth.as_ref();
+        run_stream_udp_relay(
+            self,
+            StreamUdpRelayRequest {
+                client,
+                responder: VmessStreamUdpResponder {
+                    inner: vmess::VmessInbound.udp_responder_for(&session),
+                    read_buf: vec![0_u8; 64 * 1024],
+                },
+                session: &session,
+                inbound_tag,
+                protocol: "vmess_udp",
+                auth,
+            },
+        )
+        .await
     }
 }

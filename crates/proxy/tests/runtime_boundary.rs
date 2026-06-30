@@ -187,12 +187,61 @@ fn runtime_protocol_runtime_references_are_confined_to_facades() {
 #[test]
 fn ordinary_udp_inbounds_submit_packets_through_udp_pipe() {
     let udp_dispatch = read("src/inbound/udp_dispatch.rs");
+    let stream_udp = read("src/inbound/stream_udp.rs");
     assert!(
         udp_dispatch.contains("pub(crate) async fn dispatch_inbound_udp_packet")
             && udp_dispatch.contains("UdpPipe::new(proxy, dispatch)")
             && udp_dispatch.contains("UdpPipeInput::from_inbound_dispatch"),
         "shared inbound UDP dispatch helper should own UdpPipe submission"
     );
+    assert!(
+        stream_udp.contains("dispatch_inbound_udp_packet")
+            && !stream_udp.contains("UdpPipe::new")
+            && !stream_udp.contains("UdpPipeInput"),
+        "shared stream UDP relay glue should submit decoded packets through the inbound UDP dispatch helper"
+    );
+
+    for source in [
+        "src/inbound/socks5/udp_associate/dispatch.rs",
+        "src/inbound/vless/udp_session.rs",
+        "src/inbound/vless/mux_udp.rs",
+        "src/inbound/vmess/mux_udp.rs",
+        "src/inbound/shadowsocks/udp.rs",
+        "src/inbound/hysteria2/udp.rs",
+    ] {
+        let content = read(source);
+        assert!(
+            content.contains("dispatch_inbound_udp_packet")
+                && !content.contains("UdpPipe::new")
+                && !content.contains("UdpPipeInput"),
+            "{source} should submit inbound UDP packets through the shared inbound UDP dispatch helper"
+        );
+        assert!(
+            !content.contains("UdpDispatch::dispatch"),
+            "{source} should not call the UDP dispatch state machine directly"
+        );
+    }
+
+    for source in [
+        "src/inbound/vmess/udp_session.rs",
+        "src/inbound/trojan/udp.rs",
+        "src/inbound/mieru/udp.rs",
+    ] {
+        let content = read(source);
+        assert!(
+            content.contains("run_stream_udp_relay")
+                && content.contains("StreamUdpRelayRequest")
+                && content.contains("impl StreamUdpResponder")
+                && !content.contains("dispatch_inbound_udp_packet")
+                && !content.contains("UdpPipe::new")
+                && !content.contains("UdpPipeInput"),
+            "{source} should delegate stream UDP packet submission to shared stream UDP relay glue"
+        );
+        assert!(
+            !content.contains("UdpDispatch::dispatch"),
+            "{source} should not call the UDP dispatch state machine directly"
+        );
+    }
 
     for source in [
         "src/inbound/socks5/udp_associate/dispatch.rs",
@@ -206,16 +255,6 @@ fn ordinary_udp_inbounds_submit_packets_through_udp_pipe() {
         "src/inbound/mieru/udp.rs",
     ] {
         let content = read(source);
-        assert!(
-            content.contains("dispatch_inbound_udp_packet")
-                && !content.contains("UdpPipe::new")
-                && !content.contains("UdpPipeInput"),
-            "{source} should submit inbound UDP packets through the shared inbound UDP dispatch helper"
-        );
-        assert!(
-            !content.contains("UdpDispatch::dispatch"),
-            "{source} should not call the UDP dispatch state machine directly"
-        );
         for forbidden in [
             "protocol: ProtocolType::Socks5",
             "protocol: ProtocolType::Shadowsocks",
@@ -322,6 +361,7 @@ fn inbound_udp_glue_does_not_name_protocol_private_packet_models() {
 fn inbound_udp_response_accounting_uses_runtime_helpers() {
     let helper = read("src/runtime/udp_flow/helpers.rs");
     let inbound_response = read("src/inbound/udp_response.rs");
+    let stream_udp = read("src/inbound/stream_udp.rs");
     assert!(
         helper.contains("fn record_udp_inbound_response_rx")
             && helper.contains("fn record_udp_inbound_response_tx")
@@ -363,13 +403,21 @@ fn inbound_udp_response_accounting_uses_runtime_helpers() {
             && inbound_response.contains("response.accounting.record_sent(written)"),
         "stream UDP inbound response write glue should centralize protocol write callbacks plus neutral accounting"
     );
+    assert!(
+        stream_udp.contains("record_direct_udp_response_parts")
+            && stream_udp.contains("record_upstream_udp_response_received")
+            && stream_udp.contains("record_chain_udp_response_parts")
+            && stream_udp.contains("write_direct_response")
+            && stream_udp.contains("write_upstream_response")
+            && stream_udp.contains("write_chain_response")
+            && stream_udp.contains("wait_for_upstream_idle")
+            && stream_udp.contains("dispatch.finish_all()")
+            && stream_udp.contains("log_completed_udp_flow"),
+        "shared stream UDP relay glue should own direct/upstream/chain response accounting and writes for stream-carried UDP inbounds"
+    );
 
-    for source in [
-        "src/inbound/vless/udp_session.rs",
-        "src/inbound/vmess/udp_session.rs",
-        "src/inbound/trojan/udp.rs",
-        "src/inbound/mieru/udp.rs",
-    ] {
+    {
+        let source = "src/inbound/vless/udp_session.rs";
         let content = read(source);
         assert!(
             content.contains("write_direct_response")
@@ -380,6 +428,25 @@ fn inbound_udp_response_accounting_uses_runtime_helpers() {
                 && content.contains("record_chain_udp_response_parts")
                 && !content.contains("response.accounting.record_sent"),
             "{source} should write stream UDP responses through the neutral inbound response helpers"
+        );
+    }
+
+    for source in [
+        "src/inbound/vmess/udp_session.rs",
+        "src/inbound/trojan/udp.rs",
+        "src/inbound/mieru/udp.rs",
+    ] {
+        let content = read(source);
+        assert!(
+            content.contains("run_stream_udp_relay")
+                && !content.contains("write_direct_response")
+                && !content.contains("write_upstream_response")
+                && !content.contains("write_chain_response")
+                && !content.contains("record_direct_udp_response_parts")
+                && !content.contains("record_upstream_udp_response_received")
+                && !content.contains("record_chain_udp_response_parts")
+                && !content.contains("response.accounting.record_sent"),
+            "{source} should delegate stream UDP response accounting and writes to shared stream UDP relay glue"
         );
     }
 
@@ -479,10 +546,7 @@ fn inbound_udp_response_accounting_uses_runtime_helpers() {
     for source in [
         "src/inbound/vless/udp_session.rs",
         "src/inbound/vless/mux_udp.rs",
-        "src/inbound/vmess/udp_session.rs",
         "src/inbound/vmess/mux_udp.rs",
-        "src/inbound/trojan/udp.rs",
-        "src/inbound/mieru/udp.rs",
         "src/inbound/hysteria2/udp.rs",
     ] {
         let content = read(source);
@@ -519,10 +583,7 @@ fn inbound_udp_response_accounting_uses_runtime_helpers() {
     for source in [
         "src/inbound/vless/udp_session.rs",
         "src/inbound/vless/mux_udp.rs",
-        "src/inbound/vmess/udp_session.rs",
         "src/inbound/vmess/mux_udp.rs",
-        "src/inbound/trojan/udp.rs",
-        "src/inbound/mieru/udp.rs",
         "src/inbound/hysteria2/udp.rs",
         "src/inbound/shadowsocks/udp.rs",
         "src/inbound/socks5/udp_associate/direct_response.rs",
@@ -539,10 +600,7 @@ fn inbound_udp_response_accounting_uses_runtime_helpers() {
     for source in [
         "src/inbound/vless/udp_session.rs",
         "src/inbound/vless/mux_udp.rs",
-        "src/inbound/vmess/udp_session.rs",
         "src/inbound/vmess/mux_udp.rs",
-        "src/inbound/trojan/udp.rs",
-        "src/inbound/mieru/udp.rs",
         "src/inbound/hysteria2/udp.rs",
         "src/inbound/shadowsocks/udp.rs",
         "src/inbound/socks5/udp_associate/chain_response.rs",
@@ -1784,6 +1842,7 @@ fn inbound_auth_identity_stays_in_protocol_crates() {
 
 #[test]
 fn stream_udp_inbound_direct_responses_use_client_response_models() {
+    let stream_udp = read("src/inbound/stream_udp.rs");
     let trojan_udp_inbound = read("src/inbound/trojan/udp.rs");
     let mieru_udp_inbound = read("src/inbound/mieru/udp.rs");
     let hysteria2_inbound = read("src/inbound/hysteria2/udp.rs");
@@ -1803,17 +1862,25 @@ fn stream_udp_inbound_direct_responses_use_client_response_models() {
         .expect("read vmess protocol udp source");
 
     assert!(
-        trojan_udp_inbound.contains("record_direct_udp_response_parts")
+        stream_udp.contains("record_direct_udp_response_parts")
+            && stream_udp.contains("write_direct_response")
+            && stream_udp.contains("write_upstream_response")
+            && stream_udp.contains("write_chain_response")
+            && !trojan_udp_inbound.contains("record_direct_udp_response_parts")
             && !trojan_udp_inbound.contains("udp_response_target_from_socket_addr(sender)")
             && !trojan_udp_inbound.contains("TrojanInboundUdpClientResponse::new")
+            && trojan_udp_inbound.contains("TrojanStreamUdpResponder")
+            && trojan_udp_inbound.contains("impl StreamUdpResponder<TcpRelayStream>")
+            && trojan_udp_inbound.contains("run_stream_udp_relay")
+            && trojan_udp_inbound.contains("StreamUdpRelayRequest")
             && trojan_udp_inbound.contains("trojan::TrojanInbound.udp_responder()")
-            && trojan_udp_inbound.contains("udp_responder.read_inbound_dispatch")
-            && trojan_udp_inbound.contains("udp_responder")
+            && trojan_udp_inbound.contains("self.inner.read_inbound_dispatch(client)")
+            && trojan_udp_inbound.contains("self.inner")
             && trojan_udp_inbound.contains(".write_response_for_target")
             && !trojan_udp_inbound.contains("udp_session.write_client_response_for_target")
-            && trojan_udp_inbound.contains("write_direct_response")
-            && trojan_udp_inbound.contains("write_upstream_response")
-            && trojan_udp_inbound.contains("write_chain_response")
+            && !trojan_udp_inbound.contains("write_direct_response")
+            && !trojan_udp_inbound.contains("write_upstream_response")
+            && !trojan_udp_inbound.contains("write_chain_response")
             && !trojan_udp_inbound.contains("write_response_to_socket_addr_tokio")
             && trojan_protocol.contains("pub async fn write_client_response")
             && trojan_protocol.contains("pub async fn write_client_response_for_target")
@@ -1824,17 +1891,21 @@ fn stream_udp_inbound_direct_responses_use_client_response_models() {
         "Trojan inbound UDP direct response glue should pass neutral target data to protocol-owned response APIs"
     );
     assert!(
-        mieru_udp_inbound.contains("record_direct_udp_response_parts")
+        !mieru_udp_inbound.contains("record_direct_udp_response_parts")
             && !mieru_udp_inbound.contains("udp_response_target_from_socket_addr(sender)")
             && !mieru_udp_inbound.contains("MieruInboundUdpClientResponse::new")
+            && mieru_udp_inbound.contains("MieruStreamUdpResponder")
+            && mieru_udp_inbound.contains("impl StreamUdpResponder<MieruClientStream>")
+            && mieru_udp_inbound.contains("run_stream_udp_relay")
+            && mieru_udp_inbound.contains("StreamUdpRelayRequest")
             && mieru_udp_inbound.contains("mieru::MieruInbound.udp_responder()")
-            && mieru_udp_inbound.contains("udp_responder.read_inbound_dispatch_tokio")
-            && mieru_udp_inbound.contains("udp_responder")
+            && mieru_udp_inbound.contains("self.inner")
+            && mieru_udp_inbound.contains(".read_inbound_dispatch_tokio(client")
             && mieru_udp_inbound.contains(".write_response_for_target_tokio")
             && !mieru_udp_inbound.contains("udp_session.write_client_response_for_target_tokio")
-            && mieru_udp_inbound.contains("write_direct_response")
-            && mieru_udp_inbound.contains("write_upstream_response")
-            && mieru_udp_inbound.contains("write_chain_response")
+            && !mieru_udp_inbound.contains("write_direct_response")
+            && !mieru_udp_inbound.contains("write_upstream_response")
+            && !mieru_udp_inbound.contains("write_chain_response")
             && !mieru_udp_inbound.contains("write_response_for_sender_tokio")
             && mieru_protocol.contains("pub async fn write_client_response_tokio")
             && mieru_protocol.contains("pub async fn write_client_response_for_target_tokio")
@@ -1899,20 +1970,24 @@ fn stream_udp_inbound_direct_responses_use_client_response_models() {
         "VLESS inbound UDP direct response glue should pass neutral target data to protocol-owned response APIs"
     );
     assert!(
-        vmess_udp_inbound.contains("record_direct_udp_response_parts")
+        !vmess_udp_inbound.contains("record_direct_udp_response_parts")
             && vmess_mux_inbound.contains("record_direct_udp_response_parts")
             && !vmess_udp_inbound.contains("udp_response_target_from_socket_addr(sender)")
             && !vmess_mux_inbound.contains("udp_response_target_from_socket_addr(sender)")
             && !vmess_udp_inbound.contains("VmessInboundUdpClientResponse::new")
             && !vmess_mux_inbound.contains("VmessInboundUdpClientResponse::new")
+            && vmess_udp_inbound.contains("VmessStreamUdpResponder")
+            && vmess_udp_inbound.contains("impl StreamUdpResponder<TcpRelayStream>")
+            && vmess_udp_inbound.contains("run_stream_udp_relay")
+            && vmess_udp_inbound.contains("StreamUdpRelayRequest")
             && vmess_udp_inbound.contains("vmess::VmessInbound.udp_responder_for(&session)")
-            && vmess_udp_inbound.contains("udp_responder.read_inbound_dispatch_tokio")
-            && vmess_udp_inbound.contains("udp_responder")
+            && vmess_udp_inbound.contains("self.inner")
+            && vmess_udp_inbound.contains(".read_inbound_dispatch_tokio(client")
             && vmess_udp_inbound.contains(".write_response_for_target_tokio")
             && !vmess_udp_inbound.contains("udp_session.write_client_response_for_target_tokio")
-            && vmess_udp_inbound.contains("write_direct_response")
-            && vmess_udp_inbound.contains("write_upstream_response")
-            && vmess_udp_inbound.contains("write_chain_response")
+            && !vmess_udp_inbound.contains("write_direct_response")
+            && !vmess_udp_inbound.contains("write_upstream_response")
+            && !vmess_udp_inbound.contains("write_chain_response")
             && vmess_mux_inbound.contains("vmess::VmessInbound.mux_udp_responder_for")
             && vmess_mux_inbound.contains("udp_responder.write_response_for_target")
             && vmess_mux_inbound.contains("udp_responder.end_inbound_stream")
@@ -6111,6 +6186,7 @@ fn vmess_transport_dispatch_uses_protocol_session_classification() {
 #[test]
 fn vmess_inbound_udp_response_encoding_stays_in_protocol_crate() {
     let helper_path = manifest_dir().join("src/inbound/vmess/helpers.rs");
+    let stream_udp = read("src/inbound/stream_udp.rs");
     let mux = read("src/inbound/vmess/mux.rs");
     let mux_udp = read("src/inbound/vmess/mux_udp.rs");
     let udp_session = read("src/inbound/vmess/udp_session.rs");
@@ -6140,7 +6216,8 @@ fn vmess_inbound_udp_response_encoding_stays_in_protocol_crate() {
         !mux.contains("socks5::parse_udp_packet")
             && !mux.contains("socks5::decode_udp_associate_response")
             && !mux.contains("udp_response::decode_socks5_upstream_response")
-            && udp_session.contains("upstream_udp.recv_response")
+            && stream_udp.contains("upstream_udp.recv_response")
+            && !udp_session.contains("upstream_udp.recv_response")
             && mux_udp.contains("upstream_udp.recv_response")
             && !mux.contains("&pkt.target")
             && !mux.contains("pkt.port,")
@@ -6186,22 +6263,29 @@ fn vmess_inbound_udp_response_encoding_stays_in_protocol_crate() {
             && !mux.contains("input.state")
             && !mux.contains("VmessInboundUdpCodec.decode_datagram")
             && !mux.contains(".response_mode(payload_mode)")
+            && udp_session.contains("run_stream_udp_relay")
+            && udp_session.contains("impl StreamUdpResponder<TcpRelayStream>")
             && udp_session.contains("vmess::VmessInbound.udp_responder_for(&session)")
             && mux_udp.contains("vmess::VmessInbound.mux_udp_responder_for")
-            && udp_session.contains("udp_responder.read_inbound_dispatch_tokio")
+            && udp_session.contains(".read_inbound_dispatch_tokio(client")
             && mux_udp.contains("udp_responder.decode_inbound_dispatch")
-            && udp_session.contains("dispatch_inbound_udp_packet")
+            && stream_udp.contains("dispatch_inbound_udp_packet")
+            && !udp_session.contains("dispatch_inbound_udp_packet")
             && mux_udp.contains("dispatch_inbound_udp_packet")
             && !mux.contains("decode_dispatch_parts(&payload)")
             && !mux.contains("client.read(&mut client_buf)")
             && !mux.contains("decode_dispatch_parts(&client_buf[..n])")
-            && udp_session.contains("udp_responder")
+            && udp_session.contains("self.inner")
             && udp_session.contains(".write_response_for_target_tokio")
             && !udp_session.contains("udp_session.write_client_response_for_target_tokio")
-            && udp_session.contains("write_direct_response")
-            && udp_session.contains("write_upstream_response")
-            && udp_session.contains("write_chain_response")
-            && udp_session.contains("record_direct_udp_response_parts")
+            && stream_udp.contains("write_direct_response")
+            && stream_udp.contains("write_upstream_response")
+            && stream_udp.contains("write_chain_response")
+            && !udp_session.contains("write_direct_response")
+            && !udp_session.contains("write_upstream_response")
+            && !udp_session.contains("write_chain_response")
+            && stream_udp.contains("record_direct_udp_response_parts")
+            && !udp_session.contains("record_direct_udp_response_parts")
             && !udp_session.contains("udp_response_target_from_socket_addr(sender)")
             && !udp_session.contains("udp_session.write_response_to_socket_addr_tokio")
             && mux_udp.contains("udp_responder.write_response_for_target")
@@ -6219,7 +6303,8 @@ fn vmess_inbound_udp_response_encoding_stays_in_protocol_crate() {
             && !mux.contains("request.pipe_parts()")
             && !mux.contains("request.into_parts()")
             && !mux.contains("request.into_dispatch_parts()")
-            && udp_session.contains("record_upstream_udp_response_received")
+            && stream_udp.contains("record_upstream_udp_response_received")
+            && !udp_session.contains("record_upstream_udp_response_received")
             && mux_udp.contains("record_upstream_udp_response_received")
             && !udp_session.contains("VmessInboundUdpClientResponse::new")
             && !mux_udp.contains("VmessInboundUdpClientResponse::new")
@@ -6664,6 +6749,7 @@ fn upstream_udp_response_decode_lives_behind_registered_handler() {
 #[test]
 fn trojan_inbound_udp_packet_framing_stays_in_protocol_crate() {
     let root = read("src/inbound/trojan.rs");
+    let stream_udp = read("src/inbound/stream_udp.rs");
     let inbound = read("src/inbound/trojan/udp.rs");
     let protocol_outbound = manifest_dir()
         .parent()
@@ -6711,7 +6797,8 @@ fn trojan_inbound_udp_packet_framing_stays_in_protocol_crate() {
     assert!(
         !inbound.contains("socks5::decode_udp_associate_response")
             && !inbound.contains("udp_response::decode_socks5_upstream_response")
-            && inbound.contains("upstream_udp.recv_response")
+            && stream_udp.contains("upstream_udp.recv_response")
+            && !inbound.contains("upstream_udp.recv_response")
             && !inbound.contains("&pkt.target")
             && !inbound.contains("pkt.port,")
             && !inbound.contains("&pkt.payload")
@@ -6721,31 +6808,39 @@ fn trojan_inbound_udp_packet_framing_stays_in_protocol_crate() {
     );
 
     assert!(
-        inbound.contains("trojan::TrojanInbound.udp_responder()")
-            && inbound.contains("udp_responder.read_inbound_dispatch(&mut client)")
-            && inbound.contains("dispatch_inbound_udp_packet")
+        stream_udp.contains("dispatch_inbound_udp_packet")
+            && stream_udp.contains("record_direct_udp_response_parts")
+            && stream_udp.contains("record_upstream_udp_response_received")
+            && stream_udp.contains("write_direct_response")
+            && stream_udp.contains("write_upstream_response")
+            && stream_udp.contains("write_chain_response")
+            && inbound.contains("run_stream_udp_relay")
+            && inbound.contains("impl StreamUdpResponder<TcpRelayStream>")
+            && inbound.contains("trojan::TrojanInbound.udp_responder()")
+            && inbound.contains("self.inner.read_inbound_dispatch(client)")
+            && !inbound.contains("dispatch_inbound_udp_packet")
             && !inbound.contains("udp_session.read_dispatch_view(&mut client)")
             && !inbound.contains("view.pipe_parts()")
             && !inbound.contains("parts.pipe_parts()")
             && !inbound.contains("parts.into_pipe_parts()")
-            && inbound.contains("udp_responder")
+            && inbound.contains("self.inner")
             && inbound.contains(".write_response_for_target")
             && !inbound.contains("udp_session.write_client_response_for_target")
-            && inbound.contains("write_direct_response")
-            && inbound.contains("write_upstream_response")
-            && inbound.contains("write_chain_response")
+            && !inbound.contains("write_direct_response")
+            && !inbound.contains("write_upstream_response")
+            && !inbound.contains("write_chain_response")
             && !inbound.contains("let written = udp_session")
             && !inbound.contains("response.accounting.record_sent(written)")
             && !inbound.contains("response_accounting.record_sent(n)")
             && !inbound.contains("let payload_len = payload.len()")
             && !inbound.contains("response_accounting.record_sent(payload_len)")
             && !inbound.contains("let udp_session")
-            && inbound.contains("record_direct_udp_response_parts")
+            && !inbound.contains("record_direct_udp_response_parts")
             && !inbound.contains("udp_response_target_from_socket_addr(sender)")
             && !inbound.contains(".write_response_to_socket_addr_tokio(&mut client")
             && !inbound.contains("request.into_dispatch_parts()")
             && !inbound.contains("request.client_session_id")
-            && inbound.contains("record_upstream_udp_response_received")
+            && !inbound.contains("record_upstream_udp_response_received")
             && !inbound.contains("TrojanInboundUdpClientResponse::new")
             && !inbound.contains("udp_session.write_response(&mut client")
             && !inbound.contains("client_session_id: None")
@@ -6904,6 +6999,7 @@ fn mieru_client_stream_model_lives_outside_inbound_root() {
 #[test]
 fn mieru_inbound_udp_packet_framing_stays_in_protocol_crate() {
     let root = read("src/inbound/mieru.rs");
+    let stream_udp = read("src/inbound/stream_udp.rs");
     let inbound = read("src/inbound/mieru/udp.rs");
     let protocol_udp = manifest_dir()
         .parent()
@@ -6937,9 +7033,16 @@ fn mieru_inbound_udp_packet_framing_stays_in_protocol_crate() {
     }
 
     assert!(
-        inbound.contains("mieru::MieruInbound.udp_responder()")
-            && inbound.contains("udp_responder.read_inbound_dispatch_tokio")
-            && inbound.contains("dispatch_inbound_udp_packet")
+        stream_udp.contains("dispatch_inbound_udp_packet")
+            && stream_udp.contains("record_direct_udp_response_parts")
+            && stream_udp.contains("write_direct_response")
+            && stream_udp.contains("write_upstream_response")
+            && stream_udp.contains("write_chain_response")
+            && inbound.contains("run_stream_udp_relay")
+            && inbound.contains("impl StreamUdpResponder<MieruClientStream>")
+            && inbound.contains("mieru::MieruInbound.udp_responder()")
+            && inbound.contains(".read_inbound_dispatch_tokio(client")
+            && !inbound.contains("dispatch_inbound_udp_packet")
             && !inbound.contains("udp_session.read_dispatch_view_tokio")
             && !inbound.contains("udp_session.decode_dispatch_view")
             && !inbound.contains("client.read(&mut read_buf)")
@@ -6948,7 +7051,6 @@ fn mieru_inbound_udp_packet_framing_stays_in_protocol_crate() {
             && !inbound.contains("dispatch_parts.pipe_parts()")
             && !inbound.contains("dispatch_parts.into_parts()")
             && !inbound.contains("request.into_dispatch_parts().into_parts()")
-            && inbound.contains("dispatch_inbound_udp_packet")
             && !inbound.contains("protocol: dispatch_parts.protocol()")
             && !inbound.contains("protocol: zero_core::ProtocolType::Mieru")
             && !inbound.contains("tokio::net::UdpSocket::bind")
@@ -6966,14 +7068,14 @@ fn mieru_inbound_udp_packet_framing_stays_in_protocol_crate() {
             && !inbound.contains("zero_core::Address::Ipv4")
             && !inbound.contains("zero_core::Address::Ipv6")
             && !inbound.contains("fn addr_from_ip")
-            && inbound.contains("record_direct_udp_response_parts")
+            && !inbound.contains("record_direct_udp_response_parts")
             && !inbound.contains("udp_response_target_from_socket_addr(sender)")
-            && inbound.contains("udp_responder")
+            && inbound.contains("self.inner")
             && inbound.contains(".write_response_for_target_tokio")
             && !inbound.contains("udp_session.write_client_response_for_target_tokio")
-            && inbound.contains("write_direct_response")
-            && inbound.contains("write_upstream_response")
-            && inbound.contains("write_chain_response")
+            && !inbound.contains("write_direct_response")
+            && !inbound.contains("write_upstream_response")
+            && !inbound.contains("write_chain_response")
             && !inbound.contains("MieruInboundUdpClientResponse::new")
             && !inbound.contains(".write_response_for_target_tokio(&mut client")
             && !inbound.contains("let udp_session")
