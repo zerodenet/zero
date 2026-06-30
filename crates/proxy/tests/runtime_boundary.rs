@@ -1042,6 +1042,59 @@ fn architecture_docs_do_not_describe_removed_proxy_facades() {
 }
 
 #[test]
+fn project_docs_keep_protocol_response_framing_protocol_owned() {
+    let docs = [
+        (
+            "docs/project/architecture.md",
+            fs::read_to_string(repo_root().join("docs/project/architecture.md"))
+                .expect("read docs/project/architecture.md"),
+        ),
+        (
+            "docs/project/protocol-capabilities.md",
+            fs::read_to_string(repo_root().join("docs/project/protocol-capabilities.md"))
+                .expect("read docs/project/protocol-capabilities.md"),
+        ),
+        (
+            "docs/project/release-boundary.md",
+            fs::read_to_string(repo_root().join("docs/project/release-boundary.md"))
+                .expect("read docs/project/release-boundary.md"),
+        ),
+    ];
+
+    for (path, content) in &docs {
+        for forbidden in [
+            "代理拥有传输设置、socket 设置、路由、会话生命周期、统计、事件和响应桥接",
+            "代理拥有传输设置、中继前缀设置、路由、fallback、会话生命周期、统计、事件和响应桥接",
+            "代理拥有传输设置、路由、会话生命周期、统计、事件、上游缓存、响应桥接",
+            "代理拥有 TLS 设置、中继前缀设置、上游缓存、任务调度、路由、fallback、会话生命周期、统计、事件和响应桥接",
+            "代理拥有 UDP socket、上游缓存、响应匹配、路由、fallback、会话生命周期、统计、事件和响应桥接",
+            "代理拥有 QUIC 连接设置、认证、UDP datagram 发送/接收、路由、fallback、会话生命周期、统计、事件和响应桥接",
+            "代理拥有路由、中继前缀设置、上游缓存、任务调度、统计、事件和响应桥接",
+            "运行时可以缓存 socket、流、关联和响应桥接",
+            "Generic runtime and protocol-runtime modules dispatch through `ProtocolInventory`",
+        ] {
+            assert!(
+                !content.contains(forbidden),
+                "{path} should keep protocol response framing and runtime dispatch ownership current; found `{forbidden}`"
+            );
+        }
+    }
+
+    let architecture = &docs[0].1;
+    assert!(
+        architecture.contains("协议响应编码和会话状态保持在协议 crate 或协议拥有的 responder API 中"),
+        "docs/project/architecture.md should state that protocol response encoding stays protocol-owned"
+    );
+
+    let release_boundary = &docs[2].1;
+    assert!(
+        release_boundary
+            .contains("协议数据包编码、解码和响应封装保持在协议 crates 或中性协议特征中"),
+        "docs/project/release-boundary.md should state response framing ownership"
+    );
+}
+
+#[test]
 fn runtime_does_not_match_protocol_config_variants() {
     for path in rust_sources_under("src/runtime") {
         let source = relative(&path);
