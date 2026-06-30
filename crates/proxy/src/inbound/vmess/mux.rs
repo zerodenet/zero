@@ -5,7 +5,7 @@ use tokio::task::JoinSet;
 use tracing::{info, warn};
 use zero_engine::EngineError;
 
-use crate::inbound::mux_tcp::spawn_mux_tcp_stream_task;
+use crate::inbound::mux_tcp::{spawn_mux_tcp_stream_task, MuxTcpStreamTask};
 use crate::runtime::Proxy;
 use crate::transport::TcpRelayStream;
 
@@ -98,17 +98,19 @@ impl Proxy {
         spawn_mux_tcp_stream_task(
             self,
             tasks,
-            mux_session_id,
-            session,
-            up_rx,
-            move || async move {
-                let _ = close_writer.end_inbound_stream(mux_session_id);
+            MuxTcpStreamTask {
+                mux_session_id,
+                session,
+                uplink: up_rx,
+                close_stream: move || async move {
+                    let _ = close_writer.end_inbound_stream(mux_session_id);
+                },
+                relay_stream: move |session_id, up_rx, upstream| async move {
+                    vmess::mux::relay_inbound_mux_stream(session_id, up_rx, writer, upstream).await;
+                },
+                inbound_tag,
+                protocol: "vmess_mux",
             },
-            move |session_id, up_rx, upstream| async move {
-                vmess::mux::relay_inbound_mux_stream(session_id, up_rx, writer, upstream).await;
-            },
-            inbound_tag,
-            "vmess_mux",
         );
     }
 }

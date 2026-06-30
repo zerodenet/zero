@@ -5805,7 +5805,9 @@ fn inbound_vmess_mux_task_models_do_not_live_in_proxy_model() {
         root.contains("spawn_mux_tcp_stream_task")
             && !root.contains("TcpPipe")
             && !root.contains("TcpPipeInput")
+            && root.contains("MuxTcpStreamTask")
             && mux_tcp.contains("pub(crate) fn spawn_mux_tcp_stream_task")
+            && mux_tcp.contains("pub(crate) struct MuxTcpStreamTask")
             && mux_tcp.contains("TcpPipe::new(&proxy)")
             && mux_tcp.contains("close_stream().await")
             && mux_tcp.contains("relay_stream(mux_session_id, uplink, upstream).await"),

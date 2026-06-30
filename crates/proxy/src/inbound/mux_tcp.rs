@@ -8,16 +8,20 @@ use crate::runtime::pipe::{KernelPipe, TcpPipe, TcpPipeInput};
 use crate::runtime::Proxy;
 use crate::transport::TcpRelayStream;
 
+pub(crate) struct MuxTcpStreamTask<U, C, R> {
+    pub(crate) mux_session_id: u16,
+    pub(crate) session: Session,
+    pub(crate) uplink: U,
+    pub(crate) close_stream: C,
+    pub(crate) relay_stream: R,
+    pub(crate) inbound_tag: String,
+    pub(crate) protocol: &'static str,
+}
+
 pub(crate) fn spawn_mux_tcp_stream_task<U, C, CFut, R, RFut>(
     proxy: &Proxy,
     tasks: &mut JoinSet<()>,
-    mux_session_id: u16,
-    mut session: Session,
-    uplink: U,
-    close_stream: C,
-    relay_stream: R,
-    inbound_tag: String,
-    protocol: &'static str,
+    request: MuxTcpStreamTask<U, C, R>,
 ) where
     U: Send + 'static,
     C: FnOnce() -> CFut + Send + 'static,
@@ -27,6 +31,16 @@ pub(crate) fn spawn_mux_tcp_stream_task<U, C, CFut, R, RFut>(
 {
     let proxy = proxy.clone();
     tasks.spawn(async move {
+        let MuxTcpStreamTask {
+            mux_session_id,
+            mut session,
+            uplink,
+            close_stream,
+            relay_stream,
+            inbound_tag,
+            protocol,
+        } = request;
+
         proxy.prepare_session(&mut session, &inbound_tag, None);
 
         let upstream = match TcpPipe::new(&proxy)
