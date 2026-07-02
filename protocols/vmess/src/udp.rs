@@ -5,8 +5,11 @@ use zero_core::{
 };
 use zero_traits::{AsyncSocket, UdpPacketFraming, UdpPacketTunnelProtocol};
 
-use crate::outbound::{VmessOutbound, VmessOutboundSession};
-use crate::shared::{parse_address_from_bytes, write_address, VmessCipher, CMD_UDP};
+use crate::outbound::VmessOutbound;
+use crate::shared::{
+    establish_outbound_session, parse_address_from_bytes, write_address, VmessCipher,
+    VmessOutboundSession, CMD_UDP,
+};
 use crate::stream::VmessAeadStream;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -793,8 +796,7 @@ impl VmessOutbound {
             Network::Udp,
             ProtocolType::Vmess,
         );
-        self.establish_command_session(stream, &udp_session, uuid, cipher, CMD_UDP)
-            .await
+        establish_outbound_session(stream, &udp_session, uuid, cipher, CMD_UDP).await
     }
 }
 

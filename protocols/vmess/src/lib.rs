@@ -16,11 +16,10 @@ pub use inbound::{
 pub use metadata::VmessProtocol;
 pub use outbound::{
     establish_tcp_outbound_session, establish_tcp_outbound_stream, tcp_connect_config_from_config,
-    wrap_tcp_outbound_stream, VmessOutbound, VmessOutboundSession, VmessTcpConnectConfig,
-    VmessTcpSessionTarget,
+    wrap_tcp_outbound_stream, VmessOutbound, VmessTcpConnectConfig, VmessTcpSessionTarget,
 };
 pub use shared::{
-    parse_uuid, VmessCipher, AUTH_ID_LEN, CMD_TCP, CMD_UDP, GCM_TAG_LEN, MUX_COOL_DOMAIN,
-    MUX_COOL_PORT, VERSION,
+    parse_uuid, VmessCipher, VmessOutboundSession, AUTH_ID_LEN, CMD_TCP, CMD_UDP, GCM_TAG_LEN,
+    MUX_COOL_DOMAIN, MUX_COOL_PORT, VERSION,
 };
 pub use stream::{wrap_tcp_inbound_stream, VmessAeadStream};

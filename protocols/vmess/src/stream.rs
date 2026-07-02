@@ -9,7 +9,7 @@ use crate::crypto::{
     GCM_TAG_LEN, MAX_BODY_PAYLOAD_SIZE,
 };
 use crate::inbound::VmessAccept;
-use crate::outbound::VmessOutboundSession;
+use crate::shared::VmessOutboundSession;
 
 enum ReadState {
     ResponseHeaderLength {

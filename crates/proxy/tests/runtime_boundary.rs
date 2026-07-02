@@ -6336,6 +6336,8 @@ fn vmess_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
     let establish = read("src/adapters/vmess/udp/managed/establish.rs");
     let model = read("src/runtime/udp_flow/managed/stream_packet_manager.rs");
     let proxy_transport = read("src/transport/mod.rs");
+    let protocol_outbound = fs::read_to_string(repo_root().join("protocols/vmess/src/outbound.rs"))
+        .expect("read protocols/vmess/src/outbound.rs");
     let transport = fs::read_to_string(repo_root().join("crates/transport/src/vmess_transport.rs"))
         .expect("read zero-transport vmess_transport source");
     let protocol = fs::read_to_string(repo_root().join("protocols/vmess/src/udp.rs"))
@@ -6427,9 +6429,14 @@ fn vmess_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
             && !runtime.contains("spawn_tuple_response_bridge")
             && !runtime.contains(".recv().await")
             && !runtime.contains("EngineError::Io")
+            && !protocol_outbound.contains("pub async fn establish_command_session")
+            && !protocol_outbound.contains("command: u8")
+            && !protocol_outbound.contains("if command != 0x03")
+            && !protocol_outbound.contains("CMD_UDP")
             && protocol.contains("pub async fn establish_udp_flow_with_initial_packet")
             && protocol.contains("pub async fn establish_flow_with_initial_packet")
             && protocol.contains("pub fn start_flow_with_initial_packet")
+            && protocol.contains("pub async fn establish_udp_packet_session")
             && protocol.contains("pub fn mux_open_identity")
             && protocol.contains("pub fn mux_pool_identity")
             && protocol.contains("pub struct VmessUdpMuxOpenIdentity")

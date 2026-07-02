@@ -58,8 +58,8 @@ src/crypto.rs    - key derivation, AEAD header seal/open, body AEAD state (BodyA
 src/inbound.rs   - inbound accept with single-user and multi-user auth, response header
 src/outbound.rs  - outbound TCP session establishment, request encoding
 src/stream.rs    - VmessAeadStream (AsyncRead + AsyncWrite) for bidirectional body relay
-src/shared.rs    - cipher enum, address helpers, constants, read_exact
+src/shared.rs    - cipher enum, address helpers, constants, read_exact, shared outbound session helpers
 src/metadata.rs  - protocol capability descriptor
 src/mux.rs       - Mux.Cool frame encode/decode, VmessMuxStream
-src/udp.rs       - UDP packet encode/decode, UDP-over-stream session establishment
+src/udp.rs       - UDP packet encode/decode, UDP packet-session and UDP-over-stream establishment
 ```
