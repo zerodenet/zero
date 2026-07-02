@@ -1,16 +1,5 @@
 //! VMess inbound: TLS accept, transport dispatch (WS/gRPC), protocol auth, route, TCP relay.
 
-use vmess::{VmessInbound, VmessInboundProfile};
-
-// Trait-based handler (raw TLS path).
-
-#[derive(Clone)]
-pub(crate) struct VmessInboundHandler {
-    vmess_inbound: VmessInbound,
-    profile: VmessInboundProfile,
-    tls_acceptor: crate::transport::TlsAcceptor,
-}
-
 // Listener.
 
 mod listener;

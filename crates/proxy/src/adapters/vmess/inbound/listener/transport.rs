@@ -10,7 +10,6 @@ use zero_engine::EngineError;
 
 use super::mux::run_vmess_mux_session;
 use super::udp_session::run_vmess_udp_relay;
-use super::VmessInboundHandler;
 use crate::runtime::inbound_protocol::{serve_inbound, NoClientResponseInboundProtocol};
 use crate::runtime::Proxy;
 use crate::transport::{AsyncSocketStream, TcpRelayStream};
@@ -90,19 +89,18 @@ where
 /// Raw TLS path: TLS accept -> VMess auth -> serve_inbound.
 pub(crate) async fn handle_vmess_raw(
     proxy: &Proxy,
-    handler: &VmessInboundHandler,
+    tls_acceptor: &crate::transport::TlsAcceptor,
+    profile: &vmess::VmessInboundProfile,
     stream: TcpRelayStream,
     tag: &str,
     source_addr: Option<std::net::SocketAddr>,
 ) -> Result<(), EngineError> {
-    let tls = handler
-        .tls_acceptor
+    let tls = tls_acceptor
         .accept(stream)
         .await
         .map_err(|e| EngineError::Io(io::Error::other(e)))?;
-    let client = handler
-        .profile
-        .accept_client(handler.vmess_inbound, AsyncSocketStream::new(tls))
+    let client = profile
+        .accept_client(vmess::VmessInbound, AsyncSocketStream::new(tls))
         .await?;
     dispatch_vmess_client(proxy, client, tag, source_addr).await
 }
@@ -110,23 +108,22 @@ pub(crate) async fn handle_vmess_raw(
 /// WebSocket path: TLS accept -> WS upgrade -> VMess auth -> serve_inbound.
 pub(crate) async fn handle_vmess_ws(
     proxy: &Proxy,
-    handler: &VmessInboundHandler,
+    tls_acceptor: &crate::transport::TlsAcceptor,
+    profile: &vmess::VmessInboundProfile,
     stream: TcpRelayStream,
     ws_cfg: &WebSocketConfig,
     tag: &str,
     source_addr: Option<std::net::SocketAddr>,
 ) -> Result<(), EngineError> {
-    let tls = handler
-        .tls_acceptor
+    let tls = tls_acceptor
         .accept(stream)
         .await
         .map_err(|e| EngineError::Io(io::Error::other(e)))?;
 
     let ws = crate::transport::accept_ws(tls, &ws_cfg.path).await?;
 
-    let client = handler
-        .profile
-        .accept_client(handler.vmess_inbound, TcpRelayStream::new(ws))
+    let client = profile
+        .accept_client(vmess::VmessInbound, TcpRelayStream::new(ws))
         .await?;
 
     dispatch_vmess_client(proxy, client, tag, source_addr).await
@@ -135,21 +132,20 @@ pub(crate) async fn handle_vmess_ws(
 /// gRPC path: TLS accept -> serve_grpc -> per-stream VMess auth -> serve_inbound.
 pub(crate) async fn handle_vmess_grpc(
     proxy: &Proxy,
-    handler: &VmessInboundHandler,
+    tls_acceptor: &crate::transport::TlsAcceptor,
+    profile: &vmess::VmessInboundProfile,
     stream: TcpRelayStream,
     grpc_cfg: &GrpcConfig,
     tag: &str,
     source_addr: Option<std::net::SocketAddr>,
 ) -> Result<(), EngineError> {
-    let tls = handler
-        .tls_acceptor
+    let tls = tls_acceptor
         .accept(stream)
         .await
         .map_err(|e| EngineError::Io(io::Error::other(e)))?;
 
     let service_names = grpc_cfg.service_names.clone();
-    let profile = handler.profile.clone();
-    let vmess = handler.vmess_inbound;
+    let profile = profile.clone();
     let proxy = proxy.clone();
     let tag = tag.to_owned();
 
@@ -159,7 +155,7 @@ pub(crate) async fn handle_vmess_grpc(
         let tag = tag.clone();
         async move {
             let result = profile
-                .accept_client(vmess, TcpRelayStream::new(grpc_stream))
+                .accept_client(vmess::VmessInbound, TcpRelayStream::new(grpc_stream))
                 .await;
             match result {
                 Ok(client) => dispatch_vmess_client(&proxy, client, &tag, source_addr).await,
