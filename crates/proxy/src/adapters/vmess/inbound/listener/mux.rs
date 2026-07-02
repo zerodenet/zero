@@ -8,6 +8,8 @@ use crate::runtime::mux_session::{run_mux_session_loop, MuxOpenedDispatcher, Mux
 use crate::runtime::mux_tcp::{spawn_mux_tcp_stream_task, MuxTcpStreamTask};
 use crate::runtime::Proxy;
 
+use super::mux_udp::spawn_vmess_mux_udp_stream_task;
+
 struct VmessMuxOpenedDispatcher<'a, R> {
     proxy: &'a Proxy,
     mux_server: &'a mut vmess::mux::VmessInboundMuxServer,
@@ -57,7 +59,8 @@ impl VmessMuxOpenedRouteBridge<'_> {
         session: zero_core::Session,
         up_rx: tokio::sync::mpsc::UnboundedReceiver<Vec<u8>>,
     ) {
-        self.proxy.spawn_vmess_mux_tcp_stream_task(
+        spawn_vmess_mux_tcp_stream_task(
+            self.proxy,
             self.tasks,
             session_id,
             session,
@@ -73,7 +76,8 @@ impl VmessMuxOpenedRouteBridge<'_> {
         up_rx: tokio::sync::mpsc::UnboundedReceiver<Vec<u8>>,
         responder: vmess::udp::VmessInboundMuxUdpResponder,
     ) {
-        self.proxy.spawn_vmess_mux_udp_stream_task(
+        spawn_vmess_mux_udp_stream_task(
+            self.proxy,
             self.tasks,
             session_id,
             up_rx,
@@ -107,65 +111,63 @@ impl vmess::mux::VmessInboundMuxOpenedRouteDispatcher for VmessMuxOpenedRouteBri
     }
 }
 
-impl Proxy {
-    pub(crate) async fn run_vmess_mux_session<R>(
-        &self,
-        mut reader: R,
-        mut mux_server: vmess::mux::VmessInboundMuxServer,
-        inbound_tag: &str,
-    ) -> Result<(), EngineError>
-    where
-        R: tokio::io::AsyncRead + Unpin,
-    {
-        let mut mux_tasks: JoinSet<()> = JoinSet::new();
-        let mut dispatcher = VmessMuxOpenedDispatcher {
-            proxy: self,
-            mux_server: &mut mux_server,
-            reader: &mut reader,
+pub(super) async fn run_vmess_mux_session<R>(
+    proxy: &Proxy,
+    mut reader: R,
+    mut mux_server: vmess::mux::VmessInboundMuxServer,
+    inbound_tag: &str,
+) -> Result<(), EngineError>
+where
+    R: tokio::io::AsyncRead + Unpin,
+{
+    let mut mux_tasks: JoinSet<()> = JoinSet::new();
+    let mut dispatcher = VmessMuxOpenedDispatcher {
+        proxy,
+        mux_server: &mut mux_server,
+        reader: &mut reader,
+        inbound_tag,
+    };
+
+    run_mux_session_loop(
+        MuxSessionLoop {
             inbound_tag,
-        };
+            protocol: "vmess_mux",
+            panic_message: "vmess mux task panicked",
+            abort_on_end: false,
+        },
+        &mut mux_tasks,
+        &mut dispatcher,
+    )
+    .await?;
 
-        run_mux_session_loop(
-            MuxSessionLoop {
-                inbound_tag,
-                protocol: "vmess_mux",
-                panic_message: "vmess mux task panicked",
-                abort_on_end: false,
+    Ok(())
+}
+
+fn spawn_vmess_mux_tcp_stream_task(
+    proxy: &Proxy,
+    tasks: &mut JoinSet<()>,
+    mux_session_id: u16,
+    session: zero_core::Session,
+    up_rx: tokio::sync::mpsc::UnboundedReceiver<Vec<u8>>,
+    writer: vmess::mux::VmessInboundMuxWriter,
+    inbound_tag: String,
+) {
+    let close_writer = writer.clone();
+    spawn_mux_tcp_stream_task(
+        proxy,
+        tasks,
+        MuxTcpStreamTask {
+            mux_session_id,
+            session,
+            uplink: up_rx,
+            close_stream: move || async move {
+                let _ = close_writer.end_inbound_stream(mux_session_id);
             },
-            &mut mux_tasks,
-            &mut dispatcher,
-        )
-        .await?;
-
-        Ok(())
-    }
-
-    fn spawn_vmess_mux_tcp_stream_task(
-        &self,
-        tasks: &mut JoinSet<()>,
-        mux_session_id: u16,
-        session: zero_core::Session,
-        up_rx: tokio::sync::mpsc::UnboundedReceiver<Vec<u8>>,
-        writer: vmess::mux::VmessInboundMuxWriter,
-        inbound_tag: String,
-    ) {
-        let close_writer = writer.clone();
-        spawn_mux_tcp_stream_task(
-            self,
-            tasks,
-            MuxTcpStreamTask {
-                mux_session_id,
-                session,
-                uplink: up_rx,
-                close_stream: move || async move {
-                    let _ = close_writer.end_inbound_stream(mux_session_id);
-                },
-                relay_stream: move |session_id, up_rx, upstream| async move {
-                    vmess::mux::relay_inbound_mux_stream(session_id, up_rx, writer, upstream).await;
-                },
-                inbound_tag,
-                protocol: "vmess_mux",
+            relay_stream: move |session_id, up_rx, upstream| async move {
+                vmess::mux::relay_inbound_mux_stream(session_id, up_rx, writer, upstream).await;
             },
-        );
-    }
+            inbound_tag,
+            protocol: "vmess_mux",
+        },
+    );
 }

@@ -2933,7 +2933,8 @@ fn trojan_inbound_uses_adapter_request_model() {
             && !inbound.contains("session.network")
             && !udp.contains("session.auth")
             && !inbound.contains("auth.as_ref()")
-            && inbound.contains(".run_trojan_udp_relay(")
+            && inbound.contains("run_trojan_udp_relay(")
+            && !inbound.contains(".run_trojan_udp_relay(")
             && inbound.contains("TcpRelayStream::new(stream.into_inner())")
             && protocol_inbound.contains("pub enum TrojanInboundAcceptedSession")
             && protocol_inbound.contains("pub trait TrojanInboundAcceptedSessionDispatcher")
@@ -3188,7 +3189,8 @@ fn vless_inbound_users_are_protocol_parsed() {
             && !listener.contains("vless::VlessFallbackReplay::new")
             && listener.contains("vless::fallback_replay_for_alpns")
             && listener.contains("vless::VlessFallbackAlpnDecision::Replay")
-            && listener.contains(".relay_fallback(fallback_replay, fb)")
+            && listener.contains("relay_fallback(")
+            && !listener.contains(".relay_fallback(")
             && protocol_inbound.contains("pub fn fallback_replay_for_alpns")
             && protocol_inbound.contains("pub enum VlessFallbackAlpnDecision")
             && protocol_inbound.contains("VlessInboundMuxContext::from_uuid")
@@ -3643,11 +3645,15 @@ fn vless_inbound_root_does_not_reexport_session_models() {
             !root.contains(forbidden),
             "src/adapters/vless/inbound/listener.rs should expose listener entrypoints, not session model `{forbidden}`"
         );
-        assert!(
-            listener.contains("use super::session::{VlessStreamRequest, VlessStreamTransport};"),
-            "VLESS listener should import session models from the session module"
-        );
     }
+    assert!(
+        listener.contains("use super::session::{")
+            && listener.contains("VlessStreamRequest")
+            && listener.contains("VlessStreamTransport")
+            && listener.contains("handle_vless_client")
+            && listener.contains("handle_vless_stream"),
+        "VLESS listener should keep session-local glue and request models in the session module"
+    );
 }
 
 #[test]

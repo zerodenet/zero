@@ -11,6 +11,8 @@ use zero_config::InboundConfig;
 use zero_core::Session;
 use zero_engine::EngineError;
 
+use udp::run_trojan_udp_relay;
+
 use crate::runtime::inbound_protocol::{serve_inbound, NoClientResponseInboundProtocol};
 use crate::runtime::listener_loop::{run_tcp_listener_loop, TcpListenerLoopRequest};
 use crate::runtime::Proxy;
@@ -68,15 +70,15 @@ impl TrojanInboundAcceptedSessionDispatcher<TrojanAcceptedStream>
         responder: trojan::udp::TrojanInboundUdpResponder,
         auth: Option<zero_core::SessionAuth>,
     ) -> Result<(), Self::Error> {
-        self.proxy
-            .run_trojan_udp_relay(
-                TcpRelayStream::new(stream.into_inner()),
-                session,
-                responder,
-                auth,
-                self.inbound_tag,
-            )
-            .await
+        run_trojan_udp_relay(
+            self.proxy,
+            TcpRelayStream::new(stream.into_inner()),
+            session,
+            responder,
+            auth,
+            self.inbound_tag,
+        )
+        .await
     }
 }
 

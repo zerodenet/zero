@@ -4,6 +4,9 @@ use crate::transport::{accept_ws, ClientStream, MeteredStream, RecordingStream, 
 use zero_core::{Session, SessionAuth};
 use zero_engine::EngineError;
 
+use super::fallback::relay_fallback;
+use super::mux::handle_vless_mux_session;
+use super::udp_session::handle_vless_udp_session;
 use super::VlessInboundHandler;
 
 #[derive(Clone, Copy)]
@@ -66,9 +69,15 @@ where
         self.proxy
             .record_session_inbound_traffic(session.id, metered.drain_traffic());
         let client = MeteredStream::new(metered.into_unrecorded_inner());
-        self.proxy
-            .handle_vless_udp_session(client, self.inbound_tag, session, responder, auth)
-            .await
+        handle_vless_udp_session(
+            self.proxy,
+            client,
+            self.inbound_tag,
+            session,
+            responder,
+            auth,
+        )
+        .await
     }
 
     async fn dispatch_mux_session(
@@ -79,131 +88,127 @@ where
         self.proxy
             .record_session_inbound_traffic(0, metered.drain_traffic());
         let client = MeteredStream::new(metered.into_unrecorded_inner());
-        self.proxy
-            .handle_vless_mux_session(client, self.inbound_tag, mux_server)
-            .await
+        handle_vless_mux_session(self.proxy, client, self.inbound_tag, mux_server).await
     }
 }
 
-impl Proxy {
-    pub(crate) async fn handle_vless_stream<S>(
-        &self,
-        request: VlessStreamRequest<'_, S>,
-    ) -> Result<(), EngineError>
-    where
-        S: ClientStream + 'static,
-    {
-        let VlessStreamRequest {
-            stream,
-            inbound_tag,
-            profile,
-            transport,
-            fallback,
-            sni,
-        } = request;
-        let VlessStreamTransport {
-            ws_config,
-            grpc_config,
-            h2_config,
-            split_http_config,
-            split_http_registry,
-            http_upgrade_config,
-        } = transport;
+pub(super) async fn handle_vless_stream<S>(
+    proxy: &Proxy,
+    request: VlessStreamRequest<'_, S>,
+) -> Result<(), EngineError>
+where
+    S: ClientStream + 'static,
+{
+    let VlessStreamRequest {
+        stream,
+        inbound_tag,
+        profile,
+        transport,
+        fallback,
+        sni,
+    } = request;
+    let VlessStreamTransport {
+        ws_config,
+        grpc_config,
+        h2_config,
+        split_http_config,
+        split_http_registry,
+        http_upgrade_config,
+    } = transport;
 
-        if let Some(cfg) = split_http_config {
-            let Some(reg) = split_http_registry else {
-                return Err(EngineError::Io(std::io::Error::new(
-                    std::io::ErrorKind::InvalidInput,
-                    "vless inbound: split-http registry is required",
-                )));
-            };
-            match crate::transport::accept_xhttp_inbound(stream, cfg, reg).await? {
-                Some(xhttp_stream) => {
-                    return self
-                        .handle_vless_client(xhttp_stream, inbound_tag, profile, fallback, sni)
-                        .await;
-                }
-                None => return Ok(()),
-            }
-        }
-        if let Some(cfg) = http_upgrade_config {
-            let upg_stream = crate::transport::accept_http_upgrade(stream, cfg).await?;
-            return self
-                .handle_vless_client(upg_stream, inbound_tag, profile, fallback, sni)
-                .await;
-        }
-        match (ws_config, grpc_config, h2_config) {
-            (Some(ws), None, None) => {
-                let ws_stream = accept_ws(stream, &ws.path).await?;
-                self.handle_vless_client(ws_stream, inbound_tag, profile, fallback, sni)
-                    .await
-            }
-            (None, Some(grpc), None) => {
-                let engine = self.clone();
-                let tag = inbound_tag.to_owned();
-                let service_names = grpc.service_names.clone();
-                let profile = profile.clone();
-                let fb_clone = fallback.cloned();
-                return crate::transport::serve_grpc(stream, &service_names, move |grpc_stream| {
-                    let engine = engine.clone();
-                    let tag = tag.clone();
-                    let profile = profile.clone();
-                    let fb = fb_clone.clone();
-                    async move {
-                        engine
-                            .handle_vless_client(grpc_stream, &tag, profile, fb.as_ref(), None)
-                            .await
-                    }
-                })
-                .await;
-            }
-            (None, None, Some(h2)) => {
-                let h2_stream = crate::transport::accept_h2(stream, h2).await?;
-                self.handle_vless_client(h2_stream, inbound_tag, profile, fallback, sni)
-                    .await
-            }
-            (None, None, None) => {
-                self.handle_vless_client(stream, inbound_tag, profile, fallback, sni)
-                    .await
-            }
-            _ => Err(EngineError::Io(std::io::Error::new(
+    if let Some(cfg) = split_http_config {
+        let Some(reg) = split_http_registry else {
+            return Err(EngineError::Io(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
-                "vless inbound: ws, grpc, and h2 are mutually exclusive",
-            ))),
+                "vless inbound: split-http registry is required",
+            )));
+        };
+        match crate::transport::accept_xhttp_inbound(stream, cfg, reg).await? {
+            Some(xhttp_stream) => {
+                return handle_vless_client(
+                    proxy,
+                    xhttp_stream,
+                    inbound_tag,
+                    profile,
+                    fallback,
+                    sni,
+                )
+                .await;
+            }
+            None => return Ok(()),
         }
     }
-
-    pub(crate) async fn handle_vless_client<S>(
-        &self,
-        client: S,
-        inbound_tag: &str,
-        profile: vless::VlessInboundProfile,
-        fallback: Option<&zero_config::FallbackConfig>,
-        sni: Option<String>,
-    ) -> Result<(), EngineError>
-    where
-        S: ClientStream + 'static,
-    {
-        let metered = MeteredStream::new(RecordingStream::new(client));
-        let route = match profile.accept_client(vless::VlessInbound, metered).await {
-            Ok(accepted) => accepted.into_route_with_sni(sni),
-            Err(rejected) => {
-                let (auth_error, fallback_replay) = rejected.into_fallback_replay();
-                if let Some(fb) = fallback {
-                    return self.relay_fallback(fallback_replay, fb).await;
-                }
-                return Err(EngineError::Core(auth_error));
-            }
-        };
-
-        let handler = VlessInboundHandler {
-            vless_inbound: vless::VlessInbound,
-        };
-        let mut bridge = VlessAcceptedClientBridge {
-            proxy: self,
-            handler: &handler,
-            inbound_tag,
-        };
-        route.dispatch_with(&mut bridge).await
+    if let Some(cfg) = http_upgrade_config {
+        let upg_stream = crate::transport::accept_http_upgrade(stream, cfg).await?;
+        return handle_vless_client(proxy, upg_stream, inbound_tag, profile, fallback, sni).await;
     }
+    match (ws_config, grpc_config, h2_config) {
+        (Some(ws), None, None) => {
+            let ws_stream = accept_ws(stream, &ws.path).await?;
+            handle_vless_client(proxy, ws_stream, inbound_tag, profile, fallback, sni).await
+        }
+        (None, Some(grpc), None) => {
+            let engine = proxy.clone();
+            let tag = inbound_tag.to_owned();
+            let service_names = grpc.service_names.clone();
+            let profile = profile.clone();
+            let fb_clone = fallback.cloned();
+            return crate::transport::serve_grpc(stream, &service_names, move |grpc_stream| {
+                let engine = engine.clone();
+                let tag = tag.clone();
+                let profile = profile.clone();
+                let fb = fb_clone.clone();
+                async move {
+                    handle_vless_client(&engine, grpc_stream, &tag, profile, fb.as_ref(), None)
+                        .await
+                }
+            })
+            .await;
+        }
+        (None, None, Some(h2)) => {
+            let h2_stream = crate::transport::accept_h2(stream, h2).await?;
+            handle_vless_client(proxy, h2_stream, inbound_tag, profile, fallback, sni).await
+        }
+        (None, None, None) => {
+            handle_vless_client(proxy, stream, inbound_tag, profile, fallback, sni).await
+        }
+        _ => Err(EngineError::Io(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "vless inbound: ws, grpc, and h2 are mutually exclusive",
+        ))),
+    }
+}
+
+pub(super) async fn handle_vless_client<S>(
+    proxy: &Proxy,
+    client: S,
+    inbound_tag: &str,
+    profile: vless::VlessInboundProfile,
+    fallback: Option<&zero_config::FallbackConfig>,
+    sni: Option<String>,
+) -> Result<(), EngineError>
+where
+    S: ClientStream + 'static,
+{
+    let metered = MeteredStream::new(RecordingStream::new(client));
+    let route = match profile.accept_client(vless::VlessInbound, metered).await {
+        Ok(accepted) => accepted.into_route_with_sni(sni),
+        Err(rejected) => {
+            let (auth_error, fallback_replay) = rejected.into_fallback_replay();
+            if let Some(fb) = fallback {
+                return relay_fallback(proxy, fallback_replay, fb).await;
+            }
+            return Err(EngineError::Core(auth_error));
+        }
+    };
+
+    let handler = VlessInboundHandler {
+        vless_inbound: vless::VlessInbound,
+    };
+    let mut bridge = VlessAcceptedClientBridge {
+        proxy,
+        handler: &handler,
+        inbound_tag,
+    };
+    route.dispatch_with(&mut bridge).await
 }

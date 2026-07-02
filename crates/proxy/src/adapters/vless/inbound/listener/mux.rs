@@ -7,6 +7,8 @@ use crate::runtime::Proxy;
 use crate::transport::{ClientStream, MeteredStream};
 use zero_engine::EngineError;
 
+use super::mux_udp::spawn_vless_mux_udp_stream_task;
+
 struct VlessMuxOpenedDispatcher<'a, S> {
     proxy: &'a Proxy,
     mux_server: &'a mut vless::mux::VlessInboundMuxServer,
@@ -81,15 +83,15 @@ impl VlessMuxOpenedRouteBridge<'_> {
         let proxy_clone = self.proxy.clone();
         let inbound_tag_owned = self.inbound_tag.to_owned();
         self.tasks.spawn(async move {
-            proxy_clone
-                .spawn_vless_mux_udp_stream_task(
-                    session_id,
-                    up_rx,
-                    responder,
-                    &inbound_tag_owned,
-                    auth,
-                )
-                .await;
+            spawn_vless_mux_udp_stream_task(
+                &proxy_clone,
+                session_id,
+                up_rx,
+                responder,
+                &inbound_tag_owned,
+                auth,
+            )
+            .await;
         });
 
         info!(
@@ -128,34 +130,32 @@ impl vless::mux::VlessInboundMuxOpenedRouteDispatcher for VlessMuxOpenedRouteBri
     }
 }
 
-impl Proxy {
-    pub(crate) async fn handle_vless_mux_session<S>(
-        &self,
-        mut client: MeteredStream<S>,
-        inbound_tag: &str,
-        mut mux_server: vless::mux::VlessInboundMuxServer,
-    ) -> Result<(), EngineError>
-    where
-        S: ClientStream,
-    {
-        let mut relay_tasks = JoinSet::new();
-        let mut dispatcher = VlessMuxOpenedDispatcher {
-            proxy: self,
-            mux_server: &mut mux_server,
-            client: &mut client,
-            inbound_tag,
-        };
+pub(super) async fn handle_vless_mux_session<S>(
+    proxy: &Proxy,
+    mut client: MeteredStream<S>,
+    inbound_tag: &str,
+    mut mux_server: vless::mux::VlessInboundMuxServer,
+) -> Result<(), EngineError>
+where
+    S: ClientStream,
+{
+    let mut relay_tasks = JoinSet::new();
+    let mut dispatcher = VlessMuxOpenedDispatcher {
+        proxy,
+        mux_server: &mut mux_server,
+        client: &mut client,
+        inbound_tag,
+    };
 
-        run_mux_session_loop(
-            MuxSessionLoop {
-                inbound_tag,
-                protocol: "vless_mux",
-                panic_message: "vless mux task panicked",
-                abort_on_end: true,
-            },
-            &mut relay_tasks,
-            &mut dispatcher,
-        )
-        .await
-    }
+    run_mux_session_loop(
+        MuxSessionLoop {
+            inbound_tag,
+            protocol: "vless_mux",
+            panic_message: "vless mux task panicked",
+            abort_on_end: true,
+        },
+        &mut relay_tasks,
+        &mut dispatcher,
+    )
+    .await
 }

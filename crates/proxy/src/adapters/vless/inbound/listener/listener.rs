@@ -9,8 +9,11 @@ use tokio::sync::watch;
 use zero_engine::EngineError;
 use zero_platform_tokio::TokioSocket;
 
+use super::fallback::relay_fallback;
 use super::model::VlessInboundRequest;
-use super::session::{VlessStreamRequest, VlessStreamTransport};
+use super::session::{
+    handle_vless_client, handle_vless_stream, VlessStreamRequest, VlessStreamTransport,
+};
 use super::upgrade_vless_reality_server;
 
 pub(crate) async fn run_vless_listener_with_bound(
@@ -47,15 +50,15 @@ pub(crate) async fn run_vless_listener_with_bound(
                     let profile = profile.clone();
                     let fallback_config = fallback_config.clone();
                     async move {
-                        let result = engine
-                            .handle_vless_client(
-                                quic_stream,
-                                inbound_tag.as_str(),
-                                profile,
-                                fallback_config.as_ref(),
-                                None,
-                            )
-                            .await;
+                        let result = handle_vless_client(
+                            &engine,
+                            quic_stream,
+                            inbound_tag.as_str(),
+                            profile,
+                            fallback_config.as_ref(),
+                            None,
+                        )
+                        .await;
 
                         if let Err(error) = &result {
                             log_listener_connection_error(
@@ -137,9 +140,12 @@ pub(crate) async fn run_vless_listener_with_bound(
                                                     vless::VlessFallbackAlpnDecision::Replay(
                                                         fallback_replay,
                                                     ) => {
-                                                        return engine
-                                                            .relay_fallback(fallback_replay, fb)
-                                                            .await;
+                                                        return relay_fallback(
+                                                            &engine,
+                                                            fallback_replay,
+                                                            fb,
+                                                        )
+                                                        .await;
                                                     }
                                                     vless::VlessFallbackAlpnDecision::Continue {
                                                         stream,
@@ -155,8 +161,9 @@ pub(crate) async fn run_vless_listener_with_bound(
                                             PrefixedSocket::from_prefix(socket, replay_head);
                                         match acceptor.accept(prefixed).await {
                                             Ok(tls_stream) => {
-                                                engine
-                                                    .handle_vless_stream(VlessStreamRequest {
+                                                handle_vless_stream(
+                                                    &engine,
+                                                    VlessStreamRequest {
                                                         stream: InboundTlsStream::new_generic(
                                                             tls_stream,
                                                         ),
@@ -165,24 +172,27 @@ pub(crate) async fn run_vless_listener_with_bound(
                                                         transport,
                                                         fallback: fallback_config.as_ref(),
                                                         sni,
-                                                    })
-                                                    .await
+                                                    },
+                                                )
+                                                .await
                                             }
                                             Err(error) => Err(error.into()),
                                         }
                                     } else {
                                         match acceptor.accept(raw).await {
                                             Ok(tls_stream) => {
-                                                engine
-                                                    .handle_vless_stream(VlessStreamRequest {
+                                                handle_vless_stream(
+                                                    &engine,
+                                                    VlessStreamRequest {
                                                         stream: InboundTlsStream::new(tls_stream),
                                                         inbound_tag: inbound_tag.as_str(),
                                                         profile: profile.clone(),
                                                         transport,
                                                         fallback: fallback_config.as_ref(),
                                                         sni: None,
-                                                    })
-                                                    .await
+                                                    },
+                                                )
+                                                .await
                                             }
                                             Err(error) => Err(error.into()),
                                         }
@@ -191,31 +201,35 @@ pub(crate) async fn run_vless_listener_with_bound(
                                 (None, Some(reality)) => {
                                     match upgrade_vless_reality_server(stream, &reality).await {
                                         Ok(reality_stream) => {
-                                            engine
-                                                .handle_vless_stream(VlessStreamRequest {
+                                            handle_vless_stream(
+                                                &engine,
+                                                VlessStreamRequest {
                                                     stream: reality_stream,
                                                     inbound_tag: inbound_tag.as_str(),
                                                     profile: profile.clone(),
                                                     transport,
                                                     fallback: fallback_config.as_ref(),
                                                     sni: None,
-                                                })
-                                                .await
+                                                },
+                                            )
+                                            .await
                                         }
                                         Err(error) => Err(error.into()),
                                     }
                                 }
                                 (None, None) => {
-                                    engine
-                                        .handle_vless_stream(VlessStreamRequest {
+                                    handle_vless_stream(
+                                        &engine,
+                                        VlessStreamRequest {
                                             stream,
                                             inbound_tag: inbound_tag.as_str(),
                                             profile: profile.clone(),
                                             transport,
                                             fallback: fallback_config.as_ref(),
                                             sni: None,
-                                        })
-                                        .await
+                                        },
+                                    )
+                                    .await
                                 }
                                 (Some(_), Some(_)) => Err(std::io::Error::new(
                                     std::io::ErrorKind::InvalidInput,

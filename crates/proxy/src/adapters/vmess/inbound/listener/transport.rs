@@ -8,6 +8,8 @@ use zero_config::{GrpcConfig, WebSocketConfig};
 use zero_core::{Session, SessionAuth};
 use zero_engine::EngineError;
 
+use super::mux::run_vmess_mux_session;
+use super::udp_session::run_vmess_udp_relay;
 use super::VmessInboundHandler;
 use crate::runtime::inbound_protocol::{serve_inbound, NoClientResponseInboundProtocol};
 use crate::runtime::Proxy;
@@ -48,15 +50,15 @@ where
         responder: vmess::udp::VmessInboundUdpResponder,
         auth: Option<SessionAuth>,
     ) -> Result<(), Self::Error> {
-        self.proxy
-            .run_vmess_udp_relay(
-                TcpRelayStream::new(stream),
-                session,
-                responder,
-                auth,
-                self.tag,
-            )
-            .await
+        run_vmess_udp_relay(
+            self.proxy,
+            TcpRelayStream::new(stream),
+            session,
+            responder,
+            auth,
+            self.tag,
+        )
+        .await
     }
 
     async fn dispatch_mux_stream(
@@ -64,9 +66,7 @@ where
         reader: tokio::io::ReadHalf<S>,
         mux_server: vmess::mux::VmessInboundMuxServer,
     ) -> Result<(), Self::Error> {
-        self.proxy
-            .run_vmess_mux_session(reader, mux_server, self.tag)
-            .await
+        run_vmess_mux_session(self.proxy, reader, mux_server, self.tag).await
     }
 }
 
