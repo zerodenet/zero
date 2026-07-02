@@ -318,7 +318,10 @@ fn mux_session_task_lifecycle_lives_in_runtime() {
         }
         assert!(
             content.contains("run_mux_session_loop")
-                && content.contains("MuxOpenedDispatcher for"),
+                && content.contains("struct OpenedDispatch")
+                && content.contains("MuxOpenedDispatcher for")
+                && !content.contains("struct VlessMuxOpenedDispatcher")
+                && !content.contains("struct VmessMuxOpenedDispatcher"),
             "{source} should keep only protocol opened-stream dispatch glue over the runtime MUX session loop"
         );
     }
@@ -1030,6 +1033,8 @@ fn vless_inbound_mux_frame_detail_lives_in_protocol_crate() {
         !inbound.contains("VlessInboundMuxAction")
             && protocol_mux.contains("VlessInboundMuxAction")
             && inbound.contains("impl<S> MuxOpenedDispatcher")
+            && inbound.contains("struct OpenedDispatch")
+            && !inbound.contains("struct VlessMuxOpenedDispatcher")
             && inbound.contains("dispatch_next_opened_route_with_handlers")
             && !inbound.contains(".next_opened_route(self.client)")
             && !inbound.contains(".next_opened_route_with_auth(self.client")
@@ -1130,6 +1135,8 @@ fn vless_inbound_mux_frame_detail_lives_in_protocol_crate() {
     }
     assert!(
         inbound.contains("impl<S> MuxOpenedDispatcher")
+            && inbound.contains("struct OpenedDispatch")
+            && !inbound.contains("struct VlessMuxOpenedDispatcher")
             && inbound.contains("dispatch_next_opened_route_with_handlers")
             && !inbound.contains(".next_opened_route(self.client)")
             && !inbound.contains(".next_opened_route_with_auth(self.client")
@@ -7442,6 +7449,8 @@ fn inbound_vmess_mux_task_models_do_not_live_in_proxy_model() {
             && protocol_mux.contains("accept_mux_session_from_tokio_writer(writer)")
             && root.contains("mux_server: vmess::mux::VmessInboundMuxServer")
             && root.contains("impl<R> MuxOpenedDispatcher")
+            && root.contains("struct OpenedDispatch")
+            && !root.contains("struct VmessMuxOpenedDispatcher")
             && root.contains("dispatch_next_opened_route_with_handlers")
             && !root.contains(".next_opened_route(self.reader)")
             && !root.contains(".read_opened_stream(self.reader)")
@@ -7863,6 +7872,8 @@ fn inbound_vless_mux_task_model_does_not_live_in_proxy_model() {
             && protocol_inbound.contains(".accept_mux_session_with_auth(&mut stream, mux_context, auth)")
             && !root.contains("VlessInboundMuxServer::from_context")
             && root.contains("impl<S> MuxOpenedDispatcher")
+            && root.contains("struct OpenedDispatch")
+            && !root.contains("struct VlessMuxOpenedDispatcher")
             && root.contains("dispatch_next_opened_route_with_handlers")
             && !root.contains(".next_opened_route(self.client)")
             && !root.contains(".next_opened_route_with_auth(self.client")

@@ -12,80 +12,6 @@ use crate::runtime::Proxy;
 
 use super::mux_udp::spawn_vmess_mux_udp_stream_task;
 
-struct VmessMuxOpenedDispatcher<'a, R> {
-    proxy: &'a Proxy,
-    mux_server: &'a mut vmess::mux::VmessInboundMuxServer,
-    reader: &'a mut R,
-    inbound_tag: &'a str,
-}
-
-impl<R> MuxOpenedDispatcher for VmessMuxOpenedDispatcher<'_, R>
-where
-    R: tokio::io::AsyncRead + Unpin,
-{
-    type Error = EngineError;
-
-    async fn dispatch_next(&mut self, tasks: &mut JoinSet<()>) -> Result<bool, Self::Error> {
-        let tasks = Mutex::new(Some(tasks));
-        let writer = self.mux_server.writer();
-        let proxy = self.proxy;
-        let inbound_tag = self.inbound_tag;
-        match self
-            .mux_server
-            .dispatch_next_opened_route_with_handlers(
-                self.reader,
-                |session_id, session, up_rx| {
-                    let tasks = tasks
-                        .lock()
-                        .expect("lock vmess mux tcp tasks")
-                        .take()
-                        .expect("single vmess mux tcp dispatch");
-                    let writer = writer.clone();
-                    let inbound_tag = inbound_tag.to_owned();
-                    async move {
-                        spawn_vmess_mux_tcp_stream_task(
-                            proxy,
-                            tasks,
-                            session_id,
-                            session,
-                            up_rx,
-                            writer,
-                            inbound_tag,
-                        );
-                        Ok::<(), EngineError>(())
-                    }
-                },
-                |session_id, up_rx, responder| {
-                    let tasks = tasks
-                        .lock()
-                        .expect("lock vmess mux udp tasks")
-                        .take()
-                        .expect("single vmess mux udp dispatch");
-                    let inbound_tag = inbound_tag.to_owned();
-                    async move {
-                        spawn_vmess_mux_udp_stream_task(
-                            proxy,
-                            tasks,
-                            session_id,
-                            up_rx,
-                            responder,
-                            inbound_tag,
-                        );
-                        Ok::<(), EngineError>(())
-                    }
-                },
-            )
-            .await
-        {
-            Ok(keep_running) => Ok(keep_running),
-            Err(error) => {
-                warn!(error = %error, "vmess mux frame read failed");
-                Ok(false)
-            }
-        }
-    }
-}
-
 pub(super) async fn run_vmess_mux_session<R>(
     proxy: &Proxy,
     mut reader: R,
@@ -95,8 +21,82 @@ pub(super) async fn run_vmess_mux_session<R>(
 where
     R: tokio::io::AsyncRead + Unpin,
 {
+    struct OpenedDispatch<'a, R> {
+        proxy: &'a Proxy,
+        mux_server: &'a mut vmess::mux::VmessInboundMuxServer,
+        reader: &'a mut R,
+        inbound_tag: &'a str,
+    }
+
+    impl<R> MuxOpenedDispatcher for OpenedDispatch<'_, R>
+    where
+        R: tokio::io::AsyncRead + Unpin,
+    {
+        type Error = EngineError;
+
+        async fn dispatch_next(&mut self, tasks: &mut JoinSet<()>) -> Result<bool, Self::Error> {
+            let tasks = Mutex::new(Some(tasks));
+            let writer = self.mux_server.writer();
+            let proxy = self.proxy;
+            let inbound_tag = self.inbound_tag;
+            match self
+                .mux_server
+                .dispatch_next_opened_route_with_handlers(
+                    self.reader,
+                    |session_id, session, up_rx| {
+                        let tasks = tasks
+                            .lock()
+                            .expect("lock vmess mux tcp tasks")
+                            .take()
+                            .expect("single vmess mux tcp dispatch");
+                        let writer = writer.clone();
+                        let inbound_tag = inbound_tag.to_owned();
+                        async move {
+                            spawn_vmess_mux_tcp_stream_task(
+                                proxy,
+                                tasks,
+                                session_id,
+                                session,
+                                up_rx,
+                                writer,
+                                inbound_tag,
+                            );
+                            Ok::<(), EngineError>(())
+                        }
+                    },
+                    |session_id, up_rx, responder| {
+                        let tasks = tasks
+                            .lock()
+                            .expect("lock vmess mux udp tasks")
+                            .take()
+                            .expect("single vmess mux udp dispatch");
+                        let inbound_tag = inbound_tag.to_owned();
+                        async move {
+                            spawn_vmess_mux_udp_stream_task(
+                                proxy,
+                                tasks,
+                                session_id,
+                                up_rx,
+                                responder,
+                                inbound_tag,
+                            );
+                            Ok::<(), EngineError>(())
+                        }
+                    },
+                )
+                .await
+            {
+                Ok(keep_running) => Ok(keep_running),
+                Err(error) => {
+                    warn!(error = %error, "vmess mux frame read failed");
+                    Ok(false)
+                }
+            }
+        }
+    }
+
     let mut mux_tasks: JoinSet<()> = JoinSet::new();
-    let mut dispatcher = VmessMuxOpenedDispatcher {
+    let mut dispatcher = OpenedDispatch {
         proxy,
         mux_server: &mut mux_server,
         reader: &mut reader,
