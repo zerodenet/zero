@@ -4033,7 +4033,8 @@ fn stream_udp_roots_delegate_flow_building() {
                 && !flow.contains("fn vless_udp_flow_config")
                 && !flow.contains("fn vmess_udp_flow_config")
                 && !flow.contains("ManagedUdpSend {")
-                && !flow.contains("ManagedUdpFlowResume::new"),
+                && !flow.contains("ManagedUdpFlowResume::new")
+                && !flow.contains("struct TrojanUdpFlowStart"),
             "{flow_path} should own stream UDP flow and relay-final-hop resume construction"
         );
     }
@@ -4386,7 +4387,7 @@ fn hysteria2_tcp_udp_connect_glue_lives_in_adapter_connector() {
 }
 
 #[test]
-fn trojan_tcp_connect_uses_request_model() {
+fn trojan_tcp_connect_uses_protocol_config() {
     let outbound = manifest_dir().join("src/outbound/trojan.rs");
     let adapter = read("src/adapters/trojan/tcp.rs");
     let protocol_outbound =
@@ -4410,6 +4411,9 @@ fn trojan_tcp_connect_uses_request_model() {
     assert!(
         adapter.contains("trojan::tcp_connect_config_from_config")
             && adapter.contains("config: trojan::TrojanTcpConnectConfig")
+            && !adapter.contains("struct TrojanTcpConnect")
+            && !adapter.contains("request: TrojanTcpConnect<'_>")
+            && adapter.contains("async fn connect_tcp(")
             && adapter.contains("config.tls_profile()")
             && adapter.contains("config.establish_tcp_tunnel(&mut metered, session)")
             && !adapter.contains("trojan::tcp_outbound_profile_from_config_password")
@@ -4497,7 +4501,7 @@ fn shadowsocks_tcp_connect_uses_request_model() {
 }
 
 #[test]
-fn vmess_tcp_connect_uses_request_model() {
+fn vmess_tcp_connect_uses_protocol_config() {
     let outbound = manifest_dir().join("src/outbound/vmess.rs");
     let adapter = read("src/adapters/vmess/tcp.rs");
     let protocol_outbound = fs::read_to_string(repo_root().join("protocols/vmess/src/outbound.rs"))
@@ -4541,6 +4545,9 @@ fn vmess_tcp_connect_uses_request_model() {
     assert!(
         adapter.contains("vmess::tcp_connect_config_from_config")
             && adapter.contains("config: vmess::VmessTcpConnectConfig")
+            && !adapter.contains("struct VmessTcpConnect")
+            && !adapter.contains("request: VmessTcpConnect<'_>")
+            && adapter.contains("async fn connect_tcp(")
             && adapter.contains("config.mux_pool_identity()")
             && !adapter.contains("config.mux_pool_identity(cipher)")
             && !adapter.contains("VmessMuxIdentity::from_parts")
@@ -4572,7 +4579,7 @@ fn vmess_tcp_connect_uses_request_model() {
 }
 
 #[test]
-fn vless_tcp_connect_uses_request_model() {
+fn vless_tcp_connect_uses_protocol_config() {
     let outbound = manifest_dir().join("src/outbound/vless.rs");
     let adapter = read("src/adapters/vless/tcp.rs");
     let protocol_outbound = fs::read_to_string(repo_root().join("protocols/vless/src/outbound.rs"))
@@ -4587,9 +4594,12 @@ fn vless_tcp_connect_uses_request_model() {
         "VLESS TCP connect should not need a too_many_arguments allowance"
     );
     assert!(
-        adapter.contains("struct VlessTcpConnect")
-            && adapter.contains("request: VlessTcpConnect<'_>"),
-        "VLESS adapter TCP module should own the request model"
+        !adapter.contains("struct VlessTcpConnect")
+            && !adapter.contains("request: VlessTcpConnect<'_>")
+            && adapter.contains("async fn connect_tcp(")
+            && adapter.contains("transport: crate::transport::VlessTransportOptions<'_>")
+            && adapter.contains("quic: Option<&zero_config::QuicConfig>"),
+        "VLESS adapter TCP module should use explicit proxy glue arguments plus transport-owned option types instead of a local request wrapper"
     );
     assert!(
         !adapter.contains("parse_uuid"),

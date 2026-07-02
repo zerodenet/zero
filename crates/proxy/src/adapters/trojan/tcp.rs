@@ -32,15 +32,7 @@ impl TrojanAdapter {
         };
         let config =
             trojan::tcp_connect_config_from_config(password, *sni, *insecure, *client_fingerprint);
-        match connect_tcp(TrojanTcpConnect {
-            proxy,
-            session,
-            server,
-            port: *port,
-            config,
-        })
-        .await
-        {
+        match connect_tcp(proxy, session, server, *port, config).await {
             Ok(upstream) => Ok(EstablishedTcpOutbound::proxied(
                 *tag, *server, *port, upstream,
             )),
@@ -75,23 +67,13 @@ impl TrojanAdapter {
     }
 }
 
-struct TrojanTcpConnect<'a> {
-    proxy: &'a Proxy,
-    session: &'a Session,
-    server: &'a str,
+async fn connect_tcp(
+    proxy: &Proxy,
+    session: &Session,
+    server: &str,
     port: u16,
     config: trojan::TrojanTcpConnectConfig,
-}
-
-async fn connect_tcp(request: TrojanTcpConnect<'_>) -> Result<TcpRelayStream, EngineError> {
-    let TrojanTcpConnect {
-        proxy,
-        session,
-        server,
-        port,
-        config,
-    } = request;
-
+) -> Result<TcpRelayStream, EngineError> {
     let upstream = proxy
         .protocols
         .direct_connector()

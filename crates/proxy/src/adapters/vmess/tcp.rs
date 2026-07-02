@@ -63,18 +63,13 @@ impl VmessAdapter {
                 upstream_endpoint: Some(((*server).to_string(), *port)),
             });
         }
-        match connect_tcp(VmessTcpConnect {
-            proxy,
-            session,
-            server,
-            port: *port,
-            config,
+        let transport = crate::transport::VmessTransportOptions {
             tls: *tls,
             ws: *ws,
             grpc: *grpc,
-        })
-        .await
-        {
+            source_dir: proxy.config.source_dir(),
+        };
+        match connect_tcp(proxy, session, server, *port, config, transport).await {
             Ok(upstream) => Ok(EstablishedTcpOutbound::proxied(
                 *tag, *server, *port, upstream,
             )),
@@ -102,29 +97,14 @@ impl VmessAdapter {
     }
 }
 
-struct VmessTcpConnect<'a> {
-    proxy: &'a Proxy,
-    session: &'a Session,
-    server: &'a str,
+async fn connect_tcp(
+    proxy: &Proxy,
+    session: &Session,
+    server: &str,
     port: u16,
     config: vmess::VmessTcpConnectConfig,
-    tls: Option<&'a zero_config::ClientTlsConfig>,
-    ws: Option<&'a zero_config::WebSocketConfig>,
-    grpc: Option<&'a zero_config::GrpcConfig>,
-}
-
-async fn connect_tcp(request: VmessTcpConnect<'_>) -> Result<TcpRelayStream, EngineError> {
-    let VmessTcpConnect {
-        proxy,
-        session,
-        server,
-        port,
-        config,
-        tls,
-        ws,
-        grpc,
-    } = request;
-
+    transport: crate::transport::VmessTransportOptions<'_>,
+) -> Result<TcpRelayStream, EngineError> {
     let socket = proxy
         .protocols
         .direct_connector()
@@ -134,12 +114,7 @@ async fn connect_tcp(request: VmessTcpConnect<'_>) -> Result<TcpRelayStream, Eng
     let stream = crate::transport::build_vmess_outbound_transport(
         crate::transport::VmessOutboundTransportRequest {
             socket,
-            options: crate::transport::VmessTransportOptions {
-                tls,
-                ws,
-                grpc,
-                source_dir: proxy.config.source_dir(),
-            },
+            options: transport,
             server,
             port,
         },

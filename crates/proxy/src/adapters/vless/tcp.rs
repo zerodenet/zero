@@ -68,25 +68,19 @@ impl VlessAdapter {
                 upstream_endpoint: Some(((*server).to_string(), *port)),
             });
         }
-        match connect_tcp(VlessTcpConnect {
-            proxy,
-            session,
-            server,
-            port: *port,
-            config,
-            mux_concurrency: *mux_concurrency,
-            mux_idle_timeout_secs: *mux_idle_timeout_secs,
+        let _ = mux_concurrency;
+        let _ = mux_idle_timeout_secs;
+        let transport = crate::transport::VlessTransportOptions {
             tls: *tls,
             reality: *reality,
             ws: *ws,
             grpc: *grpc,
             h2: *h2,
             http_upgrade: *http_upgrade,
-            quic: *quic,
             split_http: *split_http,
-        })
-        .await
-        {
+            source_dir: proxy.config.source_dir(),
+        };
+        match connect_tcp(proxy, session, server, *port, config, *quic, transport).await {
             Ok(upstream) => Ok(EstablishedTcpOutbound::proxied(
                 *tag, *server, *port, upstream,
             )),
@@ -115,46 +109,15 @@ impl VlessAdapter {
     }
 }
 
-struct VlessTcpConnect<'a> {
-    proxy: &'a Proxy,
-    session: &'a Session,
-    server: &'a str,
+async fn connect_tcp(
+    proxy: &Proxy,
+    session: &Session,
+    server: &str,
     port: u16,
     config: vless::VlessTcpConnectConfig,
-    mux_concurrency: Option<u32>,
-    mux_idle_timeout_secs: Option<u64>,
-    tls: Option<&'a zero_config::ClientTlsConfig>,
-    reality: Option<&'a zero_config::RealityConfig>,
-    ws: Option<&'a zero_config::WebSocketConfig>,
-    grpc: Option<&'a zero_config::GrpcConfig>,
-    h2: Option<&'a zero_config::H2Config>,
-    http_upgrade: Option<&'a zero_config::HttpUpgradeConfig>,
-    quic: Option<&'a zero_config::QuicConfig>,
-    split_http: Option<&'a zero_config::SplitHttpConfig>,
-}
-
-async fn connect_tcp(request: VlessTcpConnect<'_>) -> Result<TcpRelayStream, EngineError> {
-    let VlessTcpConnect {
-        proxy,
-        session,
-        server,
-        port,
-        config,
-        mux_concurrency,
-        mux_idle_timeout_secs,
-        tls,
-        reality,
-        ws,
-        grpc,
-        h2,
-        http_upgrade,
-        quic,
-        split_http,
-    } = request;
-
-    let _ = mux_concurrency;
-    let _ = mux_idle_timeout_secs;
-
+    quic: Option<&zero_config::QuicConfig>,
+    transport: crate::transport::VlessTransportOptions<'_>,
+) -> Result<TcpRelayStream, EngineError> {
     if let Some(quic) = quic {
         let server_name = quic.server_name.as_deref().unwrap_or(server);
         let quic_stream = crate::transport::connect_quic(server_name, port, quic.insecure).await?;
@@ -167,20 +130,10 @@ async fn connect_tcp(request: VlessTcpConnect<'_>) -> Result<TcpRelayStream, Eng
         .connect_host(server, port, proxy.resolver.as_ref())
         .await?;
 
-    let connector =
-        crate::transport::VlessTransportConnector::new(crate::transport::VlessTransportOptions {
-            tls,
-            reality,
-            ws,
-            grpc,
-            h2,
-            http_upgrade,
-            split_http,
-            source_dir: proxy.config.source_dir(),
-        });
+    let connector = crate::transport::VlessTransportConnector::new(transport);
     let stream = connector.connect(socket, server, port).await?;
 
-    let is_reality = reality.is_some();
+    let is_reality = transport.reality.is_some();
     let mut metered = crate::transport::MeteredStream::new(stream);
 
     if is_reality {

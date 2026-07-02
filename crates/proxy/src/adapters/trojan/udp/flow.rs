@@ -17,17 +17,7 @@ pub(super) async fn start(
     leaf: &ResolvedLeafOutbound<'_>,
     payload: &[u8],
 ) -> Result<FlowStartResult, FlowFailure> {
-    start_with_carrier(TrojanUdpFlowStart {
-        adapter,
-        dispatch,
-        proxy,
-        session,
-        carrier: None,
-        leaf,
-        payload,
-        relay_chain: false,
-    })
-    .await
+    start_with_carrier(adapter, dispatch, proxy, session, None, leaf, payload).await
 }
 
 pub(super) async fn start_relay_final_hop(
@@ -39,33 +29,28 @@ pub(super) async fn start_relay_final_hop(
     leaf: &ResolvedLeafOutbound<'_>,
     payload: &[u8],
 ) -> Result<FlowStartResult, FlowFailure> {
-    start_with_carrier(TrojanUdpFlowStart {
+    start_with_carrier(
         adapter,
         dispatch,
         proxy,
         session,
-        carrier: Some(carrier),
+        Some(carrier),
         leaf,
         payload,
-        relay_chain: true,
-    })
+    )
     .await
 }
 
-struct TrojanUdpFlowStart<'a> {
-    adapter: &'a TrojanAdapter,
-    dispatch: &'a mut UdpDispatch,
-    proxy: &'a Proxy,
-    session: &'a Session,
-    carrier: Option<crate::transport::RelayCarrier>,
-    leaf: &'a ResolvedLeafOutbound<'a>,
-    payload: &'a [u8],
-    relay_chain: bool,
-}
-
 async fn start_with_carrier(
-    request: TrojanUdpFlowStart<'_>,
+    adapter: &TrojanAdapter,
+    dispatch: &mut UdpDispatch,
+    proxy: &Proxy,
+    session: &Session,
+    carrier: Option<crate::transport::RelayCarrier>,
+    leaf: &ResolvedLeafOutbound<'_>,
+    payload: &[u8],
 ) -> Result<FlowStartResult, FlowFailure> {
+    let relay_chain = carrier.is_some();
     let ResolvedLeafOutbound::Trojan {
         tag,
         server,
@@ -74,30 +59,29 @@ async fn start_with_carrier(
         sni,
         insecure,
         client_fingerprint,
-    } = request.leaf
+    } = leaf
     else {
-        return Err(unreachable_udp_leaf(request.adapter.name(), request.leaf));
+        return Err(unreachable_udp_leaf(adapter.name(), leaf));
     };
     let resume = trojan::udp::udp_flow_resume_from_config(
         password,
         *sni,
         *insecure,
         *client_fingerprint,
-        request.relay_chain,
+        relay_chain,
     );
-    request
-        .dispatch
+    dispatch
         .start_tracked_managed_stream_packet(ManagedStreamPacketStart {
-            proxy: Some(request.proxy),
+            proxy: Some(proxy),
             tag,
-            session: request.session,
-            carrier: request.carrier,
+            session,
+            carrier,
             tls_server_name: None,
             server,
             port: *port,
             resume,
-            payload: request.payload,
-            relay_chain: request.relay_chain,
+            payload,
+            relay_chain,
         })
         .await
 }
