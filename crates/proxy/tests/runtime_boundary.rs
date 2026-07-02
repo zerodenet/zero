@@ -6690,8 +6690,8 @@ fn vless_vmess_udp_packet_models_do_not_expose_raw_fields() {
 fn protocol_udp_packet_models_do_not_expose_raw_fields() {
     let hysteria2_udp = fs::read_to_string(repo_root().join("protocols/hysteria2/src/udp.rs"))
         .expect("read protocols/hysteria2/src/udp.rs");
-    let trojan_outbound = fs::read_to_string(repo_root().join("protocols/trojan/src/outbound.rs"))
-        .expect("read protocols/trojan/src/outbound.rs");
+    let trojan_udp = fs::read_to_string(repo_root().join("protocols/trojan/src/udp.rs"))
+        .expect("read protocols/trojan/src/udp.rs");
     let shadowsocks_outbound =
         fs::read_to_string(repo_root().join("protocols/shadowsocks/src/outbound.rs"))
             .expect("read protocols/shadowsocks/src/outbound.rs");
@@ -6723,8 +6723,8 @@ fn protocol_udp_packet_models_do_not_expose_raw_fields() {
             ][..],
         ),
         (
-            "protocols/trojan/src/outbound.rs",
-            trojan_outbound.as_str(),
+            "protocols/trojan/src/udp.rs",
+            trojan_udp.as_str(),
             "TrojanUdpPacket",
             &[
                 "pub target: Address",
@@ -8087,13 +8087,6 @@ fn trojan_inbound_udp_packet_framing_stays_in_protocol_crate() {
     let stream_udp = read("src/runtime/stream_udp.rs");
     let packet_session_udp = read("src/runtime/packet_session_udp.rs");
     let inbound = read("src/adapters/trojan/inbound/listener/udp.rs");
-    let protocol_outbound = manifest_dir()
-        .parent()
-        .and_then(std::path::Path::parent)
-        .expect("workspace root")
-        .join("protocols/trojan/src/outbound.rs");
-    let protocol_outbound =
-        fs::read_to_string(protocol_outbound).expect("read trojan protocol outbound source");
     let protocol_udp = manifest_dir()
         .parent()
         .and_then(std::path::Path::parent)
@@ -8216,9 +8209,9 @@ fn trojan_inbound_udp_packet_framing_stays_in_protocol_crate() {
             && !protocol_udp.contains("fn write_response_to_ip")
             && !protocol_udp.contains("fn write_response_to_socket_addr_tokio")
             && protocol_udp.contains(") -> Result<usize, Error>")
-            && protocol_outbound.contains("read_udp_flow_packet")
-            && !protocol_outbound.contains("pub async fn read_udp_flow_packet")
-            && protocol_outbound.contains("write_udp_flow_packet"),
+            && protocol_udp.contains("read_udp_flow_packet")
+            && !protocol_udp.contains("pub async fn read_udp_flow_packet")
+            && protocol_udp.contains("write_udp_flow_packet"),
         "Trojan inbound UDP packet framing should be owned by protocols/trojan udp codec"
     );
     for private_helper in [
@@ -8228,14 +8221,14 @@ fn trojan_inbound_udp_packet_framing_stays_in_protocol_crate() {
         "write_udp_flow_packet",
     ] {
         assert!(
-            protocol_outbound.contains(&format!("async fn {private_helper}"))
-                && !protocol_outbound.contains(&format!("pub async fn {private_helper}"))
+            protocol_udp.contains(&format!("async fn {private_helper}"))
+                && !protocol_udp.contains(&format!("pub async fn {private_helper}"))
                 && !protocol_lib.contains(private_helper),
-            "Trojan UDP helper `{private_helper}` should stay private to protocols/trojan::outbound and should not be re-exported"
+            "Trojan UDP helper `{private_helper}` should stay private to protocols/trojan::udp and should not be re-exported"
         );
     }
     assert!(
-        !protocol_outbound.contains("fn udp_flow_packet") && !protocol_lib.contains("udp_flow_packet"),
+        !protocol_udp.contains("fn udp_flow_packet") && !protocol_lib.contains("udp_flow_packet"),
         "Trojan UDP flow packet constructor helper should be removed from the public protocol surface"
     );
     for private_root_item in [
@@ -12373,9 +12366,8 @@ fn trojan_udp_socket_wrappers_stay_in_proxy_stream_glue() {
     let transport =
         fs::read_to_string(repo_root().join("crates/transport/src/trojan_transport.rs"))
             .expect("read zero-transport trojan_transport source");
-    let protocol_outbound =
-        fs::read_to_string(repo_root().join("protocols/trojan/src/outbound.rs"))
-            .expect("read trojan protocol outbound source");
+    let protocol_udp = fs::read_to_string(repo_root().join("protocols/trojan/src/udp.rs"))
+        .expect("read trojan protocol udp source");
 
     for forbidden in ["struct ReadOnlySocket", "struct WriteOnlySocket"] {
         assert!(
@@ -12388,10 +12380,10 @@ fn trojan_udp_socket_wrappers_stay_in_proxy_stream_glue() {
         "Trojan UDP stream half AsyncSocket adapters should not live in a separate proxy socket module"
     );
     assert!(
-        protocol_outbound.contains("struct ReadOnlySocket")
-            && protocol_outbound.contains("struct WriteOnlySocket")
-            && protocol_outbound.contains("impl<S> AsyncSocket for ReadOnlySocket")
-            && protocol_outbound.contains("impl<S> AsyncSocket for WriteOnlySocket")
+        protocol_udp.contains("struct ReadOnlySocket")
+            && protocol_udp.contains("struct WriteOnlySocket")
+            && protocol_udp.contains("impl<S> AsyncSocket for ReadOnlySocket")
+            && protocol_udp.contains("impl<S> AsyncSocket for WriteOnlySocket")
             && !transport.contains("struct ReadOnlySocket")
             && !transport.contains("struct WriteOnlySocket")
             && !transport.contains("impl AsyncSocket for ReadOnlySocket")
@@ -12517,10 +12509,9 @@ fn trojan_udp_flow_resume_is_protocol_owned() {
             .expect("read zero-transport trojan_transport source");
     let protocol_lib = fs::read_to_string(repo_root().join("protocols/trojan/src/lib.rs"))
         .expect("read trojan protocol lib source");
-    let protocol_outbound =
-        fs::read_to_string(repo_root().join("protocols/trojan/src/outbound.rs"))
-            .expect("read trojan protocol outbound source");
-    let connector_flow_impl = impl_block(&protocol_outbound, "TrojanUdpConnectorFlow");
+    let protocol_udp = fs::read_to_string(repo_root().join("protocols/trojan/src/udp.rs"))
+        .expect("read trojan protocol udp source");
+    let connector_flow_impl = impl_block(&protocol_udp, "TrojanUdpConnectorFlow");
 
     assert!(
         !adapter.contains("TrojanUdpFlowResume::new")
@@ -12530,43 +12521,43 @@ fn trojan_udp_flow_resume_is_protocol_owned() {
             && adapter_flow.contains("trojan::udp::udp_flow_resume_from_config")
             && !adapter_flow.contains("TrojanUdpFlowConfig::new")
             && !adapter_flow.contains(".flow_resume(request.relay_chain)")
-            && protocol_outbound.contains("struct TrojanUdpFlowResume")
-            && protocol_outbound.contains("struct TrojanUdpFlowConfig")
-            && protocol_outbound.contains("pub fn flow_resume(&self, relay_chain: bool)")
-            && protocol_outbound.contains("pub fn udp_flow_resume_from_config(")
-            && protocol_outbound.contains("pub struct TrojanUdpConnectorFlow")
+            && protocol_udp.contains("struct TrojanUdpFlowResume")
+            && protocol_udp.contains("struct TrojanUdpFlowConfig")
+            && protocol_udp.contains("pub fn flow_resume(&self, relay_chain: bool)")
+            && protocol_udp.contains("pub fn udp_flow_resume_from_config(")
+            && protocol_udp.contains("pub struct TrojanUdpConnectorFlow")
             && !connector_flow_impl.contains("pub fn cache_key(&self)")
             && !connector_flow_impl.contains("pub fn requires_relay_upstream(&self)")
             && connector_flow_impl.contains("pub fn into_parts(self) -> (String, bool)")
-            && protocol_outbound.contains("pub struct TrojanUdpTlsProfileSpec")
-            && protocol_outbound.contains("pub fn connector_flow(")
-            && !protocol_outbound.contains("pub struct TrojanUdpFlowSpec")
-            && !protocol_outbound.contains("pub struct TrojanUdpFlowRequirement")
-            && !protocol_outbound.contains("pub fn flow_requirement(&self)")
-            && protocol_outbound.contains("pub fn tls_profile_spec(&self)")
-            && protocol_outbound.contains("fn peer_config(&self)")
-            && !protocol_outbound.contains("pub fn peer_config(&self)")
-            && protocol_outbound.contains("fn flow_key(&self")
-            && !protocol_outbound.contains("pub fn flow_key(&self")
-            && protocol_outbound.contains("fn cache_key(&self")
-            && !protocol_outbound
+            && protocol_udp.contains("pub struct TrojanUdpTlsProfileSpec")
+            && protocol_udp.contains("pub fn connector_flow(")
+            && !protocol_udp.contains("pub struct TrojanUdpFlowSpec")
+            && !protocol_udp.contains("pub struct TrojanUdpFlowRequirement")
+            && !protocol_udp.contains("pub fn flow_requirement(&self)")
+            && protocol_udp.contains("pub fn tls_profile_spec(&self)")
+            && protocol_udp.contains("fn peer_config(&self)")
+            && !protocol_udp.contains("pub fn peer_config(&self)")
+            && protocol_udp.contains("fn flow_key(&self")
+            && !protocol_udp.contains("pub fn flow_key(&self")
+            && protocol_udp.contains("fn cache_key(&self")
+            && !protocol_udp
                 .contains("pub fn cache_key(&self, server: &str, port: u16, session_id: u64)")
-            && protocol_outbound.contains("pub fn flow_cache_key(&self")
-            && protocol_outbound.contains("enum TrojanUdpFlowKey")
-            && !protocol_outbound.contains("pub enum TrojanUdpFlowKey")
-            && protocol_outbound.contains("enum TrojanUdpCacheKey")
-            && !protocol_outbound.contains("pub enum TrojanUdpCacheKey")
-            && protocol_outbound.contains("pub struct TrojanUdpFlowStore")
-            && protocol_outbound.contains("struct TrojanUdpPeerConfig")
-            && !protocol_outbound.contains("pub struct TrojanUdpPeerConfig")
-            && protocol_outbound.contains("pub struct TrojanUdpTlsProfile")
-            && protocol_outbound.contains("pub fn tls_profile(&self")
-            && protocol_outbound.contains("pub async fn establish_udp_tunnel")
-            && protocol_outbound.contains("struct TrojanUdpLeafKey")
-            && !protocol_outbound.contains("pub struct TrojanUdpLeafKey")
-            && protocol_outbound.contains("pub fn client_fingerprint(&self) -> Option<&str>")
-            && protocol_outbound.contains("pub fn flow_requires_relay_upstream(&self) -> bool")
-            && !protocol_outbound.contains("pub fn relay_chain(&self) -> bool"),
+            && protocol_udp.contains("pub fn flow_cache_key(&self")
+            && protocol_udp.contains("enum TrojanUdpFlowKey")
+            && !protocol_udp.contains("pub enum TrojanUdpFlowKey")
+            && protocol_udp.contains("enum TrojanUdpCacheKey")
+            && !protocol_udp.contains("pub enum TrojanUdpCacheKey")
+            && protocol_udp.contains("pub struct TrojanUdpFlowStore")
+            && protocol_udp.contains("struct TrojanUdpPeerConfig")
+            && !protocol_udp.contains("pub struct TrojanUdpPeerConfig")
+            && protocol_udp.contains("pub struct TrojanUdpTlsProfile")
+            && protocol_udp.contains("pub fn tls_profile(&self")
+            && protocol_udp.contains("pub async fn establish_udp_tunnel")
+            && protocol_udp.contains("struct TrojanUdpLeafKey")
+            && !protocol_udp.contains("pub struct TrojanUdpLeafKey")
+            && protocol_udp.contains("pub fn client_fingerprint(&self) -> Option<&str>")
+            && protocol_udp.contains("pub fn flow_requires_relay_upstream(&self) -> bool")
+            && !protocol_udp.contains("pub fn relay_chain(&self) -> bool"),
         "Trojan adapter should build an opaque protocol-owned UDP flow resume descriptor"
     );
     for forbidden in [
@@ -12673,8 +12664,8 @@ fn trojan_udp_flow_resume_is_protocol_owned() {
             && connector.contains("trojan::udp::establish_udp_flow_with_resume")
             && !managed.contains("trojan::udp::TrojanUdpFlowIo")
             && !managed.contains(".establish_with_resume(")
-            && protocol_outbound.contains("pub async fn establish_with_resume")
-            && protocol_outbound.contains("pub async fn establish_udp_flow_with_resume")
+            && protocol_udp.contains("pub async fn establish_with_resume")
+            && protocol_udp.contains("pub async fn establish_udp_flow_with_resume")
             && !transport.contains("trojan::"),
         "Trojan UDP manager should consume protocol-owned cache key and TLS profile through neutral endpoints without putting protocol calls in zero-transport"
     );
@@ -12689,9 +12680,8 @@ fn trojan_udp_packet_stream_tasks_live_outside_manager() {
     let transport =
         fs::read_to_string(repo_root().join("crates/transport/src/trojan_transport.rs"))
             .expect("read zero-transport trojan_transport source");
-    let protocol_outbound =
-        fs::read_to_string(repo_root().join("protocols/trojan/src/outbound.rs"))
-            .expect("read trojan protocol outbound source");
+    let protocol_udp = fs::read_to_string(repo_root().join("protocols/trojan/src/udp.rs"))
+        .expect("read trojan protocol udp source");
 
     let forbidden = "MeteredStream";
     assert!(
@@ -12759,22 +12749,22 @@ fn trojan_udp_packet_stream_tasks_live_outside_manager() {
             && !managed.contains("trojan::udp::TrojanUdpFlowResponses")
             && !managed.contains("broadcast::Sender<UdpFlowPacket>")
             && !managed.contains("mpsc::Sender<UdpFlowPacket>")
-            && protocol_outbound.contains("pub fn spawn_udp_flow")
-            && protocol_outbound.contains("pub async fn establish_udp_flow_with_resume")
-            && protocol_outbound.contains("async fn read_udp_flow_packet")
-            && !protocol_outbound.contains("pub async fn read_udp_flow_packet")
-            && protocol_outbound.contains("async fn write_udp_flow_packet")
-            && !protocol_outbound.contains("pub async fn write_udp_flow_packet")
-            && protocol_outbound.contains("struct TrojanUdpFlowSender")
-            && !protocol_outbound.contains("pub struct TrojanUdpFlowSender")
-            && protocol_outbound.contains("pub struct TrojanUdpFlowConnection")
-            && protocol_outbound.contains("pub struct TrojanUdpFlowSession")
-            && protocol_outbound.contains("pub type TrojanUdpFlowResponseReceiver")
-            && protocol_outbound.contains("type TrojanUdpFlowResponses")
-            && !protocol_outbound.contains("pub type TrojanUdpFlowResponses")
-            && protocol_outbound.contains("tokio::spawn")
-            && protocol_outbound.contains("mpsc::channel::<UdpFlowPacket>")
-            && protocol_outbound.contains("broadcast::channel::<UdpFlowPacket>")
+            && protocol_udp.contains("pub fn spawn_udp_flow")
+            && protocol_udp.contains("pub async fn establish_udp_flow_with_resume")
+            && protocol_udp.contains("async fn read_udp_flow_packet")
+            && !protocol_udp.contains("pub async fn read_udp_flow_packet")
+            && protocol_udp.contains("async fn write_udp_flow_packet")
+            && !protocol_udp.contains("pub async fn write_udp_flow_packet")
+            && protocol_udp.contains("struct TrojanUdpFlowSender")
+            && !protocol_udp.contains("pub struct TrojanUdpFlowSender")
+            && protocol_udp.contains("pub struct TrojanUdpFlowConnection")
+            && protocol_udp.contains("pub struct TrojanUdpFlowSession")
+            && protocol_udp.contains("pub type TrojanUdpFlowResponseReceiver")
+            && protocol_udp.contains("type TrojanUdpFlowResponses")
+            && !protocol_udp.contains("pub type TrojanUdpFlowResponses")
+            && protocol_udp.contains("tokio::spawn")
+            && protocol_udp.contains("mpsc::channel::<UdpFlowPacket>")
+            && protocol_udp.contains("broadcast::channel::<UdpFlowPacket>")
             && !managed.contains(".write_stream_packet")
             && !managed.contains(".read_stream_packet")
             && !managed.contains(".read_packet(")
@@ -13016,9 +13006,8 @@ fn trojan_udp_managed_connector_is_thin_protocol_glue() {
     let transport =
         fs::read_to_string(repo_root().join("crates/transport/src/trojan_transport.rs"))
             .expect("read zero-transport trojan_transport source");
-    let protocol_outbound =
-        fs::read_to_string(repo_root().join("protocols/trojan/src/outbound.rs"))
-            .expect("read trojan protocol outbound source");
+    let protocol_udp = fs::read_to_string(repo_root().join("protocols/trojan/src/udp.rs"))
+        .expect("read trojan protocol udp source");
 
     for removed in [
         "src/adapters/trojan/udp/manager.rs",
@@ -13096,15 +13085,15 @@ fn trojan_udp_managed_connector_is_thin_protocol_glue() {
     );
 
     assert!(
-        !protocol_outbound.contains("pub fn udp_flow_packet")
-            && !protocol_outbound.contains("fn udp_flow_packet")
-            && protocol_outbound.contains("pub async fn read_flow_packet")
-            && protocol_outbound.contains("pub async fn write_flow_packet")
-            && protocol_outbound.contains("pub fn spawn_udp_flow")
-            && protocol_outbound.contains("pub async fn establish_udp_flow_with_resume")
-            && protocol_outbound.contains("pub struct TrojanUdpFlowConnection")
-            && protocol_outbound.contains("pub type TrojanUdpFlowResponseReceiver")
-            && !protocol_outbound.contains("pub async fn open_udp_flow")
+        !protocol_udp.contains("pub fn udp_flow_packet")
+            && !protocol_udp.contains("fn udp_flow_packet")
+            && protocol_udp.contains("pub async fn read_flow_packet")
+            && protocol_udp.contains("pub async fn write_flow_packet")
+            && protocol_udp.contains("pub fn spawn_udp_flow")
+            && protocol_udp.contains("pub async fn establish_udp_flow_with_resume")
+            && protocol_udp.contains("pub struct TrojanUdpFlowConnection")
+            && protocol_udp.contains("pub type TrojanUdpFlowResponseReceiver")
+            && !protocol_udp.contains("pub async fn open_udp_flow")
             && !transport.contains("mpsc::Sender<UdpFlowPacket>")
             && !transport.contains("trojan::udp_flow_packet")
             && !transport.contains("trojan::udp::TrojanUdpFlowIo"),
@@ -14543,8 +14532,8 @@ fn udp_build_traits_consume_protocol_parts() {
             .expect("read shadowsocks protocol outbound source");
     let hysteria2_protocol = fs::read_to_string(repo_root().join("protocols/hysteria2/src/udp.rs"))
         .expect("read hysteria2 protocol udp source");
-    let trojan_protocol = fs::read_to_string(repo_root().join("protocols/trojan/src/outbound.rs"))
-        .expect("read trojan protocol outbound source");
+    let trojan_protocol = fs::read_to_string(repo_root().join("protocols/trojan/src/udp.rs"))
+        .expect("read trojan protocol udp source");
     let mieru_protocol = read_repo_module_tree("protocols/mieru/src/udp.rs");
     let socks5_descriptor_impl = impl_block(&socks5_udp, "Socks5UdpPacketPathCarrierDescriptor");
     let socks5_build_impl = impl_block(&socks5_udp, "Socks5UdpPacketPathCarrierBuild");
