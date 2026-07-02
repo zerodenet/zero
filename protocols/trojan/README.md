@@ -34,8 +34,9 @@ Trojan 是一种基于 TLS 的代理协议，通过将代理流量伪装为 HTTP
 ```
 src/lib.rs       — crate root, re-exports
 src/inbound.rs   — TrojanInbound (TLS accept, auth, route)
-src/outbound.rs  — TrojanOutbound (TLS connect, send header, relay)
-src/shared.rs    — shared: UDP frame, request/response format
+src/outbound.rs  — TrojanOutbound TCP request/header path
+src/shared.rs    — shared: request/response format and framing helpers
+src/udp.rs       — Trojan UDP request, framing, flow, responder state
 ```
 
 ## 参考

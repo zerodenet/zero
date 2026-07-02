@@ -11,7 +11,9 @@ use zero_core::{MuxUdpDecodeFailure, MuxUdpResponder, StreamUdpResponder};
 use zero_traits::{AsyncSocket, UdpPacketFraming, UdpPacketTunnelProtocol};
 
 use crate::outbound::VlessOutbound;
-use crate::shared::{parse_uuid, write_address, ATYP_DOMAIN, ATYP_IPV4, ATYP_IPV6};
+use crate::shared::{
+    parse_uuid, read_response, write_address, ATYP_DOMAIN, ATYP_IPV4, ATYP_IPV6, CMD_UDP,
+};
 
 /// Target parameters for VLESS UDP packet tunnel over a connected stream.
 #[derive(Debug, Clone, Copy)]
@@ -453,9 +455,31 @@ impl<'a> UdpPacketTunnelProtocol<VlessUdpPacketTunnelTarget<'a>> for VlessOutbou
     where
         S: AsyncSocket,
     {
-        self.establish_udp_packet_tunnel(stream, target.session, target.id)
-            .await
+        establish_udp_packet_tunnel(stream, target.session, target.id).await
     }
+}
+
+fn build_udp_request(session: &Session, id: &[u8; 16]) -> Result<Vec<u8>, Error> {
+    crate::shared::build_request(session, id, CMD_UDP)
+}
+
+pub async fn send_udp_request<S>(
+    stream: &mut S,
+    session: &Session,
+    id: &[u8; 16],
+) -> Result<(), Error>
+where
+    S: AsyncSocket,
+{
+    if session.port == 0 {
+        return Err(Error::Config("target port is required"));
+    }
+
+    let request = build_udp_request(session, id)?;
+    stream
+        .write_all(&request)
+        .await
+        .map_err(|_| Error::Io("failed to write VLESS UDP request"))
 }
 
 pub async fn establish_udp_packet_tunnel<S>(
@@ -466,9 +490,8 @@ pub async fn establish_udp_packet_tunnel<S>(
 where
     S: AsyncSocket,
 {
-    VlessOutbound
-        .establish_udp_packet_tunnel(stream, session, id)
-        .await
+    send_udp_request(stream, session, id).await?;
+    read_response(stream).await
 }
 
 /// One UDP datagram to encode for a VLESS UDP packet tunnel.

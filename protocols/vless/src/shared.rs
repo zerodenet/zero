@@ -2,7 +2,7 @@ use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
 
-use zero_core::{Address, Error};
+use zero_core::{Address, Error, Session};
 use zero_traits::AsyncSocket;
 
 pub const VLESS_VERSION: u8 = 0x00;
@@ -113,6 +113,34 @@ pub(crate) fn write_address(buf: &mut Vec<u8>, address: &Address) -> Result<(), 
     }
 
     Ok(())
+}
+
+pub(crate) fn build_request(
+    session: &Session,
+    id: &[u8; 16],
+    command: u8,
+) -> Result<Vec<u8>, Error> {
+    let mut request = Vec::with_capacity(24);
+    request.push(VLESS_VERSION);
+    request.extend_from_slice(id);
+    request.push(0x00);
+    request.push(command);
+    request.extend_from_slice(&session.port.to_be_bytes());
+    write_address(&mut request, &session.target)?;
+    Ok(request)
+}
+
+pub(crate) async fn read_response<S>(stream: &mut S) -> Result<(), Error>
+where
+    S: AsyncSocket,
+{
+    let mut version = [0_u8; 1];
+    read_exact(stream, &mut version).await?;
+    if version[0] != VLESS_VERSION {
+        return Err(Error::Protocol("unsupported VLESS response version"));
+    }
+
+    read_addon(stream).await
 }
 
 pub fn parse_uuid(input: &str) -> Result<[u8; 16], Error> {

@@ -8,7 +8,7 @@ use zero_traits::{AsyncSocket, TcpTunnelProtocol};
 #[cfg(feature = "reality")]
 use crate::flow::flow_build_request;
 use crate::mux::MuxClient;
-use crate::shared::{parse_uuid, read_addon, read_exact, write_address, CMD_MUX, VLESS_VERSION};
+use crate::shared::{parse_uuid, read_response, write_address, CMD_MUX, VLESS_VERSION};
 
 #[derive(Debug, Default, Clone, Copy)]
 pub struct VlessOutbound;
@@ -87,39 +87,6 @@ impl VlessOutbound {
             .write_all(&request)
             .await
             .map_err(|_| Error::Io("failed to write VLESS outbound request"))
-    }
-
-    pub async fn send_udp_request<S>(
-        &self,
-        stream: &mut S,
-        session: &Session,
-        id: &[u8; 16],
-    ) -> Result<(), Error>
-    where
-        S: AsyncSocket,
-    {
-        if session.port == 0 {
-            return Err(Error::Config("target port is required"));
-        }
-
-        let request = build_udp_request(session, id)?;
-        stream
-            .write_all(&request)
-            .await
-            .map_err(|_| Error::Io("failed to write VLESS UDP request"))
-    }
-
-    pub async fn establish_udp_packet_tunnel<S>(
-        &self,
-        stream: &mut S,
-        session: &Session,
-        id: &[u8; 16],
-    ) -> Result<(), Error>
-    where
-        S: AsyncSocket,
-    {
-        self.send_udp_request(stream, session, id).await?;
-        read_response(stream).await
     }
 
     /// Send VLESS MUX header and read server response.
@@ -314,18 +281,6 @@ fn build_tcp_request(session: &Session, id: &[u8; 16]) -> Result<Vec<u8>, Error>
     Ok(request)
 }
 
-fn build_udp_request(session: &Session, id: &[u8; 16]) -> Result<Vec<u8>, Error> {
-    let mut request = Vec::with_capacity(24);
-    request.push(VLESS_VERSION);
-    request.extend_from_slice(id);
-    request.push(0x00);
-    request.push(crate::shared::CMD_UDP);
-    request.extend_from_slice(&session.port.to_be_bytes());
-    write_address(&mut request, &session.target)?;
-
-    Ok(request)
-}
-
 fn build_mux_request(id: &[u8; 16]) -> Result<Vec<u8>, Error> {
     let mut request = Vec::with_capacity(24);
     request.push(VLESS_VERSION);
@@ -361,17 +316,4 @@ fn build_tcp_request_with_flow(
     request.extend_from_slice(&payload);
 
     Ok(request)
-}
-
-async fn read_response<S>(stream: &mut S) -> Result<(), Error>
-where
-    S: AsyncSocket,
-{
-    let mut version = [0_u8; 1];
-    read_exact(stream, &mut version).await?;
-    if version[0] != VLESS_VERSION {
-        return Err(Error::Protocol("unsupported VLESS response version"));
-    }
-
-    read_addon(stream).await
 }

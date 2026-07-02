@@ -6054,12 +6054,18 @@ fn vless_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
             && !protocol_outbound.contains("pub fn encode_initial_flow_packet")
             && !protocol_outbound.contains("pub fn mux_initial_flow_packet")
             && !protocol_outbound.contains("pub fn mux_initial_flow_packet")
+            && !protocol_outbound.contains("pub async fn send_udp_request")
+            && !protocol_outbound.contains("fn build_udp_request")
+            && !protocol_outbound.contains("pub async fn establish_udp_packet_tunnel")
             && !protocol_outbound.contains("pub struct VlessUdpFlowHandle")
             && !protocol_outbound.contains("pub struct VlessUdpFlowConnection")
             && !protocol_outbound.contains("pub struct VlessUdpFlowSession")
             && !protocol_outbound.contains("pub struct VlessInitialUdpFlowPacket")
             && protocol_shared.contains("pub async fn establish_udp_flow_with_initial_packet")
             && protocol_shared.contains("pub async fn establish_flow_with_initial_packet")
+            && protocol_shared.contains("pub async fn send_udp_request")
+            && protocol_shared.contains("fn build_udp_request")
+            && protocol_shared.contains("pub async fn establish_udp_packet_tunnel")
             && protocol_shared.contains("pub fn encode_initial_flow_packet")
             && protocol_shared.contains("pub fn mux_initial_flow_packet")
             && protocol_shared.contains("pub fn mux_open_identity")
@@ -12712,6 +12718,9 @@ fn trojan_udp_packet_stream_tasks_live_outside_manager() {
             .expect("read zero-transport trojan_transport source");
     let protocol_udp = fs::read_to_string(repo_root().join("protocols/trojan/src/udp.rs"))
         .expect("read trojan protocol udp source");
+    let protocol_outbound =
+        fs::read_to_string(repo_root().join("protocols/trojan/src/outbound.rs"))
+            .expect("read trojan protocol outbound source");
 
     let forbidden = "MeteredStream";
     assert!(
@@ -12795,6 +12804,9 @@ fn trojan_udp_packet_stream_tasks_live_outside_manager() {
             && protocol_udp.contains("tokio::spawn")
             && protocol_udp.contains("mpsc::channel::<UdpFlowPacket>")
             && protocol_udp.contains("broadcast::channel::<UdpFlowPacket>")
+            && protocol_udp.contains("pub fn build_udp_request")
+            && !protocol_outbound.contains("pub fn build_udp_request")
+            && protocol_outbound.contains("fn build_tcp_request")
             && !managed.contains(".write_stream_packet")
             && !managed.contains(".read_stream_packet")
             && !managed.contains(".read_packet(")

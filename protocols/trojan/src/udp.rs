@@ -14,8 +14,6 @@ use zero_traits::{AsyncSocket, UdpPacketStreamFraming, UdpPacketTunnelProtocol};
 
 use crate::outbound::TrojanOutbound;
 
-pub use crate::outbound::build_udp_request;
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TrojanInboundUdpRequest {
     target: Address,
@@ -350,6 +348,10 @@ impl<'a> UdpPacketTunnelProtocol<TrojanUdpPacketTunnelTarget<'a>> for TrojanOutb
             .await
             .map_err(|_| Error::Io("trojan: write udp request failed"))
     }
+}
+
+pub fn build_udp_request(password: &str, addr: &Address, port: u16) -> Result<Vec<u8>, Error> {
+    crate::shared::build_request(password, addr, port, crate::shared::CMD_UDP)
 }
 
 /// One Trojan UDP packet carried over a connected stream.

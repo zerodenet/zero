@@ -201,6 +201,57 @@ pub(crate) fn parse_udp_packet_body(body: &[u8]) -> Result<(Address, u16, Vec<u8
     Ok((addr, port, payload))
 }
 
+#[cfg(feature = "crypto")]
+pub(crate) fn build_request(
+    password: &str,
+    addr: &Address,
+    port: u16,
+    cmd: u8,
+) -> Result<Vec<u8>, Error> {
+    let mut request = Vec::new();
+
+    use sha2::{Digest, Sha224};
+    let digest = Sha224::digest(password.as_bytes());
+    request.extend_from_slice(hex::encode(&digest).as_bytes());
+
+    request.extend_from_slice(CRLF);
+    request.push(cmd);
+
+    match addr {
+        Address::Ipv4(bytes) => {
+            request.push(ATYP_IPV4);
+            request.extend_from_slice(bytes);
+        }
+        Address::Ipv6(bytes) => {
+            request.push(ATYP_IPV6);
+            request.extend_from_slice(bytes);
+        }
+        Address::Domain(domain) => {
+            let bytes = domain.as_bytes();
+            if bytes.is_empty() || bytes.len() > 255 {
+                return Err(Error::Protocol("trojan: domain too long"));
+            }
+            request.push(ATYP_DOMAIN);
+            request.push(bytes.len() as u8);
+            request.extend_from_slice(bytes);
+        }
+    }
+
+    request.extend_from_slice(&port.to_be_bytes());
+    request.extend_from_slice(CRLF);
+    Ok(request)
+}
+
+#[cfg(not(feature = "crypto"))]
+pub(crate) fn build_request(
+    _password: &str,
+    _addr: &Address,
+    _port: u16,
+    _cmd: u8,
+) -> Result<Vec<u8>, Error> {
+    Err(Error::Unsupported("trojan: crypto feature not enabled"))
+}
+
 /// Write command byte + address + port + CRLF.
 pub async fn write_request<S: AsyncSocket>(
     stream: &mut S,

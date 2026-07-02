@@ -93,10 +93,11 @@ Xray 支持 QUIC 0-RTT 握手加速，当前使用标准握手。
 protocols/vless/src/
 ├── lib.rs            # crate root, re-exports
 ├── inbound.rs        # VlessInbound: accept, auth, session dispatch
-├── outbound.rs       # VlessOutbound: connect, send request, relay
+├── outbound.rs       # VlessOutbound: TCP request and MUX handshake
 ├── flow.rs           # Vision flow (AES-128-GCM encrypt/decrypt)
 ├── mux.rs            # MUX frame, client, server
-├── shared.rs         # common: frame parsing, address, UUID, UDP packet v1/v2
+├── shared.rs         # common: frame parsing, address, UUID, shared request helpers
+├── udp.rs            # VLESS UDP tunnel, packet framing, flow/session state
 ├── mux_crypto.rs     # MUX per-stream AES-128-GCM crypto
 ├── mux_pool.rs       # MUX connection pool
 ├── metadata.rs       # protocol capability descriptor
