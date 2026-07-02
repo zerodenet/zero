@@ -24,15 +24,6 @@ pub(crate) struct TrojanInboundRequest {
     pub(crate) tls_acceptor: crate::transport::TlsAcceptor,
 }
 
-// Trait-based handler.
-
-#[derive(Clone)]
-pub(crate) struct TrojanInboundHandler {
-    trojan_inbound: TrojanInbound,
-    profile: TrojanInboundProfile,
-    tls_acceptor: crate::transport::TlsAcceptor,
-}
-
 struct TrojanAcceptedSessionBridge<'a> {
     proxy: &'a Proxy,
     inbound_tag: &'a str,
@@ -96,12 +87,6 @@ pub(crate) async fn run_trojan_listener_with_bound(
         tls_acceptor,
     } = request;
 
-    let handler = TrojanInboundHandler {
-        trojan_inbound: TrojanInbound,
-        profile,
-        tls_acceptor,
-    };
-
     run_tcp_listener_loop(TcpListenerLoopRequest {
         proxy,
         inbound_tag: inbound.tag,
@@ -112,9 +97,10 @@ pub(crate) async fn run_trojan_listener_with_bound(
                        tag: String,
                        stream: zero_platform_tokio::TokioSocket,
                        source_addr: Option<std::net::SocketAddr>| {
-            let handler = handler.clone();
+            let profile = profile.clone();
+            let tls_acceptor = tls_acceptor.clone();
             async move {
-                let tls = match handler.tls_acceptor.accept(stream).await {
+                let tls = match tls_acceptor.accept(stream).await {
                     Ok(tls) => tls,
                     Err(e) => {
                         let e = EngineError::Io(io::Error::other(e));
@@ -126,9 +112,8 @@ pub(crate) async fn run_trojan_listener_with_bound(
                         return;
                     }
                 };
-                let client = match handler
-                    .profile
-                    .accept_client(handler.trojan_inbound, AsyncSocketStream::new(tls))
+                let client = match profile
+                    .accept_client(TrojanInbound, AsyncSocketStream::new(tls))
                     .await
                 {
                     Ok(client) => client,
