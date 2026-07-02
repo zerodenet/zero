@@ -10,12 +10,10 @@ use zero_traits::{AsyncSocket, TcpTunnelProtocol, UdpPacketFraming, UdpPacketTun
 #[cfg(feature = "reality")]
 use crate::flow::flow_build_request;
 use crate::mux::MuxClient;
-use crate::shared::{
-    build_udp_packet, parse_udp_packet, parse_uuid, read_addon, read_exact, write_address,
-    VlessUdpPacket, CMD_MUX, VLESS_VERSION,
-};
+use crate::shared::{parse_uuid, read_addon, read_exact, write_address, CMD_MUX, VLESS_VERSION};
+use crate::udp::{build_udp_packet, parse_udp_packet, VlessUdpPacket};
 #[cfg(feature = "reality")]
-use crate::shared::{VlessUdpFlowIo, VlessUdpFlowPacket};
+use crate::udp::{VlessUdpFlowIo, VlessUdpFlowPacket};
 
 #[derive(Debug, Default, Clone, Copy)]
 pub struct VlessOutbound;
@@ -370,7 +368,7 @@ impl<'a> VlessUdpFlowConfig<'a> {
         port: u16,
         payload: &[u8],
     ) -> Result<Vec<u8>, Error> {
-        crate::shared::encode_udp_flow_initial_packet(target, port, payload)
+        crate::udp::encode_udp_flow_initial_packet(target, port, payload)
     }
 
     #[cfg(feature = "reality")]

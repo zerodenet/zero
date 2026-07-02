@@ -95,7 +95,7 @@ impl TrojanInboundAcceptedSessionDispatcher<TrojanAcceptedStream>
         &mut self,
         session: Session,
         stream: TrojanAcceptedStream,
-        responder: trojan::TrojanInboundUdpResponder,
+        responder: trojan::udp::TrojanInboundUdpResponder,
         auth: Option<zero_core::SessionAuth>,
     ) -> Result<(), Self::Error> {
         self.proxy

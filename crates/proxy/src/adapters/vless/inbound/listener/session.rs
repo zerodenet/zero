@@ -60,7 +60,7 @@ where
         &mut self,
         session: Session,
         auth: Option<SessionAuth>,
-        responder: vless::VlessInboundUdpResponder,
+        responder: vless::udp::VlessInboundUdpResponder,
         mut metered: MeteredStream<RecordingStream<S>>,
     ) -> Result<(), Self::Error> {
         self.proxy

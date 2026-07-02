@@ -6,7 +6,7 @@ impl Proxy {
         &self,
         mux_session_id: u16,
         up_rx: tokio::sync::mpsc::UnboundedReceiver<Vec<u8>>,
-        responder: vless::VlessInboundMuxUdpResponder,
+        responder: vless::udp::VlessInboundMuxUdpResponder,
         inbound_tag: &str,
         auth: Option<zero_core::SessionAuth>,
     ) {

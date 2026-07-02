@@ -10,7 +10,7 @@ impl Proxy {
         &self,
         client: TcpRelayStream,
         session: Session,
-        responder: trojan::TrojanInboundUdpResponder,
+        responder: trojan::udp::TrojanInboundUdpResponder,
         auth: Option<zero_core::SessionAuth>,
         inbound_tag: &str,
     ) -> Result<(), EngineError> {

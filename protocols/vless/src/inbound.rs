@@ -1,3 +1,4 @@
+use alloc::borrow::ToOwned;
 use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
@@ -170,14 +171,16 @@ pub trait VlessAcceptedClientRouteDispatcher<S> {
         stream: S,
     ) -> Result<(), Self::Error>;
 
+    #[cfg(feature = "reality")]
     async fn dispatch_udp_session(
         &mut self,
         session: Session,
         auth: Option<SessionAuth>,
-        responder: crate::shared::VlessInboundUdpResponder,
+        responder: crate::udp::VlessInboundUdpResponder,
         stream: S,
     ) -> Result<(), Self::Error>;
 
+    #[cfg(feature = "reality")]
     async fn dispatch_mux_session(
         &mut self,
         mux_server: crate::mux::VlessInboundMuxServer,
@@ -311,6 +314,7 @@ impl<S> VlessAcceptedClient<S> {
 }
 
 impl<S> VlessAcceptedClientRoute<S> {
+    #[cfg(feature = "reality")]
     pub async fn dispatch<Tcp, TcpFut, Udp, UdpFut, Mux, MuxFut, E>(
         self,
         tcp: Tcp,
@@ -321,12 +325,8 @@ impl<S> VlessAcceptedClientRoute<S> {
         S: AsyncSocket,
         Tcp: FnOnce(Session, S) -> TcpFut,
         TcpFut: core::future::Future<Output = Result<(), E>>,
-        Udp: FnOnce(
-            Session,
-            Option<SessionAuth>,
-            crate::shared::VlessInboundUdpResponder,
-            S,
-        ) -> UdpFut,
+        Udp:
+            FnOnce(Session, Option<SessionAuth>, crate::udp::VlessInboundUdpResponder, S) -> UdpFut,
         UdpFut: core::future::Future<Output = Result<(), E>>,
         Mux: FnOnce(crate::mux::VlessInboundMuxServer, S) -> MuxFut,
         MuxFut: core::future::Future<Output = Result<(), E>>,
@@ -363,6 +363,7 @@ impl<S> VlessAcceptedClientRoute<S> {
     {
         match self {
             Self::Tcp { session, stream } => dispatcher.dispatch_tcp_session(session, stream).await,
+            #[cfg(feature = "reality")]
             Self::Udp {
                 session,
                 auth,
@@ -373,6 +374,11 @@ impl<S> VlessAcceptedClientRoute<S> {
                     .dispatch_udp_session(session, auth, responder, stream)
                     .await
             }
+            #[cfg(not(feature = "reality"))]
+            Self::Udp { .. } => {
+                Err(Error::Unsupported("VLESS UDP requires the `reality` feature").into())
+            }
+            #[cfg(feature = "reality")]
             Self::Mux {
                 mux_context,
                 auth,
@@ -382,6 +388,10 @@ impl<S> VlessAcceptedClientRoute<S> {
                     .accept_mux_session_with_auth(&mut stream, mux_context, auth)
                     .await?;
                 dispatcher.dispatch_mux_session(mux_server, stream).await
+            }
+            #[cfg(not(feature = "reality"))]
+            Self::Mux { .. } => {
+                Err(Error::Unsupported("VLESS MUX requires the `reality` feature").into())
             }
         }
     }
@@ -594,36 +604,6 @@ impl IntoVlessInboundUserConfig for BorrowedVlessInboundUserConfigParts<'_> {
 impl VlessInbound {
     pub fn protocol(&self) -> ProtocolType {
         ProtocolType::Vless
-    }
-
-    pub fn udp_session(&self) -> crate::shared::VlessInboundUdpSession {
-        crate::shared::VlessInboundUdpSession::new()
-    }
-
-    #[cfg(feature = "reality")]
-    pub fn udp_responder(&self) -> crate::shared::VlessInboundUdpResponder {
-        crate::shared::VlessInboundUdpResponder::new(self.udp_session())
-    }
-
-    #[cfg(feature = "reality")]
-    pub fn mux_udp_responder(
-        &self,
-        writer: crate::mux::VlessInboundMuxWriter,
-        mux_session_id: u16,
-    ) -> crate::shared::VlessInboundMuxUdpResponder {
-        crate::shared::VlessInboundMuxUdpResponder::new(self.udp_session(), writer, mux_session_id)
-    }
-
-    #[cfg(feature = "reality")]
-    pub async fn accept_udp_session<S>(
-        &self,
-        stream: &mut S,
-    ) -> Result<crate::shared::VlessInboundUdpResponder, Error>
-    where
-        S: AsyncSocket,
-    {
-        self.send_response(stream).await?;
-        Ok(self.udp_responder())
     }
 
     #[cfg(feature = "reality")]

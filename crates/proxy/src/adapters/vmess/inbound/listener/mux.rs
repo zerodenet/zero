@@ -71,7 +71,7 @@ impl VmessMuxOpenedRouteBridge<'_> {
         &mut self,
         session_id: u16,
         up_rx: tokio::sync::mpsc::UnboundedReceiver<Vec<u8>>,
-        responder: vmess::VmessInboundMuxUdpResponder,
+        responder: vmess::udp::VmessInboundMuxUdpResponder,
     ) {
         self.proxy.spawn_vmess_mux_udp_stream_task(
             self.tasks,
@@ -100,7 +100,7 @@ impl vmess::mux::VmessInboundMuxOpenedRouteDispatcher for VmessMuxOpenedRouteBri
         &mut self,
         session_id: u16,
         up_rx: tokio::sync::mpsc::UnboundedReceiver<Vec<u8>>,
-        responder: vmess::VmessInboundMuxUdpResponder,
+        responder: vmess::udp::VmessInboundMuxUdpResponder,
     ) -> Result<(), Self::Error> {
         self.bridge_udp_opened(session_id, up_rx, responder);
         Ok(())

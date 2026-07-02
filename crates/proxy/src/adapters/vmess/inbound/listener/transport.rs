@@ -47,7 +47,7 @@ where
         &mut self,
         session: Session,
         stream: S,
-        responder: vmess::VmessInboundUdpResponder,
+        responder: vmess::udp::VmessInboundUdpResponder,
         auth: Option<SessionAuth>,
     ) -> Result<(), Self::Error> {
         self.proxy

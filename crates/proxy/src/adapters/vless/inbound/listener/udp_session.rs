@@ -18,7 +18,7 @@ impl Proxy {
         client: MeteredStream<S>,
         inbound_tag: &str,
         session: Session,
-        responder: vless::VlessInboundUdpResponder,
+        responder: vless::udp::VlessInboundUdpResponder,
         auth: Option<zero_core::SessionAuth>,
     ) -> Result<(), EngineError>
     where

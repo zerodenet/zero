@@ -577,13 +577,10 @@ fn ordinary_udp_inbounds_submit_packets_through_udp_pipe() {
             "protocols/hysteria2/src/udp.rs",
             "Hysteria2InboundUdpDispatchParts",
         ),
-        (
-            "protocols/vless/src/shared.rs",
-            "VlessInboundUdpDispatchParts",
-        ),
+        ("protocols/vless/src/udp.rs", "VlessInboundUdpDispatchParts"),
         ("protocols/vmess/src/udp.rs", "VmessInboundUdpDispatchParts"),
         (
-            "protocols/trojan/src/inbound.rs",
+            "protocols/trojan/src/udp.rs",
             "TrojanInboundUdpDispatchParts",
         ),
         ("protocols/mieru/src/udp.rs", "MieruInboundUdpDispatchParts"),
@@ -1101,7 +1098,7 @@ fn vless_inbound_mux_frame_detail_lives_in_protocol_crate() {
             && protocol_mux.contains("pub fn into_route_with_auth")
             && protocol_mux.contains("pub async fn next_opened_route_with_auth")
             && protocol_mux.contains("opened.into_route_with_auth(auth, writer)")
-            && protocol_mux.contains("responder: crate::shared::VlessInboundMuxUdpResponder")
+            && protocol_mux.contains("responder: crate::udp::VlessInboundMuxUdpResponder")
             && protocol_mux.contains("match session.network")
             && protocol_mux.contains("VlessInboundMuxAction::OpenStream")
             && protocol_mux.contains("VlessInboundMuxOpenedStream::new")
@@ -2643,13 +2640,16 @@ fn stream_udp_inbound_direct_responses_use_client_response_models() {
     let vless_mux_inbound = read("src/adapters/vless/inbound/listener/mux_udp.rs");
     let vmess_udp_inbound = read("src/adapters/vmess/inbound/listener/udp_session.rs");
     let vmess_mux_inbound = read("src/adapters/vmess/inbound/listener/mux_udp.rs");
-    let trojan_protocol = fs::read_to_string(repo_root().join("protocols/trojan/src/inbound.rs"))
-        .expect("read trojan protocol inbound source");
+    let trojan_protocol_inbound =
+        fs::read_to_string(repo_root().join("protocols/trojan/src/inbound.rs"))
+            .expect("read trojan protocol inbound source");
+    let trojan_protocol_udp = fs::read_to_string(repo_root().join("protocols/trojan/src/udp.rs"))
+        .expect("read trojan protocol udp source");
     let mieru_protocol = read_repo_module_tree("protocols/mieru/src/udp.rs");
     let hysteria2_protocol = fs::read_to_string(repo_root().join("protocols/hysteria2/src/udp.rs"))
         .expect("read hysteria2 protocol udp source");
-    let vless_protocol = fs::read_to_string(repo_root().join("protocols/vless/src/shared.rs"))
-        .expect("read vless protocol shared source");
+    let vless_protocol = fs::read_to_string(repo_root().join("protocols/vless/src/udp.rs"))
+        .expect("read vless protocol udp source");
     let vless_protocol_inbound =
         fs::read_to_string(repo_root().join("protocols/vless/src/inbound.rs"))
             .expect("read vless protocol inbound source");
@@ -2668,7 +2668,7 @@ fn stream_udp_inbound_direct_responses_use_client_response_models() {
             && trojan_udp_inbound.contains("run_stream_udp_relay")
             && trojan_udp_inbound.contains("StreamUdpRelayRequest")
             && !trojan_udp_inbound.contains("trojan::TrojanInbound.accept_udp_session()")
-            && trojan_udp_inbound.contains("responder: trojan::TrojanInboundUdpResponder")
+            && trojan_udp_inbound.contains("responder: trojan::udp::TrojanInboundUdpResponder")
             && !trojan_udp_inbound.contains("trojan::TrojanInbound.udp_responder()")
             && !trojan_udp_inbound.contains("TrojanStreamUdpResponder")
             && !trojan_udp_inbound.contains("impl StreamUdpResponder<TcpRelayStream>")
@@ -2680,15 +2680,15 @@ fn stream_udp_inbound_direct_responses_use_client_response_models() {
             && !trojan_udp_inbound.contains("write_upstream_response")
             && !trojan_udp_inbound.contains("write_chain_response")
             && !trojan_udp_inbound.contains("write_response_to_socket_addr_tokio")
-            && trojan_protocol.contains("pub async fn write_client_response")
-            && trojan_protocol.contains("pub async fn write_client_response_for_target")
-            && trojan_protocol.contains("pub struct TrojanInboundUdpResponder")
-            && trojan_protocol.contains("responder: TrojanInboundUdpResponder")
-            && trojan_protocol.contains("responder: TrojanInbound.accept_udp_session()")
-            && trojan_protocol.contains("impl TrojanInboundUdpResponder")
-            && trojan_protocol.contains("impl<S> StreamUdpResponder<S> for TrojanInboundUdpResponder")
-            && !trojan_protocol.contains("pub async fn write_response_to_socket_addr_tokio")
-            && !trojan_protocol.contains("fn address_from_socket_addr"),
+            && trojan_protocol_udp.contains("pub async fn write_client_response")
+            && trojan_protocol_udp.contains("pub async fn write_client_response_for_target")
+            && trojan_protocol_udp.contains("pub struct TrojanInboundUdpResponder")
+            && trojan_protocol_inbound.contains("responder: TrojanInboundUdpResponder")
+            && trojan_protocol_inbound.contains("responder: TrojanInbound.accept_udp_session()")
+            && trojan_protocol_udp.contains("impl TrojanInboundUdpResponder")
+            && trojan_protocol_udp.contains("impl<S> StreamUdpResponder<S> for TrojanInboundUdpResponder")
+            && !trojan_protocol_udp.contains("pub async fn write_response_to_socket_addr_tokio")
+            && !trojan_protocol_udp.contains("fn address_from_socket_addr"),
         "Trojan inbound UDP direct response glue should pass neutral target data to protocol-owned response APIs"
     );
     assert!(
@@ -2754,7 +2754,7 @@ fn stream_udp_inbound_direct_responses_use_client_response_models() {
             && vless_udp_inbound.contains("run_stream_udp_relay")
             && vless_udp_inbound.contains("StreamUdpRelayRequest")
             && !vless_udp_inbound.contains(".accept_udp_session(&mut client)")
-            && vless_udp_inbound.contains("responder: vless::VlessInboundUdpResponder")
+            && vless_udp_inbound.contains("responder: vless::udp::VlessInboundUdpResponder")
             && vless_protocol_inbound.contains(".accept_udp_session(&mut stream)")
             && !vless_udp_inbound.contains("vless::VlessInbound.udp_responder()")
             && !vless_udp_inbound.contains("VlessStreamUdpResponder")
@@ -5960,8 +5960,8 @@ fn vless_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
     let proxy_transport = read("src/transport/mod.rs");
     let transport = fs::read_to_string(repo_root().join("crates/transport/src/vless_transport.rs"))
         .expect("read zero-transport vless_transport source");
-    let protocol_shared = fs::read_to_string(repo_root().join("protocols/vless/src/shared.rs"))
-        .expect("read protocols/vless/src/shared.rs");
+    let protocol_shared = fs::read_to_string(repo_root().join("protocols/vless/src/udp.rs"))
+        .expect("read protocols/vless/src/udp.rs");
     let protocol_lib = fs::read_to_string(repo_root().join("protocols/vless/src/lib.rs"))
         .expect("read protocols/vless/src/lib.rs");
     let protocol_outbound = fs::read_to_string(repo_root().join("protocols/vless/src/outbound.rs"))
@@ -6626,20 +6626,20 @@ fn vmess_mux_pool_model_lives_outside_runtime_root() {
 
 #[test]
 fn vless_vmess_udp_packet_models_do_not_expose_raw_fields() {
-    let vless_shared = fs::read_to_string(repo_root().join("protocols/vless/src/shared.rs"))
-        .expect("read protocols/vless/src/shared.rs");
+    let vless_shared = fs::read_to_string(repo_root().join("protocols/vless/src/udp.rs"))
+        .expect("read protocols/vless/src/udp.rs");
     let vmess_udp = fs::read_to_string(repo_root().join("protocols/vmess/src/udp.rs"))
         .expect("read protocols/vmess/src/udp.rs");
     let socks5_udp = read_repo_module_tree("protocols/socks5/src/udp.rs");
 
     for (source_name, source, struct_name) in [
         (
-            "protocols/vless/src/shared.rs",
+            "protocols/vless/src/udp.rs",
             vless_shared.as_str(),
             "VlessUdpPacket",
         ),
         (
-            "protocols/vless/src/shared.rs",
+            "protocols/vless/src/udp.rs",
             vless_shared.as_str(),
             "VlessUdpFlowPacket",
         ),
@@ -7874,7 +7874,7 @@ fn vless_inbound_udp_packet_framing_stays_in_protocol_crate() {
         .parent()
         .and_then(std::path::Path::parent)
         .expect("workspace root")
-        .join("protocols/vless/src/shared.rs");
+        .join("protocols/vless/src/udp.rs");
     let protocol_shared =
         fs::read_to_string(protocol_shared).expect("read vless protocol shared source");
     let protocol_udp = fs::read_to_string(repo_root().join("protocols/vless/src/udp.rs"))
@@ -7943,7 +7943,7 @@ fn vless_inbound_udp_packet_framing_stays_in_protocol_crate() {
             && !udp_session.contains("vless::VlessInboundUdpCodec")
             && !mux.contains("vless::VlessInboundUdpCodec")
             && udp_session.contains("run_stream_udp_relay")
-            && udp_session.contains("responder: vless::VlessInboundUdpResponder")
+            && udp_session.contains("responder: vless::udp::VlessInboundUdpResponder")
             && mux.contains("run_mux_udp_relay")
             && mux.contains("responder,")
             && stream_udp.contains("run_packet_session_udp_relay")
@@ -8094,14 +8094,13 @@ fn trojan_inbound_udp_packet_framing_stays_in_protocol_crate() {
         .join("protocols/trojan/src/outbound.rs");
     let protocol_outbound =
         fs::read_to_string(protocol_outbound).expect("read trojan protocol outbound source");
-    let protocol_inbound = manifest_dir()
+    let protocol_udp = manifest_dir()
         .parent()
         .and_then(std::path::Path::parent)
         .expect("workspace root")
-        .join("protocols/trojan/src/inbound.rs");
-    let protocol_inbound =
-        fs::read_to_string(protocol_inbound).expect("read trojan protocol inbound source");
-    let protocol_dispatch_parts = struct_block(&protocol_inbound, "TrojanInboundUdpDispatchParts");
+        .join("protocols/trojan/src/udp.rs");
+    let protocol_udp = fs::read_to_string(protocol_udp).expect("read trojan protocol udp source");
+    let protocol_dispatch_parts = struct_block(&protocol_udp, "TrojanInboundUdpDispatchParts");
     let protocol_lib = fs::read_to_string(repo_root().join("protocols/trojan/src/lib.rs"))
         .expect("read trojan protocol lib source");
     let protocol_shared = fs::read_to_string(repo_root().join("protocols/trojan/src/shared.rs"))
@@ -8153,7 +8152,7 @@ fn trojan_inbound_udp_packet_framing_stays_in_protocol_crate() {
             && packet_session_udp.contains("write_chain_response")
             && inbound.contains("run_stream_udp_relay")
             && !inbound.contains("trojan::TrojanInbound.accept_udp_session()")
-            && inbound.contains("responder: trojan::TrojanInboundUdpResponder")
+            && inbound.contains("responder: trojan::udp::TrojanInboundUdpResponder")
             && !inbound.contains("trojan::TrojanInbound.udp_responder()")
             && !inbound.contains("impl StreamUdpResponder<TcpRelayStream>")
             && !inbound.contains("TrojanStreamUdpResponder")
@@ -8192,35 +8191,35 @@ fn trojan_inbound_udp_packet_framing_stays_in_protocol_crate() {
             && !inbound.contains("zero_core::Address::Ipv6")
             && !inbound.contains("TrojanInboundUdpCodec")
             && !inbound.contains(".read_packet(&mut client)")
-            && protocol_inbound.contains("struct TrojanInboundUdpCodec")
-            && protocol_inbound.contains("struct TrojanInboundUdpSession")
-            && protocol_inbound.contains("struct TrojanInboundUdpResponder")
-            && protocol_inbound.contains("impl TrojanInboundUdpResponder")
-            && protocol_inbound.contains("struct TrojanInboundUdpRequest")
-            && protocol_inbound.contains("struct TrojanInboundUdpDispatchParts")
+            && protocol_udp.contains("struct TrojanInboundUdpCodec")
+            && protocol_udp.contains("struct TrojanInboundUdpSession")
+            && protocol_udp.contains("struct TrojanInboundUdpResponder")
+            && protocol_udp.contains("impl TrojanInboundUdpResponder")
+            && protocol_udp.contains("struct TrojanInboundUdpRequest")
+            && protocol_udp.contains("struct TrojanInboundUdpDispatchParts")
             && !protocol_dispatch_parts.contains("pub target: zero_core::Address")
             && !protocol_dispatch_parts.contains("pub port: u16")
             && !protocol_dispatch_parts.contains("pub payload: Vec<u8>")
             && !protocol_dispatch_parts.contains("pub client_session_id: Option<u64>")
-            && protocol_inbound.contains("fn into_parts")
-            && protocol_inbound.contains("fn into_dispatch_parts")
-            && protocol_inbound.contains("fn into_inbound_dispatch")
-            && protocol_inbound.contains("fn pipe_parts")
-            && protocol_inbound.contains("fn into_pipe_parts")
-            && protocol_inbound.contains("fn read_request")
-            && protocol_inbound.contains("fn read_dispatch_parts")
-            && protocol_inbound.contains("fn read_inbound_dispatch")
-            && protocol_inbound.contains("fn read_packet")
-            && protocol_inbound.contains("fn write_response")
-            && protocol_inbound.contains("struct TrojanInboundUdpClientResponse")
-            && protocol_inbound.contains("fn write_client_response")
-            && !protocol_inbound.contains("fn write_response_to_ip")
-            && !protocol_inbound.contains("fn write_response_to_socket_addr_tokio")
-            && protocol_inbound.contains(") -> Result<usize, Error>")
+            && protocol_udp.contains("fn into_parts")
+            && protocol_udp.contains("fn into_dispatch_parts")
+            && protocol_udp.contains("fn into_inbound_dispatch")
+            && protocol_udp.contains("fn pipe_parts")
+            && protocol_udp.contains("fn into_pipe_parts")
+            && protocol_udp.contains("fn read_request")
+            && protocol_udp.contains("fn read_dispatch_parts")
+            && protocol_udp.contains("fn read_inbound_dispatch")
+            && protocol_udp.contains("fn read_packet")
+            && protocol_udp.contains("fn write_response")
+            && protocol_udp.contains("struct TrojanInboundUdpClientResponse")
+            && protocol_udp.contains("fn write_client_response")
+            && !protocol_udp.contains("fn write_response_to_ip")
+            && !protocol_udp.contains("fn write_response_to_socket_addr_tokio")
+            && protocol_udp.contains(") -> Result<usize, Error>")
             && protocol_outbound.contains("read_udp_flow_packet")
             && !protocol_outbound.contains("pub async fn read_udp_flow_packet")
             && protocol_outbound.contains("write_udp_flow_packet"),
-        "Trojan inbound UDP packet framing should be owned by protocols/trojan inbound codec"
+        "Trojan inbound UDP packet framing should be owned by protocols/trojan udp codec"
     );
     for private_helper in [
         "read_inbound_udp_packet",
@@ -11946,8 +11945,8 @@ fn packet_path_traits_are_grouped_by_responsibility() {
 fn stream_protocol_udp_packet_io_stays_in_protocol_crates() {
     let vless_runtime = read("src/adapters/vless/udp/managed/establish.rs");
     let vmess_runtime = read("src/adapters/vmess/udp/managed/establish.rs");
-    let vless_shared = fs::read_to_string(repo_root().join("protocols/vless/src/shared.rs"))
-        .expect("read VLESS protocol shared source");
+    let vless_shared = fs::read_to_string(repo_root().join("protocols/vless/src/udp.rs"))
+        .expect("read VLESS protocol udp source");
     let vless_outbound = fs::read_to_string(repo_root().join("protocols/vless/src/outbound.rs"))
         .expect("read VLESS protocol outbound source");
     let vmess_protocol = fs::read_to_string(repo_root().join("protocols/vmess/src/udp.rs"))

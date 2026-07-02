@@ -207,35 +207,6 @@ impl VmessInbound {
         ProtocolType::Vmess
     }
 
-    pub fn udp_session(
-        &self,
-        default_target: zero_core::Address,
-        default_port: u16,
-    ) -> crate::udp::VmessInboundUdpSession {
-        crate::udp::VmessInboundUdpSession::new(default_target, default_port)
-    }
-
-    pub fn udp_session_for(&self, session: &Session) -> crate::udp::VmessInboundUdpSession {
-        self.udp_session(session.target.clone(), session.port)
-    }
-
-    pub fn udp_responder_for(&self, session: &Session) -> crate::udp::VmessInboundUdpResponder {
-        crate::udp::VmessInboundUdpResponder::new(self.udp_session_for(session))
-    }
-
-    pub fn mux_udp_responder_for(
-        &self,
-        session: &Session,
-        writer: crate::mux::VmessInboundMuxWriter,
-        mux_session_id: u16,
-    ) -> crate::udp::VmessInboundMuxUdpResponder {
-        crate::udp::VmessInboundMuxUdpResponder::new(
-            self.udp_session_for(session),
-            writer,
-            mux_session_id,
-        )
-    }
-
     /// Accept with a single known user.
     pub async fn accept_tcp_with_auth<S: AsyncSocket>(
         &self,

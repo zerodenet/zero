@@ -9,7 +9,7 @@ impl Proxy {
         tasks: &mut JoinSet<()>,
         mux_session_id: u16,
         up_rx: tokio::sync::mpsc::UnboundedReceiver<Vec<u8>>,
-        responder: vmess::VmessInboundMuxUdpResponder,
+        responder: vmess::udp::VmessInboundMuxUdpResponder,
         inbound_tag: String,
     ) {
         let proxy = self.clone();

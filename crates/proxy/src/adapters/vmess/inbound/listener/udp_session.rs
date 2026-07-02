@@ -10,7 +10,7 @@ impl Proxy {
         &self,
         client: TcpRelayStream,
         session: Session,
-        responder: vmess::VmessInboundUdpResponder,
+        responder: vmess::udp::VmessInboundUdpResponder,
         auth: Option<zero_core::SessionAuth>,
         inbound_tag: &str,
     ) -> Result<(), EngineError> {

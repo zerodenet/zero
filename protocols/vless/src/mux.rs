@@ -37,7 +37,9 @@ use alloc::vec::Vec;
 
 #[cfg(feature = "reality")]
 use tokio::sync::mpsc;
-use zero_core::{Address, Error, Network, ProtocolType, Session, SessionAuth};
+#[cfg(feature = "reality")]
+use zero_core::SessionAuth;
+use zero_core::{Address, Error, Network, ProtocolType, Session};
 use zero_traits::AsyncSocket;
 
 use crate::shared::{read_exact, write_address, ATYP_DOMAIN, ATYP_IPV4, ATYP_IPV6};
@@ -172,7 +174,7 @@ pub enum VlessInboundMuxOpenedRoute {
         session_id: u16,
         port: u16,
         up_rx: mpsc::UnboundedReceiver<Vec<u8>>,
-        responder: crate::shared::VlessInboundMuxUdpResponder,
+        responder: crate::udp::VlessInboundMuxUdpResponder,
         auth: Option<SessionAuth>,
     },
 }
@@ -193,7 +195,7 @@ pub trait VlessInboundMuxOpenedRouteDispatcher {
         session_id: u16,
         port: u16,
         up_rx: mpsc::UnboundedReceiver<Vec<u8>>,
-        responder: crate::shared::VlessInboundMuxUdpResponder,
+        responder: crate::udp::VlessInboundMuxUdpResponder,
         auth: Option<SessionAuth>,
     ) -> Result<bool, Self::Error>;
 }
@@ -288,8 +290,8 @@ impl VlessInboundMuxOpenedStream {
                 session_id,
                 port: session.port,
                 up_rx,
-                responder: crate::shared::VlessInboundMuxUdpResponder::new(
-                    crate::shared::VlessInboundUdpSession::new(),
+                responder: crate::udp::VlessInboundMuxUdpResponder::new(
+                    crate::udp::VlessInboundUdpSession::new(),
                     writer,
                     session_id,
                 ),

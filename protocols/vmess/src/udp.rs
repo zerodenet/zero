@@ -1464,3 +1464,30 @@ fn parse_address_body(body: &[u8]) -> Result<(Address, usize), Error> {
         _ => Err(Error::Protocol("vmess udp unknown address type")),
     }
 }
+
+impl crate::inbound::VmessInbound {
+    pub fn udp_session(
+        &self,
+        default_target: zero_core::Address,
+        default_port: u16,
+    ) -> VmessInboundUdpSession {
+        VmessInboundUdpSession::new(default_target, default_port)
+    }
+
+    pub fn udp_session_for(&self, session: &Session) -> VmessInboundUdpSession {
+        self.udp_session(session.target.clone(), session.port)
+    }
+
+    pub fn udp_responder_for(&self, session: &Session) -> VmessInboundUdpResponder {
+        VmessInboundUdpResponder::new(self.udp_session_for(session))
+    }
+
+    pub fn mux_udp_responder_for(
+        &self,
+        session: &Session,
+        writer: crate::mux::VmessInboundMuxWriter,
+        mux_session_id: u16,
+    ) -> VmessInboundMuxUdpResponder {
+        VmessInboundMuxUdpResponder::new(self.udp_session_for(session), writer, mux_session_id)
+    }
+}

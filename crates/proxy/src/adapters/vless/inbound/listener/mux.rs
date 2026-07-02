@@ -75,7 +75,7 @@ impl VlessMuxOpenedRouteBridge<'_> {
         session_id: u16,
         port: u16,
         up_rx: tokio::sync::mpsc::UnboundedReceiver<Vec<u8>>,
-        responder: vless::VlessInboundMuxUdpResponder,
+        responder: vless::udp::VlessInboundMuxUdpResponder,
         auth: Option<zero_core::SessionAuth>,
     ) {
         let proxy_clone = self.proxy.clone();
@@ -120,7 +120,7 @@ impl vless::mux::VlessInboundMuxOpenedRouteDispatcher for VlessMuxOpenedRouteBri
         session_id: u16,
         port: u16,
         up_rx: tokio::sync::mpsc::UnboundedReceiver<Vec<u8>>,
-        responder: vless::VlessInboundMuxUdpResponder,
+        responder: vless::udp::VlessInboundMuxUdpResponder,
         auth: Option<zero_core::SessionAuth>,
     ) -> Result<bool, Self::Error> {
         self.bridge_udp_opened(session_id, port, up_rx, responder, auth);
