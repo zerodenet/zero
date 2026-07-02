@@ -4,50 +4,47 @@ use zero_core::{Address, Session};
 use zero_engine::EngineError;
 use zero_platform_tokio::TransportConnector;
 
-use super::model::VlessUdpStartFlow;
-use crate::adapters::vless::mux_pool::VlessMuxOpenRequest;
 use crate::runtime::udp_flow::managed::{
     managed_tuple_udp_connection, ManagedStreamConnection, ManagedTupleUdpSender,
 };
 use crate::runtime::Proxy;
 use crate::transport::TcpRelayStream;
 
+#[allow(clippy::too_many_arguments)]
 pub(super) async fn start_mux_fast_path(
-    request: &VlessUdpStartFlow<'_>,
+    proxy: &Proxy,
+    mux_pool: &vless::mux_pool::MuxConnectionPool,
+    session: &Session,
+    server: &str,
+    port: u16,
+    config: vless::udp::VlessUdpFlowConfig<'_>,
+    transport: crate::transport::VlessUdpTransportOptions<'_>,
+    payload: &[u8],
 ) -> Result<bool, EngineError> {
-    if !request.config.mux_flow_enabled() {
+    if !config.mux_flow_enabled() {
         return Ok(false);
     }
 
     let max_concurrency = 8u32;
     let Ok((_mux_sid, up_tx, _down_rx)) = crate::adapters::vless::mux_pool::open_udp_stream(
-        request.mux_pool,
-        VlessMuxOpenRequest {
-            proxy: request.proxy,
-            session: None,
-            server: request.server,
-            port: request.port,
-            identity: request.config.mux_pool_identity(),
-            tls: request.transport.tls,
-            reality: request.transport.reality,
-            max_concurrency,
-        },
+        mux_pool,
+        proxy,
+        server,
+        port,
+        config.mux_pool_identity(),
+        transport.tls,
+        transport.reality,
+        max_concurrency,
     )
     .await
     else {
         return Ok(false);
     };
 
-    let packet = request.config.mux_initial_flow_packet(
-        &request.session.target,
-        request.session.port,
-        request.payload,
-    )?;
+    let packet = config.mux_initial_flow_packet(&session.target, session.port, payload)?;
     let sent = packet.encoded_len();
     let _ = up_tx.send(packet.into_bytes());
-    request
-        .proxy
-        .record_session_outbound_tx(request.session.id, sent as u64);
+    proxy.record_session_outbound_tx(session.id, sent as u64);
     Ok(true)
 }
 
@@ -69,32 +66,24 @@ pub(super) async fn over_stream(
 }
 
 pub(super) async fn direct_flow(
-    request: &VlessUdpStartFlow<'_>,
+    proxy: &Proxy,
+    session: &Session,
+    server: &str,
+    port: u16,
+    config: vless::udp::VlessUdpFlowConfig<'_>,
+    transport: crate::transport::VlessUdpTransportOptions<'_>,
+    payload: &[u8],
 ) -> Result<ManagedStreamConnection, EngineError> {
-    let socket = request
-        .proxy
+    let socket = proxy
         .protocols
         .direct_connector()
-        .connect_host(
-            request.server,
-            request.port,
-            request.proxy.resolver.as_ref(),
-        )
+        .connect_host(server, port, proxy.resolver.as_ref())
         .await?;
 
-    let connector = crate::transport::VlessUdpTransportConnector::new(request.transport);
-    let stream: TcpRelayStream = connector
-        .connect(socket, request.server, request.port)
-        .await?;
+    let connector = crate::transport::VlessUdpTransportConnector::new(transport);
+    let stream: TcpRelayStream = connector.connect(socket, server, port).await?;
 
-    over_stream(
-        request.proxy,
-        request.session,
-        request.config,
-        request.payload,
-        stream,
-    )
-    .await
+    over_stream(proxy, session, config, payload, stream).await
 }
 
 #[async_trait::async_trait]

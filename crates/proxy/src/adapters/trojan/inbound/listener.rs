@@ -18,26 +18,16 @@ use crate::runtime::listener_loop::{run_tcp_listener_loop, TcpListenerLoopReques
 use crate::runtime::Proxy;
 use crate::transport::{AsyncSocketStream, TcpRelayStream};
 
-pub(crate) struct TrojanInboundRequest {
-    pub(crate) inbound: InboundConfig,
-    pub(crate) profile: TrojanInboundProfile,
-    pub(crate) tls_acceptor: crate::transport::TlsAcceptor,
-}
-
 // Listener.
 
 pub(crate) async fn run_trojan_listener_with_bound(
     proxy: &Proxy,
-    request: TrojanInboundRequest,
+    inbound: InboundConfig,
+    profile: TrojanInboundProfile,
+    tls_acceptor: crate::transport::TlsAcceptor,
     listener: zero_platform_tokio::TokioListener,
     shutdown: watch::Receiver<bool>,
 ) -> Result<(), EngineError> {
-    let TrojanInboundRequest {
-        inbound,
-        profile,
-        tls_acceptor,
-    } = request;
-
     run_tcp_listener_loop(TcpListenerLoopRequest {
         proxy,
         inbound_tag: inbound.tag,

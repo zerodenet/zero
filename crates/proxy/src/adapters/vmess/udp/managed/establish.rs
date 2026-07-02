@@ -4,8 +4,6 @@ use zero_core::{Address, Session};
 use zero_engine::EngineError;
 use zero_platform_tokio::TransportConnector;
 
-use super::model::VmessUdpStartFlow;
-use crate::adapters::vmess::mux_pool::VmessMuxOpenRequest;
 use crate::runtime::udp_flow::managed::{
     managed_tuple_udp_connection, ManagedStreamConnection, ManagedTupleUdpSender,
 };
@@ -29,64 +27,55 @@ pub(super) async fn over_stream(
     ))
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(super) async fn direct_flow(
-    request: &VmessUdpStartFlow<'_>,
+    proxy: &Proxy,
+    mux_pool: &vmess::mux::VmessMuxConnectionPool,
+    session: &Session,
+    server: &str,
+    port: u16,
+    config: vmess::udp::VmessUdpFlowConfig<'_>,
+    mux_concurrency: Option<u32>,
+    transport: crate::transport::VmessTransportOptions<'_>,
+    payload: &[u8],
 ) -> Result<ManagedStreamConnection, EngineError> {
-    if let Some(max_concurrency) = request.mux_concurrency {
+    if let Some(max_concurrency) = mux_concurrency {
         let mux_stream = crate::adapters::vmess::mux_pool::open_udp_stream(
-            request.mux_pool,
-            VmessMuxOpenRequest {
-                proxy: request.proxy,
-                session: request.session,
-                server: request.server.to_owned(),
-                port: request.port,
-                identity: request.config.mux_pool_identity(),
-                tls: request.transport.tls,
-                ws: request.transport.ws,
-                grpc: request.transport.grpc,
-                max_concurrency,
-            },
+            mux_pool,
+            proxy,
+            session,
+            server,
+            port,
+            config.mux_pool_identity(),
+            transport.tls,
+            transport.ws,
+            transport.grpc,
+            max_concurrency,
         )
         .await?;
-        let established = request.config.start_flow_with_initial_packet(
+        let established = config.start_flow_with_initial_packet(
             mux_stream,
-            &request.session.target,
-            request.session.port,
-            request.payload,
+            &session.target,
+            session.port,
+            payload,
         )?;
-        request
-            .proxy
-            .record_session_outbound_tx(request.session.id, established.initial_packet_len as u64);
+        proxy.record_session_outbound_tx(session.id, established.initial_packet_len as u64);
         return Ok(ManagedStreamConnection::new(
-            request.session.id,
+            session.id,
             managed_tuple_udp_connection(Arc::new(established.into_connection())),
         ));
     }
 
-    let socket = request
-        .proxy
+    let socket = proxy
         .protocols
         .direct_connector()
-        .connect_host(
-            request.server,
-            request.port,
-            request.proxy.resolver.as_ref(),
-        )
+        .connect_host(server, port, proxy.resolver.as_ref())
         .await?;
 
-    let connector = crate::transport::VmessTransportConnector::new(request.transport);
-    let stream = connector
-        .connect(socket, request.server, request.port)
-        .await?;
+    let connector = crate::transport::VmessTransportConnector::new(transport);
+    let stream = connector.connect(socket, server, port).await?;
 
-    over_stream(
-        request.proxy,
-        request.session,
-        request.config,
-        request.payload,
-        stream,
-    )
-    .await
+    over_stream(proxy, session, config, payload, stream).await
 }
 
 #[async_trait::async_trait]

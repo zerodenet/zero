@@ -3,7 +3,6 @@ use zero_engine::{EngineError, ResolvedLeafOutbound};
 use zero_platform_tokio::TransportConnector;
 
 use crate::adapters::common::unreachable_leaf;
-use crate::adapters::vless::mux_pool::VlessMuxOpenRequest;
 use crate::adapters::vless::VlessAdapter;
 use crate::protocol_registry::ProtocolSupportCapability;
 use crate::runtime::Proxy;
@@ -49,16 +48,14 @@ impl VlessAdapter {
         if config.should_open_mux_pool_for_tcp() {
             return crate::adapters::vless::mux_pool::open_stream(
                 &self.mux_pool,
-                VlessMuxOpenRequest {
-                    proxy,
-                    session: Some(session),
-                    server,
-                    port: *port,
-                    identity: config.mux_pool_identity(),
-                    tls: *tls,
-                    reality: *reality,
-                    max_concurrency: mux_concurrency.unwrap_or(8),
-                },
+                proxy,
+                session,
+                server,
+                *port,
+                config.mux_pool_identity(),
+                *tls,
+                *reality,
+                mux_concurrency.unwrap_or(8),
             )
             .await
             .map(|upstream| EstablishedTcpOutbound::proxied(*tag, *server, *port, upstream))

@@ -1,7 +1,6 @@
 use zero_core::Session;
 use zero_engine::ResolvedLeafOutbound;
 
-use super::managed::{VmessUdpRelayFlowStart, VmessUdpStartFlow};
 use crate::adapters::common::unreachable_udp_leaf;
 use crate::adapters::vmess::VmessAdapter;
 use crate::protocol_registry::ProtocolSupportCapability;
@@ -60,17 +59,15 @@ pub(super) async fn start(
     super::managed::start_flow(
         &mut sender,
         dispatch.managed_udp_chain_tasks(),
-        VmessUdpStartFlow {
-            proxy,
-            mux_pool: &adapter.mux_pool,
-            session,
-            server,
-            port: *port,
-            config,
-            mux_concurrency: *mux_concurrency,
-            transport,
-            payload,
-        },
+        proxy,
+        &adapter.mux_pool,
+        session,
+        server,
+        *port,
+        config,
+        *mux_concurrency,
+        transport,
+        payload,
     )
     .await
     .map_err(|error| FlowFailure {
@@ -121,14 +118,12 @@ pub(super) async fn start_relay_final_hop(
     super::managed::start_relay_flow(
         &mut sender,
         dispatch.managed_udp_chain_tasks(),
-        VmessUdpRelayFlowStart {
-            proxy,
-            session,
-            carrier,
-            config,
-            transport,
-            payload,
-        },
+        proxy,
+        session,
+        carrier,
+        config,
+        transport,
+        payload,
     )
     .await
     .map_err(|error| FlowFailure {

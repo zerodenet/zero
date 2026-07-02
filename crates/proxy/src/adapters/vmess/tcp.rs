@@ -2,7 +2,6 @@ use zero_core::Session;
 use zero_engine::{EngineError, ResolvedLeafOutbound};
 
 use crate::adapters::common::unreachable_leaf;
-use crate::adapters::vmess::mux_pool::VmessMuxOpenRequest;
 use crate::adapters::vmess::VmessAdapter;
 use crate::protocol_registry::ProtocolSupportCapability;
 use crate::runtime::Proxy;
@@ -43,17 +42,15 @@ impl VmessAdapter {
         if let Some(max_concurrency) = mux_concurrency {
             return crate::adapters::vmess::mux_pool::open_stream(
                 &self.mux_pool,
-                VmessMuxOpenRequest {
-                    proxy,
-                    session,
-                    server: (*server).to_owned(),
-                    port: *port,
-                    identity: config.mux_pool_identity(),
-                    tls: *tls,
-                    ws: *ws,
-                    grpc: *grpc,
-                    max_concurrency: *max_concurrency,
-                },
+                proxy,
+                session,
+                server,
+                *port,
+                config.mux_pool_identity(),
+                *tls,
+                *ws,
+                *grpc,
+                *max_concurrency,
             )
             .await
             .map(|upstream| EstablishedTcpOutbound::proxied(*tag, *server, *port, upstream))

@@ -1,7 +1,6 @@
 use zero_core::Session;
 use zero_engine::ResolvedLeafOutbound;
 
-use super::managed::{VlessUdpRelayFinalHopStart, VlessUdpRelayTwoStream, VlessUdpStartFlow};
 use crate::adapters::common::unreachable_udp_leaf;
 use crate::adapters::vless::VlessAdapter;
 use crate::protocol_registry::ProtocolSupportCapability;
@@ -70,16 +69,14 @@ pub(super) async fn start(
     super::managed::start_flow(
         &mut sender,
         dispatch.managed_udp_chain_tasks(),
-        VlessUdpStartFlow {
-            proxy,
-            mux_pool: &adapter.mux_pool,
-            session,
-            server,
-            port: *port,
-            config,
-            transport,
-            payload,
-        },
+        proxy,
+        &adapter.mux_pool,
+        session,
+        server,
+        *port,
+        config,
+        transport,
+        payload,
     )
     .await
     .map_err(|error| FlowFailure {
@@ -138,15 +135,13 @@ pub(super) async fn start_relay_two_stream(
     super::managed::start_relay_two_stream(
         &mut sender,
         dispatch.managed_udp_chain_tasks(),
-        VlessUdpRelayTwoStream {
-            proxy,
-            session,
-            post_carrier,
-            get_carrier,
-            config,
-            split_http: split_http_cfg,
-            payload,
-        },
+        proxy,
+        session,
+        post_carrier,
+        get_carrier,
+        config,
+        split_http_cfg,
+        payload,
     )
     .await
     .map_err(|error| FlowFailure {
@@ -213,14 +208,12 @@ pub(super) async fn start_relay_final_hop(
     super::managed::start_relay_final_hop(
         &mut sender,
         dispatch.managed_udp_chain_tasks(),
-        VlessUdpRelayFinalHopStart {
-            proxy,
-            session,
-            carrier,
-            config,
-            transport,
-            payload,
-        },
+        proxy,
+        session,
+        carrier,
+        config,
+        transport,
+        payload,
     )
     .await
     .map_err(|error| FlowFailure {

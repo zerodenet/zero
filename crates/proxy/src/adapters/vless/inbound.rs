@@ -90,18 +90,16 @@ impl VlessAdapter {
                 .transpose()?;
             listener::run_vless_listener_with_bound(
                 &p,
-                listener::model::VlessInboundRequest {
-                    inbound,
-                    profile,
-                    reality,
-                    tls_acceptor,
-                    ws,
-                    grpc,
-                    h2,
-                    http_upgrade,
-                    split_http,
-                    fallback,
-                },
+                inbound,
+                profile,
+                reality,
+                tls_acceptor,
+                ws,
+                grpc,
+                h2,
+                http_upgrade,
+                split_http,
+                fallback,
                 bound,
                 shutdown_rx,
             )

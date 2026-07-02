@@ -4,24 +4,21 @@ use tokio::sync::watch;
 use tracing::warn;
 use zero_engine::EngineError;
 
-use super::model::VmessInboundRequest;
 use super::{handle_vmess_grpc, handle_vmess_raw, handle_vmess_ws};
 use crate::runtime::listener_loop::{run_tcp_listener_loop, TcpListenerLoopRequest};
 use crate::runtime::Proxy;
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn run_vmess_listener_with_bound(
     proxy: &Proxy,
-    request: VmessInboundRequest,
+    inbound: zero_config::InboundConfig,
+    profile: vmess::VmessInboundProfile,
+    tls_acceptor: crate::transport::TlsAcceptor,
+    ws_config: Option<Box<zero_config::WebSocketConfig>>,
+    grpc_config: Option<Box<zero_config::GrpcConfig>>,
     listener: zero_platform_tokio::TokioListener,
     shutdown: watch::Receiver<bool>,
 ) -> Result<(), EngineError> {
-    let VmessInboundRequest {
-        inbound,
-        profile,
-        tls_acceptor,
-        ws: ws_config,
-        grpc: grpc_config,
-    } = request;
     if profile.is_empty() {
         return Err(EngineError::Io(io::Error::new(
             io::ErrorKind::InvalidInput,

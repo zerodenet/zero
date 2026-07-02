@@ -42,11 +42,9 @@ impl TrojanAdapter {
                 crate::transport::build_tls_acceptor(&tls_cfg, p.config.source_dir())?;
             listener::run_trojan_listener_with_bound(
                 &p,
-                listener::TrojanInboundRequest {
-                    inbound,
-                    profile,
-                    tls_acceptor,
-                },
+                inbound,
+                profile,
+                tls_acceptor,
                 bound.into_tcp(),
                 shutdown_rx,
             )

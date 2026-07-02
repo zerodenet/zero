@@ -55,13 +55,11 @@ impl VmessAdapter {
             })?;
             listener::run_vmess_listener_with_bound(
                 &p,
-                listener::model::VmessInboundRequest {
-                    inbound,
-                    profile,
-                    tls_acceptor,
-                    ws,
-                    grpc,
-                },
+                inbound,
+                profile,
+                tls_acceptor,
+                ws,
+                grpc,
                 bound.into_tcp(),
                 shutdown_rx,
             )

@@ -2876,9 +2876,9 @@ fn trojan_inbound_uses_adapter_request_model() {
         .expect("read trojan protocol lib source");
 
     assert!(
-        inbound.contains("struct TrojanInboundRequest")
-            && inbound.contains("request: TrojanInboundRequest"),
-        "Trojan inbound listener should receive an adapter-built request model"
+        !inbound.contains("struct TrojanInboundRequest")
+            && !inbound.contains("request: TrojanInboundRequest"),
+        "Trojan inbound listener should not keep a proxy-local request model wrapper"
     );
     assert!(
         !inbound.contains("InboundProtocolConfig::Trojan"),
@@ -2886,12 +2886,12 @@ fn trojan_inbound_uses_adapter_request_model() {
     );
     assert!(
         adapter.contains("InboundProtocolConfig::Trojan")
-            && adapter.contains("TrojanInboundRequest"),
-        "Trojan adapter should extract Trojan config and pass TrojanInboundRequest"
+            && !adapter.contains("TrojanInboundRequest"),
+        "Trojan adapter should extract Trojan config and pass protocol-built values directly"
     );
     assert!(
-        inbound.contains("pub(crate) profile: TrojanInboundProfile")
-            && inbound.contains("pub(crate) tls_acceptor: crate::transport::TlsAcceptor")
+        inbound.contains("profile: TrojanInboundProfile")
+            && inbound.contains("tls_acceptor: crate::transport::TlsAcceptor")
             && !inbound.contains("struct TrojanInboundHandler")
             && !inbound.contains("let handler = TrojanInboundHandler")
             && !inbound.contains(".profile")
@@ -2974,7 +2974,7 @@ fn trojan_inbound_uses_adapter_request_model() {
 #[test]
 fn vmess_inbound_uses_adapter_request_model() {
     let inbound = read("src/adapters/vmess/inbound/listener/listener.rs");
-    let model = read("src/adapters/vmess/inbound/listener/model.rs");
+    let model_path = manifest_dir().join("src/adapters/vmess/inbound/listener/model.rs");
     let root = read("src/adapters/vmess/inbound/listener.rs");
     let transport = read("src/adapters/vmess/inbound/listener/transport.rs");
     let adapter = read("src/adapters/vmess/inbound.rs");
@@ -2988,9 +2988,10 @@ fn vmess_inbound_uses_adapter_request_model() {
         .expect("read vmess protocol lib source");
 
     assert!(
-        model.contains("struct VmessInboundRequest")
-            && inbound.contains("request: VmessInboundRequest"),
-        "VMess inbound listener should receive an adapter-built request model"
+        !model_path.exists()
+            && !inbound.contains("VmessInboundRequest")
+            && !adapter.contains("VmessInboundRequest"),
+        "VMess inbound listener should consume adapter-built values without a proxy-local request model"
     );
     assert!(
         !inbound.contains("InboundProtocolConfig::Vmess")
@@ -2998,8 +2999,9 @@ fn vmess_inbound_uses_adapter_request_model() {
         "VMess inbound entrypoint should not parse VMess config variants"
     );
     assert!(
-        adapter.contains("InboundProtocolConfig::Vmess") && adapter.contains("VmessInboundRequest"),
-        "VMess adapter should extract VMess config and pass VmessInboundRequest"
+        adapter.contains("InboundProtocolConfig::Vmess")
+            && !adapter.contains("VmessInboundRequest"),
+        "VMess adapter should extract VMess config and pass protocol-built values directly"
     );
     for forbidden in [
         "parse_uuid",
@@ -3007,8 +3009,8 @@ fn vmess_inbound_uses_adapter_request_model() {
         "vmess unknown cipher",
     ] {
         assert!(
-            !inbound.contains(forbidden) && !model.contains(forbidden),
-            "VMess inbound listener/model should receive protocol-built users; found `{forbidden}`"
+            !inbound.contains(forbidden),
+            "VMess inbound listener should receive protocol-built users; found `{forbidden}`"
         );
         assert!(
             !adapter.contains(forbidden) && protocol_inbound.contains(forbidden),
@@ -3032,8 +3034,8 @@ fn vmess_inbound_uses_adapter_request_model() {
             && protocol_inbound.contains("pub async fn accept_tcp_stream<S: AsyncSocket>")
             && protocol_inbound.contains("pub async fn accept_client<S: AsyncSocket>")
             && protocol_inbound.contains("VmessInboundAcceptedStream::from_session_stream")
-            && model.contains("pub(crate) profile: vmess::VmessInboundProfile")
-            && model.contains("pub(crate) tls_acceptor: crate::transport::TlsAcceptor")
+            && inbound.contains("profile: vmess::VmessInboundProfile")
+            && inbound.contains("tls_acceptor: crate::transport::TlsAcceptor")
             && !root.contains("struct VmessInboundHandler")
             && !root.contains("profile: VmessInboundProfile")
             && !transport.contains(".profile")
@@ -3043,7 +3045,7 @@ fn vmess_inbound_uses_adapter_request_model() {
             && !transport.contains(".accept_tcp_stream(")
             && transport.contains(".accept_client(vmess")
             && inbound.contains("profile.is_empty()")
-            && !model.contains("tls: Option<Box<zero_config::TlsConfig>>")
+            && !model_path.exists()
             && !inbound.contains("build_tls_acceptor")
             && !inbound.contains("zero_config::TlsConfig")
             && adapter.contains("crate::transport::build_tls_acceptor")
@@ -3057,7 +3059,6 @@ fn vmess_inbound_uses_adapter_request_model() {
             && !adapter.contains("user.cipher.clone()")
             && !adapter.contains("user.credential_id.clone()")
             && !adapter.contains("user.principal_key.clone()")
-            && !model.contains("users: Vec<vmess::VmessUser>")
             && !root.contains("users: Vec<VmessUser>")
             && !root.contains("handler.users")
             && !transport.contains("handler.users"),
@@ -3090,15 +3091,15 @@ fn vmess_inbound_uses_adapter_request_model() {
         "VMess inbound stream wrapping should be protocol-owned, not a proxy helper around VmessAeadStream"
     );
     assert!(
-        !inbound.contains("VmessUserConfig") && !model.contains("VmessUserConfig"),
-        "VMess inbound listener/model should not carry raw config user records"
+        !inbound.contains("VmessUserConfig") && !model_path.exists(),
+        "VMess inbound listener should not carry raw config user records or a proxy request-model layer"
     );
 }
 
 #[test]
 fn vless_inbound_users_are_protocol_parsed() {
     let listener = read("src/adapters/vless/inbound/listener/listener.rs");
-    let model = read("src/adapters/vless/inbound/listener/model.rs");
+    let model_path = manifest_dir().join("src/adapters/vless/inbound/listener/model.rs");
     let session = read("src/adapters/vless/inbound/listener/session.rs");
     let fallback = read("src/adapters/vless/inbound/listener/fallback.rs");
     let helpers = read("src/adapters/vless/inbound/listener/helpers.rs");
@@ -3172,7 +3173,7 @@ fn vless_inbound_users_are_protocol_parsed() {
             && !listener.contains("VlessConfiguredUser")
             && !session.contains("VlessConfiguredUser")
             && !session.contains("VlessConfiguredUsers::new")
-            && model.contains("profile: vless::VlessInboundProfile")
+            && listener.contains("profile: vless::VlessInboundProfile")
             && session.contains("profile: vless::VlessInboundProfile")
             && session.contains(".accept_client(vless::VlessInbound, metered)")
             && !session.contains(".accept_tcp_with_auth_context(vless::VlessInbound")
@@ -3263,17 +3264,16 @@ fn vless_inbound_users_are_protocol_parsed() {
         "VLESS inbound glue should consume protocol-owned session classification without implementing protocol callback handlers"
     );
     assert!(
-        model.contains("struct VlessInboundRequest")
-            && model.contains("reality: Option<vless::VlessRealityServerProfile>")
-            && listener.contains("request: VlessInboundRequest")
-            && listener.contains("let VlessInboundRequest")
-            && model.contains("tls_acceptor: Option<crate::transport::TlsAcceptor>")
-            && model.contains("ws: Option<Box<zero_config::WebSocketConfig>>")
-            && model.contains("grpc: Option<Box<zero_config::GrpcConfig>>")
-            && model.contains("h2: Option<Box<zero_config::H2Config>>")
-            && model.contains("http_upgrade: Option<Box<zero_config::HttpUpgradeConfig>>")
-            && model.contains("split_http: Option<Box<zero_config::SplitHttpConfig>>")
-            && model.contains("fallback: Option<Box<zero_config::FallbackConfig>>")
+        !model_path.exists()
+            && !listener.contains("VlessInboundRequest")
+            && listener.contains("reality: Option<vless::VlessRealityServerProfile>")
+            && listener.contains("tls_acceptor: Option<crate::transport::TlsAcceptor>")
+            && listener.contains("ws: Option<Box<zero_config::WebSocketConfig>>")
+            && listener.contains("grpc: Option<Box<zero_config::GrpcConfig>>")
+            && listener.contains("h2: Option<Box<zero_config::H2Config>>")
+            && listener.contains("http_upgrade: Option<Box<zero_config::HttpUpgradeConfig>>")
+            && listener.contains("split_http: Option<Box<zero_config::SplitHttpConfig>>")
+            && listener.contains("fallback: Option<Box<zero_config::FallbackConfig>>")
             && !adapter.contains("fn parse_transport_config")
             && !adapter.contains("fn parse_reality_profile")
             && adapter.contains("crate::transport::build_tls_acceptor")
@@ -3284,7 +3284,7 @@ fn vless_inbound_users_are_protocol_parsed() {
             && !listener.contains("build_tls_acceptor")
             && !listener.contains("zero_config::TlsConfig")
             && protocol_inbound.contains("pub struct VlessInboundProfile"),
-        "VLESS inbound request model should live in inbound/vless/model.rs"
+        "VLESS inbound listener should consume adapter-built values directly without a proxy request-model layer"
     );
     let transport_split_http =
         fs::read_to_string(repo_root().join("crates/transport/src/split_http.rs"))
@@ -3643,14 +3643,13 @@ fn protocol_inbound_roots_do_not_define_request_models() {
         ),
     ] {
         let root_content = read(root);
-        let model_content = read(model);
         assert!(
             !root_content.contains(&format!("struct {request}")),
             "{root} should not define protocol request model `{request}`"
         );
         assert!(
-            model_content.contains(&format!("struct {request}")),
-            "{model} should own protocol request model `{request}`"
+            !root_content.contains("mod model;") && !manifest_dir().join(model).exists(),
+            "{root} should not keep a separate request-model module `{model}` for `{request}`"
         );
     }
 }
@@ -5827,7 +5826,7 @@ fn socks5_udp_association_runtime_state_stays_out_of_outbound_module() {
 #[test]
 fn vless_udp_state_model_lives_outside_runtime_root() {
     let managed = read("src/adapters/vless/udp/managed.rs");
-    let model = read("src/adapters/vless/udp/managed/model.rs");
+    let model_path = manifest_dir().join("src/adapters/vless/udp/managed/model.rs");
     let establish = read("src/adapters/vless/udp/managed/establish.rs");
     let stream_packet_manager = read("src/runtime/udp_flow/managed/stream_packet_manager.rs");
     let managed_cache = read("src/runtime/udp_flow/managed/cache.rs");
@@ -5851,22 +5850,21 @@ fn vless_udp_state_model_lives_outside_runtime_root() {
         "VLESS UDP manager should not live under protocol_runtime"
     );
 
-    for required in [
-        "struct VlessUdpStartFlow",
-        "struct VlessUdpRelayTwoStream",
-        "struct VlessUdpRelayFinalHopStart",
-    ] {
-        assert!(
-            model.contains(required) && !managed.contains(required),
-            "VLESS UDP request model should live in adapters/vless/udp/managed/model.rs, not the manager root; missing `{required}`"
-        );
-    }
     assert!(
-        !managed.contains("struct VlessUdpUpstream {")
+        !model_path.exists()
+            && !managed.contains("struct VlessUdpStartFlow")
+            && !managed.contains("struct VlessUdpRelayTwoStream")
+            && !managed.contains("struct VlessUdpRelayFinalHopStart")
+            && !establish.contains("struct VlessUdpStartFlow")
+            && !managed.contains("pub(crate) use model::{")
+            && !managed.contains("mod model;")
+            && establish.contains("pub(super) async fn start_mux_fast_path(")
+            && establish.contains("config: vless::udp::VlessUdpFlowConfig")
+            && establish.contains("transport: crate::transport::VlessUdpTransportOptions")
+            && establish.contains("mux_pool: &vless::mux_pool::MuxConnectionPool")
+            && !managed.contains("struct VlessUdpUpstream {")
             && !managed.contains("VlessUdpUpstream {")
-            && managed.contains("pub(crate) use model::{")
             && managed.contains("mod establish;")
-            && managed.contains("mod model;")
             && !managed.contains("fn over_stream")
             && !managed.contains("fn direct")
             && !managed.contains("impl ManagedTupleUdpSender")
@@ -5945,9 +5943,10 @@ fn vless_udp_transport_opening_lives_in_transport_crate() {
 #[test]
 fn vless_udp_identity_is_protocol_parsed() {
     let managed = read("src/adapters/vless/udp/managed.rs");
-    let model = read("src/adapters/vless/udp/managed/model.rs");
+    let model_path = manifest_dir().join("src/adapters/vless/udp/managed/model.rs");
     let adapter = read("src/adapters/vless/udp.rs");
     let flow = read("src/adapters/vless/udp/flow.rs");
+    let establish = read("src/adapters/vless/udp/managed/establish.rs");
     let transport = fs::read_to_string(repo_root().join("crates/transport/src/vless_transport.rs"))
         .expect("read zero-transport vless transport source");
     let protocol = fs::read_to_string(repo_root().join("protocols/vless/src/udp.rs"))
@@ -5958,20 +5957,11 @@ fn vless_udp_identity_is_protocol_parsed() {
         "VLESS UDP runtime should receive protocol-parsed UUIDs"
     );
     assert!(
-        !model.contains("id: &'a str") && model.contains("vless::udp::VlessUdpFlowConfig"),
-        "VLESS UDP request models should carry protocol-owned flow config instead of raw config IDs"
+        !model_path.exists()
+            && managed.contains("config: vless::udp::VlessUdpFlowConfig")
+            && establish.contains("config: vless::udp::VlessUdpFlowConfig"),
+        "VLESS UDP managed glue should carry protocol-owned flow config directly instead of a proxy request model"
     );
-    for forbidden in [
-        "pub(crate) id: &'a str",
-        "pub(super) id: &'a str",
-        "pub(crate) uuid: [u8; 16]",
-        "pub(super) uuid: [u8; 16]",
-    ] {
-        assert!(
-            !model.contains(forbidden),
-            "VLESS UDP request models should not carry raw config IDs or UUID fields; found `{forbidden}`"
-        );
-    }
     assert!(
         !adapter.contains("parse_uuid")
             && !adapter.contains("vless::parse_udp_identity")
@@ -6224,7 +6214,7 @@ fn vless_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
 #[test]
 fn vmess_udp_state_model_lives_outside_runtime_root() {
     let managed = read("src/adapters/vmess/udp/managed.rs");
-    let model = read("src/adapters/vmess/udp/managed/model.rs");
+    let model_path = manifest_dir().join("src/adapters/vmess/udp/managed/model.rs");
     let establish = read("src/adapters/vmess/udp/managed/establish.rs");
     let stream_packet_manager = read("src/runtime/udp_flow/managed/stream_packet_manager.rs");
     let managed_cache = read("src/runtime/udp_flow/managed/cache.rs");
@@ -6244,22 +6234,23 @@ fn vmess_udp_state_model_lives_outside_runtime_root() {
         );
     }
 
-    for required in ["struct VmessUdpStartFlow", "struct VmessUdpRelayFlowStart"] {
-        assert!(
-            model.contains(required) && !managed.contains(required),
-            "VMess UDP protocol request model should live in adapters/vmess/udp/managed/model.rs, not the manager root; missing `{required}`"
-        );
-    }
     assert!(
-        !managed.contains("struct VmessUdpUpstream {")
+        !model_path.exists()
+            && !managed.contains("struct VmessUdpStartFlow")
+            && !managed.contains("struct VmessUdpRelayFlowStart")
+            && !establish.contains("struct VmessUdpStartFlow")
+            && !managed.contains("pub(crate) use model::{")
+            && !managed.contains("mod model;")
+            && establish.contains("config: vmess::udp::VmessUdpFlowConfig")
+            && establish.contains("transport: crate::transport::VmessTransportOptions")
+            && establish.contains("mux_pool: &vmess::mux::VmessMuxConnectionPool")
+            && !managed.contains("struct VmessUdpUpstream {")
             && !managed.contains("struct VmessUdpUpstreamRequest")
             && establish.contains("pub(super) async fn over_stream")
             && establish.contains("pub(super) async fn direct_flow")
             && !establish.contains("struct VmessManagedUdpSender")
             && establish.contains("impl ManagedTupleUdpSender for vmess::udp::VmessUdpFlowConnection")
-            && managed.contains("pub(crate) use model::{")
             && managed.contains("mod establish;")
-            && managed.contains("mod model;")
             && managed.contains("ManagedStreamPacketSender")
             && !managed.contains("VmessUdpOutboundManager")
             && !managed.contains("ManagedStreamConnectionCacheKey")
@@ -6339,15 +6330,16 @@ fn vmess_udp_transport_opening_lives_in_transport_crate() {
 #[test]
 fn vmess_udp_identity_is_protocol_parsed() {
     let managed = read("src/adapters/vmess/udp/managed.rs");
-    let model = read("src/adapters/vmess/udp/managed/model.rs");
+    let model_path = manifest_dir().join("src/adapters/vmess/udp/managed/model.rs");
     let adapter = read("src/adapters/vmess/udp.rs");
     let flow = read("src/adapters/vmess/udp/flow.rs");
+    let establish = read("src/adapters/vmess/udp/managed/establish.rs");
     let protocol = fs::read_to_string(repo_root().join("protocols/vmess/src/udp.rs"))
         .expect("read protocols/vmess/src/udp.rs");
 
     for forbidden in ["parse_uuid", "VmessCipher::from_name"] {
         assert!(
-            !managed.contains(forbidden) && !model.contains(forbidden),
+            !managed.contains(forbidden),
             "VMess UDP runtime should receive protocol-parsed identity; found `{forbidden}`"
         );
         assert!(
@@ -6376,25 +6368,12 @@ fn vmess_udp_identity_is_protocol_parsed() {
         "protocols/vmess should own VMess UDP flow config construction"
     );
 
-    for forbidden in [
-        "pub(crate) id: &'a str",
-        "pub(super) id: &'a str",
-        "pub(crate) cipher: &'a str",
-        "pub(super) cipher: &'a str",
-        "pub(crate) uuid: [u8; 16]",
-        "pub(super) uuid: [u8; 16]",
-        "pub(crate) cipher: vmess::VmessCipher",
-        "pub(super) cipher: vmess::VmessCipher",
-        "cipher_name: &'a str",
-    ] {
-        assert!(
-            !model.contains(forbidden),
-            "VMess UDP request models should carry protocol-owned flow config only; found `{forbidden}`"
-        );
-    }
     assert!(
-        model.contains("vmess::udp::VmessUdpFlowConfig") && !model.contains("vmess::VmessUdpIdentity"),
-        "VMess UDP request models should carry protocol-owned flow config for identity and mux keying"
+        !model_path.exists()
+            && managed.contains("config: vmess::udp::VmessUdpFlowConfig")
+            && establish.contains("config: vmess::udp::VmessUdpFlowConfig")
+            && !managed.contains("vmess::VmessUdpIdentity"),
+        "VMess UDP managed glue should carry protocol-owned flow config for identity and mux keying without a proxy request model"
     );
 }
 
@@ -6576,7 +6555,7 @@ fn vmess_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
 #[test]
 fn vmess_mux_pool_model_lives_outside_runtime_root() {
     let root = read("src/adapters/vmess/mux_pool.rs");
-    let model = read("src/adapters/vmess/mux_pool/model.rs");
+    let model_path = manifest_dir().join("src/adapters/vmess/mux_pool/model.rs");
     let protocol_mux = fs::read_to_string(repo_root().join("protocols/vmess/src/mux.rs"))
         .expect("read protocols/vmess/src/mux.rs");
     let old_root = manifest_dir().join("src/protocol_runtime/vmess_mux_pool.rs");
@@ -6586,42 +6565,23 @@ fn vmess_mux_pool_model_lives_outside_runtime_root() {
         "struct VmessMuxPoolKey",
         "enum VmessMuxTransportKey",
         "struct VmessMuxConn",
-        "struct VmessMuxOpenRequest",
         "struct VmessMuxConnectionPool",
         "impl VmessMuxConnectionPool",
     ] {
         assert!(
             !root.contains(forbidden),
-            "VMess adapter mux_pool.rs should keep pool/request models in mux_pool/model.rs; found `{forbidden}`"
+            "VMess adapter mux_pool.rs should keep protocol MUX state out of proxy glue; found `{forbidden}`"
         );
     }
-
-    for forbidden in ["struct VmessMuxPoolKey", "enum VmessMuxTransportKey"] {
-        assert!(
-            !model.contains(forbidden),
-            "VMess mux cache identity should live in protocols/vmess, not adapter model; found `{forbidden}`"
-        );
-    }
-    for forbidden in [
-        "id: [u8; 16]",
-        "cipher_name: String",
-        "cipher: vmess::VmessCipher",
-    ] {
-        assert!(
-            !model.contains(forbidden),
-            "VMess mux open request should carry protocol-owned identity, not `{forbidden}`"
-        );
-    }
-
-    for required in [
-        "struct VmessMuxOpenRequest",
-        "identity: vmess::mux::VmessMuxIdentity",
-    ] {
-        assert!(
-            model.contains(required),
-            "VMess MUX proxy I/O request model should live in adapters/vmess/mux_pool/model.rs; missing `{required}`"
-        );
-    }
+    assert!(
+        !model_path.exists()
+            && !root.contains("struct VmessMuxOpenRequest")
+            && root.contains("fn pool_key(")
+            && root.contains("identity: vmess::mux::VmessMuxIdentity")
+            && root.contains("vmess::mux::VmessMuxPoolKeyConfig::new")
+            && root.contains(".into_pool_key()"),
+        "VMess mux pool should build protocol-owned cache keys directly without a proxy request model"
+    );
     for required in [
         "struct VmessMuxPoolKey",
         "enum VmessMuxTransportKey",
@@ -6935,7 +6895,7 @@ fn vmess_mux_pool_transport_opening_lives_in_transport_crate() {
 #[test]
 fn vmess_mux_pool_receives_protocol_parsed_cipher() {
     let root = read("src/adapters/vmess/mux_pool.rs");
-    let model = read("src/adapters/vmess/mux_pool/model.rs");
+    let model_path = manifest_dir().join("src/adapters/vmess/mux_pool/model.rs");
     let tcp_adapter = read("src/adapters/vmess/tcp.rs");
     let udp_root = read("src/adapters/vmess/udp.rs");
     let udp_flow = read("src/adapters/vmess/udp/flow.rs");
@@ -6949,27 +6909,23 @@ fn vmess_mux_pool_receives_protocol_parsed_cipher() {
         "VMess mux pool should receive parsed cipher values from protocol-owned config builders"
     );
     assert!(
-        model.contains("identity: vmess::mux::VmessMuxIdentity")
-            && root.contains("request.pool_key()")
+        !model_path.exists()
+            && root.contains("identity: vmess::mux::VmessMuxIdentity")
+            && root.contains("fn pool_key(")
             && root.contains("let (server, port) = key.endpoint()")
             && !root.contains("key.server")
             && !root.contains("key.port")
             && !root.contains("vmess::mux::VmessMuxPoolKey::from_config_parts")
-            && !model.contains("vmess::mux::VmessMuxPoolKey::from_config_parts")
-            && model.contains("fn pool_key(&self)")
-            && model.contains("vmess::mux::VmessMuxPoolKeyConfig::new")
-            && model.contains(".into_pool_key()")
+            && root.contains("vmess::mux::VmessMuxPoolKeyConfig::new")
+            && root.contains(".into_pool_key()")
             && !root.contains("vmess::mux::VmessMuxPoolKey::from_identity")
             && !root.contains("vmess::mux::transport_key_from_config")
-            && !model.contains("vmess::mux::transport_key_from_config")
             && !root.contains("fn transport_key(")
             && !root.contains("VmessMuxTransportKey::Grpc")
             && !root.contains("VmessMuxTransportKey::Ws")
             && !root.contains("VmessMuxTransportKey::RawTls")
-            && !root.contains("service_names: grpc.service_names.clone()")
-            && !root.contains("path: ws.path.clone()")
-            && !model.contains("struct VmessMuxPoolKey"),
-        "VMess mux pool request should carry parsed identity and ask protocols/vmess to build transport cache identity"
+            && !root.contains("struct VmessMuxPoolKey"),
+        "VMess mux pool should carry parsed identity and ask protocols/vmess to build transport cache identity"
     );
     assert!(
         protocol_mux.contains("pub struct VmessMuxPoolKeyConfig")
@@ -6997,35 +6953,28 @@ fn vmess_mux_pool_receives_protocol_parsed_cipher() {
 #[test]
 fn vless_mux_pool_model_lives_outside_runtime_root() {
     let root = read("src/adapters/vless/mux_pool.rs");
-    let model = read("src/adapters/vless/mux_pool/model.rs");
+    let model_path = manifest_dir().join("src/adapters/vless/mux_pool/model.rs");
     let protocol_mux_pool = fs::read_to_string(repo_root().join("protocols/vless/src/mux_pool.rs"))
         .expect("read protocols/vless/src/mux_pool.rs");
     let old_root = manifest_dir().join("src/protocol_runtime/vless_mux_pool.rs");
     let old_dir = manifest_dir().join("src/protocol_runtime/vless_mux_pool");
 
-    for forbidden in ["struct MuxConnectionPool", "struct VlessMuxOpenRequest"] {
+    {
+        let forbidden = "struct MuxConnectionPool";
         assert!(
             !root.contains(forbidden),
-            "VLESS adapter mux_pool.rs should keep proxy-layer pool/request models in mux_pool/model.rs; found `{forbidden}`"
+            "VLESS adapter mux_pool.rs should keep protocol MUX state out of proxy glue; found `{forbidden}`"
         );
     }
-
-    for forbidden in ["id: &'a [u8; 16]", "uuid: [u8; 16]"] {
-        assert!(
-            !model.contains(forbidden),
-            "VLESS mux open request should carry protocol-owned identity, not `{forbidden}`"
-        );
-    }
-
-    for required in [
-        "struct VlessMuxOpenRequest",
-        "identity: vless::mux_pool::MuxIdentity",
-    ] {
-        assert!(
-            model.contains(required),
-            "VLESS MUX pool model should live in adapters/vless/mux_pool/model.rs; missing `{required}`"
-        );
-    }
+    assert!(
+        !model_path.exists()
+            && !root.contains("struct VlessMuxOpenRequest")
+            && root.contains("fn pool_key(")
+            && root.contains("identity: MuxIdentity")
+            && root.contains("PoolKeyConfig::new")
+            && root.contains(".into_pool_key()"),
+        "VLESS mux pool should build protocol-owned cache keys directly without a proxy request model"
+    );
     for required in [
         "pub struct MuxConnectionPool",
         "impl MuxConnectionPool",
@@ -7078,7 +7027,7 @@ fn vless_mux_pool_model_lives_outside_runtime_root() {
         "establish_mux_connection",
         "into_pool_conn",
         "key.endpoint()",
-        "request.pool_key()",
+        "fn pool_key(",
     ] {
         assert!(
             root.contains(required),
@@ -7100,16 +7049,15 @@ fn vless_mux_pool_model_lives_outside_runtime_root() {
     assert!(
         !root.contains("PoolKey::from_identity")
             && !root.contains("PoolKey::from_config_parts")
-            && !model.contains("PoolKey::from_config_parts")
             && !root.contains("vless::mux_pool::transport_key_from_config")
-            && !model.contains("vless::mux_pool::transport_key_from_config"),
+            && !model_path.exists(),
         "VLESS adapter mux pool should call protocol-owned pool-key builders instead of composing transport cache identity"
     );
     assert!(
-        model.contains("fn pool_key(&self)")
-            && model.contains("PoolKeyConfig::new")
-            && model.contains(".into_pool_key()"),
-        "VLESS mux open request should delegate protocol pool key construction to protocol-owned config builders"
+        root.contains("fn pool_key(")
+            && root.contains("PoolKeyConfig::new")
+            && root.contains(".into_pool_key()"),
+        "VLESS mux pool should delegate protocol pool key construction to protocol-owned config builders"
     );
     assert!(
         !root.contains("VlessOutbound")
@@ -7172,18 +7120,18 @@ fn protocol_mux_pools_are_adapter_owned_not_proxy_fields() {
         vless_adapter.contains("mux_pool: vless::mux_pool::MuxConnectionPool")
             && vless_adapter.contains("fn on_config_reloaded(&self)")
             && vless_adapter.contains("self.mux_pool.evict_all()")
-            && vless_tcp.contains("VlessMuxOpenRequest")
+            && vless_tcp.contains("crate::adapters::vless::mux_pool::open_stream(")
             && vless_tcp.contains(".mux_pool")
-            && vless_udp.contains("mux_pool: &adapter.mux_pool"),
+            && vless_udp.contains("&adapter.mux_pool"),
         "VLESS MUX pool should be protocol-owned state held by VlessAdapter and shared by its TCP/UDP paths"
     );
     assert!(
         vmess_adapter.contains("mux_pool: vmess::mux::VmessMuxConnectionPool")
             && vmess_adapter.contains("fn on_config_reloaded(&self)")
             && vmess_adapter.contains("self.mux_pool.evict_all()")
-            && vmess_tcp.contains("VmessMuxOpenRequest")
+            && vmess_tcp.contains("crate::adapters::vmess::mux_pool::open_stream(")
             && vmess_tcp.contains(".mux_pool")
-            && vmess_udp.contains("mux_pool: &adapter.mux_pool"),
+            && vmess_udp.contains("&adapter.mux_pool"),
         "VMess MUX pool should be protocol-owned state held by VmessAdapter and shared by its TCP/UDP paths"
     );
 }
@@ -7205,15 +7153,21 @@ fn protocol_runtime_udp_and_mux_roots_do_not_reexport_request_models() {
         );
     }
 
+    for model in [
+        "src/adapters/vless/mux_pool/model.rs",
+        "src/adapters/vmess/mux_pool/model.rs",
+        "src/adapters/vless/udp/managed/model.rs",
+        "src/adapters/vmess/udp/managed/model.rs",
+    ] {
+        assert!(
+            !manifest_dir().join(model).exists(),
+            "{model} should stay deleted after collapsing proxy request-model wrappers"
+        );
+    }
     assert!(
-        read("src/adapters/vless/mux_pool.rs")
-            .contains("pub(crate) use model::VlessMuxOpenRequest;"),
-        "VLESS mux pool root should expose only the adapter request facade"
-    );
-    assert!(
-        read("src/adapters/vmess/mux_pool.rs")
-            .contains("pub(crate) use model::VmessMuxOpenRequest;"),
-        "VMess mux pool root should expose only the adapter request facade"
+        !read("src/adapters/vless/mux_pool.rs").contains("mod model;")
+            && !read("src/adapters/vmess/mux_pool.rs").contains("mod model;"),
+        "VLESS and VMess mux pool roots should not re-export request models through a model module"
     );
 }
 
@@ -7404,29 +7358,22 @@ fn inbound_vmess_mux_task_models_do_not_live_in_proxy_model() {
     let root = read("src/adapters/vmess/inbound/listener/mux.rs");
     let mux_udp = read("src/adapters/vmess/inbound/listener/mux_udp.rs");
     let mux_tcp = read("src/runtime/mux_tcp.rs");
-    let model = read("src/adapters/vmess/inbound/listener/model.rs");
+    let model_path = manifest_dir().join("src/adapters/vmess/inbound/listener/model.rs");
 
     for forbidden in [
         "struct VmessMuxTcpStreamTask",
         "struct VmessMuxUdpStreamTask",
     ] {
         assert!(
-            !root.contains(forbidden) && !model.contains(forbidden),
+            !root.contains(forbidden) && !model_path.exists(),
             "VMess inbound MUX task models should not be proxy model-layer structs; found `{forbidden}`"
         );
     }
 
-    for forbidden in [
-        "writer: vmess::mux::VmessInboundMuxWriter",
-        "mpsc::UnboundedReceiver<Vec<u8>>",
-        "tasks: &'a mut JoinSet<()>",
-        "pub(crate) session: Session",
-    ] {
-        assert!(
-            !model.contains(forbidden),
-            "inbound/vmess/model.rs should only keep inbound request models, not MUX runtime task fields `{forbidden}`"
-        );
-    }
+    assert!(
+        !model_path.exists(),
+        "VMess inbound listener should not keep a proxy model module for MUX task state"
+    );
     let protocol_mux = fs::read_to_string(repo_root().join("protocols/vmess/src/mux.rs"))
         .expect("read protocols/vmess/src/mux.rs");
     let handler_section = root
@@ -7572,8 +7519,7 @@ fn inbound_vmess_mux_task_models_do_not_live_in_proxy_model() {
             && !root.contains("session.network")
             && !root.contains("network,")
             && !root.contains("Session::new(0,")
-            && !model.contains("pub(crate) target: Address")
-            && !model.contains("pub(crate) port: u16"),
+            && !model_path.exists(),
         "VMess inbound MUX new-stream Session conversion should be protocol-owned and exposed as an action"
     );
     assert!(
@@ -7600,8 +7546,7 @@ fn inbound_vmess_mux_task_models_do_not_live_in_proxy_model() {
             && !root.contains("mux_session.next_action(")
             && !root.contains("vmess::mux::VmessMuxFrameEncoder")
             && !root.contains("frame_encoder.")
-            && !model.contains("VmessMuxFrameEncoder")
-            && !model.contains("mpsc::UnboundedSender<Vec<u8>>")
+            && !model_path.exists()
             && !root.contains("vmess::mux::read_mux_server_event")
             && !root.contains("vmess::mux::queue_end_stream")
             && !root.contains("vmess::mux::queue_keep_stream")
@@ -7865,18 +7810,14 @@ fn inbound_vless_mux_task_model_does_not_live_in_proxy_model() {
     let root = read("src/adapters/vless/inbound/listener/mux.rs");
     let packet_session_udp = read("src/runtime/packet_session_udp.rs");
     let mux_udp = read("src/adapters/vless/inbound/listener/mux_udp.rs");
-    let model = read("src/adapters/vless/inbound/listener/model.rs");
+    let model_path = manifest_dir().join("src/adapters/vless/inbound/listener/model.rs");
     let protocol_mux = fs::read_to_string(repo_root().join("protocols/vless/src/mux.rs"))
         .expect("read protocols/vless/src/mux.rs");
     let protocol_inbound = fs::read_to_string(repo_root().join("protocols/vless/src/inbound.rs"))
         .expect("read protocols/vless/src/inbound.rs");
 
     assert!(
-        !root.contains("struct VlessMuxUdpStreamTask")
-            && !model.contains("struct VlessMuxUdpStreamTask")
-            && !model.contains("writer: vless::mux::VlessInboundMuxWriter")
-            && !model.contains("tokio::sync::mpsc::UnboundedReceiver<Vec<u8>>")
-            && !model.contains("SessionAuth"),
+        !root.contains("struct VlessMuxUdpStreamTask") && !model_path.exists(),
         "VLESS inbound MUX task model should not be a proxy model-layer struct"
     );
     let handler_section = root
@@ -7950,7 +7891,7 @@ fn inbound_vless_mux_task_model_does_not_live_in_proxy_model() {
             && !root.contains("mpsc::unbounded_channel()")
             && !root.contains("up_senders")
             && !root.contains("down_tx")
-            && !model.contains("mpsc::UnboundedSender<(u16, Vec<u8>)>")
+            && !model_path.exists()
             && protocol_mux.contains("struct VlessInboundMuxDownlink")
             && protocol_mux.contains("pub struct VlessInboundMuxStreams")
             && protocol_mux.contains("pub fn open_stream")

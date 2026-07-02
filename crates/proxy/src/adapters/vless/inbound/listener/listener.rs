@@ -10,29 +10,25 @@ use zero_engine::EngineError;
 use zero_platform_tokio::TokioSocket;
 
 use super::fallback::relay_fallback;
-use super::model::VlessInboundRequest;
 use super::session::{handle_vless_client, handle_vless_stream};
 use super::upgrade_vless_reality_server;
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn run_vless_listener_with_bound(
     proxy: &Proxy,
-    request: VlessInboundRequest,
+    inbound: zero_config::InboundConfig,
+    profile: vless::VlessInboundProfile,
+    reality: Option<vless::VlessRealityServerProfile>,
+    tls_acceptor: Option<crate::transport::TlsAcceptor>,
+    ws: Option<Box<zero_config::WebSocketConfig>>,
+    grpc: Option<Box<zero_config::GrpcConfig>>,
+    h2: Option<Box<zero_config::H2Config>>,
+    http_upgrade: Option<Box<zero_config::HttpUpgradeConfig>>,
+    split_http: Option<Box<zero_config::SplitHttpConfig>>,
+    fallback: Option<Box<zero_config::FallbackConfig>>,
     bound: crate::protocol_registry::BoundInbound,
     shutdown: watch::Receiver<bool>,
 ) -> Result<(), EngineError> {
-    let VlessInboundRequest {
-        inbound,
-        profile,
-        reality,
-        tls_acceptor,
-        ws,
-        grpc,
-        h2,
-        http_upgrade,
-        split_http,
-        fallback,
-    } = request;
-
     match bound {
         crate::protocol_registry::BoundInbound::Quic(quic_inbound) => {
             let fallback_config = fallback.as_deref().cloned();
