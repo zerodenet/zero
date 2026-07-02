@@ -90,6 +90,33 @@ pub(crate) trait InboundProtocol: Send + Sync {
     }
 }
 
+#[derive(Clone, Copy, Default)]
+pub(crate) struct NoClientResponseInboundProtocol;
+
+#[async_trait]
+impl InboundProtocol for NoClientResponseInboundProtocol {
+    type ClientStream = TcpRelayStream;
+
+    async fn accept(
+        &self,
+        _stream: TcpRelayStream,
+    ) -> Result<(Session, Self::ClientStream), EngineError> {
+        unreachable!("accept is handled before serve_inbound dispatch")
+    }
+
+    async fn send_ok(&self, _client: &mut TcpRelayStream) -> Result<(), EngineError> {
+        Ok(())
+    }
+
+    async fn send_blocked(&self, _client: &mut TcpRelayStream) -> Result<(), EngineError> {
+        Ok(())
+    }
+
+    async fn send_upstream_failure(&self, _client: &mut TcpRelayStream) -> Result<(), EngineError> {
+        Ok(())
+    }
+}
+
 // ── Unified kernel pipeline ───────────────────────────────────────────
 
 /// Single entry point for ALL TCP protocols (generic over the protocol type).

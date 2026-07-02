@@ -4,7 +4,6 @@ mod udp;
 
 use std::io;
 
-use async_trait::async_trait;
 use tokio::sync::watch;
 use tracing::warn;
 use trojan::{TrojanInbound, TrojanInboundAcceptedSessionDispatcher, TrojanInboundProfile};
@@ -12,7 +11,7 @@ use zero_config::InboundConfig;
 use zero_core::Session;
 use zero_engine::EngineError;
 
-use crate::runtime::inbound_protocol::{serve_inbound, InboundProtocol};
+use crate::runtime::inbound_protocol::{serve_inbound, NoClientResponseInboundProtocol};
 use crate::runtime::listener_loop::{run_tcp_listener_loop, TcpListenerLoopRequest};
 use crate::runtime::Proxy;
 use crate::transport::{AsyncSocketStream, TcpRelayStream};
@@ -34,37 +33,8 @@ pub(crate) struct TrojanInboundHandler {
 
 struct TrojanAcceptedSessionBridge<'a> {
     proxy: &'a Proxy,
-    handler: &'a TrojanInboundHandler,
     inbound_tag: &'a str,
     source_addr: Option<std::net::SocketAddr>,
-}
-
-#[async_trait]
-impl InboundProtocol for TrojanInboundHandler {
-    type ClientStream = TcpRelayStream;
-
-    async fn accept(
-        &self,
-        stream: TcpRelayStream,
-    ) -> Result<(Session, Self::ClientStream), EngineError> {
-        let _ = stream;
-        unreachable!("trojan accept is handled before serve_inbound dispatch")
-    }
-
-    async fn send_ok(&self, _client: &mut TcpRelayStream) -> Result<(), EngineError> {
-        // Trojan has no success response
-        Ok(())
-    }
-
-    async fn send_blocked(&self, _client: &mut TcpRelayStream) -> Result<(), EngineError> {
-        // Trojan has no blocked response; just close.
-        Ok(())
-    }
-
-    async fn send_upstream_failure(&self, _client: &mut TcpRelayStream) -> Result<(), EngineError> {
-        Ok(())
-    }
-    // relay uses default
 }
 
 type TrojanAcceptedStream =
@@ -84,7 +54,7 @@ impl TrojanInboundAcceptedSessionDispatcher<TrojanAcceptedStream>
             self.proxy,
             session,
             TcpRelayStream::new(stream.into_inner()),
-            self.handler,
+            &NoClientResponseInboundProtocol,
             self.inbound_tag,
             self.source_addr,
         )
@@ -173,7 +143,6 @@ pub(crate) async fn run_trojan_listener_with_bound(
 
                 let mut bridge = TrojanAcceptedSessionBridge {
                     proxy: &engine,
-                    handler: &handler,
                     inbound_tag: &tag,
                     source_addr,
                 };

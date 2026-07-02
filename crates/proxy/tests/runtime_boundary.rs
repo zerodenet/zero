@@ -2862,6 +2862,7 @@ fn trojan_inbound_uses_adapter_request_model() {
     let inbound = read("src/adapters/trojan/inbound/listener.rs");
     let udp = read("src/adapters/trojan/inbound/listener/udp.rs");
     let adapter = read("src/adapters/trojan/inbound.rs");
+    let runtime_protocol = read("src/runtime/inbound_protocol.rs");
     let protocol_inbound = fs::read_to_string(repo_root().join("protocols/trojan/src/inbound.rs"))
         .expect("read trojan protocol inbound source");
     let protocol_lib = fs::read_to_string(repo_root().join("protocols/trojan/src/lib.rs"))
@@ -2920,6 +2921,8 @@ fn trojan_inbound_uses_adapter_request_model() {
             && !inbound.contains("TrojanInboundAcceptedSession::from_session_stream")
             && inbound.contains(".accept_client(handler.trojan_inbound")
             && inbound.contains("struct TrojanAcceptedSessionBridge")
+            && inbound.contains("NoClientResponseInboundProtocol")
+            && !inbound.contains("impl InboundProtocol for TrojanInboundHandler")
             && inbound.contains("impl TrojanInboundAcceptedSessionDispatcher<TrojanAcceptedStream>")
             && inbound.contains(".dispatch_with(&mut bridge)")
             && !inbound.contains(".dispatch(")
@@ -2949,7 +2952,9 @@ fn trojan_inbound_uses_adapter_request_model() {
             && !protocol_lib.contains("dispatch_inbound_session")
             && !protocol_lib.contains("TrojanInboundSessionHandler")
             && protocol_lib.contains("TrojanInboundAcceptedSessionDispatcher")
-            && protocol_lib.contains("TrojanInboundSessionKind"),
+            && protocol_lib.contains("TrojanInboundSessionKind")
+            && runtime_protocol.contains("pub(crate) struct NoClientResponseInboundProtocol")
+            && runtime_protocol.contains("impl InboundProtocol for NoClientResponseInboundProtocol"),
         "Trojan inbound glue should consume protocol-owned session classification without implementing protocol callback handlers"
     );
 }
@@ -2961,6 +2966,7 @@ fn vmess_inbound_uses_adapter_request_model() {
     let root = read("src/adapters/vmess/inbound/listener.rs");
     let transport = read("src/adapters/vmess/inbound/listener/transport.rs");
     let adapter = read("src/adapters/vmess/inbound.rs");
+    let runtime_protocol = read("src/runtime/inbound_protocol.rs");
     let helper_path = manifest_dir().join("src/adapters/vmess/inbound/listener/helpers.rs");
     let protocol_inbound = fs::read_to_string(repo_root().join("protocols/vmess/src/inbound.rs"))
         .expect("read vmess protocol inbound source");
@@ -3056,9 +3062,15 @@ fn vmess_inbound_uses_adapter_request_model() {
             && !transport.contains("wrap_vmess_client")
             && !root.contains("VmessAeadStream")
             && !transport.contains("VmessAeadStream")
+            && transport.contains("NoClientResponseInboundProtocol")
+            && !root.contains("impl InboundProtocol for VmessInboundHandler")
+            && !root.contains("struct VmessTransportHandler")
+            && !root.contains("impl InboundProtocol for VmessTransportHandler")
             && protocol_stream.contains("pub fn wrap_tcp_inbound_stream")
             && protocol_stream.contains("VmessAeadStream::inbound")
-            && protocol_lib.contains("wrap_tcp_inbound_stream"),
+            && protocol_lib.contains("wrap_tcp_inbound_stream")
+            && runtime_protocol.contains("pub(crate) struct NoClientResponseInboundProtocol")
+            && runtime_protocol.contains("impl InboundProtocol for NoClientResponseInboundProtocol"),
         "VMess inbound stream wrapping should be protocol-owned, not a proxy helper around VmessAeadStream"
     );
     assert!(
@@ -7585,7 +7597,8 @@ fn vmess_transport_dispatch_uses_protocol_session_classification() {
             && transport.contains(".dispatch_with(&mut bridge)")
             && !transport.contains(".dispatch(")
             && transport.contains("struct VmessAcceptedStreamBridge")
-            && transport.contains("impl<S, H> vmess::mux::VmessInboundAcceptedStreamDispatcher")
+            && transport.contains("impl<S> vmess::mux::VmessInboundAcceptedStreamDispatcher")
+            && !transport.contains("handler: &'a H")
             && !transport.contains("vmess::mux::VmessInboundAcceptedStream::Udp")
             && !transport.contains("vmess::mux::VmessInboundAcceptedStream::Mux")
             && !transport.contains("vmess::mux::VmessInboundAcceptedStream::Tcp")
