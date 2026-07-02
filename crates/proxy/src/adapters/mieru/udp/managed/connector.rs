@@ -11,8 +11,6 @@ use crate::transport::TcpRelayStream;
 use zero_core::Session;
 use zero_engine::EngineError;
 
-pub(super) struct MieruManagedStreamConnector;
-
 impl ManagedStreamConnectorFlowBuild for mieru::udp::MieruUdpConnectorFlow {
     fn into_parts(self) -> (String, bool) {
         mieru::udp::MieruUdpConnectorFlow::into_parts(self)
@@ -20,15 +18,14 @@ impl ManagedStreamConnectorFlowBuild for mieru::udp::MieruUdpConnectorFlow {
 }
 
 #[async_trait::async_trait]
-impl ManagedStreamFlowConnector<mieru::udp::MieruUdpFlowResume> for MieruManagedStreamConnector {
+impl ManagedStreamFlowConnector for mieru::udp::MieruUdpFlowResume {
     fn connector_flow(
         &self,
-        resume: &mieru::udp::MieruUdpFlowResume,
         endpoint: OutboundEndpoint<'_>,
         session_id: u64,
     ) -> ManagedStreamConnectorFlow {
         let flow = mieru::udp::connector_flow_from_resume(
-            resume,
+            self,
             endpoint.server,
             endpoint.port,
             session_id,
@@ -41,14 +38,13 @@ impl ManagedStreamFlowConnector<mieru::udp::MieruUdpFlowResume> for MieruManaged
         proxy: &Proxy,
         _session: &Session,
         endpoint: OutboundEndpoint<'_>,
-        resume: mieru::udp::MieruUdpFlowResume,
     ) -> Result<SharedManagedUdpConnection, EngineError> {
         let socket = proxy
             .protocols
             .direct_connector()
             .connect_host(endpoint.server, endpoint.port, proxy.resolver.as_ref())
             .await?;
-        packet_stream(TcpRelayStream::new(socket), resume).await
+        packet_stream(TcpRelayStream::new(socket), self).await
     }
 
     async fn establish_relay(
@@ -58,17 +54,16 @@ impl ManagedStreamFlowConnector<mieru::udp::MieruUdpFlowResume> for MieruManaged
         _proxy: Option<&Proxy>,
         _session: &Session,
         _endpoint: OutboundEndpoint<'_>,
-        resume: mieru::udp::MieruUdpFlowResume,
     ) -> Result<SharedManagedUdpConnection, EngineError> {
-        packet_stream(stream, resume).await
+        packet_stream(stream, self).await
     }
 }
 
 async fn packet_stream(
     stream: TcpRelayStream,
-    resume: mieru::udp::MieruUdpFlowResume,
+    resume: &mieru::udp::MieruUdpFlowResume,
 ) -> Result<SharedManagedUdpConnection, EngineError> {
-    let connection = mieru::udp::establish_udp_flow_with_resume(stream, &resume)
+    let connection = mieru::udp::establish_udp_flow_with_resume(stream, resume)
         .await
         .map_err(|error| {
             EngineError::Io(std::io::Error::other(format!(

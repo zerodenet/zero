@@ -3,8 +3,8 @@ use std::sync::Arc;
 use crate::runtime::orchestration::OutboundEndpoint;
 use crate::runtime::udp_flow::managed::{
     managed_packet_udp_connection, managed_stream_connector_flow_from_build,
-    ManagedPacketUdpSender, ManagedStreamConnectorFlow, ManagedStreamFlowConnector,
-    SharedManagedUdpConnection,
+    ManagedPacketUdpSender, ManagedStreamConnectorFlow, ManagedStreamConnectorFlowBuild,
+    ManagedStreamFlowConnector, SharedManagedUdpConnection,
 };
 use crate::runtime::Proxy;
 use crate::transport::{
@@ -14,26 +14,21 @@ use crate::transport::{
 use zero_core::Session;
 use zero_engine::EngineError;
 
-pub(super) struct TrojanManagedStreamConnector;
-
-impl crate::runtime::udp_flow::managed::ManagedStreamConnectorFlowBuild
-    for trojan::udp::TrojanUdpConnectorFlow
-{
+impl ManagedStreamConnectorFlowBuild for trojan::udp::TrojanUdpConnectorFlow {
     fn into_parts(self) -> (String, bool) {
         trojan::udp::TrojanUdpConnectorFlow::into_parts(self)
     }
 }
 
 #[async_trait::async_trait]
-impl ManagedStreamFlowConnector<trojan::udp::TrojanUdpFlowResume> for TrojanManagedStreamConnector {
+impl ManagedStreamFlowConnector for trojan::udp::TrojanUdpFlowResume {
     fn connector_flow(
         &self,
-        resume: &trojan::udp::TrojanUdpFlowResume,
         endpoint: OutboundEndpoint<'_>,
         session_id: u64,
     ) -> ManagedStreamConnectorFlow {
         let flow = trojan::udp::connector_flow_from_resume(
-            resume,
+            self,
             endpoint.server,
             endpoint.port,
             session_id,
@@ -46,10 +41,9 @@ impl ManagedStreamFlowConnector<trojan::udp::TrojanUdpFlowResume> for TrojanMana
         proxy: &Proxy,
         session: &Session,
         endpoint: OutboundEndpoint<'_>,
-        resume: trojan::udp::TrojanUdpFlowResume,
     ) -> Result<SharedManagedUdpConnection, EngineError> {
-        let tls_stream = open_udp_tls_stream(proxy, endpoint, &resume).await?;
-        packet_stream(session, tls_stream, resume).await
+        let tls_stream = open_udp_tls_stream(proxy, endpoint, self).await?;
+        packet_stream(session, tls_stream, self).await
     }
 
     async fn establish_relay(
@@ -59,7 +53,6 @@ impl ManagedStreamFlowConnector<trojan::udp::TrojanUdpFlowResume> for TrojanMana
         proxy: Option<&Proxy>,
         session: &Session,
         endpoint: OutboundEndpoint<'_>,
-        resume: trojan::udp::TrojanUdpFlowResume,
     ) -> Result<SharedManagedUdpConnection, EngineError> {
         let proxy = proxy.ok_or_else(|| {
             EngineError::Io(std::io::Error::other(
@@ -67,8 +60,8 @@ impl ManagedStreamFlowConnector<trojan::udp::TrojanUdpFlowResume> for TrojanMana
             ))
         })?;
         let tls_stream =
-            open_udp_tls_relay_stream(stream, tls_server_name, proxy, endpoint, &resume).await?;
-        packet_stream(session, tls_stream, resume).await
+            open_udp_tls_relay_stream(stream, tls_server_name, proxy, endpoint, self).await?;
+        packet_stream(session, tls_stream, self).await
     }
 }
 
@@ -132,9 +125,9 @@ fn udp_tls_options<'a>(
 async fn packet_stream(
     session: &Session,
     stream: TcpRelayStream,
-    resume: trojan::udp::TrojanUdpFlowResume,
+    resume: &trojan::udp::TrojanUdpFlowResume,
 ) -> Result<SharedManagedUdpConnection, EngineError> {
-    let connection = trojan::udp::establish_udp_flow_with_resume(stream, session, &resume)
+    let connection = trojan::udp::establish_udp_flow_with_resume(stream, session, resume)
         .await
         .map_err(|error| EngineError::Io(std::io::Error::other(format!("{error}"))))?;
     Ok(managed_packet_udp_connection(Arc::new(connection)))

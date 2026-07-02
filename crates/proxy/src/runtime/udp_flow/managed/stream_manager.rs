@@ -16,10 +16,11 @@ use crate::runtime::Proxy;
 use crate::transport::TcpRelayStream;
 
 #[async_trait]
-pub(crate) trait ManagedStreamFlowConnector<T>: Send + Sync {
+pub(crate) trait ManagedStreamFlowConnector:
+    Any + Clone + Send + Sync + std::fmt::Debug + 'static
+{
     fn connector_flow(
         &self,
-        resume: &T,
         endpoint: OutboundEndpoint<'_>,
         session_id: u64,
     ) -> ManagedStreamConnectorFlow;
@@ -29,7 +30,6 @@ pub(crate) trait ManagedStreamFlowConnector<T>: Send + Sync {
         proxy: &Proxy,
         session: &Session,
         endpoint: OutboundEndpoint<'_>,
-        resume: T,
     ) -> Result<SharedManagedUdpConnection, EngineError>;
 
     async fn establish_relay(
@@ -39,7 +39,6 @@ pub(crate) trait ManagedStreamFlowConnector<T>: Send + Sync {
         proxy: Option<&Proxy>,
         session: &Session,
         endpoint: OutboundEndpoint<'_>,
-        resume: T,
     ) -> Result<SharedManagedUdpConnection, EngineError>;
 }
 
@@ -72,9 +71,8 @@ pub(crate) fn managed_stream_connector_flow_from_build(
     ManagedStreamConnectorFlow::new(cache_key, requires_relay_upstream)
 }
 
-pub(crate) struct ManagedStreamFlowManager<T, C> {
+pub(crate) struct ManagedStreamFlowManager<T> {
     upstreams: ManagedUdpConnectionCache,
-    connector: C,
     establish_stage: &'static str,
     relay_upstream_stage: &'static str,
     relay_establish_stage: &'static str,
@@ -95,9 +93,8 @@ struct ManagedStreamRelayRequest<'a, T> {
     packet_ref: UdpPacketRef<'a>,
 }
 
-impl<T, C> ManagedStreamFlowManager<T, C> {
+impl<T> ManagedStreamFlowManager<T> {
     pub(crate) fn new(
-        connector: C,
         establish_stage: &'static str,
         relay_upstream_stage: &'static str,
         relay_establish_stage: &'static str,
@@ -107,7 +104,6 @@ impl<T, C> ManagedStreamFlowManager<T, C> {
     ) -> Self {
         Self {
             upstreams: ManagedUdpConnectionCache::new(),
-            connector,
             establish_stage,
             relay_upstream_stage,
             relay_establish_stage,
@@ -119,10 +115,9 @@ impl<T, C> ManagedStreamFlowManager<T, C> {
     }
 }
 
-impl<T, C> ManagedStreamFlowManager<T, C>
+impl<T> ManagedStreamFlowManager<T>
 where
-    T: Any + Clone + Send + Sync + std::fmt::Debug + 'static,
-    C: ManagedStreamFlowConnector<T>,
+    T: ManagedStreamFlowConnector,
 {
     fn supports_managed_existing(&self, resume: &ManagedUdpFlowResume) -> bool {
         resume.as_ref::<T>().is_some()
@@ -138,7 +133,7 @@ where
         packet_ref: UdpPacketRef<'_>,
     ) -> Result<usize, FlowFailure> {
         let session_id = ctx.session_id;
-        let connector_flow = self.connector.connector_flow(&resume, endpoint, session_id);
+        let connector_flow = resume.connector_flow(endpoint, session_id);
         let (cache_key, requires_relay_upstream) = connector_flow.into_parts();
         if requires_relay_upstream {
             if let Some(sent) = self
@@ -169,8 +164,7 @@ where
                 ctx.chain_tasks,
                 session_id,
                 packet_ref,
-                self.connector
-                    .establish_direct(proxy, session, endpoint, resume),
+                resume.establish_direct(proxy, session, endpoint),
             )
             .await
             .map_err(|e| FlowFailure {
@@ -186,19 +180,18 @@ where
     ) -> Result<usize, FlowFailure> {
         let session_id = request.ctx.session_id;
         let upstream = request.endpoint.upstream();
-        let (cache_key, _) = self
-            .connector
-            .connector_flow(&request.resume, request.endpoint, session_id)
+        let (cache_key, _) = request
+            .resume
+            .connector_flow(request.endpoint, session_id)
             .into_parts();
-        let entry = self
-            .connector
+        let entry = request
+            .resume
             .establish_relay(
                 request.stream,
                 request.tls_server_name,
                 request.proxy,
                 request.session,
                 request.endpoint,
-                request.resume,
             )
             .await
             .map_err(|e| FlowFailure {
@@ -301,10 +294,9 @@ where
 }
 
 #[async_trait]
-impl<T, C> ManagedStreamFlowHandler for ManagedStreamFlowManager<T, C>
+impl<T> ManagedStreamFlowHandler for ManagedStreamFlowManager<T>
 where
-    T: Any + Clone + Send + Sync + std::fmt::Debug + 'static,
-    C: ManagedStreamFlowConnector<T>,
+    T: ManagedStreamFlowConnector,
 {
     fn supports_managed_existing(&self, resume: &ManagedUdpFlowResume) -> bool {
         ManagedStreamFlowManager::supports_managed_existing(self, resume)

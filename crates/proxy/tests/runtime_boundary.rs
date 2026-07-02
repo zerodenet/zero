@@ -12936,10 +12936,9 @@ fn mieru_udp_managed_connector_is_thin_protocol_glue() {
     }
 
     assert!(
-        managed.contains("ManagedStreamFlowManager::new")
-            && managed.contains("connector::MieruManagedStreamConnector")
-            && !managed.contains("impl ManagedStreamFlowConnector<mieru::udp::MieruUdpFlowResume>")
-            && connector.contains("impl ManagedStreamFlowConnector<mieru::udp::MieruUdpFlowResume>")
+        managed.contains("ManagedStreamFlowManager::<mieru::udp::MieruUdpFlowResume>::new")
+            && !managed.contains("MieruManagedStreamConnector")
+            && connector.contains("impl ManagedStreamFlowConnector for mieru::udp::MieruUdpFlowResume")
             && connector.contains("mieru::udp::connector_flow_from_resume")
             && !connector.contains("resume.connector_flow(endpoint.server, endpoint.port, session_id)")
             && !connector.contains(".flow(endpoint.server, endpoint.port, session_id)")
@@ -12950,7 +12949,7 @@ fn mieru_udp_managed_connector_is_thin_protocol_glue() {
             && !connector.contains("flow.requires_relay_upstream()")
             && !connector.contains("resume.flow_cache_key(")
             && !connector.contains("resume.flow_requires_relay_upstream()")
-            && connector.contains("mieru::udp::establish_udp_flow_with_resume(stream, &resume)")
+            && connector.contains("mieru::udp::establish_udp_flow_with_resume(stream, resume)")
             && connector.contains("managed_tuple_udp_connection")
             && connector.contains("impl ManagedTupleUdpSender for MieruManagedUdpSender")
             && stream_manager.contains("ManagedUdpConnectionCache")
@@ -13149,10 +13148,9 @@ fn trojan_udp_managed_connector_is_thin_protocol_glue() {
     );
 
     assert!(
-        managed.contains("ManagedStreamFlowManager::new")
-            && managed.contains("connector::TrojanManagedStreamConnector")
-            && !managed.contains("impl ManagedStreamFlowConnector<trojan::udp::TrojanUdpFlowResume>")
-            && connector.contains("impl ManagedStreamFlowConnector<trojan::udp::TrojanUdpFlowResume>")
+        managed.contains("ManagedStreamFlowManager::<trojan::udp::TrojanUdpFlowResume>::new")
+            && !managed.contains("TrojanManagedStreamConnector")
+            && connector.contains("impl ManagedStreamFlowConnector for trojan::udp::TrojanUdpFlowResume")
             && connector.contains("trojan::udp::connector_flow_from_resume")
             && !connector.contains("resume.connector_flow(endpoint.server, endpoint.port, session_id)")
             && !connector.contains(".flow(endpoint.server, endpoint.port, session_id)")

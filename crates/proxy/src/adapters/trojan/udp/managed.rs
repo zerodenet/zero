@@ -3,13 +3,14 @@ use crate::runtime::udp_flow::managed::{ManagedStreamFlowHandler, ManagedStreamF
 mod connector;
 
 pub(super) fn handler() -> Box<dyn ManagedStreamFlowHandler> {
-    Box::new(ManagedStreamFlowManager::new(
-        connector::TrojanManagedStreamConnector,
-        "trojan_establish",
-        "trojan_relay_upstream",
-        "trojan_relay_establish",
-        "trojan_relay_send",
-        "udp_trojan_resume",
-        "expected Trojan UDP flow resume",
-    ))
+    Box::new(
+        ManagedStreamFlowManager::<trojan::udp::TrojanUdpFlowResume>::new(
+            "trojan_establish",
+            "trojan_relay_upstream",
+            "trojan_relay_establish",
+            "trojan_relay_send",
+            "udp_trojan_resume",
+            "expected Trojan UDP flow resume",
+        ),
+    )
 }
