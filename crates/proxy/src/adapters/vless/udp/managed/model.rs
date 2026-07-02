@@ -1,11 +1,10 @@
 use zero_core::Session;
 
-use crate::adapters::vless::mux_pool::MuxConnectionPool;
 use crate::runtime::Proxy;
 
 pub(crate) struct VlessUdpStartFlow<'a> {
     pub(crate) proxy: &'a Proxy,
-    pub(crate) mux_pool: &'a MuxConnectionPool,
+    pub(crate) mux_pool: &'a vless::mux_pool::MuxConnectionPool,
     pub(crate) session: &'a Session,
     pub(crate) server: &'a str,
     pub(crate) port: u16,

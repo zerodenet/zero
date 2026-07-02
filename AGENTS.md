@@ -124,6 +124,7 @@ If you change protocol behavior, config parsing, routing, or runtime wiring, run
 - Concrete protocol crate accessors must not be exposed on `ProtocolInventory`; `inventory/protocols.rs` exposes only neutral proxy-owned helpers such as the direct connector. Compiled adapter collection lives in `crates/proxy/src/register.rs`; inventory dispatch modules must not import protocol crates directly.
 - Port conflicts surface eagerly (before accept loop spawn) via `bind_inbound_listener`.
 - Per-protocol TCP connect glue lives in the owning `crates/proxy/src/adapters/<protocol>/tcp.rs` module (`connect_tcp` + `apply_tcp_hop`) after extracting the leaf variant. Protocol handshake/session details live in `protocols/*`; do not recreate `crates/proxy/src/outbound/<protocol>.rs` helper modules.
+- VLESS/VMess MUX pool cache state and concurrency reuse live in `protocols/vless::mux_pool` and `protocols/vmess::mux`. `crates/proxy/src/adapters/{vless,vmess}/mux_pool.rs` are transport-opening bridges only: they build proxy-owned upstream streams, pass them into protocol-owned pool state, and may keep only adapter request models plus narrow connection helpers.
 - UDP relay-chain datagram-over-packet-path helpers (`resolve_udp_packet_path_chain`, `owned_packet_path_carrier`) in `udp_dispatch/start/` still match on `ResolvedLeafOutbound` — these model carrier+datagram protocol *pairs* (SS→SS, SOCKS5→SS, H2→SS), not per-protocol dispatch.
 
 ## Docs

@@ -35,9 +35,9 @@ pub(super) async fn direct_flow(
     request: &VmessUdpStartFlow<'_>,
 ) -> Result<ManagedStreamConnection, EngineError> {
     if let Some(max_concurrency) = request.mux_concurrency {
-        let mux_stream = request
-            .mux_pool
-            .open_udp_stream(VmessMuxOpenRequest {
+        let mux_stream = crate::adapters::vmess::mux_pool::open_udp_stream(
+            request.mux_pool,
+            VmessMuxOpenRequest {
                 proxy: request.proxy,
                 session: request.session,
                 server: request.server.to_owned(),
@@ -47,8 +47,9 @@ pub(super) async fn direct_flow(
                 ws: request.transport.ws,
                 grpc: request.transport.grpc,
                 max_concurrency,
-            })
-            .await?;
+            },
+        )
+        .await?;
         let established = request.config.start_flow_with_initial_packet(
             mux_stream,
             &request.session.target,

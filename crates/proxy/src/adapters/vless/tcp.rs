@@ -47,9 +47,9 @@ impl VlessAdapter {
             }
         })?;
         if config.should_open_mux_pool_for_tcp() {
-            return self
-                .mux_pool
-                .open_stream(VlessMuxOpenRequest {
+            return crate::adapters::vless::mux_pool::open_stream(
+                &self.mux_pool,
+                VlessMuxOpenRequest {
                     proxy,
                     session: Some(session),
                     server,
@@ -58,14 +58,15 @@ impl VlessAdapter {
                     tls: *tls,
                     reality: *reality,
                     max_concurrency: mux_concurrency.unwrap_or(8),
-                })
-                .await
-                .map(|upstream| EstablishedTcpOutbound::proxied(*tag, *server, *port, upstream))
-                .map_err(|error| TcpOutboundFailure {
-                    stage: "connect_upstream_vless",
-                    error,
-                    upstream_endpoint: Some(((*server).to_string(), *port)),
-                });
+                },
+            )
+            .await
+            .map(|upstream| EstablishedTcpOutbound::proxied(*tag, *server, *port, upstream))
+            .map_err(|error| TcpOutboundFailure {
+                stage: "connect_upstream_vless",
+                error,
+                upstream_endpoint: Some(((*server).to_string(), *port)),
+            });
         }
         match connect_tcp(VlessTcpConnect {
             proxy,

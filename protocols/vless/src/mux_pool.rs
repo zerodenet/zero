@@ -4,6 +4,7 @@
 //! Connection establishment (raw TCP, transport wrapping) stays in the
 //! proxy crate which owns the I/O infrastructure.
 
+use core::future::Future;
 use std::collections::HashMap;
 use std::io;
 use std::pin::Pin;
@@ -42,6 +43,11 @@ pub enum TransportKey {
         public_key: String,
         server_name: String,
     },
+}
+
+#[derive(Clone)]
+pub struct MuxConnectionPool {
+    pool: Arc<Mutex<HashMap<PoolKey, Arc<MuxPoolConn>>>>,
 }
 
 pub struct PoolKeyConfig {
@@ -173,6 +179,68 @@ impl PoolKey {
         S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
     {
         MuxPoolConn::new(stream, self.uuid(), max_concurrency)
+    }
+}
+
+impl Default for MuxConnectionPool {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl core::fmt::Debug for MuxConnectionPool {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("MuxConnectionPool")
+            .field(
+                "entries",
+                &self.pool.lock().expect("mux pool lock poisoned").len(),
+            )
+            .finish()
+    }
+}
+
+impl MuxConnectionPool {
+    pub fn new() -> Self {
+        Self {
+            pool: Arc::new(Mutex::new(HashMap::new())),
+        }
+    }
+
+    pub fn evict_all(&self) {
+        self.pool.lock().expect("mux pool lock poisoned").clear();
+    }
+
+    pub async fn get_or_create_conn<F, Fut, E>(
+        &self,
+        key: PoolKey,
+        max_concurrency: u32,
+        create_conn: F,
+    ) -> Result<Arc<MuxPoolConn>, E>
+    where
+        F: FnOnce(PoolKey, u32) -> Fut,
+        Fut: Future<Output = Result<MuxPoolConn, E>>,
+    {
+        let cached = {
+            let pool = self.pool.lock().expect("mux pool lock poisoned");
+            pool.get(&key).cloned()
+        };
+
+        match cached {
+            Some(conn)
+                if *conn.active.lock().expect("mux conn active lock poisoned")
+                    < conn.max_concurrency as usize =>
+            {
+                Ok(conn)
+            }
+            _ => {
+                let conn = Arc::new(create_conn(key.clone(), max_concurrency).await?);
+                self.pool
+                    .lock()
+                    .expect("mux pool lock poisoned")
+                    .insert(key, conn.clone());
+                Ok(conn)
+            }
+        }
     }
 }
 

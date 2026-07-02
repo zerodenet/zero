@@ -6549,6 +6549,7 @@ fn vmess_mux_pool_model_lives_outside_runtime_root() {
         "struct VmessMuxConn",
         "struct VmessMuxOpenRequest",
         "struct VmessMuxConnectionPool",
+        "impl VmessMuxConnectionPool",
     ] {
         assert!(
             !root.contains(forbidden),
@@ -6575,7 +6576,6 @@ fn vmess_mux_pool_model_lives_outside_runtime_root() {
 
     for required in [
         "struct VmessMuxOpenRequest",
-        "struct VmessMuxConnectionPool",
         "identity: vmess::mux::VmessMuxIdentity",
     ] {
         assert!(
@@ -6587,6 +6587,8 @@ fn vmess_mux_pool_model_lives_outside_runtime_root() {
         "struct VmessMuxPoolKey",
         "enum VmessMuxTransportKey",
         "struct VmessMuxIdentity",
+        "pub struct VmessMuxConnectionPool",
+        "impl VmessMuxConnectionPool",
         "impl VmessMuxPoolKey",
     ] {
         assert!(
@@ -6600,8 +6602,11 @@ fn vmess_mux_pool_model_lives_outside_runtime_root() {
     );
 
     assert!(
-        !root.contains("VmessMuxStream::new_with_network"),
-        "VMess mux pool runtime should use the protocol mux stream helper instead of constructing VmessMuxStream directly"
+        !root.contains("VmessMuxStream::new_with_network")
+            && !root.contains("struct VmessMuxConnectionPool")
+            && !root.contains("pool.lock().unwrap()")
+            && root.contains(".get_or_create_conn("),
+        "VMess mux pool adapter glue should delegate pool state to protocols/vmess and avoid constructing VmessMuxStream directly"
     );
     for forbidden in [
         "vmess::mux_cool_session",
@@ -6630,7 +6635,7 @@ fn vmess_mux_pool_model_lives_outside_runtime_root() {
         "VMess mux pool runtime should ask the protocol key to establish MUX streams without unpacking identity fields"
     );
     assert!(
-        root.contains("key.clone().into_pool_conn(stream, request.max_concurrency)")
+        root.contains("key.clone().into_pool_conn(stream, max_concurrency)")
             && !root.contains("vmess::mux::VmessMuxConn::new"),
         "VMess adapter mux pool should ask the protocol key to wrap established streams as pool connections"
     );
@@ -6974,7 +6979,6 @@ fn vless_mux_pool_model_lives_outside_runtime_root() {
     }
 
     for required in [
-        "struct MuxConnectionPool",
         "struct VlessMuxOpenRequest",
         "identity: vless::mux_pool::MuxIdentity",
     ] {
@@ -6984,6 +6988,8 @@ fn vless_mux_pool_model_lives_outside_runtime_root() {
         );
     }
     for required in [
+        "pub struct MuxConnectionPool",
+        "impl MuxConnectionPool",
         "pub struct MuxIdentity",
         "impl MuxIdentity",
         "pub struct PoolKeyConfig",
@@ -7072,6 +7078,8 @@ fn vless_mux_pool_model_lives_outside_runtime_root() {
             && !root.contains("key.uuid()")
             && !root.contains("key.server")
             && !root.contains("key.port")
+            && !root.contains("struct MuxConnectionPool")
+            && !root.contains("pool.lock().unwrap()")
             && !root.contains("MuxPoolConn::new("),
         "VLESS adapter mux pool should not unpack protocol identity or construct MUX connections directly"
     );
@@ -7122,22 +7130,22 @@ fn protocol_mux_pools_are_adapter_owned_not_proxy_fields() {
         "runtime reload should notify protocol inventory instead of clearing concrete protocol pools"
     );
     assert!(
-        vless_adapter.contains("mux_pool: mux_pool::MuxConnectionPool")
+        vless_adapter.contains("mux_pool: vless::mux_pool::MuxConnectionPool")
             && vless_adapter.contains("fn on_config_reloaded(&self)")
             && vless_adapter.contains("self.mux_pool.evict_all()")
             && vless_tcp.contains("VlessMuxOpenRequest")
             && vless_tcp.contains(".mux_pool")
             && vless_udp.contains("mux_pool: &adapter.mux_pool"),
-        "VLESS MUX pool should be owned by VlessAdapter and shared by its TCP/UDP paths"
+        "VLESS MUX pool should be protocol-owned state held by VlessAdapter and shared by its TCP/UDP paths"
     );
     assert!(
-        vmess_adapter.contains("mux_pool: mux_pool::VmessMuxConnectionPool")
+        vmess_adapter.contains("mux_pool: vmess::mux::VmessMuxConnectionPool")
             && vmess_adapter.contains("fn on_config_reloaded(&self)")
             && vmess_adapter.contains("self.mux_pool.evict_all()")
             && vmess_tcp.contains("VmessMuxOpenRequest")
             && vmess_tcp.contains(".mux_pool")
             && vmess_udp.contains("mux_pool: &adapter.mux_pool"),
-        "VMess MUX pool should be owned by VmessAdapter and shared by its TCP/UDP paths"
+        "VMess MUX pool should be protocol-owned state held by VmessAdapter and shared by its TCP/UDP paths"
     );
 }
 
@@ -7160,13 +7168,13 @@ fn protocol_runtime_udp_and_mux_roots_do_not_reexport_request_models() {
 
     assert!(
         read("src/adapters/vless/mux_pool.rs")
-            .contains("pub(crate) use model::{MuxConnectionPool, VlessMuxOpenRequest};"),
-        "VLESS mux pool root should expose only the adapter-owned pool/request facade"
+            .contains("pub(crate) use model::VlessMuxOpenRequest;"),
+        "VLESS mux pool root should expose only the adapter request facade"
     );
     assert!(
         read("src/adapters/vmess/mux_pool.rs")
-            .contains("pub(crate) use model::{VmessMuxConnectionPool, VmessMuxOpenRequest};"),
-        "VMess mux pool root should expose only the adapter-owned pool/request facade"
+            .contains("pub(crate) use model::VmessMuxOpenRequest;"),
+        "VMess mux pool root should expose only the adapter request facade"
     );
 }
 

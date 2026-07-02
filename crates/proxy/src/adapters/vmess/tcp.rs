@@ -41,9 +41,9 @@ impl VmessAdapter {
             }
         })?;
         if let Some(max_concurrency) = mux_concurrency {
-            return self
-                .mux_pool
-                .open_stream(VmessMuxOpenRequest {
+            return crate::adapters::vmess::mux_pool::open_stream(
+                &self.mux_pool,
+                VmessMuxOpenRequest {
                     proxy,
                     session,
                     server: (*server).to_owned(),
@@ -53,14 +53,15 @@ impl VmessAdapter {
                     ws: *ws,
                     grpc: *grpc,
                     max_concurrency: *max_concurrency,
-                })
-                .await
-                .map(|upstream| EstablishedTcpOutbound::proxied(*tag, *server, *port, upstream))
-                .map_err(|error| TcpOutboundFailure {
-                    stage: "connect_upstream_vmess",
-                    error,
-                    upstream_endpoint: Some(((*server).to_string(), *port)),
-                });
+                },
+            )
+            .await
+            .map(|upstream| EstablishedTcpOutbound::proxied(*tag, *server, *port, upstream))
+            .map_err(|error| TcpOutboundFailure {
+                stage: "connect_upstream_vmess",
+                error,
+                upstream_endpoint: Some(((*server).to_string(), *port)),
+            });
         }
         match connect_tcp(VmessTcpConnect {
             proxy,

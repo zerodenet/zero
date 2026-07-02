@@ -27,14 +27,14 @@ mod udp;
 #[cfg(feature = "vless")]
 #[derive(Debug)]
 pub(crate) struct VlessAdapter {
-    mux_pool: mux_pool::MuxConnectionPool,
+    mux_pool: vless::mux_pool::MuxConnectionPool,
 }
 
 #[cfg(feature = "vless")]
 impl Default for VlessAdapter {
     fn default() -> Self {
         Self {
-            mux_pool: mux_pool::MuxConnectionPool::new(),
+            mux_pool: vless::mux_pool::MuxConnectionPool::new(),
         }
     }
 }

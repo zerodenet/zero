@@ -1,16 +1,8 @@
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
-
-use vless::mux_pool::{MuxPoolConn, PoolKey, PoolKeyConfig};
+use vless::mux_pool::{PoolKey, PoolKeyConfig};
 use zero_config::{ClientTlsConfig, RealityConfig};
 use zero_core::Session;
 
 use crate::runtime::Proxy;
-
-#[derive(Clone)]
-pub(crate) struct MuxConnectionPool {
-    pub(super) pool: Arc<Mutex<HashMap<PoolKey, Arc<MuxPoolConn>>>>,
-}
 
 pub(crate) struct VlessMuxOpenRequest<'a> {
     pub(crate) proxy: &'a Proxy,

@@ -1,3 +1,5 @@
+use core::future::Future;
+use std::collections::HashMap;
 use std::io;
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
@@ -52,6 +54,11 @@ pub enum VmessMuxTransportKey {
         server_name: Option<String>,
         service_names: Vec<String>,
     },
+}
+
+#[derive(Clone)]
+pub struct VmessMuxConnectionPool {
+    pool: Arc<Mutex<HashMap<VmessMuxPoolKey, Arc<VmessMuxConn>>>>,
 }
 
 pub struct VmessMuxPoolKeyConfig {
@@ -194,6 +201,65 @@ impl VmessMuxPoolKey {
         S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
     {
         VmessMuxConn::new(stream, max_concurrency)
+    }
+}
+
+impl Default for VmessMuxConnectionPool {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl core::fmt::Debug for VmessMuxConnectionPool {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("VmessMuxConnectionPool")
+            .field(
+                "entries",
+                &self.pool.lock().expect("vmess mux pool poisoned").len(),
+            )
+            .finish()
+    }
+}
+
+impl VmessMuxConnectionPool {
+    pub fn new() -> Self {
+        Self {
+            pool: Arc::new(Mutex::new(HashMap::new())),
+        }
+    }
+
+    pub fn evict_all(&self) {
+        self.pool.lock().expect("vmess mux pool poisoned").clear();
+    }
+
+    pub async fn get_or_create_conn<F, Fut, E>(
+        &self,
+        key: VmessMuxPoolKey,
+        max_concurrency: u32,
+        create_conn: F,
+    ) -> Result<Arc<VmessMuxConn>, E>
+    where
+        F: FnOnce(VmessMuxPoolKey, u32) -> Fut,
+        Fut: Future<Output = Result<VmessMuxConn, E>>,
+    {
+        let cached = self
+            .pool
+            .lock()
+            .expect("vmess mux pool poisoned")
+            .get(&key)
+            .cloned();
+
+        match cached {
+            Some(conn) if conn.has_capacity() => Ok(conn),
+            _ => {
+                let conn = Arc::new(create_conn(key.clone(), max_concurrency).await?);
+                self.pool
+                    .lock()
+                    .expect("vmess mux pool poisoned")
+                    .insert(key, conn.clone());
+                Ok(conn)
+            }
+        }
     }
 }
 

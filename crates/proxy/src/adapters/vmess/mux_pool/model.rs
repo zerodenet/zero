@@ -1,6 +1,3 @@
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
-
 use zero_config::{ClientTlsConfig, GrpcConfig, WebSocketConfig};
 use zero_core::{Error, Session};
 
@@ -30,10 +27,4 @@ impl VmessMuxOpenRequest<'_> {
         .with_grpc_service_names(self.grpc.map(|grpc| grpc.service_names.clone()))
         .into_pool_key()
     }
-}
-
-#[derive(Clone)]
-pub(crate) struct VmessMuxConnectionPool {
-    pub(super) pool:
-        Arc<Mutex<HashMap<vmess::mux::VmessMuxPoolKey, Arc<vmess::mux::VmessMuxConn>>>>,
 }

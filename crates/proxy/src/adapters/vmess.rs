@@ -27,14 +27,14 @@ mod udp;
 #[cfg(feature = "vmess")]
 #[derive(Debug)]
 pub(crate) struct VmessAdapter {
-    mux_pool: mux_pool::VmessMuxConnectionPool,
+    mux_pool: vmess::mux::VmessMuxConnectionPool,
 }
 
 #[cfg(feature = "vmess")]
 impl Default for VmessAdapter {
     fn default() -> Self {
         Self {
-            mux_pool: mux_pool::VmessMuxConnectionPool::new(),
+            mux_pool: vmess::mux::VmessMuxConnectionPool::new(),
         }
     }
 }

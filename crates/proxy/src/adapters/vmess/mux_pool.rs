@@ -1,106 +1,80 @@
 mod model;
 
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
-
 use zero_core::Network;
 use zero_engine::EngineError;
 use zero_platform_tokio::TransportConnector;
 
 use crate::transport::{MeteredStream, TcpRelayStream, VmessTransportConnector};
 
-pub(crate) use model::{VmessMuxConnectionPool, VmessMuxOpenRequest};
+pub(crate) use model::VmessMuxOpenRequest;
 
-impl std::fmt::Debug for VmessMuxConnectionPool {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("VmessMuxConnectionPool")
-            .field("entries", &self.pool.lock().unwrap().len())
-            .finish()
-    }
+pub(crate) async fn open_stream(
+    pool: &vmess::mux::VmessMuxConnectionPool,
+    request: VmessMuxOpenRequest<'_>,
+) -> Result<TcpRelayStream, EngineError> {
+    open_with_network(pool, request, Network::Tcp).await
 }
 
-impl VmessMuxConnectionPool {
-    pub fn new() -> Self {
-        Self {
-            pool: Arc::new(Mutex::new(HashMap::new())),
-        }
-    }
+pub(crate) async fn open_udp_stream(
+    pool: &vmess::mux::VmessMuxConnectionPool,
+    request: VmessMuxOpenRequest<'_>,
+) -> Result<TcpRelayStream, EngineError> {
+    open_with_network(pool, request, Network::Udp).await
+}
 
-    pub fn evict_all(&self) {
-        self.pool.lock().expect("vmess mux pool poisoned").clear();
-    }
+async fn open_with_network(
+    pool: &vmess::mux::VmessMuxConnectionPool,
+    request: VmessMuxOpenRequest<'_>,
+    network: Network,
+) -> Result<TcpRelayStream, EngineError> {
+    let key = request.pool_key().map_err(|error| {
+        EngineError::Io(std::io::Error::new(std::io::ErrorKind::InvalidInput, error))
+    })?;
+    let target = request.session.target.clone();
+    let port = request.session.port;
+    let max_concurrency = request.max_concurrency;
+    let conn = pool
+        .get_or_create_conn(key, max_concurrency, |key, max_concurrency| async move {
+            create_connection(
+                request.proxy,
+                &key,
+                request.tls,
+                request.ws,
+                request.grpc,
+                max_concurrency,
+            )
+            .await
+        })
+        .await?;
 
-    pub async fn open_stream(
-        &self,
-        request: VmessMuxOpenRequest<'_>,
-    ) -> Result<TcpRelayStream, EngineError> {
-        self.open_with_network(request, Network::Tcp).await
-    }
+    Ok(TcpRelayStream::new(conn.open_stream(target, port, network)))
+}
 
-    pub async fn open_udp_stream(
-        &self,
-        request: VmessMuxOpenRequest<'_>,
-    ) -> Result<TcpRelayStream, EngineError> {
-        self.open_with_network(request, Network::Udp).await
-    }
+async fn create_connection(
+    proxy: &crate::runtime::Proxy,
+    key: &vmess::mux::VmessMuxPoolKey,
+    tls: Option<&zero_config::ClientTlsConfig>,
+    ws: Option<&zero_config::WebSocketConfig>,
+    grpc: Option<&zero_config::GrpcConfig>,
+    max_concurrency: u32,
+) -> Result<vmess::mux::VmessMuxConn, EngineError> {
+    let (server, port) = key.endpoint();
+    let socket = proxy
+        .protocols
+        .direct_connector()
+        .connect_host(server, port, proxy.resolver.as_ref())
+        .await?;
 
-    async fn open_with_network(
-        &self,
-        request: VmessMuxOpenRequest<'_>,
-        network: Network,
-    ) -> Result<TcpRelayStream, EngineError> {
-        let key = request.pool_key().map_err(|error| {
-            EngineError::Io(std::io::Error::new(std::io::ErrorKind::InvalidInput, error))
-        })?;
+    let connector = VmessTransportConnector::new(crate::transport::VmessTransportOptions {
+        tls,
+        ws,
+        grpc,
+        source_dir: proxy.config.source_dir(),
+    });
+    let stream = connector.connect(socket, server, port).await?;
 
-        let conn = self.get_or_create_conn(&key, &request).await?;
-        Ok(TcpRelayStream::new(conn.open_stream(
-            request.session.target.clone(),
-            request.session.port,
-            network,
-        )))
-    }
+    let metered = MeteredStream::new(stream);
+    let stream = TcpRelayStream::new(key.establish_mux_outbound_stream(metered).await?);
 
-    async fn get_or_create_conn(
-        &self,
-        key: &vmess::mux::VmessMuxPoolKey,
-        request: &VmessMuxOpenRequest<'_>,
-    ) -> Result<Arc<vmess::mux::VmessMuxConn>, EngineError> {
-        let cached = self.pool.lock().unwrap().get(key).cloned();
-        let conn = match cached {
-            Some(conn) if conn.has_capacity() => conn,
-            _ => {
-                let conn = Arc::new(Self::create_connection(key, request).await?);
-                self.pool.lock().unwrap().insert(key.clone(), conn.clone());
-                conn
-            }
-        };
-        Ok(conn)
-    }
-
-    async fn create_connection(
-        key: &vmess::mux::VmessMuxPoolKey,
-        request: &VmessMuxOpenRequest<'_>,
-    ) -> Result<vmess::mux::VmessMuxConn, EngineError> {
-        let (server, port) = key.endpoint();
-        let socket = request
-            .proxy
-            .protocols
-            .direct_connector()
-            .connect_host(server, port, request.proxy.resolver.as_ref())
-            .await?;
-
-        let connector = VmessTransportConnector::new(crate::transport::VmessTransportOptions {
-            tls: request.tls,
-            ws: request.ws,
-            grpc: request.grpc,
-            source_dir: request.proxy.config.source_dir(),
-        });
-        let stream = connector.connect(socket, server, port).await?;
-
-        let metered = MeteredStream::new(stream);
-        let stream = TcpRelayStream::new(key.establish_mux_outbound_stream(metered).await?);
-
-        Ok(key.clone().into_pool_conn(stream, request.max_concurrency))
-    }
+    Ok(key.clone().into_pool_conn(stream, max_concurrency))
 }

@@ -20,9 +20,9 @@ pub(super) async fn start_mux_fast_path(
     }
 
     let max_concurrency = 8u32;
-    let Ok((_mux_sid, up_tx, _down_rx)) = request
-        .mux_pool
-        .open_udp_stream(VlessMuxOpenRequest {
+    let Ok((_mux_sid, up_tx, _down_rx)) = crate::adapters::vless::mux_pool::open_udp_stream(
+        request.mux_pool,
+        VlessMuxOpenRequest {
             proxy: request.proxy,
             session: None,
             server: request.server,
@@ -31,8 +31,9 @@ pub(super) async fn start_mux_fast_path(
             tls: request.transport.tls,
             reality: request.transport.reality,
             max_concurrency,
-        })
-        .await
+        },
+    )
+    .await
     else {
         return Ok(false);
     };
