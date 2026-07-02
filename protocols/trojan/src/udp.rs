@@ -761,21 +761,13 @@ impl TrojanUdpFlowResume {
         }
     }
 
-    pub fn tls_profile(&self, fallback_server_name: Option<&str>) -> TrojanUdpTlsProfile {
+    fn tls_profile(&self, fallback_server_name: Option<&str>) -> TrojanUdpTlsProfile {
         TrojanUdpTlsProfile {
             server_name: self
                 .sni
                 .as_deref()
                 .or(fallback_server_name)
                 .map(ToOwned::to_owned),
-            insecure: self.insecure,
-            client_fingerprint: self.client_fingerprint.clone(),
-        }
-    }
-
-    pub fn tls_profile_spec(&self) -> TrojanUdpTlsProfileSpec {
-        TrojanUdpTlsProfileSpec {
-            sni: self.sni.clone(),
             insecure: self.insecure,
             client_fingerprint: self.client_fingerprint.clone(),
         }
@@ -803,27 +795,6 @@ pub struct TrojanUdpConnectorFlow {
 impl TrojanUdpConnectorFlow {
     pub fn into_parts(self) -> (String, bool) {
         (self.cache_key, self.requires_relay_upstream)
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct TrojanUdpTlsProfileSpec {
-    sni: Option<String>,
-    insecure: bool,
-    client_fingerprint: Option<String>,
-}
-
-impl TrojanUdpTlsProfileSpec {
-    pub fn tls_profile(&self, fallback_server_name: Option<&str>) -> TrojanUdpTlsProfile {
-        TrojanUdpTlsProfile {
-            server_name: self
-                .sni
-                .as_deref()
-                .or(fallback_server_name)
-                .map(ToOwned::to_owned),
-            insecure: self.insecure,
-            client_fingerprint: self.client_fingerprint.clone(),
-        }
     }
 }
 
@@ -878,6 +849,13 @@ pub fn connector_flow_from_resume(
     session_id: u64,
 ) -> TrojanUdpConnectorFlow {
     resume.connector_flow(server, port, session_id)
+}
+
+pub fn connector_tls_profile_from_resume(
+    resume: &TrojanUdpFlowResume,
+    fallback_server_name: Option<&str>,
+) -> TrojanUdpTlsProfile {
+    resume.tls_profile(fallback_server_name)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -987,6 +965,10 @@ pub struct TrojanUdpTlsProfile {
 }
 
 impl TrojanUdpTlsProfile {
+    pub fn into_parts(self) -> (Option<String>, bool, Option<String>) {
+        (self.server_name, self.insecure, self.client_fingerprint)
+    }
+
     pub fn server_name(&self) -> Option<&str> {
         self.server_name.as_deref()
     }

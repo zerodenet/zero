@@ -1439,6 +1439,10 @@ fn adapters_delegate_protocol_private_config_parsing_to_protocols() {
             "shadowsocks::tcp_connect_config_from_config",
         ),
         (
+            "src/adapters/trojan/tcp.rs",
+            "trojan::tcp_connect_config_from_config",
+        ),
+        (
             "src/adapters/shadowsocks/udp.rs",
             "shadowsocks::udp::udp_flow_resume_from_config",
         ),
@@ -4397,33 +4401,45 @@ fn trojan_tcp_connect_uses_request_model() {
         "Trojan adapter TCP glue should share the Trojan transport TLS opening path with UDP while keeping TLS opening outside runtime"
     );
     assert!(
-        adapter.contains("trojan::tcp_outbound_profile_from_config_password")
-            && adapter.contains("trojan::tcp_tls_profile_from_config")
+        adapter.contains("trojan::tcp_connect_config_from_config")
+            && adapter.contains("config: trojan::TrojanTcpConnectConfig")
+            && adapter.contains("config.tls_profile()")
+            && adapter.contains("config.establish_tcp_tunnel(&mut metered, session)")
+            && !adapter.contains("trojan::tcp_outbound_profile_from_config_password")
+            && !adapter.contains("trojan::tcp_tls_profile_from_config")
+            && !adapter.contains("TrojanTcpConnectConfig::from_config")
             && !adapter.contains("TrojanTcpOutboundProfile::from_config_password")
             && !adapter.contains("TrojanTcpTlsProfile::from_config_parts")
             && adapter.contains("TrojanTlsProfile::from_parts")
+            && adapter.contains("profile.into_parts()")
             && !adapter.contains("password.to_owned()")
             && !adapter.contains("ClientTlsConfig")
             && !adapter.contains("ClientTlsConfig {")
             && !adapter.contains("trojan_tcp_tls_config(")
             && !adapter.contains("TrojanTcpTunnelTarget::new")
-            && !adapter.contains("TrojanTcpTunnelTarget {"),
-        "Trojan adapter TCP glue should use protocol-owned outbound/TLS profiles instead of constructing TCP targets or raw TLS config directly"
+            && !adapter.contains("TrojanTcpTunnelTarget {")
+            && !adapter.contains("password: &'a str")
+            && !adapter.contains("sni: Option<&'a str>")
+            && !adapter.contains("insecure: bool")
+            && !adapter.contains("client_fingerprint: Option<&'a str>"),
+        "Trojan adapter TCP glue should use one protocol-owned TCP connect config instead of constructing outbound/TLS state from raw config fields"
     );
     assert!(
         protocol_outbound.contains("struct TrojanTcpOutboundProfile")
+            && protocol_outbound.contains("pub struct TrojanTcpConnectConfig")
             && protocol_outbound.contains("pub struct TrojanTcpTlsProfile")
-            && protocol_outbound.contains("pub fn server_name(&self) -> Option<&str>")
-            && protocol_outbound.contains("pub fn insecure(&self) -> bool")
-            && protocol_outbound.contains("pub fn client_fingerprint(&self) -> Option<&str>")
+            && protocol_outbound.contains("pub fn into_parts(self) -> (Option<String>, bool, Option<String>)")
+            && protocol_outbound.contains("pub fn from_config(")
+            && protocol_outbound.contains("pub fn tls_profile(&self) -> TrojanTcpTlsProfile")
+            && protocol_outbound.contains("pub async fn establish_tcp_tunnel")
+            && protocol_outbound.contains("pub fn tcp_connect_config_from_config")
             && protocol_outbound.contains("pub fn from_config_parts")
             && protocol_outbound.contains("pub fn from_config_password(password: &str)")
             && protocol_outbound.contains("pub fn tcp_outbound_profile_from_config_password")
             && protocol_outbound.contains("pub fn tcp_tls_profile_from_config")
-            && protocol_outbound.contains("pub async fn establish_tcp_tunnel")
             && protocol_outbound.contains("impl<'a> TrojanTcpTunnelTarget<'a>")
             && protocol_outbound.contains("pub fn new(session: &'a Session, password: &'a str)"),
-        "Trojan protocol crate should own TCP target construction and profile-backed handshake/TLS identity"
+        "Trojan protocol crate should own TCP target construction plus protocol-owned connect/TLS profile composition"
     );
 }
 
@@ -12552,11 +12568,13 @@ fn trojan_udp_tls_connect_lives_outside_manager() {
             && connector.contains("open_trojan_udp_tls_stream")
             && connector.contains("open_trojan_udp_tls_relay_stream")
             && connector.contains("TrojanUdpTlsOptions")
-            && connector.contains("tls_profile_spec().tls_profile(")
+            && connector.contains("trojan::udp::connector_tls_profile_from_resume")
+            && !connector.contains("tls_profile_spec().tls_profile(")
             && !connector.contains("resume.tls_profile(")
-            && connector.contains("tls_profile.server_name()")
-            && connector.contains("tls_profile.insecure()")
-            && connector.contains("tls_profile.client_fingerprint()")
+            && connector.contains("tls_profile.into_parts()")
+            && !connector.contains("tls_profile.server_name()")
+            && !connector.contains("tls_profile.insecure()")
+            && !connector.contains("tls_profile.client_fingerprint()")
             && connector.contains("TrojanTlsProfile::from_parts")
             && !connector.contains("fn udp_tls_config(")
             && !connector.contains("ClientTlsConfig")
@@ -12610,12 +12628,16 @@ fn trojan_udp_flow_resume_is_protocol_owned() {
             && !connector_flow_impl.contains("pub fn cache_key(&self)")
             && !connector_flow_impl.contains("pub fn requires_relay_upstream(&self)")
             && connector_flow_impl.contains("pub fn into_parts(self) -> (String, bool)")
-            && protocol_udp.contains("pub struct TrojanUdpTlsProfileSpec")
             && protocol_udp.contains("pub fn connector_flow(")
+            && protocol_udp.contains("pub fn connector_tls_profile_from_resume(")
+            && protocol_udp.contains("pub struct TrojanUdpTlsProfile")
+            && protocol_udp
+                .contains("pub fn into_parts(self) -> (Option<String>, bool, Option<String>)")
             && !protocol_udp.contains("pub struct TrojanUdpFlowSpec")
             && !protocol_udp.contains("pub struct TrojanUdpFlowRequirement")
             && !protocol_udp.contains("pub fn flow_requirement(&self)")
-            && protocol_udp.contains("pub fn tls_profile_spec(&self)")
+            && !protocol_udp.contains("pub struct TrojanUdpTlsProfileSpec")
+            && !protocol_udp.contains("pub fn tls_profile_spec(&self)")
             && protocol_udp.contains("fn peer_config(&self)")
             && !protocol_udp.contains("pub fn peer_config(&self)")
             && protocol_udp.contains("fn flow_key(&self")
@@ -12632,7 +12654,8 @@ fn trojan_udp_flow_resume_is_protocol_owned() {
             && protocol_udp.contains("struct TrojanUdpPeerConfig")
             && !protocol_udp.contains("pub struct TrojanUdpPeerConfig")
             && protocol_udp.contains("pub struct TrojanUdpTlsProfile")
-            && protocol_udp.contains("pub fn tls_profile(&self")
+            && protocol_udp.contains("fn tls_profile(&self")
+            && !protocol_udp.contains("pub fn tls_profile(&self")
             && protocol_udp.contains("pub async fn establish_udp_tunnel")
             && protocol_udp.contains("struct TrojanUdpLeafKey")
             && !protocol_udp.contains("pub struct TrojanUdpLeafKey")
@@ -15499,9 +15522,9 @@ fn protocol_crate_roots_do_not_reexport_udp_manager_internals() {
                 "TrojanUdpPacket",
                 "TrojanUdpPacketTunnelTarget",
                 "TrojanUdpTlsProfile",
-                "TrojanUdpTlsProfileSpec",
                 "build_udp_request",
                 "connector_flow_from_resume",
+                "connector_tls_profile_from_resume",
                 "establish_udp_flow_with_resume",
                 "establish_udp_packet_tunnel",
                 "spawn_udp_flow",

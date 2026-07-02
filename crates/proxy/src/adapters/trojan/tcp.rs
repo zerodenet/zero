@@ -30,15 +30,14 @@ impl TrojanAdapter {
         else {
             return Err(unreachable_leaf(self.name(), leaf));
         };
+        let config =
+            trojan::tcp_connect_config_from_config(password, *sni, *insecure, *client_fingerprint);
         match connect_tcp(TrojanTcpConnect {
             proxy,
             session,
             server,
             port: *port,
-            password,
-            sni: *sni,
-            insecure: *insecure,
-            client_fingerprint: *client_fingerprint,
+            config,
         })
         .await
         {
@@ -60,10 +59,19 @@ impl TrojanAdapter {
         session: &Session,
         leaf: &ResolvedLeafOutbound<'_>,
     ) -> Result<crate::transport::TcpRelayStream, EngineError> {
-        let ResolvedLeafOutbound::Trojan { password, .. } = leaf else {
+        let ResolvedLeafOutbound::Trojan {
+            password,
+            sni,
+            insecure,
+            client_fingerprint,
+            ..
+        } = leaf
+        else {
             return Err(unreachable_leaf(self.name(), leaf).error);
         };
-        apply_tcp_hop(proxy, stream, session, password).await
+        let config =
+            trojan::tcp_connect_config_from_config(password, *sni, *insecure, *client_fingerprint);
+        apply_tcp_hop(proxy, stream, session, config).await
     }
 }
 
@@ -72,10 +80,7 @@ struct TrojanTcpConnect<'a> {
     session: &'a Session,
     server: &'a str,
     port: u16,
-    password: &'a str,
-    sni: Option<&'a str>,
-    insecure: bool,
-    client_fingerprint: Option<&'a str>,
+    config: trojan::TrojanTcpConnectConfig,
 }
 
 async fn connect_tcp(request: TrojanTcpConnect<'_>) -> Result<TcpRelayStream, EngineError> {
@@ -84,10 +89,7 @@ async fn connect_tcp(request: TrojanTcpConnect<'_>) -> Result<TcpRelayStream, En
         session,
         server,
         port,
-        password,
-        sni,
-        insecure,
-        client_fingerprint,
+        config,
     } = request;
 
     let upstream = proxy
@@ -97,16 +99,11 @@ async fn connect_tcp(request: TrojanTcpConnect<'_>) -> Result<TcpRelayStream, En
         .await?;
     let tls_stream = open_trojan_udp_tls_stream(
         upstream,
-        trojan_tls_options(
-            proxy,
-            server,
-            trojan::tcp_tls_profile_from_config(sni, insecure, client_fingerprint),
-        ),
+        trojan_tls_options(proxy, server, config.tls_profile()),
     )
     .await?;
     let mut metered = MeteredStream::new(tls_stream);
-    let profile = trojan::tcp_outbound_profile_from_config_password(password);
-    profile.establish_tcp_tunnel(&mut metered, session).await?;
+    config.establish_tcp_tunnel(&mut metered, session).await?;
     metered.flush().await?;
     let traffic = metered.drain_traffic();
     tracing::debug!(
@@ -125,11 +122,12 @@ fn trojan_tls_options<'a>(
     server: &'a str,
     profile: trojan::TrojanTcpTlsProfile,
 ) -> TrojanUdpTlsOptions<'a> {
+    let (server_name, insecure, client_fingerprint) = profile.into_parts();
     TrojanUdpTlsOptions {
         tls_profile: TrojanTlsProfile::from_parts(
-            profile.server_name(),
-            profile.insecure(),
-            profile.client_fingerprint(),
+            server_name.as_deref(),
+            insecure,
+            client_fingerprint.as_deref(),
         ),
         source_dir: proxy.config.source_dir(),
         server,
@@ -140,10 +138,9 @@ async fn apply_tcp_hop(
     _proxy: &Proxy,
     mut stream: TcpRelayStream,
     session: &Session,
-    password: &str,
+    config: trojan::TrojanTcpConnectConfig,
 ) -> Result<TcpRelayStream, EngineError> {
-    let profile = trojan::tcp_outbound_profile_from_config_password(password);
-    profile
+    config
         .establish_tcp_tunnel(&mut stream, session)
         .await
         .map_err(|error| EngineError::Io(std::io::Error::other(error)))?;

@@ -87,6 +87,7 @@ If you change protocol behavior, config parsing, routing, or runtime wiring, run
   - transport implementations (TLS, QUIC, WS, etc.) -> `crates/transport`
   - concrete protocol implementations -> `protocols/*`
 - Protocol-private config fields (cert/key, cipher, identity/user IDs, etc.) are read from config by thin adapters and parsed by protocol-owned constructors/helpers, never by the proxy runtime directly. Runtime code receives validated protocol values or opaque protocol/adapter-built keys, not raw protocol config strings.
+- Trojan outbound password/TLS identity parsing follows the same rule: `protocols/trojan` owns TCP connect config, UDP flow resume, and protocol TLS profile builders; proxy adapters only open transport streams and map protocol-built TLS profile parts into neutral transport options.
 - Port conflict detection is authoritative in config validation (`DuplicateInboundListen`); bind-time errors mean external port occupation only
 - `direct` and `block` target semantics stay inside `zero-engine`; socket-level direct execution stays in `zero-proxy`
 - `mixed` is an inbound multiplexor, not an external protocol, but it is still registered through `MixedAdapter` so runtime code does not special-case it

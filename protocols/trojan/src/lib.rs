@@ -19,6 +19,7 @@ pub use inbound::{
 };
 pub use metadata::TrojanProtocol;
 pub use outbound::{
-    tcp_outbound_profile_from_config_password, tcp_tls_profile_from_config, TrojanOutbound,
-    TrojanTcpOutboundProfile, TrojanTcpTlsProfile, TrojanTcpTunnelTarget,
+    tcp_connect_config_from_config, tcp_outbound_profile_from_config_password,
+    tcp_tls_profile_from_config, TrojanOutbound, TrojanTcpConnectConfig, TrojanTcpOutboundProfile,
+    TrojanTcpTlsProfile, TrojanTcpTunnelTarget,
 };

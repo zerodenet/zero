@@ -85,7 +85,11 @@ async fn open_udp_tls_stream(
 
     open_trojan_udp_tls_stream(
         upstream,
-        udp_tls_options(proxy, endpoint, resume.tls_profile_spec().tls_profile(None)),
+        udp_tls_options(
+            proxy,
+            endpoint,
+            trojan::udp::connector_tls_profile_from_resume(resume, None),
+        ),
     )
     .await
 }
@@ -102,7 +106,7 @@ async fn open_udp_tls_relay_stream(
         udp_tls_options(
             proxy,
             endpoint,
-            resume.tls_profile_spec().tls_profile(tls_server_name),
+            trojan::udp::connector_tls_profile_from_resume(resume, tls_server_name),
         ),
     )
     .await
@@ -113,11 +117,12 @@ fn udp_tls_options<'a>(
     endpoint: OutboundEndpoint<'a>,
     tls_profile: trojan::udp::TrojanUdpTlsProfile,
 ) -> TrojanUdpTlsOptions<'a> {
+    let (server_name, insecure, client_fingerprint) = tls_profile.into_parts();
     TrojanUdpTlsOptions {
         tls_profile: TrojanTlsProfile::from_parts(
-            tls_profile.server_name(),
-            tls_profile.insecure(),
-            tls_profile.client_fingerprint(),
+            server_name.as_deref(),
+            insecure,
+            client_fingerprint.as_deref(),
         ),
         source_dir: proxy.config.source_dir(),
         server: endpoint.server,

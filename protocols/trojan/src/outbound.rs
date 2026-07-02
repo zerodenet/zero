@@ -61,6 +61,10 @@ impl TrojanTcpTlsProfile {
         }
     }
 
+    pub fn into_parts(self) -> (Option<String>, bool, Option<String>) {
+        (self.server_name, self.insecure, self.client_fingerprint)
+    }
+
     pub fn server_name(&self) -> Option<&str> {
         self.server_name.as_deref()
     }
@@ -74,6 +78,43 @@ impl TrojanTcpTlsProfile {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TrojanTcpConnectConfig {
+    outbound_profile: TrojanTcpOutboundProfile,
+    tls_profile: TrojanTcpTlsProfile,
+}
+
+impl TrojanTcpConnectConfig {
+    pub fn from_config(
+        password: &str,
+        sni: Option<&str>,
+        insecure: bool,
+        client_fingerprint: Option<&str>,
+    ) -> Self {
+        Self {
+            outbound_profile: tcp_outbound_profile_from_config_password(password),
+            tls_profile: tcp_tls_profile_from_config(sni, insecure, client_fingerprint),
+        }
+    }
+
+    pub fn tls_profile(&self) -> TrojanTcpTlsProfile {
+        self.tls_profile.clone()
+    }
+
+    pub async fn establish_tcp_tunnel<S>(
+        &self,
+        stream: &mut S,
+        session: &Session,
+    ) -> Result<(), Error>
+    where
+        S: AsyncSocket,
+    {
+        self.outbound_profile
+            .establish_tcp_tunnel(stream, session)
+            .await
+    }
+}
+
 pub fn tcp_outbound_profile_from_config_password(password: &str) -> TrojanTcpOutboundProfile {
     TrojanTcpOutboundProfile::from_config_password(password)
 }
@@ -84,6 +125,15 @@ pub fn tcp_tls_profile_from_config(
     client_fingerprint: Option<&str>,
 ) -> TrojanTcpTlsProfile {
     TrojanTcpTlsProfile::from_config_parts(sni, insecure, client_fingerprint)
+}
+
+pub fn tcp_connect_config_from_config(
+    password: &str,
+    sni: Option<&str>,
+    insecure: bool,
+    client_fingerprint: Option<&str>,
+) -> TrojanTcpConnectConfig {
+    TrojanTcpConnectConfig::from_config(password, sni, insecure, client_fingerprint)
 }
 
 impl TrojanOutbound {
