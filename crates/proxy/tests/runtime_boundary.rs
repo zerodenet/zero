@@ -3201,7 +3201,10 @@ fn vless_inbound_users_are_protocol_parsed() {
             && protocol_inbound.contains("let auth = VlessConfiguredUsers::new(&self.users)")
             && protocol_inbound.contains("pub struct VlessConfiguredUsers")
             && protocol_inbound.contains("impl VlessUserStore for VlessConfiguredUsers")
-            && protocol_inbound.contains("user.user.clone()"),
+            && protocol_inbound.contains("user.user.clone()")
+            && protocol_inbound.contains("pub async fn send_ok")
+            && protocol_inbound.contains("pub async fn send_blocked")
+            && protocol_inbound.contains("pub async fn send_upstream_failure"),
         "VLESS user store should live in protocols/vless, not proxy inbound helpers"
     );
     assert!(
@@ -3225,6 +3228,8 @@ fn vless_inbound_users_are_protocol_parsed() {
             && !session.contains("vless::VlessInboundSessionKind::")
             && !session.contains("session.network")
             && !session.contains("VlessInbound::is_mux_session(&session)")
+            && !session.contains("VlessInboundHandler")
+            && session.contains("protocol: &'a vless::VlessInbound")
             && protocol_inbound.contains("pub enum VlessAcceptedClientRoute")
             && protocol_inbound.contains("pub fn into_route")
             && protocol_inbound.contains("pub fn into_route_with_sni")
@@ -3653,6 +3658,12 @@ fn vless_inbound_root_does_not_reexport_session_models() {
             && listener.contains("handle_vless_client")
             && listener.contains("handle_vless_stream"),
         "VLESS listener should keep session-local glue and request models in the session module"
+    );
+    assert!(
+        !root.contains("struct VlessInboundHandler")
+            && !root.contains("vless_inbound: vless::VlessInbound")
+            && root.contains("impl InboundProtocol for vless::VlessInbound"),
+        "VLESS inbound root should implement the runtime bridge directly on vless::VlessInbound instead of a proxy-side handler wrapper"
     );
 }
 

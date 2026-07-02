@@ -7,7 +7,6 @@ use zero_engine::EngineError;
 use super::fallback::relay_fallback;
 use super::mux::handle_vless_mux_session;
 use super::udp_session::handle_vless_udp_session;
-use super::VlessInboundHandler;
 
 #[derive(Clone, Copy)]
 pub(crate) struct VlessStreamTransport<'a> {
@@ -30,7 +29,7 @@ pub(crate) struct VlessStreamRequest<'a, S> {
 
 struct VlessAcceptedClientBridge<'a> {
     proxy: &'a Proxy,
-    handler: &'a VlessInboundHandler,
+    protocol: &'a vless::VlessInbound,
     inbound_tag: &'a str,
 }
 
@@ -52,7 +51,7 @@ where
             self.proxy,
             session,
             TcpRelayStream::new(client),
-            self.handler,
+            self.protocol,
             self.inbound_tag,
             source_addr,
         )
@@ -202,12 +201,10 @@ where
         }
     };
 
-    let handler = VlessInboundHandler {
-        vless_inbound: vless::VlessInbound,
-    };
+    let protocol = vless::VlessInbound;
     let mut bridge = VlessAcceptedClientBridge {
         proxy,
-        handler: &handler,
+        protocol: &protocol,
         inbound_tag,
     };
     route.dispatch_with(&mut bridge).await

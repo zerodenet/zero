@@ -722,6 +722,29 @@ impl VlessInbound {
             .map_err(|_| Error::Io("failed to write VLESS response"))
     }
 
+    pub async fn send_ok<S>(&self, stream: &mut S) -> Result<(), Error>
+    where
+        S: AsyncSocket,
+    {
+        self.send_response(stream).await
+    }
+
+    pub async fn send_blocked<S>(&self, stream: &mut S) -> Result<(), Error>
+    where
+        S: AsyncSocket,
+    {
+        let _ = stream.shutdown().await;
+        Ok(())
+    }
+
+    pub async fn send_upstream_failure<S>(&self, stream: &mut S) -> Result<(), Error>
+    where
+        S: AsyncSocket,
+    {
+        let _ = stream.shutdown().await;
+        Ok(())
+    }
+
     pub async fn handshake_with_auth<S, A>(
         &self,
         stream: &mut S,

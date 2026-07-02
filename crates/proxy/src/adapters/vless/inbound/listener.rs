@@ -1,49 +1,38 @@
-use std::io;
-
 use async_trait::async_trait;
 use zero_engine::EngineError;
-use zero_traits::AsyncSocket;
 
 use crate::runtime::inbound_protocol::InboundProtocol;
 use crate::transport::TcpRelayStream;
 
-// ── Handler (TCP path only) ─────────────────────────────────────────────
-
-#[derive(Clone)]
-struct VlessInboundHandler {
-    vless_inbound: vless::VlessInbound,
-}
+// TCP runtime bridge: VLESS accept happens in session glue before serve_inbound.
 
 #[async_trait]
-impl InboundProtocol for VlessInboundHandler {
+impl InboundProtocol for vless::VlessInbound {
     type ClientStream = TcpRelayStream;
 
     async fn accept(
         &self,
         _stream: TcpRelayStream,
     ) -> Result<(zero_core::Session, Self::ClientStream), EngineError> {
-        // VLESS accept is handled inline by the listener (complex dispatch).
-        Err(EngineError::Io(io::Error::new(
-            io::ErrorKind::Unsupported,
-            "VLESS accept handled by listener",
-        )))
+        unreachable!("vless accept is handled before serve_inbound dispatch")
     }
 
     async fn send_ok(&self, client: &mut TcpRelayStream) -> Result<(), EngineError> {
-        self.vless_inbound
-            .send_response(client)
+        vless::VlessInbound::send_ok(self, client)
             .await
             .map_err(EngineError::from)
     }
 
     async fn send_blocked(&self, client: &mut TcpRelayStream) -> Result<(), EngineError> {
-        let _ = AsyncSocket::shutdown(client).await;
-        Ok(())
+        vless::VlessInbound::send_blocked(self, client)
+            .await
+            .map_err(EngineError::from)
     }
 
     async fn send_upstream_failure(&self, client: &mut TcpRelayStream) -> Result<(), EngineError> {
-        let _ = AsyncSocket::shutdown(client).await;
-        Ok(())
+        vless::VlessInbound::send_upstream_failure(self, client)
+            .await
+            .map_err(EngineError::from)
     }
     // relay uses default
 }
