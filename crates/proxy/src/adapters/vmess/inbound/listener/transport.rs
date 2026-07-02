@@ -14,61 +14,6 @@ use crate::runtime::inbound_protocol::{serve_inbound, NoClientResponseInboundPro
 use crate::runtime::Proxy;
 use crate::transport::{AsyncSocketStream, TcpRelayStream};
 
-struct VmessAcceptedStreamBridge<'a> {
-    proxy: &'a Proxy,
-    tag: &'a str,
-    source_addr: Option<std::net::SocketAddr>,
-}
-
-impl<S> vmess::mux::VmessInboundAcceptedStreamDispatcher<S> for VmessAcceptedStreamBridge<'_>
-where
-    S: AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static,
-{
-    type Error = EngineError;
-
-    async fn dispatch_tcp_stream(
-        &mut self,
-        session: Session,
-        stream: S,
-    ) -> Result<(), Self::Error> {
-        serve_inbound(
-            self.proxy,
-            session,
-            TcpRelayStream::new(stream),
-            &NoClientResponseInboundProtocol,
-            self.tag,
-            self.source_addr,
-        )
-        .await
-    }
-
-    async fn dispatch_udp_stream(
-        &mut self,
-        session: Session,
-        stream: S,
-        responder: vmess::udp::VmessInboundUdpResponder,
-        auth: Option<SessionAuth>,
-    ) -> Result<(), Self::Error> {
-        run_vmess_udp_relay(
-            self.proxy,
-            TcpRelayStream::new(stream),
-            session,
-            responder,
-            auth,
-            self.tag,
-        )
-        .await
-    }
-
-    async fn dispatch_mux_stream(
-        &mut self,
-        reader: tokio::io::ReadHalf<S>,
-        mux_server: vmess::mux::VmessInboundMuxServer,
-    ) -> Result<(), Self::Error> {
-        run_vmess_mux_session(self.proxy, reader, mux_server, self.tag).await
-    }
-}
-
 async fn dispatch_vmess_client<S>(
     proxy: &Proxy,
     client: vmess::mux::VmessInboundAcceptedStream<S>,
@@ -78,12 +23,38 @@ async fn dispatch_vmess_client<S>(
 where
     S: AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static,
 {
-    let mut bridge = VmessAcceptedStreamBridge {
-        proxy,
-        tag,
-        source_addr,
-    };
-    client.dispatch_with(&mut bridge).await
+    client
+        .dispatch(
+            |session: Session, stream: S| async move {
+                serve_inbound(
+                    proxy,
+                    session,
+                    TcpRelayStream::new(stream),
+                    &NoClientResponseInboundProtocol,
+                    tag,
+                    source_addr,
+                )
+                .await
+            },
+            |session: Session,
+             stream: S,
+             responder: vmess::udp::VmessInboundUdpResponder,
+             auth: Option<SessionAuth>| async move {
+                run_vmess_udp_relay(
+                    proxy,
+                    TcpRelayStream::new(stream),
+                    session,
+                    responder,
+                    auth,
+                    tag,
+                )
+                .await
+            },
+            |reader: tokio::io::ReadHalf<S>, mux_server: vmess::mux::VmessInboundMuxServer| async move {
+                run_vmess_mux_session(proxy, reader, mux_server, tag).await
+            },
+        )
+        .await
 }
 
 /// Raw TLS path: TLS accept -> VMess auth -> serve_inbound.

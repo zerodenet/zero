@@ -6,7 +6,7 @@ use std::io;
 
 use tokio::sync::watch;
 use tracing::warn;
-use trojan::{TrojanInbound, TrojanInboundAcceptedSessionDispatcher, TrojanInboundProfile};
+use trojan::{TrojanInbound, TrojanInboundProfile};
 use zero_config::InboundConfig;
 use zero_core::Session;
 use zero_engine::EngineError;
@@ -22,55 +22,6 @@ pub(crate) struct TrojanInboundRequest {
     pub(crate) inbound: InboundConfig,
     pub(crate) profile: TrojanInboundProfile,
     pub(crate) tls_acceptor: crate::transport::TlsAcceptor,
-}
-
-struct TrojanAcceptedSessionBridge<'a> {
-    proxy: &'a Proxy,
-    inbound_tag: &'a str,
-    source_addr: Option<std::net::SocketAddr>,
-}
-
-type TrojanAcceptedStream =
-    AsyncSocketStream<tokio_rustls::server::TlsStream<zero_platform_tokio::TokioSocket>>;
-
-impl TrojanInboundAcceptedSessionDispatcher<TrojanAcceptedStream>
-    for TrojanAcceptedSessionBridge<'_>
-{
-    type Error = EngineError;
-
-    async fn dispatch_tcp_session(
-        &mut self,
-        session: Session,
-        stream: TrojanAcceptedStream,
-    ) -> Result<(), Self::Error> {
-        serve_inbound(
-            self.proxy,
-            session,
-            TcpRelayStream::new(stream.into_inner()),
-            &NoClientResponseInboundProtocol,
-            self.inbound_tag,
-            self.source_addr,
-        )
-        .await
-    }
-
-    async fn dispatch_udp_session(
-        &mut self,
-        session: Session,
-        stream: TrojanAcceptedStream,
-        responder: trojan::udp::TrojanInboundUdpResponder,
-        auth: Option<zero_core::SessionAuth>,
-    ) -> Result<(), Self::Error> {
-        run_trojan_udp_relay(
-            self.proxy,
-            TcpRelayStream::new(stream.into_inner()),
-            session,
-            responder,
-            auth,
-            self.inbound_tag,
-        )
-        .await
-    }
 }
 
 // Listener.
@@ -128,12 +79,42 @@ pub(crate) async fn run_trojan_listener_with_bound(
                     }
                 };
 
-                let mut bridge = TrojanAcceptedSessionBridge {
-                    proxy: &engine,
-                    inbound_tag: &tag,
-                    source_addr,
-                };
-                let result = client.dispatch_with(&mut bridge).await;
+                let engine_ref = &engine;
+                let tag_ref = &tag;
+                let result = client
+                    .dispatch(
+                        |session: Session,
+                         stream: AsyncSocketStream<
+                            tokio_rustls::server::TlsStream<zero_platform_tokio::TokioSocket>,
+                        >| async move {
+                            serve_inbound(
+                                engine_ref,
+                                session,
+                                TcpRelayStream::new(stream.into_inner()),
+                                &NoClientResponseInboundProtocol,
+                                tag_ref,
+                                source_addr,
+                            )
+                            .await
+                        },
+                        |session: Session,
+                         stream: AsyncSocketStream<
+                            tokio_rustls::server::TlsStream<zero_platform_tokio::TokioSocket>,
+                        >,
+                         responder: trojan::udp::TrojanInboundUdpResponder,
+                         auth: Option<zero_core::SessionAuth>| async move {
+                            run_trojan_udp_relay(
+                                engine_ref,
+                                TcpRelayStream::new(stream.into_inner()),
+                                session,
+                                responder,
+                                auth,
+                                tag_ref,
+                            )
+                            .await
+                        },
+                    )
+                    .await;
                 if let Err(e) = result {
                     if !matches!(&e, EngineError::Io(io) if matches!(io.kind(),
                         io::ErrorKind::UnexpectedEof | io::ErrorKind::ConnectionReset | io::ErrorKind::BrokenPipe))
