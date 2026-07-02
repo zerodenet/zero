@@ -3,25 +3,494 @@ use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
 
-use zero_core::{Address, Error, InboundUdpDispatch, ProtocolType};
+#[cfg(feature = "reality")]
+use tokio::sync::{broadcast, mpsc, oneshot};
+use zero_core::{Address, Error, InboundUdpDispatch, ProtocolType, Session};
 #[cfg(feature = "reality")]
 use zero_core::{MuxUdpDecodeFailure, MuxUdpResponder, StreamUdpResponder};
-use zero_traits::AsyncSocket;
+use zero_traits::{AsyncSocket, UdpPacketFraming, UdpPacketTunnelProtocol};
 
-use crate::shared::{write_address, ATYP_DOMAIN, ATYP_IPV4, ATYP_IPV6};
+use crate::outbound::VlessOutbound;
+use crate::shared::{parse_uuid, write_address, ATYP_DOMAIN, ATYP_IPV4, ATYP_IPV6};
+
+/// Target parameters for VLESS UDP packet tunnel over a connected stream.
+#[derive(Debug, Clone, Copy)]
+pub struct VlessUdpPacketTunnelTarget<'a> {
+    pub session: &'a Session,
+    pub id: &'a [u8; 16],
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct VlessUdpIdentity {
+    pub uuid: [u8; 16],
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct VlessUdpMuxOpenIdentity {
+    pub id: [u8; 16],
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct VlessUdpFlowConfig<'a> {
+    identity: VlessUdpIdentity,
+    flow: Option<&'a str>,
+}
+
+impl<'a> VlessUdpFlowConfig<'a> {
+    pub fn new(id: &str, flow: Option<&'a str>) -> Result<Self, Error> {
+        Ok(Self {
+            identity: parse_udp_identity(id)?,
+            flow,
+        })
+    }
+
+    pub fn identity(&self) -> VlessUdpIdentity {
+        self.identity
+    }
+
+    pub fn uuid(&self) -> &[u8; 16] {
+        &self.identity.uuid
+    }
+
+    pub fn mux_flow_enabled(&self) -> bool {
+        self.flow == Some("xtls-rprx-vision") || self.flow == Some("xtls-rprx-vision-udp443")
+    }
+
+    pub fn mux_open_identity(&self) -> VlessUdpMuxOpenIdentity {
+        VlessUdpMuxOpenIdentity {
+            id: self.identity.uuid,
+        }
+    }
+
+    #[cfg(feature = "reality")]
+    pub fn mux_pool_identity(&self) -> crate::mux_pool::MuxIdentity {
+        crate::mux_pool::MuxIdentity::from_uuid(self.identity.uuid)
+    }
+
+    #[cfg(feature = "reality")]
+    pub fn encode_initial_flow_packet(
+        &self,
+        target: &Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<Vec<u8>, Error> {
+        encode_udp_flow_initial_packet(target, port, payload)
+    }
+
+    #[cfg(feature = "reality")]
+    pub fn mux_initial_flow_packet(
+        &self,
+        target: &Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<VlessMuxInitialUdpFlowPacket, Error> {
+        Ok(VlessMuxInitialUdpFlowPacket {
+            packet: self.encode_initial_flow_packet(target, port, payload)?,
+        })
+    }
+
+    #[cfg(feature = "reality")]
+    pub async fn establish_flow_with_initial_packet<S>(
+        &self,
+        stream: S,
+        session: &Session,
+        initial_payload: &[u8],
+    ) -> Result<VlessEstablishedUdpFlowHandle, Error>
+    where
+        S: AsyncSocket + tokio::io::AsyncRead + tokio::io::AsyncWrite + Send + Sync + 'static,
+    {
+        establish_udp_flow_with_initial_packet(stream, session, self.identity, initial_payload)
+            .await
+    }
+}
+
+pub fn udp_flow_config_from_config<'a>(
+    id: &str,
+    flow: Option<&'a str>,
+) -> Result<VlessUdpFlowConfig<'a>, Error> {
+    VlessUdpFlowConfig::new(id, flow)
+}
+
+pub fn parse_udp_identity(id: &str) -> Result<VlessUdpIdentity, Error> {
+    parse_uuid(id).map(|uuid| VlessUdpIdentity { uuid })
+}
+
+pub async fn establish_udp_flow_stream<S>(
+    stream: &mut S,
+    session: &Session,
+    identity: VlessUdpIdentity,
+) -> Result<(), Error>
+where
+    S: AsyncSocket,
+{
+    establish_udp_packet_tunnel(stream, session, &identity.uuid).await
+}
 
 #[cfg(feature = "reality")]
-pub use crate::outbound::{
-    establish_udp_flow, establish_udp_flow_with_initial_packet, spawn_udp_flow,
-    VlessEstablishedUdpFlow, VlessEstablishedUdpFlowHandle, VlessInitialUdpFlowPacket,
-    VlessMuxInitialUdpFlowPacket, VlessUdpFlowConnection, VlessUdpFlowHandle, VlessUdpFlowResponse,
-    VlessUdpFlowResponseReceiver, VlessUdpFlowSession,
-};
-pub use crate::outbound::{
-    establish_udp_flow_stream, establish_udp_packet_tunnel, parse_udp_identity,
-    udp_flow_config_from_config, VlessUdpFlowConfig, VlessUdpIdentity, VlessUdpMuxOpenIdentity,
-    VlessUdpPacketTarget, VlessUdpPacketTunnelTarget,
-};
+#[derive(Debug, Clone, Copy, Default)]
+pub struct VlessEstablishedUdpFlow {
+    io: VlessUdpFlowIo,
+}
+
+#[cfg(feature = "reality")]
+pub type VlessUdpFlowResponse = (Address, u16, Vec<u8>);
+
+#[cfg(feature = "reality")]
+type VlessUdpFlowResponses = broadcast::Sender<VlessUdpFlowResponse>;
+
+#[cfg(feature = "reality")]
+pub type VlessUdpFlowResponseReceiver = broadcast::Receiver<VlessUdpFlowResponse>;
+
+#[cfg(feature = "reality")]
+struct VlessUdpFlowSend {
+    packet: zero_core::UdpFlowPacket,
+    result_tx: oneshot::Sender<Result<usize, Error>>,
+}
+
+#[cfg(feature = "reality")]
+#[derive(Clone)]
+pub struct VlessInitialUdpFlowPacket {
+    packet: zero_core::UdpFlowPacket,
+}
+
+#[cfg(feature = "reality")]
+impl VlessInitialUdpFlowPacket {
+    pub fn from_parts(target: &Address, port: u16, payload: &[u8]) -> Self {
+        Self {
+            packet: zero_core::UdpFlowPacket::from_parts(target, port, payload),
+        }
+    }
+
+    pub fn encoded_len(&self, flow: &VlessEstablishedUdpFlow) -> Result<usize, Error> {
+        flow.encoded_packet_len(&self.packet.target, self.packet.port, &self.packet.payload)
+    }
+
+    pub fn encode(&self, flow: &VlessEstablishedUdpFlow) -> Result<Vec<u8>, Error> {
+        flow.initial_packet(&self.packet.target, self.packet.port, &self.packet.payload)
+    }
+
+    fn write_target(&self) -> (&Address, u16, &[u8]) {
+        (&self.packet.target, self.packet.port, &self.packet.payload)
+    }
+}
+
+#[cfg(feature = "reality")]
+#[derive(Clone)]
+struct VlessUdpFlowSender {
+    send_tx: mpsc::Sender<VlessUdpFlowSend>,
+}
+
+#[cfg(feature = "reality")]
+pub struct VlessUdpFlowHandle {
+    sender: VlessUdpFlowSender,
+    responses: VlessUdpFlowResponses,
+}
+
+#[cfg(feature = "reality")]
+pub struct VlessEstablishedUdpFlowHandle {
+    pub handle: VlessUdpFlowHandle,
+    pub initial_packet_len: usize,
+}
+
+#[cfg(feature = "reality")]
+pub struct VlessMuxInitialUdpFlowPacket {
+    packet: Vec<u8>,
+}
+
+#[cfg(feature = "reality")]
+impl VlessMuxInitialUdpFlowPacket {
+    pub fn encoded_len(&self) -> usize {
+        self.packet.len()
+    }
+
+    pub fn into_bytes(self) -> Vec<u8> {
+        self.packet
+    }
+}
+
+#[cfg(feature = "reality")]
+impl VlessEstablishedUdpFlowHandle {
+    pub fn into_connection(self) -> VlessUdpFlowConnection {
+        VlessUdpFlowConnection::new(self.handle)
+    }
+}
+
+#[cfg(feature = "reality")]
+#[derive(Clone)]
+pub struct VlessUdpFlowSession {
+    sender: VlessUdpFlowSender,
+    responses: VlessUdpFlowResponses,
+}
+
+#[cfg(feature = "reality")]
+impl VlessUdpFlowSession {
+    pub fn new(handle: VlessUdpFlowHandle) -> Self {
+        Self {
+            sender: handle.sender,
+            responses: handle.responses,
+        }
+    }
+
+    pub async fn send(&self, target: &Address, port: u16, payload: &[u8]) -> Result<usize, Error> {
+        self.sender.send(target, port, payload).await
+    }
+
+    pub fn subscribe_responses(&self) -> VlessUdpFlowResponseReceiver {
+        self.responses.subscribe()
+    }
+}
+
+#[cfg(feature = "reality")]
+#[derive(Clone)]
+pub struct VlessUdpFlowConnection {
+    session: VlessUdpFlowSession,
+}
+
+#[cfg(feature = "reality")]
+impl VlessUdpFlowConnection {
+    pub fn new(handle: VlessUdpFlowHandle) -> Self {
+        Self {
+            session: VlessUdpFlowSession::new(handle),
+        }
+    }
+
+    pub async fn send(&self, target: &Address, port: u16, payload: &[u8]) -> Result<usize, Error> {
+        self.session.send(target, port, payload).await
+    }
+
+    pub fn subscribe_responses(&self) -> VlessUdpFlowResponseReceiver {
+        self.session.subscribe_responses()
+    }
+}
+
+#[cfg(feature = "reality")]
+impl VlessUdpFlowSender {
+    pub async fn send(&self, target: &Address, port: u16, payload: &[u8]) -> Result<usize, Error> {
+        let packet = zero_core::UdpFlowPacket::from_parts(target, port, payload);
+        let (result_tx, result_rx) = oneshot::channel();
+        self.send_tx
+            .send(VlessUdpFlowSend { packet, result_tx })
+            .await
+            .map_err(|_| Error::Io("vless udp flow closed"))?;
+        result_rx
+            .await
+            .map_err(|_| Error::Io("vless udp flow closed"))?
+    }
+}
+
+#[cfg(feature = "reality")]
+impl VlessEstablishedUdpFlow {
+    pub fn encode_packet(
+        &self,
+        target: &Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<Vec<u8>, Error> {
+        self.io.encode_packet(target, port, payload)
+    }
+
+    pub fn encoded_packet_len(
+        &self,
+        target: &Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<usize, Error> {
+        self.io.encoded_packet_len(target, port, payload)
+    }
+
+    pub fn initial_packet(
+        &self,
+        target: &Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<Vec<u8>, Error> {
+        self.io.encode_packet(target, port, payload)
+    }
+
+    pub async fn write_packet_tokio<S>(
+        &self,
+        stream: &mut S,
+        target: &Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<usize, Error>
+    where
+        S: tokio::io::AsyncWrite + Unpin,
+    {
+        self.io
+            .write_packet_tokio(stream, target, port, payload)
+            .await
+    }
+
+    pub async fn read_packet_tokio<S>(
+        &self,
+        stream: &mut S,
+        buffer: &mut [u8],
+    ) -> Result<Option<VlessUdpFlowPacket>, Error>
+    where
+        S: tokio::io::AsyncRead + Unpin,
+    {
+        self.io.read_packet_tokio(stream, buffer).await
+    }
+}
+
+#[cfg(feature = "reality")]
+pub fn spawn_udp_flow<S>(
+    stream: S,
+    initial_packet: Option<VlessInitialUdpFlowPacket>,
+    flow_io: VlessEstablishedUdpFlow,
+) -> VlessUdpFlowHandle
+where
+    S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Send + Sync + Unpin + 'static,
+{
+    let (send_tx, send_rx) = mpsc::channel::<VlessUdpFlowSend>(32);
+    let (responses, _) = broadcast::channel::<VlessUdpFlowResponse>(32);
+    spawn_udp_flow_task(stream, initial_packet, send_rx, responses.clone(), flow_io);
+    VlessUdpFlowHandle {
+        sender: VlessUdpFlowSender { send_tx },
+        responses,
+    }
+}
+
+#[cfg(feature = "reality")]
+pub async fn establish_udp_flow_with_initial_packet<S>(
+    mut stream: S,
+    session: &Session,
+    identity: VlessUdpIdentity,
+    initial_payload: &[u8],
+) -> Result<VlessEstablishedUdpFlowHandle, Error>
+where
+    S: AsyncSocket + tokio::io::AsyncRead + tokio::io::AsyncWrite + Send + Sync + 'static,
+{
+    let flow_io = establish_udp_flow(&mut stream, session, identity).await?;
+    let initial_packet =
+        VlessInitialUdpFlowPacket::from_parts(&session.target, session.port, initial_payload);
+    let initial_packet_len = initial_packet.encoded_len(&flow_io)?;
+    let handle = spawn_udp_flow(stream, Some(initial_packet), flow_io);
+
+    Ok(VlessEstablishedUdpFlowHandle {
+        handle,
+        initial_packet_len,
+    })
+}
+
+#[cfg(feature = "reality")]
+fn spawn_udp_flow_task<S>(
+    mut stream: S,
+    initial_packet: Option<VlessInitialUdpFlowPacket>,
+    mut send_rx: mpsc::Receiver<VlessUdpFlowSend>,
+    responses: VlessUdpFlowResponses,
+    flow_io: VlessEstablishedUdpFlow,
+) where
+    S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Send + Sync + Unpin + 'static,
+{
+    tokio::spawn(async move {
+        if let Some(packet) = initial_packet {
+            let (target, port, payload) = packet.write_target();
+            if flow_io
+                .write_packet_tokio(&mut stream, target, port, payload)
+                .await
+                .is_err()
+            {
+                return;
+            }
+        }
+
+        let mut buffer = vec![0_u8; 64 * 1024];
+        loop {
+            tokio::select! {
+                to_send = send_rx.recv() => {
+                    match to_send {
+                        Some(request) => {
+                            let (target, port, payload) = request.packet.into_parts();
+                            let result = flow_io
+                                .write_packet_tokio(&mut stream, &target, port, &payload)
+                                .await;
+                            let should_break = result.is_err();
+                            let _ = request.result_tx.send(result);
+                            if should_break {
+                                break;
+                            }
+                        }
+                        None => break,
+                    }
+                }
+                read = flow_io.read_packet_tokio(&mut stream, &mut buffer) => {
+                    match read {
+                        Ok(Some(packet)) => {
+                            let _ = responses.send(packet.into_parts());
+                        }
+                        Ok(None) => break,
+                        Err(_) => break,
+                    }
+                }
+            }
+        }
+    });
+}
+
+#[cfg(feature = "reality")]
+pub async fn establish_udp_flow<S>(
+    stream: &mut S,
+    session: &Session,
+    identity: VlessUdpIdentity,
+) -> Result<VlessEstablishedUdpFlow, Error>
+where
+    S: AsyncSocket,
+{
+    establish_udp_flow_stream(stream, session, identity).await?;
+    Ok(VlessEstablishedUdpFlow { io: VlessUdpFlowIo })
+}
+
+impl<'a> UdpPacketTunnelProtocol<VlessUdpPacketTunnelTarget<'a>> for VlessOutbound {
+    type Error = Error;
+
+    async fn establish_udp_packet_tunnel<S>(
+        &self,
+        stream: &mut S,
+        target: &VlessUdpPacketTunnelTarget<'a>,
+    ) -> Result<(), Self::Error>
+    where
+        S: AsyncSocket,
+    {
+        self.establish_udp_packet_tunnel(stream, target.session, target.id)
+            .await
+    }
+}
+
+pub async fn establish_udp_packet_tunnel<S>(
+    stream: &mut S,
+    session: &Session,
+    id: &[u8; 16],
+) -> Result<(), Error>
+where
+    S: AsyncSocket,
+{
+    VlessOutbound
+        .establish_udp_packet_tunnel(stream, session, id)
+        .await
+}
+
+/// One UDP datagram to encode for a VLESS UDP packet tunnel.
+#[derive(Debug, Clone, Copy)]
+pub struct VlessUdpPacketTarget<'a> {
+    pub address: &'a Address,
+    pub port: u16,
+    pub payload: &'a [u8],
+}
+
+impl<'a> UdpPacketFraming<VlessUdpPacketTarget<'a>> for VlessOutbound {
+    type Error = Error;
+    type Decoded = VlessUdpPacket;
+
+    fn encode_udp_packet(&self, packet: &VlessUdpPacketTarget<'a>) -> Result<Vec<u8>, Self::Error> {
+        build_udp_packet(packet.address, packet.port, packet.payload)
+    }
+
+    fn decode_udp_packet(&self, packet: &[u8]) -> Result<Self::Decoded, Self::Error> {
+        parse_udp_packet(packet)
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct VlessUdpPacket {
