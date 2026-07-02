@@ -1,9 +1,6 @@
 #[cfg(feature = "crypto")]
-pub use crate::inbound::{
-    ShadowsocksInboundUdpClientResponse, ShadowsocksInboundUdpCodec,
-    ShadowsocksInboundUdpDispatchParts, ShadowsocksInboundUdpPacket, ShadowsocksInboundUdpResponse,
-    ShadowsocksInboundUdpResponseTarget, ShadowsocksInboundUdpSession,
-};
+mod inbound;
+
 #[cfg(feature = "crypto")]
 pub use crate::outbound::{
     managed_socket_flow_from_resume, parse_udp_cipher, udp_flow_resume_from_config,
@@ -13,4 +10,12 @@ pub use crate::outbound::{
     ShadowsocksUdpFlowResume, ShadowsocksUdpPacket, ShadowsocksUdpPacketPathCarrierBuild,
     ShadowsocksUdpPacketPathCarrierDescriptor, ShadowsocksUdpPacketPathDatagramSourceBuild,
     ShadowsocksUdpPacketPathSpec, ShadowsocksUdpPacketTarget, ShadowsocksUdpSocketFlowSpec,
+};
+#[cfg(feature = "crypto")]
+pub use inbound::{
+    ShadowsocksInboundAcceptedUdpSession, ShadowsocksInboundUdpClientResponse,
+    ShadowsocksInboundUdpCodec, ShadowsocksInboundUdpDispatchParts, ShadowsocksInboundUdpPacket,
+    ShadowsocksInboundUdpResponder, ShadowsocksInboundUdpResponse,
+    ShadowsocksInboundUdpResponseDatagram, ShadowsocksInboundUdpResponseTarget,
+    ShadowsocksInboundUdpSession,
 };

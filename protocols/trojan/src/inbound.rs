@@ -1,6 +1,9 @@
 //! Trojan inbound protocol handler.
 
-use zero_core::{Address, Error, InboundUdpDispatch, Network, ProtocolType, Session, SessionAuth};
+use zero_core::{
+    Address, Error, InboundUdpDispatch, Network, ProtocolType, Session, SessionAuth,
+    StreamUdpResponder,
+};
 use zero_traits::AsyncSocket;
 
 use super::outbound::TrojanUdpPacket;
@@ -43,6 +46,28 @@ impl TrojanInboundProfile {
             .accept(stream, core::slice::from_ref(&self.password))
             .await
     }
+
+    pub async fn accept_session<S: AsyncSocket>(
+        &self,
+        inbound: TrojanInbound,
+        stream: &mut S,
+    ) -> Result<Session, Error> {
+        let accept = self.accept(inbound, stream).await?;
+        let mut session = accept.session;
+        session.apply_auth(self.inbound_auth());
+        Ok(session)
+    }
+
+    pub async fn accept_client<S: AsyncSocket>(
+        &self,
+        inbound: TrojanInbound,
+        mut stream: S,
+    ) -> Result<TrojanInboundAcceptedSession<S>, Error> {
+        let session = self.accept_session(inbound, &mut stream).await?;
+        Ok(TrojanInboundAcceptedSession::from_session_stream(
+            session, stream,
+        ))
+    }
 }
 
 pub fn inbound_profile_from_config_password(password: impl Into<String>) -> TrojanInboundProfile {
@@ -61,6 +86,37 @@ pub enum TrojanInboundSessionKind {
     Udp,
 }
 
+pub enum TrojanInboundAcceptedSession<S> {
+    Tcp {
+        session: Session,
+        stream: S,
+    },
+    Udp {
+        auth: Option<SessionAuth>,
+        responder: TrojanInboundUdpResponder,
+        session: Session,
+        stream: S,
+    },
+}
+
+pub trait TrojanInboundAcceptedSessionDispatcher<S> {
+    type Error;
+
+    async fn dispatch_tcp_session(
+        &mut self,
+        session: Session,
+        stream: S,
+    ) -> Result<(), Self::Error>;
+
+    async fn dispatch_udp_session(
+        &mut self,
+        session: Session,
+        stream: S,
+        responder: TrojanInboundUdpResponder,
+        auth: Option<SessionAuth>,
+    ) -> Result<(), Self::Error>;
+}
+
 pub fn classify_inbound_session(session: &Session) -> TrojanInboundSessionKind {
     match session.network {
         Network::Udp => TrojanInboundSessionKind::Udp,
@@ -68,21 +124,54 @@ pub fn classify_inbound_session(session: &Session) -> TrojanInboundSessionKind {
     }
 }
 
-pub trait TrojanInboundSessionHandler {
-    type Error;
+impl<S> TrojanInboundAcceptedSession<S> {
+    pub fn from_session_stream(session: Session, stream: S) -> Self {
+        match classify_inbound_session(&session) {
+            TrojanInboundSessionKind::Tcp => Self::Tcp { session, stream },
+            TrojanInboundSessionKind::Udp => Self::Udp {
+                auth: session.auth.clone(),
+                responder: TrojanInbound.accept_udp_session(),
+                session,
+                stream,
+            },
+        }
+    }
 
-    async fn handle_tcp_session(&mut self) -> Result<(), Self::Error>;
+    pub async fn dispatch<Tcp, TcpFut, Udp, UdpFut, E>(self, tcp: Tcp, udp: Udp) -> Result<(), E>
+    where
+        Tcp: FnOnce(Session, S) -> TcpFut,
+        TcpFut: core::future::Future<Output = Result<(), E>>,
+        Udp: FnOnce(Session, S, TrojanInboundUdpResponder, Option<SessionAuth>) -> UdpFut,
+        UdpFut: core::future::Future<Output = Result<(), E>>,
+    {
+        match self {
+            Self::Tcp { session, stream } => tcp(session, stream).await,
+            Self::Udp {
+                auth,
+                responder,
+                session,
+                stream,
+            } => udp(session, stream, responder, auth).await,
+        }
+    }
 
-    async fn handle_udp_session(&mut self) -> Result<(), Self::Error>;
-}
-
-pub async fn dispatch_inbound_session<H>(session: &Session, handler: &mut H) -> Result<(), H::Error>
-where
-    H: TrojanInboundSessionHandler,
-{
-    match classify_inbound_session(session) {
-        TrojanInboundSessionKind::Udp => handler.handle_udp_session().await,
-        TrojanInboundSessionKind::Tcp => handler.handle_tcp_session().await,
+    pub async fn dispatch_with<D>(self, dispatcher: &mut D) -> Result<(), D::Error>
+    where
+        D: TrojanInboundAcceptedSessionDispatcher<S>,
+    {
+        match self {
+            Self::Tcp { session, stream } => dispatcher.dispatch_tcp_session(session, stream).await,
+            Self::Udp {
+                auth,
+                responder,
+                session,
+                stream,
+            } => {
+                dispatcher
+                    .dispatch_udp_session(session, stream, responder, auth)
+                    .await
+            }
+        }
     }
 }
 
@@ -330,6 +419,31 @@ impl TrojanInboundUdpResponder {
     }
 }
 
+impl<S> StreamUdpResponder<S> for TrojanInboundUdpResponder
+where
+    S: AsyncSocket,
+{
+    async fn read_inbound_dispatch(
+        &mut self,
+        client: &mut S,
+    ) -> Result<Option<InboundUdpDispatch>, Error> {
+        TrojanInboundUdpResponder::read_inbound_dispatch(self, client)
+            .await
+            .map(Some)
+    }
+
+    async fn write_response_for_target(
+        &mut self,
+        client: &mut S,
+        target: &Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<usize, Error> {
+        TrojanInboundUdpResponder::write_response_for_target(self, client, target, port, payload)
+            .await
+    }
+}
+
 #[derive(Debug, Default, Clone, Copy)]
 pub struct TrojanInboundUdpCodec;
 
@@ -373,6 +487,10 @@ impl TrojanInbound {
 
     pub fn udp_responder(&self) -> TrojanInboundUdpResponder {
         TrojanInboundUdpResponder::new(self.udp_session())
+    }
+
+    pub fn accept_udp_session(&self) -> TrojanInboundUdpResponder {
+        self.udp_responder()
     }
 
     /// Accept a Trojan TCP connection.

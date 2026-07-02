@@ -24,18 +24,18 @@ pub mod crypto;
 mod inbound;
 #[cfg(feature = "crypto")]
 mod outbound;
+#[cfg(feature = "crypto")]
+mod tunnel;
 
 #[cfg(feature = "crypto")]
 pub use inbound::{
-    classify_inbound_session, dispatch_inbound_session, inbound_profile_from_config_users,
-    IntoMieruInboundUserConfig, MieruAccept, MieruInbound, MieruInboundProfile,
-    MieruInboundSessionHandler, MieruInboundSessionKind, MieruInboundStream,
+    classify_inbound_session, inbound_profile_from_config_users, IntoMieruInboundUserConfig,
+    MieruAccept, MieruInbound, MieruInboundAcceptedSession, MieruInboundAcceptedSessionDispatcher,
+    MieruInboundProfile, MieruInboundSessionKind, MieruInboundStream,
 };
 #[cfg(feature = "crypto")]
 pub use outbound::{
     establish_tcp_tunnel, tcp_outbound_profile_from_config, MieruOutbound, MieruTcpOutboundProfile,
-    MieruTcpStream, MieruTcpTarget, MieruTcpTunnelTarget,
+    MieruTcpStream, MieruTcpTunnelTarget,
 };
 pub use protocol::MieruProtocol;
-#[cfg(feature = "crypto")]
-pub use udp::MieruInboundUdpResponder;

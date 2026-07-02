@@ -5,7 +5,7 @@ use std::task::{Context, Poll};
 
 use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt, ReadBuf};
 use tokio::sync::mpsc;
-use zero_core::{Address, Error, Network, ProtocolType, Session};
+use zero_core::{Address, Error, Network, ProtocolType, Session, SessionAuth};
 use zero_traits::AsyncSocket;
 
 use crate::outbound::VmessOutbound;
@@ -279,6 +279,11 @@ pub struct VmessInboundMuxOpenedStream {
 }
 
 pub enum VmessInboundMuxOpenedKind {
+    Tcp(VmessInboundMuxTcpOpenedStream),
+    Udp(VmessInboundMuxUdpOpenedStream),
+}
+
+pub enum VmessInboundMuxOpenedRoute {
     Tcp {
         session_id: u16,
         session: Session,
@@ -286,29 +291,61 @@ pub enum VmessInboundMuxOpenedKind {
     },
     Udp {
         session_id: u16,
-        session: Session,
+        port: u16,
         up_rx: mpsc::UnboundedReceiver<Vec<u8>>,
+        responder: crate::udp::VmessInboundMuxUdpResponder,
     },
 }
 
-pub trait VmessInboundMuxOpenedHandler {
-    type Error: From<Error>;
+pub trait VmessInboundMuxOpenedRouteDispatcher {
+    type Error;
 
-    async fn handle_tcp_opened(
+    async fn dispatch_tcp_opened(
         &mut self,
         session_id: u16,
         session: Session,
         up_rx: mpsc::UnboundedReceiver<Vec<u8>>,
-        writer: VmessInboundMuxWriter,
     ) -> Result<(), Self::Error>;
 
-    async fn handle_udp_opened(
+    async fn dispatch_udp_opened(
         &mut self,
         session_id: u16,
-        session: Session,
         up_rx: mpsc::UnboundedReceiver<Vec<u8>>,
-        writer: VmessInboundMuxWriter,
+        responder: crate::udp::VmessInboundMuxUdpResponder,
     ) -> Result<(), Self::Error>;
+}
+
+impl VmessInboundMuxOpenedRoute {
+    pub async fn dispatch_with<D>(self, dispatcher: &mut D) -> Result<(), D::Error>
+    where
+        D: VmessInboundMuxOpenedRouteDispatcher,
+    {
+        match self {
+            Self::Tcp {
+                session_id,
+                session,
+                up_rx,
+            } => {
+                dispatcher
+                    .dispatch_tcp_opened(session_id, session, up_rx)
+                    .await
+            }
+            Self::Udp {
+                session_id,
+                up_rx,
+                responder,
+                ..
+            } => {
+                dispatcher
+                    .dispatch_udp_opened(session_id, up_rx, responder)
+                    .await
+            }
+        }
+    }
+}
+
+pub enum VmessInboundMuxEvent {
+    Opened(VmessInboundMuxOpenedStream),
 }
 
 impl VmessInboundMuxOpenedStream {
@@ -331,17 +368,66 @@ impl VmessInboundMuxOpenedStream {
     pub fn into_kind(self) -> VmessInboundMuxOpenedKind {
         let (session_id, session, up_rx) = self.into_parts();
         match session.network {
-            Network::Tcp => VmessInboundMuxOpenedKind::Tcp {
+            Network::Tcp => VmessInboundMuxOpenedKind::Tcp(VmessInboundMuxTcpOpenedStream {
                 session_id,
                 session,
                 up_rx,
-            },
-            Network::Udp => VmessInboundMuxOpenedKind::Udp {
+            }),
+            Network::Udp => VmessInboundMuxOpenedKind::Udp(VmessInboundMuxUdpOpenedStream {
                 session_id,
                 session,
                 up_rx,
-            },
+            }),
         }
+    }
+
+    pub fn into_route(self, writer: VmessInboundMuxWriter) -> VmessInboundMuxOpenedRoute {
+        let (session_id, session, up_rx) = self.into_parts();
+        match session.network {
+            Network::Tcp => VmessInboundMuxOpenedRoute::Tcp {
+                session_id,
+                session,
+                up_rx,
+            },
+            Network::Udp => {
+                let port = session.port;
+                let target = session.target;
+                VmessInboundMuxOpenedRoute::Udp {
+                    session_id,
+                    port,
+                    up_rx,
+                    responder: crate::udp::VmessInboundMuxUdpResponder::new(
+                        crate::udp::VmessInboundUdpSession::new(target, port),
+                        writer,
+                        session_id,
+                    ),
+                }
+            }
+        }
+    }
+}
+
+pub struct VmessInboundMuxTcpOpenedStream {
+    session_id: u16,
+    session: Session,
+    up_rx: mpsc::UnboundedReceiver<Vec<u8>>,
+}
+
+impl VmessInboundMuxTcpOpenedStream {
+    pub fn into_parts(self) -> (u16, Session, mpsc::UnboundedReceiver<Vec<u8>>) {
+        (self.session_id, self.session, self.up_rx)
+    }
+}
+
+pub struct VmessInboundMuxUdpOpenedStream {
+    session_id: u16,
+    session: Session,
+    up_rx: mpsc::UnboundedReceiver<Vec<u8>>,
+}
+
+impl VmessInboundMuxUdpOpenedStream {
+    pub fn into_parts(self) -> (u16, Session, mpsc::UnboundedReceiver<Vec<u8>>) {
+        (self.session_id, self.session, self.up_rx)
     }
 }
 
@@ -368,6 +454,43 @@ pub enum VmessInboundSessionKind {
     Mux,
 }
 
+pub enum VmessInboundAcceptedStream<S> {
+    Tcp {
+        session: Session,
+        stream: S,
+    },
+    Udp {
+        session: Session,
+        stream: S,
+        responder: crate::udp::VmessInboundUdpResponder,
+        auth: Option<SessionAuth>,
+    },
+    Mux {
+        stream: S,
+    },
+}
+
+pub trait VmessInboundAcceptedStreamDispatcher<S> {
+    type Error;
+
+    async fn dispatch_tcp_stream(&mut self, session: Session, stream: S)
+        -> Result<(), Self::Error>;
+
+    async fn dispatch_udp_stream(
+        &mut self,
+        session: Session,
+        stream: S,
+        responder: crate::udp::VmessInboundUdpResponder,
+        auth: Option<SessionAuth>,
+    ) -> Result<(), Self::Error>;
+
+    async fn dispatch_mux_stream(
+        &mut self,
+        reader: tokio::io::ReadHalf<S>,
+        mux_server: VmessInboundMuxServer,
+    ) -> Result<(), Self::Error>;
+}
+
 pub fn classify_inbound_session(session: &Session) -> VmessInboundSessionKind {
     match session.network {
         Network::Udp => VmessInboundSessionKind::Udp,
@@ -376,24 +499,87 @@ pub fn classify_inbound_session(session: &Session) -> VmessInboundSessionKind {
     }
 }
 
-pub trait VmessInboundSessionHandler {
-    type Error;
+impl<S> VmessInboundAcceptedStream<S> {
+    pub fn from_session_stream(session: Session, stream: S) -> Self {
+        match classify_inbound_session(&session) {
+            VmessInboundSessionKind::Tcp => Self::Tcp { session, stream },
+            VmessInboundSessionKind::Udp => {
+                let responder = crate::udp::VmessInboundUdpResponder::new(
+                    crate::udp::VmessInboundUdpSession::new(session.target.clone(), session.port),
+                );
+                Self::Udp {
+                    auth: session.auth.clone(),
+                    session,
+                    stream,
+                    responder,
+                }
+            }
+            VmessInboundSessionKind::Mux => Self::Mux { stream },
+        }
+    }
 
-    async fn handle_tcp_session(&mut self) -> Result<(), Self::Error>;
+    pub async fn dispatch<Tcp, TcpFut, Udp, UdpFut, Mux, MuxFut, E>(
+        self,
+        tcp: Tcp,
+        udp: Udp,
+        mux: Mux,
+    ) -> Result<(), E>
+    where
+        Tcp: FnOnce(Session, S) -> TcpFut,
+        TcpFut: core::future::Future<Output = Result<(), E>>,
+        Udp:
+            FnOnce(Session, S, crate::udp::VmessInboundUdpResponder, Option<SessionAuth>) -> UdpFut,
+        UdpFut: core::future::Future<Output = Result<(), E>>,
+        S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+        Mux: FnOnce(tokio::io::ReadHalf<S>, VmessInboundMuxServer) -> MuxFut,
+        MuxFut: core::future::Future<Output = Result<(), E>>,
+    {
+        match self {
+            Self::Tcp { session, stream } => tcp(session, stream).await,
+            Self::Udp {
+                session,
+                stream,
+                responder,
+                auth,
+            } => udp(session, stream, responder, auth).await,
+            Self::Mux { stream } => {
+                let (reader, writer) = tokio::io::split(stream);
+                mux(
+                    reader,
+                    crate::inbound::VmessInbound.accept_mux_session_from_tokio_writer(writer),
+                )
+                .await
+            }
+        }
+    }
 
-    async fn handle_udp_session(&mut self) -> Result<(), Self::Error>;
-
-    async fn handle_mux_session(&mut self) -> Result<(), Self::Error>;
-}
-
-pub async fn dispatch_inbound_session<H>(session: &Session, handler: &mut H) -> Result<(), H::Error>
-where
-    H: VmessInboundSessionHandler,
-{
-    match classify_inbound_session(session) {
-        VmessInboundSessionKind::Udp => handler.handle_udp_session().await,
-        VmessInboundSessionKind::Mux => handler.handle_mux_session().await,
-        VmessInboundSessionKind::Tcp => handler.handle_tcp_session().await,
+    pub async fn dispatch_with<D>(self, dispatcher: &mut D) -> Result<(), D::Error>
+    where
+        S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+        D: VmessInboundAcceptedStreamDispatcher<S>,
+    {
+        match self {
+            Self::Tcp { session, stream } => dispatcher.dispatch_tcp_stream(session, stream).await,
+            Self::Udp {
+                session,
+                stream,
+                responder,
+                auth,
+            } => {
+                dispatcher
+                    .dispatch_udp_stream(session, stream, responder, auth)
+                    .await
+            }
+            Self::Mux { stream } => {
+                let (reader, writer) = tokio::io::split(stream);
+                dispatcher
+                    .dispatch_mux_stream(
+                        reader,
+                        crate::inbound::VmessInbound.accept_mux_session_from_tokio_writer(writer),
+                    )
+                    .await
+            }
+        }
     }
 }
 
@@ -660,53 +846,65 @@ impl VmessInboundMuxServer {
         Ok(self.streams.apply_inbound_action(action))
     }
 
+    pub async fn next_opened_stream<R>(
+        &mut self,
+        reader: &mut R,
+    ) -> Result<Option<VmessInboundMuxEvent>, Error>
+    where
+        R: tokio::io::AsyncRead + Unpin,
+    {
+        self.read_opened_stream(reader)
+            .await
+            .map(|opened| opened.map(VmessInboundMuxEvent::Opened))
+    }
+
+    pub async fn next_opened_route<R>(
+        &mut self,
+        reader: &mut R,
+    ) -> Result<Option<VmessInboundMuxOpenedRoute>, Error>
+    where
+        R: tokio::io::AsyncRead + Unpin,
+    {
+        let writer = self.writer();
+        self.next_opened_stream(reader).await.map(|event| {
+            event.map(|event| match event {
+                VmessInboundMuxEvent::Opened(opened) => opened.into_route(writer),
+            })
+        })
+    }
+
+    pub async fn dispatch_next_opened_route<R, D>(
+        &mut self,
+        reader: &mut R,
+        dispatcher: &mut D,
+    ) -> Result<bool, D::Error>
+    where
+        R: tokio::io::AsyncRead + Unpin,
+        D: VmessInboundMuxOpenedRouteDispatcher,
+        D::Error: From<Error>,
+    {
+        let Some(route) = self.next_opened_route(reader).await? else {
+            return Ok(true);
+        };
+        route.dispatch_with(dispatcher).await?;
+        Ok(true)
+    }
+
     pub fn writer(&self) -> VmessInboundMuxWriter {
         self.writer.clone()
     }
 
-    pub async fn dispatch_next_opened_stream<R, H>(
-        &mut self,
-        reader: &mut R,
-        handler: &mut H,
-    ) -> Result<(), H::Error>
-    where
-        R: tokio::io::AsyncRead + Unpin,
-        H: VmessInboundMuxOpenedHandler,
-    {
-        let Some(opened) = self
-            .read_opened_stream(reader)
-            .await
-            .map_err(H::Error::from)?
-        else {
-            return Ok(());
-        };
-
-        match opened.into_kind() {
-            VmessInboundMuxOpenedKind::Tcp {
-                session_id,
-                session,
-                up_rx,
-            } => {
-                handler
-                    .handle_tcp_opened(session_id, session, up_rx, self.writer())
-                    .await?;
-            }
-            VmessInboundMuxOpenedKind::Udp {
-                session_id,
-                session,
-                up_rx,
-            } => {
-                handler
-                    .handle_udp_opened(session_id, session, up_rx, self.writer())
-                    .await?;
-            }
-        }
-
-        Ok(())
-    }
-
     pub fn end_inbound_stream(&self, session_id: u16) -> Result<usize, Error> {
         self.session.end_inbound_stream(&self.writer, session_id)
+    }
+}
+
+impl crate::inbound::VmessInbound {
+    pub fn accept_mux_session_from_tokio_writer<W>(&self, writer: W) -> VmessInboundMuxServer
+    where
+        W: AsyncWrite + Unpin + Send + 'static,
+    {
+        VmessInboundMuxServer::from_tokio_writer(writer)
     }
 }
 

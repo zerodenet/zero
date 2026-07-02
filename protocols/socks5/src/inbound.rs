@@ -12,7 +12,9 @@ use crate::shared::{
     CMD_UDP_ASSOCIATE, METHOD_NOT_ACCEPTABLE, METHOD_NO_AUTH, METHOD_USERNAME_PASSWORD,
     SOCKS5_VERSION, USERPASS_STATUS_FAILURE, USERPASS_STATUS_SUCCESS, USERPASS_VERSION,
 };
-use crate::udp::{Socks5InboundUdpResponder, Socks5InboundUdpSession};
+pub fn is_socks5_greeting_byte(byte: u8) -> bool {
+    byte == SOCKS5_VERSION
+}
 
 #[derive(Debug, Default, Clone, Copy)]
 pub struct Socks5Inbound;
@@ -23,24 +25,23 @@ pub enum Socks5Request {
     UdpAssociate(Socks5UdpAssociateRequest),
 }
 
-pub trait Socks5RequestHandler {
-    type Error;
-
-    async fn handle_connect(&mut self, session: Session) -> Result<(), Self::Error>;
-
-    async fn handle_udp_associate(
-        &mut self,
-        request: Socks5UdpAssociateRequest,
-    ) -> Result<(), Self::Error>;
-}
-
-pub async fn dispatch_request<H>(request: Socks5Request, handler: &mut H) -> Result<(), H::Error>
-where
-    H: Socks5RequestHandler,
-{
-    match request {
-        Socks5Request::Connect(session) => handler.handle_connect(*session).await,
-        Socks5Request::UdpAssociate(request) => handler.handle_udp_associate(request).await,
+impl Socks5Request {
+    pub async fn dispatch_with_handlers<S, E, FC, FFut, FU, UFut>(
+        self,
+        stream: S,
+        on_connect: FC,
+        on_udp_associate: FU,
+    ) -> Result<(), E>
+    where
+        FC: FnOnce(Session, S) -> FFut,
+        FFut: core::future::Future<Output = Result<(), E>>,
+        FU: FnOnce(Socks5UdpAssociateRequest, S) -> UFut,
+        UFut: core::future::Future<Output = Result<(), E>>,
+    {
+        match self {
+            Self::Connect(session) => on_connect(*session, stream).await,
+            Self::UdpAssociate(request) => on_udp_associate(request, stream).await,
+        }
     }
 }
 
@@ -140,14 +141,6 @@ impl ConfiguredSocks5PasswordAuth {
     }
 }
 
-pub fn password_auth_from_config_users<I, U>(users: I) -> ConfiguredSocks5PasswordAuth
-where
-    I: IntoIterator<Item = U>,
-    U: IntoSocks5AuthUserConfig,
-{
-    ConfiguredSocks5PasswordAuth::from_config_users(users)
-}
-
 impl Socks5PasswordAuth for ConfiguredSocks5PasswordAuth {
     fn required(&self) -> bool {
         !self.users.is_empty()
@@ -172,6 +165,68 @@ impl Socks5PasswordAuth for ConfiguredSocks5PasswordAuth {
             .find(|user| user.username == username)
             .map(|user| (user.up_bps, user.down_bps))
             .unwrap_or((None, None))
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Socks5InboundTcpAcceptor {
+    inbound: Socks5Inbound,
+    auth: ConfiguredSocks5PasswordAuth,
+}
+
+impl Socks5InboundTcpAcceptor {
+    pub fn new(auth: ConfiguredSocks5PasswordAuth) -> Self {
+        Self {
+            inbound: Socks5Inbound,
+            auth,
+        }
+    }
+
+    pub fn from_config_users<I, U>(users: I) -> Self
+    where
+        I: IntoIterator<Item = U>,
+        U: IntoSocks5AuthUserConfig,
+    {
+        Self::new(ConfiguredSocks5PasswordAuth::from_config_users(users))
+    }
+
+    pub async fn accept_command<S>(&self, stream: &mut S) -> Result<Socks5Request, Error>
+    where
+        S: AsyncSocket,
+    {
+        self.inbound
+            .accept_command_with_auth(stream, &self.auth)
+            .await
+    }
+
+    pub async fn accept_request<S>(&self, stream: &mut S) -> Result<Session, Error>
+    where
+        S: AsyncSocket,
+    {
+        self.inbound
+            .accept_request_with_auth(stream, &self.auth)
+            .await
+    }
+
+    pub async fn send_success<S>(&self, stream: &mut S) -> Result<(), Error>
+    where
+        S: AsyncSocket,
+    {
+        self.inbound.send_success_response(stream).await
+    }
+
+    pub async fn send_blocked<S>(&self, stream: &mut S) -> Result<(), Error>
+    where
+        S: AsyncSocket,
+    {
+        self.inbound.send_blocked_response(stream).await
+    }
+
+    pub async fn send_upstream_failure<S>(&self, stream: &mut S) -> Result<(), Error>
+    where
+        S: AsyncSocket,
+    {
+        self.inbound.send_upstream_failure_response(stream).await
     }
 }
 
@@ -221,14 +276,6 @@ impl Socks5Inbound {
         ProtocolType::Socks5
     }
 
-    pub fn udp_session(&self) -> Socks5InboundUdpSession {
-        Socks5InboundUdpSession::new()
-    }
-
-    pub fn udp_responder(&self) -> Socks5InboundUdpResponder {
-        Socks5InboundUdpResponder::new()
-    }
-
     pub async fn accept_request<S>(&self, stream: &mut S) -> Result<Session, Error>
     where
         S: AsyncSocket,
@@ -246,15 +293,13 @@ impl Socks5Inbound {
         S: AsyncSocket,
         A: Socks5PasswordAuth,
     {
-        let mut handler = Socks5TcpRequestHandler {
-            stream,
-            session: None,
-        };
-        let request = self.accept_command_with_auth(handler.stream, auth).await?;
-        dispatch_request(request, &mut handler).await?;
-        handler
-            .session
-            .ok_or(Error::Protocol("SOCKS5 connect request was not accepted"))
+        match self.accept_command_with_auth(stream, auth).await? {
+            Socks5Request::Connect(session) => Ok(*session),
+            Socks5Request::UdpAssociate(_) => {
+                write_reply(stream, Socks5Reply::CommandNotSupported).await?;
+                Err(Error::Unsupported("SOCKS5 command is not supported"))
+            }
+        }
     }
 
     pub async fn accept_command<S>(&self, stream: &mut S) -> Result<Socks5Request, Error>
@@ -376,31 +421,6 @@ impl Socks5Inbound {
         self.send_response(stream, Socks5Reply::Succeeded).await?;
 
         Ok(session)
-    }
-}
-
-struct Socks5TcpRequestHandler<'a, S> {
-    stream: &'a mut S,
-    session: Option<Session>,
-}
-
-impl<S> Socks5RequestHandler for Socks5TcpRequestHandler<'_, S>
-where
-    S: AsyncSocket,
-{
-    type Error = Error;
-
-    async fn handle_connect(&mut self, session: Session) -> Result<(), Self::Error> {
-        self.session = Some(session);
-        Ok(())
-    }
-
-    async fn handle_udp_associate(
-        &mut self,
-        _request: Socks5UdpAssociateRequest,
-    ) -> Result<(), Self::Error> {
-        write_reply(self.stream, Socks5Reply::CommandNotSupported).await?;
-        Err(Error::Unsupported("SOCKS5 command is not supported"))
     }
 }
 

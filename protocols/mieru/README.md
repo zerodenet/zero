@@ -49,6 +49,7 @@ Mieru 是一种加密代理协议。它先与对端建立一条 XChaCha20-Poly13
 src/lib.rs       — crate root, re-exports
 src/inbound.rs   — MieruInbound（openSession 握手，不含目标）
 src/outbound.rs  — MieruOutbound（建立加密隧道，不含目标）
+src/tunnel.rs    — socks5-in-tunnel CONNECT / UDP ASSOCIATE 目标协商
 src/segment.rs   — segment 成帧（build/parse，无前缀 padding0）
 src/crypto.rs    — 密钥派生（HashPassword）+ XChaCha20-Poly1305 + nonce user hint
 src/udp.rs       — UDP associate wrap/unwrap
@@ -57,7 +58,7 @@ src/metadata.rs  — segment metadata 编解码
 src/session.rs   — 会话状态（seq/window/timestamp）
 ```
 
-代理层的 socks5-in-tunnel 编排（目标协商）在 `crates/proxy/src/adapters/mieru/tcp.rs`（出站 `socks5_connect`）与 `crates/proxy/src/inbound/mieru.rs`（入站 `socks5_serve`）。
+协议私有的 socks5-in-tunnel 编排（TCP CONNECT / UDP ASSOCIATE 目标协商）由 `protocols/mieru/src/tunnel.rs` 负责；`crates/proxy/src/adapters/mieru/*` 只保留 carrier socket 生命周期、runtime pipe 调用和 trait bridge。
 
 ## 参考
 

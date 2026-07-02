@@ -15,7 +15,7 @@ pub(super) struct MieruManagedStreamConnector;
 
 impl ManagedStreamConnectorFlowBuild for mieru::udp::MieruUdpConnectorFlow {
     fn into_parts(self) -> (String, bool) {
-        self.into_parts()
+        mieru::udp::MieruUdpConnectorFlow::into_parts(self)
     }
 }
 

@@ -11,7 +11,11 @@ pub mod udp;
 
 #[cfg(feature = "crypto")]
 pub use inbound::{inbound_profile_from_config_password, Hysteria2InboundProfile};
-pub use inbound::{Hysteria2Inbound, Hysteria2User, Hysteria2UserStore};
+#[cfg(all(feature = "tokio", feature = "crypto"))]
+pub use inbound::{Hysteria2AcceptedQuicConnection, Hysteria2AcceptedQuicDispatcher};
+pub use inbound::{
+    Hysteria2Inbound, Hysteria2InboundTcpAcceptor, Hysteria2User, Hysteria2UserStore,
+};
 pub use metadata::Hysteria2Protocol;
 pub use outbound::Hysteria2Outbound;
 #[cfg(feature = "crypto")]

@@ -18,7 +18,7 @@ impl crate::runtime::udp_flow::managed::ManagedDatagramSocketConnectorFlowBuild
     for shadowsocks::udp::ShadowsocksUdpSocketFlowSpec
 {
     fn into_cache_key(self) -> String {
-        self.into_cache_key()
+        shadowsocks::udp::ShadowsocksUdpSocketFlowSpec::into_cache_key(self)
     }
 }
 

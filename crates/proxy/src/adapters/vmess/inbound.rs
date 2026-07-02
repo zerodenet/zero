@@ -5,6 +5,8 @@ use crate::adapters::vmess::VmessAdapter;
 use crate::protocol_registry::BoundInbound;
 use crate::runtime::Proxy;
 
+mod listener;
+
 impl VmessAdapter {
     pub(super) fn spawn_inbound_impl(
         &self,
@@ -51,9 +53,9 @@ impl VmessAdapter {
             .map_err(|error| {
                 EngineError::Io(std::io::Error::new(std::io::ErrorKind::InvalidInput, error))
             })?;
-            crate::inbound::run_vmess_listener_with_bound(
+            listener::run_vmess_listener_with_bound(
                 &p,
-                crate::inbound::vmess::model::VmessInboundRequest {
+                listener::model::VmessInboundRequest {
                     inbound,
                     profile,
                     tls_acceptor,

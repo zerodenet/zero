@@ -13,8 +13,8 @@ pub mod shared;
 pub mod udp;
 
 pub use inbound::{
-    classify_inbound_session, dispatch_inbound_session, inbound_profile_from_config_password,
-    TrojanAccept, TrojanInbound, TrojanInboundProfile, TrojanInboundSessionHandler,
+    classify_inbound_session, inbound_profile_from_config_password, TrojanAccept, TrojanInbound,
+    TrojanInboundAcceptedSession, TrojanInboundAcceptedSessionDispatcher, TrojanInboundProfile,
     TrojanInboundSessionKind, TrojanInboundUdpClientResponse, TrojanInboundUdpResponder,
 };
 pub use metadata::TrojanProtocol;

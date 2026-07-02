@@ -61,7 +61,7 @@ impl Socks5UdpFlowResume {
         self.auth.as_ref().map(Socks5OwnedOutboundAuth::as_ref)
     }
 
-    pub fn owned_association_config(&self) -> Socks5OwnedUdpAssociationConfig {
+    fn owned_association_config(&self) -> Socks5OwnedUdpAssociationConfig {
         Socks5OwnedUdpAssociationConfig::new(self.auth.clone())
     }
 
@@ -73,58 +73,10 @@ impl Socks5UdpFlowResume {
     ) -> Socks5UdpAssociationTarget {
         Socks5UdpAssociationTarget::new(outbound_tag, server, port, self.owned_association_config())
     }
-
-    pub fn flow(
-        &self,
-        outbound_tag: impl Into<alloc::string::String>,
-        server: impl Into<alloc::string::String>,
-        port: u16,
-    ) -> Socks5UdpFlowSpec {
-        Socks5UdpFlowSpec {
-            association_target: self.association_target(outbound_tag, server, port),
-        }
-    }
-
-    pub fn association_send(
-        &self,
-        outbound_tag: impl Into<alloc::string::String>,
-        server: impl Into<alloc::string::String>,
-        port: u16,
-    ) -> Socks5UdpAssociationSend {
-        Socks5UdpAssociationSend {
-            association_target: self.association_target(outbound_tag, server, port),
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Socks5UdpFlowSpec {
-    association_target: Socks5UdpAssociationTarget,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Socks5UdpAssociationSend {
-    association_target: Socks5UdpAssociationTarget,
-}
-
-impl Socks5UdpFlowSpec {
-    pub fn association_target(&self) -> Socks5UdpAssociationTarget {
-        self.association_target.clone()
-    }
-}
-
-impl Socks5UdpAssociationSend {
-    pub fn target(&self) -> Socks5UdpAssociationTarget {
-        self.association_target.clone()
-    }
-
-    pub fn into_target(self) -> Socks5UdpAssociationTarget {
-        self.association_target
-    }
 }
 
 #[derive(Debug, Clone, Copy)]
-pub struct Socks5TcpTunnelTarget<'a> {
+struct Socks5TcpTunnelTarget<'a> {
     pub session: &'a Session,
     pub auth: Option<Socks5OutboundAuth<'a>>,
 }
@@ -142,6 +94,13 @@ impl<'a> Socks5TcpTunnelTarget<'a> {
 pub struct Socks5TcpOutboundProfile {
     username: Option<String>,
     password: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Socks5TcpConnectSpec {
+    server: String,
+    port: u16,
+    profile: Socks5TcpOutboundProfile,
 }
 
 impl Socks5TcpOutboundProfile {
@@ -173,14 +132,41 @@ impl Socks5TcpOutboundProfile {
     }
 }
 
-pub fn tcp_outbound_profile_from_config(
-    username: Option<&str>,
-    password: Option<&str>,
-) -> Socks5TcpOutboundProfile {
-    Socks5TcpOutboundProfile::from_config_parts(username, password)
+impl Socks5TcpConnectSpec {
+    pub fn from_config_parts(
+        server: impl Into<String>,
+        port: u16,
+        username: Option<&str>,
+        password: Option<&str>,
+    ) -> Self {
+        Self {
+            server: server.into(),
+            port,
+            profile: Socks5TcpOutboundProfile::from_config_parts(username, password),
+        }
+    }
+
+    pub fn server(&self) -> &str {
+        &self.server
+    }
+
+    pub fn port(&self) -> u16 {
+        self.port
+    }
+
+    pub async fn establish_tcp_tunnel<S>(
+        &self,
+        stream: &mut S,
+        session: &Session,
+    ) -> Result<(), Error>
+    where
+        S: AsyncSocket,
+    {
+        self.profile.establish_tcp_tunnel(stream, session).await
+    }
 }
 
-pub fn outbound_auth<'a>(
+fn outbound_auth<'a>(
     username: Option<&'a str>,
     password: Option<&'a str>,
 ) -> Option<Socks5OutboundAuth<'a>> {

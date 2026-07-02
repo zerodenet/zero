@@ -5,6 +5,8 @@ use crate::adapters::mieru::MieruAdapter;
 use crate::protocol_registry::BoundInbound;
 use crate::runtime::Proxy;
 
+mod listener;
+
 impl MieruAdapter {
     pub(super) fn spawn_inbound_impl(
         &self,
@@ -29,9 +31,9 @@ impl MieruAdapter {
                     )));
                 }
             };
-            crate::inbound::run_mieru_listener_with_bound(
+            listener::run_mieru_listener_with_bound(
                 &p,
-                crate::inbound::mieru::MieruInboundRequest { inbound, profile },
+                listener::MieruInboundRequest { inbound, profile },
                 bound.into_tcp(),
                 shutdown_rx,
             )

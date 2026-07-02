@@ -18,7 +18,7 @@ use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
 use crate::transport::{EstablishedTcpOutbound, TcpOutboundFailure};
 
 #[cfg(feature = "socks5")]
-mod inbound;
+pub(super) mod inbound;
 #[cfg(feature = "socks5")]
 mod tcp;
 #[cfg(feature = "socks5")]

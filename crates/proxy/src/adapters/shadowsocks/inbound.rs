@@ -5,6 +5,8 @@ use crate::adapters::shadowsocks::ShadowsocksAdapter;
 use crate::protocol_registry::BoundInbound;
 use crate::runtime::Proxy;
 
+mod listener;
+
 impl ShadowsocksAdapter {
     pub(super) fn spawn_inbound_impl(
         &self,
@@ -36,9 +38,14 @@ impl ShadowsocksAdapter {
                     )));
                 }
             };
-            crate::inbound::run_shadowsocks_listener_with_bound(
+            let udp_session = profile.accept_udp_session_with_auth();
+            listener::run_shadowsocks_listener_with_bound(
                 &p,
-                crate::inbound::shadowsocks::ShadowsocksInboundRequest { inbound, profile },
+                listener::ShadowsocksInboundRequest {
+                    inbound,
+                    profile,
+                    udp_session,
+                },
                 bound.into_tcp(),
                 shutdown_rx,
             )

@@ -8,7 +8,7 @@ use crate::protocol_registry::{
 };
 
 #[cfg(feature = "http_connect")]
-mod inbound;
+pub(super) mod inbound;
 
 #[cfg(feature = "http_connect")]
 #[derive(Debug)]

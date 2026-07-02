@@ -24,21 +24,26 @@ impl Socks5Adapter {
         else {
             return Err(unreachable_leaf(self.name(), leaf));
         };
-        match connect_tcp(proxy, session, server, *port, *username, *password).await {
+        let connect =
+            socks5::Socks5TcpConnectSpec::from_config_parts(*server, *port, *username, *password);
+        match connect_tcp(proxy, session, &connect).await {
             Ok(upstream) => Ok(EstablishedTcpOutbound::proxied(
-                *tag, *server, *port, upstream,
+                *tag,
+                connect.server(),
+                connect.port(),
+                upstream,
             )),
             Err(error) => Err(TcpOutboundFailure {
                 stage: "connect_upstream_socks5",
                 error,
-                upstream_endpoint: Some(((*server).to_string(), *port)),
+                upstream_endpoint: Some((connect.server().to_owned(), connect.port())),
             }),
         }
     }
 
     pub(super) async fn apply_relay_hop_impl(
         &self,
-        proxy: &Proxy,
+        _proxy: &Proxy,
         stream: crate::transport::TcpRelayStream,
         session: &Session,
         leaf: &ResolvedLeafOutbound<'_>,
@@ -49,40 +54,34 @@ impl Socks5Adapter {
         else {
             return Err(unreachable_leaf(self.name(), leaf).error);
         };
-        apply_tcp_hop(proxy, stream, session, *username, *password).await
+        let profile = socks5::Socks5TcpOutboundProfile::from_config_parts(*username, *password);
+        apply_tcp_hop(stream, session, profile).await
     }
 }
 
 async fn connect_tcp(
     proxy: &Proxy,
     session: &Session,
-    server: &str,
-    port: u16,
-    username: Option<&str>,
-    password: Option<&str>,
+    connect: &socks5::Socks5TcpConnectSpec,
 ) -> Result<TcpRelayStream, EngineError> {
     let upstream = proxy
         .protocols
         .direct_connector()
-        .connect_host(server, port, proxy.resolver.as_ref())
+        .connect_host(connect.server(), connect.port(), proxy.resolver.as_ref())
         .await?;
     let mut upstream = MeteredStream::new(upstream);
 
-    let profile = socks5::tcp_outbound_profile_from_config(username, password);
-    profile.establish_tcp_tunnel(&mut upstream, session).await?;
+    connect.establish_tcp_tunnel(&mut upstream, session).await?;
     proxy.record_session_outbound_traffic(session.id, upstream.drain_traffic());
 
     Ok(upstream.into_inner().into())
 }
 
 async fn apply_tcp_hop(
-    _proxy: &Proxy,
     mut stream: TcpRelayStream,
     session: &Session,
-    username: Option<&str>,
-    password: Option<&str>,
+    profile: socks5::Socks5TcpOutboundProfile,
 ) -> Result<TcpRelayStream, EngineError> {
-    let profile = socks5::tcp_outbound_profile_from_config(username, password);
     profile
         .establish_tcp_tunnel(&mut stream, session)
         .await

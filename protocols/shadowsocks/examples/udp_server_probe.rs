@@ -5,14 +5,26 @@
 //! Run with Zero listening on 127.0.0.1:18388 (2022-blake3-aes-256-gcm):
 //!   cargo run --example udp_server_probe --features crypto,blake3
 
+#[cfg(all(feature = "crypto", feature = "blake3"))]
 use std::net::UdpSocket;
+#[cfg(all(feature = "crypto", feature = "blake3"))]
 use std::time::Duration;
 
+#[cfg(all(feature = "crypto", feature = "blake3"))]
 use shadowsocks::udp::ShadowsocksDatagramCodec;
+#[cfg(all(feature = "crypto", feature = "blake3"))]
 use shadowsocks::{CipherKind, ShadowsocksInboundProfile};
+#[cfg(all(feature = "crypto", feature = "blake3"))]
 use zero_core::Address;
+#[cfg(all(feature = "crypto", feature = "blake3"))]
 use zero_traits::DatagramCodec;
 
+#[cfg(not(all(feature = "crypto", feature = "blake3")))]
+fn main() {
+    eprintln!("udp_server_probe requires --features crypto,blake3");
+}
+
+#[cfg(all(feature = "crypto", feature = "blake3"))]
 fn main() {
     let cipher = CipherKind::Blake3Aes256Gcm;
     let password = b"MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=";

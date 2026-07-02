@@ -1,6 +1,6 @@
 use alloc::vec::Vec;
 
-use crate::{Address, ProtocolType};
+use crate::{Address, Error, ProtocolType, SessionAuth};
 
 /// Neutral UDP payload routed by proxy/runtime glue.
 ///
@@ -26,6 +26,72 @@ pub struct InboundUdpDispatch {
     payload: Vec<u8>,
     protocol: ProtocolType,
     client_session_id: Option<u64>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MuxUdpDecodeFailure {
+    Continue,
+    End,
+}
+
+pub trait MuxUdpResponder: Send {
+    fn decode_inbound_dispatch(&mut self, payload: &[u8]) -> Result<InboundUdpDispatch, Error>;
+
+    fn write_response_for_target(
+        &mut self,
+        target: &Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<usize, Error>;
+
+    fn end_inbound_stream(&mut self) -> Result<usize, Error>;
+
+    fn decode_failure(&self) -> MuxUdpDecodeFailure {
+        MuxUdpDecodeFailure::End
+    }
+}
+
+pub trait StreamUdpResponder<S>: Send
+where
+    S: Send,
+{
+    async fn read_inbound_dispatch(
+        &mut self,
+        client: &mut S,
+    ) -> Result<Option<InboundUdpDispatch>, Error>;
+
+    async fn write_response_for_target(
+        &mut self,
+        client: &mut S,
+        target: &Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<usize, Error>;
+}
+
+pub trait DatagramUdpResponder<S>: Send
+where
+    S: Send,
+{
+    async fn read_inbound_dispatch(
+        &mut self,
+        source: &S,
+    ) -> Result<Option<InboundUdpDispatch>, Error>;
+
+    fn auth(&self) -> Option<&SessionAuth> {
+        None
+    }
+
+    fn on_dispatch_success(&mut self, _session_id: u64, _dispatch: &InboundUdpDispatch) {}
+
+    async fn write_response_for_session(
+        &mut self,
+        source: &S,
+        session_id: Option<u64>,
+        target: &Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<Option<usize>, Error>;
 }
 
 impl InboundUdpDispatch {

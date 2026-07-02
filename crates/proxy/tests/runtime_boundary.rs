@@ -16,7 +16,52 @@ fn repo_root() -> PathBuf {
 
 fn read(relative: &str) -> String {
     let path = manifest_dir().join(relative);
-    fs::read_to_string(&path).unwrap_or_else(|error| panic!("read {}: {error}", path.display()))
+    fs::read_to_string(&path)
+        .unwrap_or_else(|error| panic!("read {}: {error}", path.display()))
+        .replace("\r\n", "\n")
+}
+
+fn read_repo_module_tree(relative: &str) -> String {
+    fn collect_rust_files(root: &Path, files: &mut Vec<PathBuf>) {
+        for entry in fs::read_dir(root).unwrap_or_else(|error| {
+            panic!("read dir {}: {error}", root.display());
+        }) {
+            let entry = entry.expect("read dir entry");
+            let path = entry.path();
+            if path.is_dir() {
+                collect_rust_files(&path, files);
+            } else if path.extension().and_then(|ext| ext.to_str()) == Some("rs") {
+                files.push(path);
+            }
+        }
+    }
+
+    let root = repo_root().join(relative);
+    let mut files = Vec::new();
+
+    if root.is_file() {
+        files.push(root.clone());
+        let module_dir = root.with_extension("");
+        if module_dir.is_dir() {
+            collect_rust_files(&module_dir, &mut files);
+        }
+    } else if root.is_dir() {
+        collect_rust_files(&root, &mut files);
+    } else {
+        panic!("missing repo module tree {}", root.display());
+    }
+
+    files.sort();
+
+    files
+        .into_iter()
+        .map(|path| {
+            fs::read_to_string(&path)
+                .unwrap_or_else(|error| panic!("read {}: {error}", path.display()))
+                .replace("\r\n", "\n")
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 fn impl_block(source: &str, type_name: &str) -> String {
@@ -75,18 +120,18 @@ fn rust_sources_under(relative: &str) -> Vec<PathBuf> {
 
 fn protocol_inbound_sources() -> Vec<PathBuf> {
     [
-        "src/inbound/socks5.rs",
-        "src/inbound/socks5",
-        "src/inbound/shadowsocks.rs",
-        "src/inbound/shadowsocks",
-        "src/inbound/trojan.rs",
-        "src/inbound/trojan",
-        "src/inbound/mieru.rs",
-        "src/inbound/mieru",
-        "src/inbound/hysteria2.rs",
-        "src/inbound/hysteria2",
-        "src/inbound/vless",
-        "src/inbound/vmess",
+        "src/adapters/socks5/inbound/listener.rs",
+        "src/adapters/socks5/inbound/listener",
+        "src/adapters/shadowsocks/inbound/listener.rs",
+        "src/adapters/shadowsocks/inbound/listener",
+        "src/adapters/trojan/inbound/listener.rs",
+        "src/adapters/trojan/inbound/listener",
+        "src/adapters/mieru/inbound/listener.rs",
+        "src/adapters/mieru/inbound/listener",
+        "src/adapters/hysteria2/inbound/listener.rs",
+        "src/adapters/hysteria2/inbound/listener",
+        "src/adapters/vless/inbound/listener",
+        "src/adapters/vmess/inbound/listener",
     ]
     .into_iter()
     .flat_map(|relative| {
@@ -185,11 +230,206 @@ fn runtime_protocol_runtime_references_are_confined_to_facades() {
 }
 
 #[test]
+fn runtime_engine_facade_keeps_traffic_and_udp_upstream_accounting_protocol_neutral() {
+    let engine_facade = read("src/runtime/engine_facade.rs");
+
+    assert!(
+        engine_facade.contains("pub(crate) fn record_session_outbound_rx")
+            && engine_facade.contains("pub(crate) fn record_session_outbound_tx")
+            && engine_facade.contains("pub(crate) fn record_session_outbound_traffic")
+            && engine_facade.contains("pub(crate) fn record_udp_upstream_association_created")
+            && engine_facade.contains("pub(crate) fn record_udp_upstream_association_reused")
+            && engine_facade.contains("pub(crate) fn record_udp_upstream_association_closed")
+            && engine_facade.contains("pub(crate) fn record_udp_upstream_association_idle_timeout")
+            && engine_facade.contains("pub(crate) fn record_udp_upstream_association_dropped")
+            && engine_facade.contains("pub(crate) fn record_udp_upstream_association_failed")
+            && engine_facade.contains("pub(crate) fn record_udp_upstream_send_failure")
+            && engine_facade.contains("pub(crate) fn record_udp_upstream_recv_failure")
+            && engine_facade.contains("pub(crate) fn record_udp_upstream_packet_sent")
+            && engine_facade.contains("pub(crate) fn record_udp_upstream_packet_received")
+            && engine_facade.contains("pub(crate) fn udp_upstream_idle_timeout")
+            && !engine_facade.contains("#[cfg(feature = \"socks5\")]")
+            && !engine_facade.contains("#[cfg(any(feature = \"socks5\", feature = \"vless\"))]")
+            && !engine_facade.contains("Socks5")
+            && !engine_facade.contains("Vless"),
+        "runtime engine facade should expose generic traffic and UDP upstream accounting without protocol feature gates"
+    );
+}
+
+#[test]
+fn neutral_mux_runtime_glue_does_not_live_under_inbound() {
+    assert!(
+        !manifest_dir().join("src/inbound/mux_tcp.rs").exists()
+            && !manifest_dir().join("src/inbound/mux_udp.rs").exists(),
+        "neutral MUX TCP/UDP runtime glue should live under src/runtime, not src/inbound"
+    );
+
+    let runtime_mux_tcp = read("src/runtime/mux_tcp.rs");
+    let runtime_mux_udp = read("src/runtime/mux_udp.rs");
+    let packet_session_udp = read("src/runtime/packet_session_udp.rs");
+    assert!(
+        runtime_mux_tcp.contains("TcpPipe::new(proxy)")
+            && runtime_mux_tcp.contains("TcpPipeInput")
+            && runtime_mux_udp.contains("run_packet_session_udp_relay")
+            && packet_session_udp.contains("dispatch_inbound_udp_packet")
+            && packet_session_udp.contains("write_direct_response")
+            && packet_session_udp.contains("write_upstream_response")
+            && packet_session_udp.contains("write_chain_response"),
+        "runtime MUX glue should own neutral TCP/UDP pipe orchestration"
+    );
+}
+
+#[test]
+fn mux_session_task_lifecycle_lives_in_runtime() {
+    let runtime_mux_session = read("src/runtime/mux_session.rs");
+    let vless_mux = read("src/adapters/vless/inbound/listener/mux.rs");
+    let vmess_mux = read("src/adapters/vmess/inbound/listener/mux.rs");
+
+    assert!(
+        runtime_mux_session.contains("pub(crate) trait MuxOpenedDispatcher")
+            && runtime_mux_session.contains("pub(crate) async fn run_mux_session_loop")
+            && runtime_mux_session.contains("tasks.abort_all()")
+            && runtime_mux_session.contains("tasks.try_join_next()")
+            && runtime_mux_session.contains("mux session started")
+            && runtime_mux_session.contains("mux session ended"),
+        "neutral MUX session task lifecycle should live in runtime/mux_session"
+    );
+
+    for (source, content) in [
+        (
+            "src/adapters/vless/inbound/listener/mux.rs",
+            vless_mux.as_str(),
+        ),
+        (
+            "src/adapters/vmess/inbound/listener/mux.rs",
+            vmess_mux.as_str(),
+        ),
+    ] {
+        for forbidden in [
+            "try_join_next",
+            "abort_all()",
+            "mux session started",
+            "mux session ended",
+        ] {
+            assert!(
+                !content.contains(forbidden),
+                "{source} should delegate neutral MUX task lifecycle to runtime/mux_session; found `{forbidden}`"
+            );
+        }
+        assert!(
+            content.contains("run_mux_session_loop")
+                && content.contains("MuxOpenedDispatcher for"),
+            "{source} should keep only protocol opened-stream dispatch glue over the runtime MUX session loop"
+        );
+    }
+}
+
+#[test]
+fn neutral_udp_dispatch_and_response_glue_lives_in_runtime() {
+    assert!(
+        !manifest_dir().join("src/inbound/udp_dispatch.rs").exists()
+            && !manifest_dir().join("src/inbound/udp_response.rs").exists(),
+        "neutral inbound UDP dispatch/response accounting glue should live under src/runtime"
+    );
+
+    let udp_dispatch = read("src/runtime/udp_inbound_dispatch.rs");
+    let udp_response = read("src/runtime/udp_response.rs");
+    assert!(
+        udp_dispatch.contains("pub(crate) async fn dispatch_inbound_udp_packet")
+            && udp_dispatch.contains("UdpPipe::new(proxy, dispatch)")
+            && udp_dispatch.contains("UdpPipeInput::from_inbound_dispatch")
+            && udp_response.contains("fn write_direct_response")
+            && udp_response.contains("fn write_upstream_response")
+            && udp_response.contains("fn write_chain_response"),
+        "runtime should own neutral inbound UDP pipe submission and response accounting"
+    );
+}
+
+#[test]
+fn neutral_stream_and_datagram_udp_relays_live_in_runtime() {
+    assert!(
+        !manifest_dir().join("src/inbound/stream_udp.rs").exists()
+            && !manifest_dir().join("src/inbound/datagram_udp.rs").exists(),
+        "neutral stream/datagram UDP relay glue should live under src/runtime, not src/inbound"
+    );
+
+    let stream_udp = read("src/runtime/stream_udp.rs");
+    let packet_session_udp = read("src/runtime/packet_session_udp.rs");
+    let datagram_udp = read("src/runtime/datagram_udp.rs");
+    let core_udp = fs::read_to_string(repo_root().join("crates/core/src/udp.rs"))
+        .expect("read zero-core UDP source");
+    assert!(
+        core_udp.contains("pub trait StreamUdpResponder")
+            && stream_udp.contains("StreamUdpResponder")
+            && stream_udp.contains("pub(crate) async fn run_stream_udp_relay")
+            && stream_udp.contains("run_packet_session_udp_relay")
+            && packet_session_udp.contains("dispatch_inbound_udp_packet")
+            && core_udp.contains("pub trait DatagramUdpResponder")
+            && datagram_udp.contains("DatagramUdpResponder")
+            && datagram_udp.contains("pub(crate) async fn run_datagram_udp_relay")
+            && datagram_udp.contains("dispatch_inbound_udp_packet"),
+        "runtime should own neutral stream/datagram UDP relay loops, with stream and mux delegating packet-session orchestration to a shared runtime template"
+    );
+}
+
+#[test]
+fn udp_inbound_runtime_converges_to_three_neutral_loop_templates() {
+    let runtime_root = read("src/runtime.rs");
+    let stream_udp = read("src/runtime/stream_udp.rs");
+    let mux_udp = read("src/runtime/mux_udp.rs");
+    let packet_session_udp = read("src/runtime/packet_session_udp.rs");
+    let datagram_udp = read("src/runtime/datagram_udp.rs");
+    let udp_association = read("src/runtime/udp_association.rs");
+
+    assert!(
+        runtime_root.contains("pub(crate) mod datagram_udp;")
+            && runtime_root.contains("pub(crate) mod packet_session_udp;")
+            && runtime_root.contains("pub(crate) mod stream_udp;")
+            && runtime_root.contains("pub(crate) mod mux_udp;")
+            && runtime_root.contains("pub(crate) mod udp_association;")
+            && !manifest_dir().join("src/inbound/stream_udp.rs").exists()
+            && !manifest_dir().join("src/inbound/mux_udp.rs").exists()
+            && !manifest_dir().join("src/inbound/datagram_udp.rs").exists()
+            && !manifest_dir().join("src/inbound/socks5/udp_associate.rs").exists(),
+        "proxy should expose only runtime-owned UDP inbound glue modules and keep the old inbound UDP loop files removed"
+    );
+
+    assert!(
+        stream_udp.contains("run_packet_session_udp_relay")
+            && !stream_udp.contains("select!")
+            && !stream_udp.contains("upstream_udp.recv_response")
+            && !stream_udp.contains("direct_sock.recv_from_addr")
+            && mux_udp.contains("run_packet_session_udp_relay")
+            && !mux_udp.contains("select!")
+            && !mux_udp.contains("upstream_udp.recv_response")
+            && !mux_udp.contains("direct_sock.recv_from_addr"),
+        "stream_udp and mux_udp should be thin bridges into the shared packet-session runtime template instead of owning separate UDP event loops"
+    );
+
+    assert!(
+        packet_session_udp.contains("select!")
+            && packet_session_udp.contains("upstream_udp.recv_response")
+            && packet_session_udp.contains("direct_sock.recv_from_addr")
+            && datagram_udp.contains("select!")
+            && datagram_udp.contains("direct_sock.recv_from_addr")
+            && udp_association.contains("select!")
+            && udp_association.contains("relay.recv_from_addr")
+            && udp_association.contains("upstream_udp.recv_response")
+            && !packet_session_udp.contains("socks5::")
+            && !datagram_udp.contains("shadowsocks::")
+            && !datagram_udp.contains("mieru::")
+            && !udp_association.contains("socks5::"),
+        "the remaining UDP inbound event-loop templates should be the neutral packet-session, datagram, and association runtimes without protocol-private ownership"
+    );
+}
+
+#[test]
 fn ordinary_udp_inbounds_submit_packets_through_udp_pipe() {
-    let udp_dispatch = read("src/inbound/udp_dispatch.rs");
-    let datagram_udp = read("src/inbound/datagram_udp.rs");
-    let stream_udp = read("src/inbound/stream_udp.rs");
-    let mux_udp = read("src/inbound/mux_udp.rs");
+    let udp_dispatch = read("src/runtime/udp_inbound_dispatch.rs");
+    let datagram_udp = read("src/runtime/datagram_udp.rs");
+    let stream_udp = read("src/runtime/stream_udp.rs");
+    let mux_udp = read("src/runtime/mux_udp.rs");
+    let packet_session_udp = read("src/runtime/packet_session_udp.rs");
     assert!(
         udp_dispatch.contains("pub(crate) async fn dispatch_inbound_udp_packet")
             && udp_dispatch.contains("UdpPipe::new(proxy, dispatch)")
@@ -197,13 +437,15 @@ fn ordinary_udp_inbounds_submit_packets_through_udp_pipe() {
         "shared inbound UDP dispatch helper should own UdpPipe submission"
     );
     assert!(
-        stream_udp.contains("dispatch_inbound_udp_packet")
+        stream_udp.contains("run_packet_session_udp_relay")
+            && packet_session_udp.contains("dispatch_inbound_udp_packet")
             && !stream_udp.contains("UdpPipe::new")
             && !stream_udp.contains("UdpPipeInput"),
         "shared stream UDP relay glue should submit decoded packets through the inbound UDP dispatch helper"
     );
     assert!(
-        mux_udp.contains("dispatch_inbound_udp_packet")
+        mux_udp.contains("run_packet_session_udp_relay")
+            && packet_session_udp.contains("dispatch_inbound_udp_packet")
             && !mux_udp.contains("UdpPipe::new")
             && !mux_udp.contains("UdpPipeInput"),
         "shared MUX UDP relay glue should submit decoded packets through the inbound UDP dispatch helper"
@@ -216,7 +458,7 @@ fn ordinary_udp_inbounds_submit_packets_through_udp_pipe() {
     );
 
     {
-        let source = "src/inbound/socks5/udp_associate/dispatch.rs";
+        let source = "src/adapters/socks5/inbound/listener/udp_associate/dispatch.rs";
         let content = read(source);
         assert!(
             content.contains("dispatch_inbound_udp_packet")
@@ -231,14 +473,14 @@ fn ordinary_udp_inbounds_submit_packets_through_udp_pipe() {
     }
 
     for source in [
-        "src/inbound/shadowsocks/udp.rs",
-        "src/inbound/hysteria2/udp.rs",
+        "src/adapters/shadowsocks/inbound/listener/udp.rs",
+        "src/adapters/hysteria2/inbound/listener/udp.rs",
     ] {
         let content = read(source);
         assert!(
             content.contains("run_datagram_udp_relay")
                 && content.contains("DatagramUdpRelayRequest")
-                && content.contains("DatagramUdpResponder")
+                && !content.contains("impl DatagramUdpResponder")
                 && !content.contains("dispatch_inbound_udp_packet")
                 && !content.contains("UdpPipe::new")
                 && !content.contains("UdpPipeInput"),
@@ -251,16 +493,15 @@ fn ordinary_udp_inbounds_submit_packets_through_udp_pipe() {
     }
 
     for source in [
-        "src/inbound/vless/udp_session.rs",
-        "src/inbound/vmess/udp_session.rs",
-        "src/inbound/trojan/udp.rs",
-        "src/inbound/mieru/udp.rs",
+        "src/adapters/vless/inbound/listener/udp_session.rs",
+        "src/adapters/vmess/inbound/listener/udp_session.rs",
+        "src/adapters/trojan/inbound/listener/udp.rs",
+        "src/adapters/mieru/inbound/listener/udp.rs",
     ] {
         let content = read(source);
         assert!(
             content.contains("run_stream_udp_relay")
                 && content.contains("StreamUdpRelayRequest")
-                && content.contains("StreamUdpResponder<")
                 && !content.contains("dispatch_inbound_udp_packet")
                 && !content.contains("UdpPipe::new")
                 && !content.contains("UdpPipeInput"),
@@ -273,14 +514,13 @@ fn ordinary_udp_inbounds_submit_packets_through_udp_pipe() {
     }
 
     for source in [
-        "src/inbound/vless/mux_udp.rs",
-        "src/inbound/vmess/mux_udp.rs",
+        "src/adapters/vless/inbound/listener/mux_udp.rs",
+        "src/adapters/vmess/inbound/listener/mux_udp.rs",
     ] {
         let content = read(source);
         assert!(
             content.contains("run_mux_udp_relay")
                 && content.contains("MuxUdpRelayRequest")
-                && content.contains("MuxUdpResponder")
                 && !content.contains("dispatch_inbound_udp_packet")
                 && !content.contains("UdpPipe::new")
                 && !content.contains("UdpPipeInput"),
@@ -293,15 +533,15 @@ fn ordinary_udp_inbounds_submit_packets_through_udp_pipe() {
     }
 
     for source in [
-        "src/inbound/socks5/udp_associate/dispatch.rs",
-        "src/inbound/vless/udp_session.rs",
-        "src/inbound/vless/mux_udp.rs",
-        "src/inbound/vmess/udp_session.rs",
-        "src/inbound/vmess/mux_udp.rs",
-        "src/inbound/trojan/udp.rs",
-        "src/inbound/shadowsocks/udp.rs",
-        "src/inbound/hysteria2/udp.rs",
-        "src/inbound/mieru/udp.rs",
+        "src/adapters/socks5/inbound/listener/udp_associate/dispatch.rs",
+        "src/adapters/vless/inbound/listener/udp_session.rs",
+        "src/adapters/vless/inbound/listener/mux_udp.rs",
+        "src/adapters/vmess/inbound/listener/udp_session.rs",
+        "src/adapters/vmess/inbound/listener/mux_udp.rs",
+        "src/adapters/trojan/inbound/listener/udp.rs",
+        "src/adapters/shadowsocks/inbound/listener/udp.rs",
+        "src/adapters/hysteria2/inbound/listener/udp.rs",
+        "src/adapters/mieru/inbound/listener/udp.rs",
     ] {
         let content = read(source);
         for forbidden in [
@@ -321,13 +561,16 @@ fn ordinary_udp_inbounds_submit_packets_through_udp_pipe() {
         }
     }
 
+    let socks5_udp = read_repo_module_tree("protocols/socks5/src/udp.rs");
+    assert!(
+        socks5_udp.contains("impl Socks5InboundUdpDispatchParts")
+            && socks5_udp.contains("pub fn protocol(&self) -> ProtocolType"),
+        "Socks5InboundUdpDispatchParts should expose protocol identity to inbound UDP glue"
+    );
+
     for (protocol_source, dispatch_parts) in [
         (
-            "protocols/socks5/src/shared.rs",
-            "Socks5InboundUdpDispatchParts",
-        ),
-        (
-            "protocols/shadowsocks/src/inbound.rs",
+            "protocols/shadowsocks/src/udp.rs",
             "ShadowsocksInboundUdpDispatchParts",
         ),
         (
@@ -345,8 +588,7 @@ fn ordinary_udp_inbounds_submit_packets_through_udp_pipe() {
         ),
         ("protocols/mieru/src/udp.rs", "MieruInboundUdpDispatchParts"),
     ] {
-        let content = fs::read_to_string(repo_root().join(protocol_source))
-            .expect("read protocol dispatch parts source");
+        let content = read_repo_module_tree(protocol_source);
         assert!(
             content.contains(&format!("impl {dispatch_parts}"))
                 && content.contains("pub fn protocol(&self) -> ProtocolType"),
@@ -368,15 +610,18 @@ fn custom_tcp_inbound_relays_use_runtime_metering_helpers() {
         "runtime inbound protocol layer should own TCP relay metering helpers"
     );
 
-    let hysteria2 = read("src/inbound/hysteria2.rs");
+    let hysteria2 = read("src/adapters/hysteria2/inbound/listener.rs");
     assert!(
-        hysteria2.contains("record_tcp_upload")
-            && hysteria2.contains("record_tcp_download")
+        !hysteria2.contains("record_tcp_upload")
+            && !hysteria2.contains("record_tcp_download")
+            && !hysteria2.contains("copy_one_way")
+            && !hysteria2.contains("tokio::io::split")
+            && !hysteria2.contains("async fn relay")
             && !hysteria2.contains("record_session_inbound_rx")
             && !hysteria2.contains("record_session_outbound_tx")
             && !hysteria2.contains("record_session_outbound_rx")
             && !hysteria2.contains("record_session_inbound_tx"),
-        "custom Hysteria2 TCP relay should use runtime metering helpers instead of touching session counters directly"
+        "Hysteria2 TCP relay should use InboundProtocol's runtime default relay instead of owning copy/metering glue in the adapter"
     );
 }
 
@@ -409,10 +654,12 @@ fn inbound_udp_glue_does_not_name_protocol_private_packet_models() {
 #[test]
 fn inbound_udp_response_accounting_uses_runtime_helpers() {
     let helper = read("src/runtime/udp_flow/helpers.rs");
-    let inbound_response = read("src/inbound/udp_response.rs");
-    let datagram_udp = read("src/inbound/datagram_udp.rs");
-    let stream_udp = read("src/inbound/stream_udp.rs");
-    let mux_udp = read("src/inbound/mux_udp.rs");
+    let inbound_response = read("src/runtime/udp_response.rs");
+    let datagram_udp = read("src/runtime/datagram_udp.rs");
+    let stream_udp = read("src/runtime/stream_udp.rs");
+    let mux_udp = read("src/runtime/mux_udp.rs");
+    let packet_session_udp = read("src/runtime/packet_session_udp.rs");
+    let udp_association = read("src/runtime/udp_association.rs");
     assert!(
         helper.contains("fn record_udp_inbound_response_rx")
             && helper.contains("fn record_udp_inbound_response_tx")
@@ -443,41 +690,37 @@ fn inbound_udp_response_accounting_uses_runtime_helpers() {
         inbound_response.contains("fn write_direct_response")
             && inbound_response.contains("fn write_upstream_response")
             && inbound_response.contains("fn write_chain_response")
-            && inbound_response.contains("fn write_direct_response_sync")
-            && inbound_response.contains("fn write_upstream_response_sync")
-            && inbound_response.contains("fn write_chain_response_sync")
             && inbound_response.contains("fn write_optional_direct_response")
             && inbound_response.contains("fn write_optional_upstream_response")
             && inbound_response.contains("fn write_optional_chain_response")
-            && !inbound_response.contains("fn write_optional_direct_response_sync")
-            && !inbound_response.contains("fn write_optional_upstream_response_sync")
-            && !inbound_response.contains("fn write_optional_chain_response_sync")
             && inbound_response.contains("response.accounting.record_sent(written)"),
         "stream UDP inbound response write glue should centralize protocol write callbacks plus neutral accounting"
     );
     assert!(
-        stream_udp.contains("record_direct_udp_response_parts")
-            && stream_udp.contains("record_upstream_udp_response_received")
-            && stream_udp.contains("record_chain_udp_response_parts")
-            && stream_udp.contains("write_direct_response")
-            && stream_udp.contains("write_upstream_response")
-            && stream_udp.contains("write_chain_response")
-            && stream_udp.contains("wait_for_upstream_idle")
-            && stream_udp.contains("dispatch.finish_all()")
-            && stream_udp.contains("log_completed_udp_flow"),
-        "shared stream UDP relay glue should own direct/upstream/chain response accounting and writes for stream-carried UDP inbounds"
+        stream_udp.contains("run_packet_session_udp_relay")
+            && packet_session_udp.contains("record_direct_udp_response_parts")
+            && packet_session_udp.contains("record_upstream_udp_response_received")
+            && packet_session_udp.contains("record_chain_udp_response_parts")
+            && packet_session_udp.contains("write_direct_response")
+            && packet_session_udp.contains("write_upstream_response")
+            && packet_session_udp.contains("write_chain_response")
+            && packet_session_udp.contains("wait_for_upstream_idle")
+            && packet_session_udp.contains("dispatch.finish_all()")
+            && packet_session_udp.contains("log_completed_udp_flow"),
+        "shared packet-session UDP relay glue should own direct/upstream/chain response accounting and writes for stream-carried UDP inbounds"
     );
     assert!(
-        mux_udp.contains("record_direct_udp_response_parts")
-            && mux_udp.contains("record_upstream_udp_response_received")
-            && mux_udp.contains("record_chain_udp_response_parts")
-            && mux_udp.contains("write_direct_response_sync")
-            && mux_udp.contains("write_upstream_response_sync")
-            && mux_udp.contains("write_chain_response_sync")
-            && mux_udp.contains("wait_for_upstream_idle")
-            && mux_udp.contains("dispatch.finish_all()")
-            && mux_udp.contains("log_completed_udp_flow"),
-        "shared MUX UDP relay glue should own direct/upstream/chain response accounting and synchronous writes for MUX UDP inbounds"
+        mux_udp.contains("run_packet_session_udp_relay")
+            && packet_session_udp.contains("record_direct_udp_response_parts")
+            && packet_session_udp.contains("record_upstream_udp_response_received")
+            && packet_session_udp.contains("record_chain_udp_response_parts")
+            && packet_session_udp.contains("write_direct_response")
+            && packet_session_udp.contains("write_upstream_response")
+            && packet_session_udp.contains("write_chain_response")
+            && packet_session_udp.contains("wait_for_upstream_idle")
+            && packet_session_udp.contains("dispatch.finish_all()")
+            && packet_session_udp.contains("log_completed_udp_flow"),
+        "shared packet-session UDP relay glue should own direct/upstream/chain response accounting and writes for MUX UDP inbounds"
     );
     assert!(
         datagram_udp.contains("record_direct_udp_response_parts")
@@ -491,12 +734,24 @@ fn inbound_udp_response_accounting_uses_runtime_helpers() {
             && datagram_udp.contains("log_completed_udp_flow"),
         "shared datagram UDP relay glue should own datagram direct/upstream/chain response accounting and writes"
     );
+    assert!(
+        udp_association.contains("record_upstream_udp_response_received")
+            && udp_association.contains("record_chain_udp_response_parts")
+            && udp_association.contains("write_upstream_response")
+            && udp_association.contains("write_chain_response")
+            && udp_association.contains("wait_for_upstream_idle")
+            && udp_association.contains("finish_all")
+            && udp_association.contains("log_completed_udp_flow")
+            && !udp_association.contains("socks5::")
+            && !udp_association.contains("Socks5"),
+        "shared UDP association glue should own upstream/chain response accounting and writes without naming SOCKS5"
+    );
 
     for source in [
-        "src/inbound/vless/udp_session.rs",
-        "src/inbound/vmess/udp_session.rs",
-        "src/inbound/trojan/udp.rs",
-        "src/inbound/mieru/udp.rs",
+        "src/adapters/vless/inbound/listener/udp_session.rs",
+        "src/adapters/vmess/inbound/listener/udp_session.rs",
+        "src/adapters/trojan/inbound/listener/udp.rs",
+        "src/adapters/mieru/inbound/listener/udp.rs",
     ] {
         let content = read(source);
         assert!(
@@ -513,15 +768,15 @@ fn inbound_udp_response_accounting_uses_runtime_helpers() {
     }
 
     for source in [
-        "src/inbound/vless/mux_udp.rs",
-        "src/inbound/vmess/mux_udp.rs",
+        "src/adapters/vless/inbound/listener/mux_udp.rs",
+        "src/adapters/vmess/inbound/listener/mux_udp.rs",
     ] {
         let content = read(source);
         assert!(
             content.contains("run_mux_udp_relay")
-                && !content.contains("write_direct_response_sync")
-                && !content.contains("write_upstream_response_sync")
-                && !content.contains("write_chain_response_sync")
+                && !content.contains("write_direct_response")
+                && !content.contains("write_upstream_response")
+                && !content.contains("write_chain_response")
                 && !content.contains("record_direct_udp_response_parts")
                 && !content.contains("record_upstream_udp_response_received")
                 && !content.contains("record_chain_udp_response_parts")
@@ -531,8 +786,8 @@ fn inbound_udp_response_accounting_uses_runtime_helpers() {
     }
 
     for source in [
-        "src/inbound/hysteria2/udp.rs",
-        "src/inbound/shadowsocks/udp.rs",
+        "src/adapters/hysteria2/inbound/listener/udp.rs",
+        "src/adapters/shadowsocks/inbound/listener/udp.rs",
     ] {
         let content = read(source);
         assert!(
@@ -548,11 +803,8 @@ fn inbound_udp_response_accounting_uses_runtime_helpers() {
         );
     }
 
-    for source in [
-        "src/inbound/socks5/udp_associate/direct_response.rs",
-        "src/inbound/socks5/udp_associate/chain_response.rs",
-        "src/inbound/socks5/udp_associate/upstream_response.rs",
-    ] {
+    {
+        let source = "src/adapters/socks5/inbound/listener/udp_associate/direct_response.rs";
         let content = read(source);
         assert!(
             (content.contains("record_direct_udp_response_parts")
@@ -581,11 +833,8 @@ fn inbound_udp_response_accounting_uses_runtime_helpers() {
         "shared datagram UDP glue should consume registered upstream UDP responses through the neutral runtime helper"
     );
 
-    for source in [
-        "src/inbound/socks5/udp_associate/direct_response.rs",
-        "src/inbound/socks5/udp_associate/chain_response.rs",
-        "src/inbound/socks5/udp_associate/upstream_response.rs",
-    ] {
+    {
+        let source = "src/adapters/socks5/inbound/listener/udp_associate/direct_response.rs";
         let content = read(source);
         assert!(
             (content.contains("record_direct_udp_response_parts")
@@ -604,7 +853,7 @@ fn inbound_udp_response_accounting_uses_runtime_helpers() {
     }
 
     {
-        let source = "src/inbound/socks5/udp_associate/direct_response.rs";
+        let source = "src/adapters/socks5/inbound/listener/udp_associate/direct_response.rs";
         let content = read(source);
         assert!(
             content.contains("record_direct_udp_response_parts")
@@ -614,27 +863,22 @@ fn inbound_udp_response_accounting_uses_runtime_helpers() {
         );
     }
 
-    {
-        let source = "src/inbound/socks5/udp_associate/chain_response.rs";
-        let content = read(source);
-        assert!(
-            content.contains("record_chain_udp_response_parts")
-                && !content.contains("record_chain_udp_response_received"),
-            "{source} should consume neutral chain response parts instead of open-coding chain response accounting"
-        );
-    }
+    assert!(
+        udp_association.contains("record_chain_udp_response_parts")
+            && !udp_association.contains("record_chain_udp_response_received"),
+        "runtime UDP association should consume neutral chain response parts instead of open-coding chain response accounting in SOCKS5 glue"
+    );
 
     for source in [
-        "src/inbound/vless/udp_session.rs",
-        "src/inbound/vless/mux.rs",
-        "src/inbound/vmess/mux.rs",
-        "src/inbound/trojan.rs",
-        "src/inbound/mieru.rs",
-        "src/inbound/hysteria2.rs",
-        "src/inbound/shadowsocks/udp.rs",
-        "src/inbound/socks5/udp_associate/direct_response.rs",
-        "src/inbound/socks5/udp_associate/chain_response.rs",
-        "src/inbound/socks5/udp_associate/upstream_response.rs",
+        "src/adapters/vless/inbound/listener/udp_session.rs",
+        "src/adapters/vless/inbound/listener/mux.rs",
+        "src/adapters/vmess/inbound/listener/mux.rs",
+        "src/adapters/trojan/inbound/listener.rs",
+        "src/adapters/mieru/inbound/listener.rs",
+        "src/adapters/hysteria2/inbound/listener.rs",
+        "src/adapters/shadowsocks/inbound/listener/udp.rs",
+        "src/adapters/socks5/inbound/listener/udp_associate/direct_response.rs",
+        "src/adapters/socks5/inbound/listener/udp_associate/relay_socket.rs",
     ] {
         let content = read(source);
         assert!(
@@ -668,12 +912,21 @@ fn ordinary_tcp_inbounds_use_tcp_pipe_for_route_execution() {
         "serve_inbound should route ordinary TCP sessions through TcpPipe"
     );
 
-    let vless = read("src/inbound/vless/mux.rs");
-    let vmess = read("src/inbound/vmess/mux.rs");
-    let mux_tcp = read("src/inbound/mux_tcp.rs");
+    let vless = read("src/adapters/vless/inbound/listener/mux.rs");
+    let vmess = read("src/adapters/vmess/inbound/listener/mux.rs");
+    let mux_tcp = read("src/runtime/mux_tcp.rs");
     assert!(
-        vless.contains("TcpPipe::new") && vless.contains("TcpPipeInput"),
-        "VLESS MUX sub-streams keep local TcpPipe glue because dispatch failure must reject on the active client stream"
+        vless.contains("spawn_mux_tcp_stream_task")
+            && vless.contains("MuxTcpStreamTask")
+            && !vless.contains("open_mux_tcp_upstream")
+            && !vless.contains("TcpPipe::new")
+            && !vless.contains("TcpPipeInput")
+            && mux_tcp.contains("pub(crate) fn spawn_mux_tcp_stream_task")
+            && mux_tcp.contains("pub(crate) struct MuxTcpStreamTask")
+            && mux_tcp.contains("pub(crate) async fn open_mux_tcp_upstream")
+            && mux_tcp.contains("TcpPipe::new(proxy)")
+            && mux_tcp.contains("TcpPipeInput"),
+        "VLESS MUX sub-streams should use shared runtime MUX TCP task dispatch instead of opening upstreams in adapter glue"
     );
     assert!(
         !vless.contains("dispatch_tcp_outbound"),
@@ -684,7 +937,7 @@ fn ordinary_tcp_inbounds_use_tcp_pipe_for_route_execution() {
             && !vmess.contains("TcpPipe::new")
             && !vmess.contains("TcpPipeInput")
             && !vmess.contains("dispatch_tcp(")
-            && mux_tcp.contains("TcpPipe::new(&proxy)")
+            && mux_tcp.contains("open_mux_tcp_upstream")
             && mux_tcp.contains("TcpPipeInput"),
         "VMess MUX sub-streams should route through the shared MUX TCP pipe glue"
     );
@@ -692,10 +945,12 @@ fn ordinary_tcp_inbounds_use_tcp_pipe_for_route_execution() {
 
 #[test]
 fn vless_inbound_mux_frame_detail_lives_in_protocol_crate() {
-    let inbound = read("src/inbound/vless/mux.rs");
-    let session = read("src/inbound/vless/session.rs");
+    let inbound = read("src/adapters/vless/inbound/listener/mux.rs");
+    let session = read("src/adapters/vless/inbound/listener/session.rs");
     let protocol_mux = fs::read_to_string(repo_root().join("protocols/vless/src/mux.rs"))
         .expect("read protocols/vless/src/mux.rs");
+    let protocol_inbound = fs::read_to_string(repo_root().join("protocols/vless/src/inbound.rs"))
+        .expect("read protocols/vless/src/inbound.rs");
     let protocol_lib = fs::read_to_string(repo_root().join("protocols/vless/src/lib.rs"))
         .expect("read protocols/vless/src/lib.rs");
 
@@ -721,17 +976,22 @@ fn vless_inbound_mux_frame_detail_lives_in_protocol_crate() {
     assert!(
         !session.contains("uuid")
             && !session.contains("with_encryption")
-            && inbound.contains("mux_context: vless::mux::VlessInboundMuxContext")
-            && inbound.contains("vless::mux::VlessInboundMuxServer::from_context(mux_context)")
+            && !inbound.contains("mux_context: vless::mux::VlessInboundMuxContext")
+            && !inbound.contains(".accept_mux_session_with_auth(&mut client, mux_context, auth)")
+            && inbound.contains("mux_server: vless::mux::VlessInboundMuxServer")
+            && !inbound.contains("vless::mux::VlessInboundMuxServer::from_context(mux_context)")
             && !inbound.contains("let mut mux = mux_context.inbound_session()")
             && protocol_mux.contains("pub struct VlessInboundMuxContext")
             && protocol_mux.contains("pub fn inbound_session(&self) -> VlessInboundMuxSession")
             && protocol_mux.contains("pub struct VlessInboundMuxServer")
-            && protocol_mux.contains("pub fn from_context(context: VlessInboundMuxContext) -> Self"),
+            && protocol_mux.contains("pub fn from_context(context: VlessInboundMuxContext) -> Self")
+            && protocol_inbound.contains(".accept_mux_session_with_auth(&mut stream, mux_context, auth)")
+            && protocol_inbound.contains("pub async fn accept_mux_session")
+            && protocol_inbound.contains("pub async fn accept_mux_session_with_auth"),
         "VLESS inbound mux identity and encrypted MUX session construction should be hidden behind a protocol-owned context"
     );
 
-    for required in ["VlessInboundMuxContext", "VlessInboundMuxServer"] {
+    for required in ["VlessInboundMuxServer"] {
         assert!(
             inbound.contains(required),
             "VLESS inbound mux should consume protocol-owned semantic MUX server APIs; missing `{required}`"
@@ -742,8 +1002,22 @@ fn vless_inbound_mux_frame_detail_lives_in_protocol_crate() {
         );
     }
     assert!(
-        !inbound.contains("VlessInboundMuxEvent") && protocol_mux.contains("VlessInboundMuxEvent"),
-        "VLESS inbound mux event classification should stay behind the protocol-owned dispatch API"
+        !inbound.contains("VlessInboundMuxContext")
+            && protocol_mux.contains("VlessInboundMuxContext")
+            && protocol_inbound.contains("VlessInboundMuxContext"),
+        "VLESS inbound mux context should be consumed by protocol dispatch before proxy mux glue"
+    );
+    assert!(
+        !inbound.contains("vless::mux::VlessInboundMuxEvent::Opened(opened)")
+            && inbound.contains(".dispatch_next_opened_route(self.client, &mut bridge)")
+            && !inbound.contains(".next_opened_route(self.client)")
+            && !inbound.contains(".next_opened_route_with_auth(self.client")
+            && !inbound.contains("self.auth")
+            && protocol_mux.contains("VlessInboundMuxEvent")
+            && protocol_mux.contains("pub async fn next_opened_route")
+            && protocol_mux.contains("pub async fn next_opened_route_with_auth")
+            && protocol_mux.contains("pub async fn dispatch_next_opened_route"),
+        "VLESS inbound mux event-to-route dispatch should be protocol-owned before proxy bridges opened streams"
     );
     for required in [
         "VlessInboundMuxAction",
@@ -758,11 +1032,17 @@ fn vless_inbound_mux_frame_detail_lives_in_protocol_crate() {
     assert!(
         !inbound.contains("VlessInboundMuxAction")
             && protocol_mux.contains("VlessInboundMuxAction")
-            && inbound.contains("mux_server\n                .dispatch_next_opened_stream(&mut client, &mut handler)")
-            && protocol_mux.contains("pub async fn dispatch_next_opened_stream")
-            && protocol_mux.contains("pub trait VlessInboundMuxOpenedHandler")
+            && inbound.contains("impl<S> MuxOpenedDispatcher")
+            && inbound.contains(".dispatch_next_opened_route(self.client, &mut bridge)")
+            && !inbound.contains(".next_opened_route(self.client)")
+            && !inbound.contains(".next_opened_route_with_auth(self.client")
+            && !inbound.contains("self.auth")
+            && inbound.contains("run_mux_session_loop")
+            && !inbound.contains("dispatch_next_opened_stream")
+            && !protocol_mux.contains("dispatch_next_opened_stream")
+            && !protocol_mux.contains("VlessInboundMuxOpenedHandler")
             && !inbound.contains(".apply_inbound_action(&mut mux, &mut client, action)"),
-        "VLESS inbound mux glue should not match protocol action variants directly"
+        "VLESS inbound mux glue should consume protocol-opened stream events without protocol callback traits"
     );
     for required in [
         "send_inbound_downlink",
@@ -805,9 +1085,23 @@ fn vless_inbound_mux_frame_detail_lives_in_protocol_crate() {
         protocol_mux.contains("pub fn into_session(self) -> Result<Session, Error>")
             && protocol_mux.contains("ProtocolType::Vless")
             && protocol_mux.contains("impl From<MuxServerEvent> for VlessInboundMuxAction")
+            && !inbound.contains("opened.into_route_with_auth")
+            && !inbound.contains("route.dispatch_with(&mut bridge).await")
+            && inbound.contains(".dispatch_next_opened_route(self.client, &mut bridge)")
+            && inbound.contains("VlessMuxOpenedRouteBridge")
+            && inbound.contains("impl vless::mux::VlessInboundMuxOpenedRouteDispatcher")
+            && !inbound.contains("VlessInboundMuxOpenedRoute::Tcp")
+            && !inbound.contains("VlessInboundMuxOpenedRoute::Udp")
             && !inbound.contains("opened.into_kind()")
-            && protocol_mux.contains("VlessInboundMuxOpenedKind")
-            && protocol_mux.contains("pub fn into_kind")
+            && protocol_mux.contains("VlessInboundMuxOpenedRoute")
+            && protocol_mux.contains("pub trait VlessInboundMuxOpenedRouteDispatcher")
+            && protocol_mux.contains("pub async fn dispatch_with")
+            && protocol_mux.contains("pub async fn dispatch_next_opened_route")
+            && protocol_mux.contains("route.dispatch_with(dispatcher).await")
+            && protocol_mux.contains("pub fn into_route_with_auth")
+            && protocol_mux.contains("pub async fn next_opened_route_with_auth")
+            && protocol_mux.contains("opened.into_route_with_auth(auth, writer)")
+            && protocol_mux.contains("responder: crate::shared::VlessInboundMuxUdpResponder")
             && protocol_mux.contains("match session.network")
             && protocol_mux.contains("VlessInboundMuxAction::OpenStream")
             && protocol_mux.contains("VlessInboundMuxOpenedStream::new")
@@ -835,9 +1129,15 @@ fn vless_inbound_mux_frame_detail_lives_in_protocol_crate() {
         );
     }
     assert!(
-        inbound.contains("mux_server\n                .dispatch_next_opened_stream(&mut client, &mut handler)")
+        inbound.contains("impl<S> MuxOpenedDispatcher")
+            && inbound.contains(".dispatch_next_opened_route(self.client, &mut bridge)")
+            && !inbound.contains(".next_opened_route(self.client)")
+            && !inbound.contains(".next_opened_route_with_auth(self.client")
+            && !inbound.contains("self.auth")
+            && inbound.contains("run_mux_session_loop")
             && !inbound.contains("mux_server.reject_opened_stream(&mut client, sid)")
-            && protocol_mux.contains("self.reject_opened_stream(stream, session_id)")
+            && protocol_mux.contains("pub async fn reject_opened_stream")
+            && protocol_mux.contains(".reject_opened_stream(&mut self.mux, stream, session_id)")
             && !inbound.contains(".apply_inbound_action(&mut mux, &mut client, action)")
             && !inbound.contains(".send_inbound_downlink(&mut mux, &mut client, downlink)")
             && !inbound.contains(".reject_opened_stream(&mut mux, &mut client, sid)")
@@ -1068,14 +1368,9 @@ fn project_docs_keep_protocol_response_framing_protocol_owned() {
 
     for (path, content) in &docs {
         for forbidden in [
-            "代理拥有传输设置、socket 设置、路由、会话生命周期、统计、事件和响应桥接",
-            "代理拥有传输设置、中继前缀设置、路由、fallback、会话生命周期、统计、事件和响应桥接",
-            "代理拥有传输设置、路由、会话生命周期、统计、事件、上游缓存、响应桥接",
-            "代理拥有 TLS 设置、中继前缀设置、上游缓存、任务调度、路由、fallback、会话生命周期、统计、事件和响应桥接",
-            "代理拥有 UDP socket、上游缓存、响应匹配、路由、fallback、会话生命周期、统计、事件和响应桥接",
-            "代理拥有 QUIC 连接设置、认证、UDP datagram 发送/接收、路由、fallback、会话生命周期、统计、事件和响应桥接",
-            "代理拥有路由、中继前缀设置、上游缓存、任务调度、统计、事件和响应桥接",
-            "运行时可以缓存 socket、流、关联和响应桥接",
+            "proxy owns protocol response encoding",
+            "proxy owns protocol packet parsing",
+            "proxy owns protocol framing",
             "Generic runtime and protocol-runtime modules dispatch through `ProtocolInventory`",
         ] {
             assert!(
@@ -1087,18 +1382,18 @@ fn project_docs_keep_protocol_response_framing_protocol_owned() {
 
     let architecture = &docs[0].1;
     assert!(
-        architecture.contains("协议响应编码和会话状态保持在协议 crate 或协议拥有的 responder API 中"),
+        architecture.contains("Protocol stream/datagram codecs own protocol crypto/framing state")
+            && architecture.contains("VMess inbound UDP request payload mode detection/parsing and response packet encoding live in `protocols/vmess::udp`")
+            && architecture.contains("VLESS inbound UDP packet parsing and response/MUX response encoding live in `protocols/vless::udp`"),
         "docs/project/architecture.md should state that protocol response encoding stays protocol-owned"
     );
 
     let release_boundary = &docs[2].1;
     assert!(
-        release_boundary
-            .contains("协议数据包编码、解码和响应封装保持在协议 crates 或中性协议特征中"),
+        !release_boundary.contains("proxy owns protocol response encoding"),
         "docs/project/release-boundary.md should state response framing ownership"
     );
 }
-
 #[test]
 fn adapters_delegate_protocol_private_config_parsing_to_protocols() {
     let adapters = rust_sources_under("src/adapters");
@@ -1147,11 +1442,11 @@ fn adapters_delegate_protocol_private_config_parsing_to_protocols() {
             "shadowsocks::tcp_connect_config_from_config",
         ),
         (
-            "src/adapters/shadowsocks/udp/flow.rs",
+            "src/adapters/shadowsocks/udp.rs",
             "shadowsocks::udp::udp_flow_resume_from_config",
         ),
         (
-            "src/adapters/shadowsocks/udp/packet_path.rs",
+            "src/adapters/shadowsocks/udp.rs",
             "shadowsocks::udp::udp_packet_path_datagram_source_build_from_config",
         ),
     ] {
@@ -1230,9 +1525,10 @@ fn proxy_boundary_todo_completion_invariants_are_locked() {
     }
 
     for source in [
-        "src/inbound/datagram_udp.rs",
-        "src/inbound/stream_udp.rs",
-        "src/inbound/mux_udp.rs",
+        "src/runtime/datagram_udp.rs",
+        "src/runtime/stream_udp.rs",
+        "src/runtime/mux_udp.rs",
+        "src/runtime/packet_session_udp.rs",
     ] {
         let content = read(source);
         for forbidden in [
@@ -1266,7 +1562,6 @@ fn proxy_boundary_todo_completion_invariants_are_locked() {
             "protocol's own adapter",
             "move protocol state to src/protocol_runtime",
             "proxy owns response bridge",
-            "代理拥有传输设置、socket 设置、路由、会话生命周期、统计、事件和响应桥接",
         ] {
             assert!(
                 !content.contains(forbidden),
@@ -1691,31 +1986,41 @@ fn inbound_root_is_facade_only() {
 
     for expected in [
         "pub(crate) mod direct;",
-        "mod http_connect;",
-        "pub(crate) mod hysteria2;",
-        "pub(crate) mod mieru;",
-        "mod mixed;",
-        "pub(crate) mod shadowsocks;",
-        "mod socks5;",
         "mod system;",
-        "pub(crate) mod trojan;",
         "mod tun;",
-        "pub(crate) mod vless;",
-        "pub(crate) mod vmess;",
         "pub(crate) use direct::run_direct_listener_with_bound;",
-        "pub(crate) use http_connect::run_http_connect_listener_with_bound;",
-        "pub(crate) use hysteria2::run_hysteria2_listener_with_bound;",
-        "pub(crate) use mieru::run_mieru_listener_with_bound;",
-        "pub(crate) use mixed::run_mixed_listener_with_bound;",
-        "pub(crate) use shadowsocks::run_shadowsocks_listener_with_bound;",
-        "pub(crate) use socks5::run_socks5_listener_with_bound;",
-        "pub(crate) use trojan::run_trojan_listener_with_bound;",
-        "pub(crate) use vless::run_vless_listener_with_bound;",
-        "pub(crate) use vmess::run_vmess_listener_with_bound;",
     ] {
         assert!(
             root.contains(expected),
             "src/inbound/mod.rs should expose inbound facade item `{expected}`"
+        );
+    }
+
+    for forbidden in [
+        "mod http_connect;",
+        "pub(crate) use http_connect::run_http_connect_listener_with_bound;",
+        "mod socks5;",
+        "pub(crate) use socks5::run_socks5_listener_with_bound;",
+        "pub(crate) use socks5::Socks5InboundRequest;",
+        "pub(crate) mod mieru;",
+        "pub(crate) use mieru::run_mieru_listener_with_bound;",
+        "pub(crate) mod shadowsocks;",
+        "pub(crate) use shadowsocks::run_shadowsocks_listener_with_bound;",
+        "pub(crate) mod trojan;",
+        "pub(crate) use trojan::run_trojan_listener_with_bound;",
+        "pub(crate) mod hysteria2;",
+        "pub(crate) use hysteria2::run_hysteria2_listener_with_bound;",
+        "pub(crate) mod vless;",
+        "pub(crate) use vless::run_vless_listener_with_bound;",
+        "pub(crate) mod vmess;",
+        "pub(crate) use vmess::run_vmess_listener_with_bound;",
+        "mod mixed;",
+        "pub(crate) use mixed::run_mixed_listener_with_bound;",
+        "pub(crate) use mixed::MixedInboundRequest;",
+    ] {
+        assert!(
+            !root.contains(forbidden),
+            "protocol inbound glue should not live under src/inbound; found `{forbidden}`"
         );
     }
 
@@ -1745,6 +2050,25 @@ fn inbound_root_is_facade_only() {
             !root.contains(forbidden),
             "src/inbound/mod.rs should remain a facade over inbound listener modules; found `{forbidden}`"
         );
+    }
+}
+
+#[test]
+fn protocol_inbound_root_is_facade_only() {
+    assert!(
+        !manifest_dir().join("src/protocol_inbound").exists(),
+        "zero-proxy must not keep protocol inbound glue in a top-level src/protocol_inbound bucket"
+    );
+
+    for path in rust_sources_under("src") {
+        let source = relative(&path);
+        let content = fs::read_to_string(&path).expect("read rust source");
+        for forbidden in ["crate::protocol_inbound", "mod protocol_inbound;"] {
+            assert!(
+                !content.contains(forbidden),
+                "{source} should not reference the removed protocol_inbound bucket through `{forbidden}`"
+            );
+        }
     }
 }
 
@@ -1843,25 +2167,38 @@ fn direct_inbound_uses_adapter_request_model() {
 
 #[test]
 fn socks5_inbound_uses_adapter_request_model() {
-    let inbound = read("src/inbound/socks5.rs");
-    let mixed = read("src/inbound/mixed.rs");
+    let inbound = read("src/adapters/socks5/inbound/listener.rs");
+    let mixed = read("src/adapters/mixed/inbound/listener.rs");
     let adapter = read("src/adapters/socks5/inbound.rs");
     let mixed_adapter = read("src/adapters/mixed/inbound.rs");
+    let listener_loop = read("src/runtime/listener_loop.rs");
     let protocol_inbound = fs::read_to_string(repo_root().join("protocols/socks5/src/inbound.rs"))
         .expect("read socks5 protocol inbound source");
+    let protocol_lib = fs::read_to_string(repo_root().join("protocols/socks5/src/lib.rs"))
+        .expect("read socks5 protocol lib source");
 
     assert!(
         inbound.contains("struct Socks5InboundRequest")
             && inbound.contains("request: Socks5InboundRequest")
             && adapter.contains("InboundProtocolConfig::Socks5")
-            && adapter.contains("Socks5InboundRequest"),
+            && adapter.contains("Socks5InboundRequest")
+            && inbound.contains("inbound_tag: String")
+            && !inbound.contains("zero_config::InboundConfig")
+            && !inbound.contains("inbound: zero_config::InboundConfig")
+            && adapter.contains("inbound_tag: inbound.tag")
+            && !adapter.contains("inbound,"),
         "SOCKS5 inbound listener should receive an adapter-built request model"
     );
     assert!(
         mixed.contains("struct MixedInboundRequest")
             && mixed.contains("request: MixedInboundRequest")
             && mixed_adapter.contains("InboundProtocolConfig::Mixed")
-            && mixed_adapter.contains("MixedInboundRequest"),
+            && mixed_adapter.contains("MixedInboundRequest")
+            && mixed.contains("inbound_tag: String")
+            && !mixed.contains("zero_config::InboundConfig")
+            && !mixed.contains("inbound: zero_config::InboundConfig")
+            && mixed_adapter.contains("inbound_tag: inbound.tag")
+            && !mixed_adapter.contains("inbound,"),
         "mixed inbound listener should receive an adapter-built request model"
     );
     assert!(
@@ -1870,18 +2207,32 @@ fn socks5_inbound_uses_adapter_request_model() {
             && protocol_inbound.contains("pub struct ConfiguredSocks5User")
             && protocol_inbound.contains("pub fn from_config_parts")
             && protocol_inbound.contains("pub fn from_config_users")
+            && protocol_inbound.contains("impl Socks5InboundTcpAcceptor")
+            && protocol_inbound.contains("pub fn from_config_users<I, U>(users: I) -> Self")
+            && protocol_inbound.contains("Self::new(ConfiguredSocks5PasswordAuth::from_config_users(users))")
             && protocol_inbound
                 .contains("for (&str, &str, Option<&str>, Option<u64>, Option<u64>)")
-            && inbound.contains("auth: socks5::ConfiguredSocks5PasswordAuth")
-            && mixed.contains("socks5_auth: socks5::ConfiguredSocks5PasswordAuth")
-            && adapter.contains("socks5::password_auth_from_config_users")
-            && mixed_adapter.contains("socks5::password_auth_from_config_users")
+            && !protocol_inbound.contains("pub fn password_auth_from_config_users")
+            && !protocol_lib.contains("password_auth_from_config_users")
+            && inbound.contains("acceptor: Socks5InboundTcpAcceptor")
+            && mixed.contains("socks5_acceptor: Socks5InboundTcpAcceptor")
+            && adapter.contains("socks5::Socks5InboundTcpAcceptor::from_config_users")
+            && mixed_adapter.contains("socks5::Socks5InboundTcpAcceptor::from_config_users")
+            && !adapter.contains("socks5::ConfiguredSocks5PasswordAuth::from_config_users")
+            && !mixed_adapter.contains("socks5::ConfiguredSocks5PasswordAuth::from_config_users")
+            && !adapter.contains("socks5::Socks5InboundTcpAcceptor::new(")
+            && !mixed_adapter.contains("socks5::Socks5InboundTcpAcceptor::new(")
+            && !adapter.contains("socks5::password_auth_from_config_users")
+            && !mixed_adapter.contains("socks5::password_auth_from_config_users")
+            && adapter.contains("fn config_user_refs(")
             && adapter.contains("user.username.as_str()")
             && adapter.contains("user.password.as_str()")
             && adapter.contains("user.principal_key.as_deref()")
-            && mixed_adapter.contains("user.username.as_str()")
-            && mixed_adapter.contains("user.password.as_str()")
-            && mixed_adapter.contains("user.principal_key.as_deref()")
+            && adapter.contains("config_user_refs(users)")
+            && mixed_adapter.contains("crate::adapters::socks5::inbound::config_user_refs(socks5_users)")
+            && !mixed_adapter.contains("user.username.as_str()")
+            && !mixed_adapter.contains("user.password.as_str()")
+            && !mixed_adapter.contains("user.principal_key.as_deref()")
             && !adapter.contains("user.username.clone()")
             && !adapter.contains("user.password.clone()")
             && !adapter.contains("user.principal_key.clone()")
@@ -1893,8 +2244,6 @@ fn socks5_inbound_uses_adapter_request_model() {
             && !adapter.contains("fn socks5_password_auth_from_users")
             && !mixed_adapter.contains("socks5_password_auth_from_users")
             && !mixed_adapter.contains("use crate::adapters::socks5::")
-            && !adapter.contains("socks5::ConfiguredSocks5PasswordAuth::from_config_users")
-            && !mixed_adapter.contains("socks5::ConfiguredSocks5PasswordAuth::from_config_users")
             && !adapter.contains("socks5::ConfiguredSocks5PasswordAuth::from_config_parts")
             && !mixed_adapter.contains("socks5::ConfiguredSocks5PasswordAuth::from_config_parts")
             && !adapter.contains("socks5::ConfiguredSocks5User::new")
@@ -1912,41 +2261,102 @@ fn socks5_inbound_uses_adapter_request_model() {
         "SOCKS5 inbound auth lookup should live in protocols/socks5 while proxy listeners hold only a protocol-owned auth profile"
     );
     assert!(
-        inbound.contains(".send_success_response(")
-            && inbound.contains(".send_blocked_response(")
-            && inbound.contains(".send_upstream_failure_response(")
+        inbound.contains("Socks5InboundTcpAcceptor")
+            && !inbound.contains("Socks5InboundTcpAcceptor::new(auth)")
+            && inbound.contains("acceptor.accept_command(&mut metered).await")
+            && inbound.contains("Socks5InboundTcpAcceptor::accept_request(self, &mut metered)")
+            && inbound.contains("Socks5InboundTcpAcceptor::send_success(self, client)")
+            && inbound.contains("Socks5InboundTcpAcceptor::send_blocked(self, client)")
+            && inbound.contains("Socks5InboundTcpAcceptor::send_upstream_failure(self, client)")
+            && inbound.contains("impl InboundProtocol for Socks5InboundTcpAcceptor")
+            && !inbound.contains("struct Socks5InboundHandler")
+            && !inbound.contains("handler: &'a Socks5InboundHandler")
+            && !inbound.contains("handler.accept_command")
+            && !inbound.contains("tokio::io::AsyncWriteExt")
+            && inbound.contains("client.shutdown().await")
+            && !inbound.contains("accept_command_with_auth")
+            && !inbound.contains("accept_request_with_auth")
+            && !inbound.contains(".send_success_response(")
+            && !inbound.contains(".send_blocked_response(")
+            && !inbound.contains(".send_upstream_failure_response(")
             && !inbound.contains("Socks5Reply"),
-        "SOCKS5 inbound TCP response reply selection should stay behind protocol-owned semantic response methods"
+        "SOCKS5 inbound TCP accept and response selection should stay behind protocol-owned semantic acceptor methods"
     );
     assert!(
-        inbound.contains("dispatch_socks5_request")
-            && inbound.contains("impl socks5::Socks5RequestHandler")
-            && inbound.contains("async fn handle_connect")
-            && inbound.contains("async fn handle_udp_associate")
-            && mixed.contains("dispatch_socks5_request")
+        inbound.contains("handle_socks5_connection")
+            && !inbound.contains("impl socks5::Socks5RequestHandler")
+            && !inbound.contains("impl socks5::Socks5InboundRequestDispatcher")
+            && inbound.contains("acceptor.accept_command(&mut metered).await")
+            && inbound.contains(".dispatch_with_handlers(")
+            && inbound.contains("udp_associate::run_socks5_udp_associate(proxy, stream, inbound_tag, request)")
+            && !inbound.contains("async fn handle_connect")
+            && !inbound.contains("async fn handle_udp_associate")
+            && mixed.contains("handle_socks5_connection(")
+            && mixed.contains("use crate::adapters::socks5::inbound::listener::handle_socks5_connection;")
+            && !mixed.contains(".dispatch_with_handlers(")
+            && !mixed.contains("accept_command(&mut metered)")
+            && !mixed.contains("Socks5InboundTcpAcceptor::new(socks5_auth)")
+            && !mixed.contains("Socks5InboundHandler")
+            && mixed.contains("socks5::is_socks5_greeting_byte(first_byte)")
+            && !mixed.contains("first_byte == 0x05")
             && !inbound.contains("Socks5Request::Connect")
             && !inbound.contains("Socks5Request::UdpAssociate")
             && !mixed.contains("Socks5Request::Connect")
             && !mixed.contains("Socks5Request::UdpAssociate")
             && !mixed.contains("use socks5::Socks5Request")
-            && protocol_inbound.contains("pub trait Socks5RequestHandler")
-            && protocol_inbound.contains("pub async fn dispatch_request"),
-        "SOCKS5 and mixed inbound glue should ask protocols/socks5 to dispatch accepted SOCKS5 commands"
+            && !protocol_inbound.contains("Socks5RequestHandler")
+            && !protocol_inbound.contains("dispatch_request")
+            && !protocol_inbound.contains("pub trait Socks5InboundRequestDispatcher")
+            && protocol_inbound.contains("pub async fn dispatch_with_handlers")
+            && protocol_inbound.contains("Self::Connect(session)")
+            && protocol_inbound.contains("Self::UdpAssociate(request)"),
+        "SOCKS5 and mixed inbound glue should delegate protocol request variant dispatch through protocols/socks5"
     );
     assert!(
         protocol_inbound.contains("pub async fn send_success_response")
             && protocol_inbound.contains("pub async fn send_blocked_response")
             && protocol_inbound.contains("pub async fn send_upstream_failure_response")
+            && protocol_inbound.contains("pub struct Socks5InboundTcpAcceptor")
+            && protocol_inbound.contains("pub fn is_socks5_greeting_byte")
+            && protocol_inbound.contains("byte == SOCKS5_VERSION")
+            && protocol_inbound.contains("pub async fn accept_command")
+            && protocol_inbound.contains("pub async fn accept_request")
+            && protocol_inbound.contains("pub async fn send_success")
+            && protocol_inbound.contains("pub async fn send_blocked")
+            && protocol_inbound.contains("pub async fn send_upstream_failure")
             && protocol_inbound.contains("Socks5Reply::Succeeded")
             && protocol_inbound.contains("Socks5Reply::ConnectionNotAllowed")
             && protocol_inbound.contains("Socks5Reply::HostUnreachable"),
-        "protocols/socks5 should own concrete SOCKS5 reply selection for common inbound TCP outcomes"
+        "protocols/socks5 should own concrete SOCKS5 TCP accept and reply selection for common inbound outcomes"
+    );
+    assert!(
+        inbound.contains("run_tcp_listener_loop")
+            && inbound.contains("TcpListenerLoopRequest")
+            && mixed.contains("run_tcp_listener_loop")
+            && mixed.contains("TcpListenerLoopRequest")
+            && !inbound.contains("tokio::select!")
+            && !mixed.contains("tokio::select!")
+            && !inbound.contains("JoinSet")
+            && !mixed.contains("JoinSet")
+            && !inbound.contains("listener.accept()")
+            && !mixed.contains("listener.accept()")
+            && !inbound.contains("inbound listener ready")
+            && !mixed.contains("inbound listener ready")
+            && !inbound.contains("inbound listener stopped")
+            && !mixed.contains("inbound listener stopped")
+            && listener_loop.contains("pub(crate) async fn run_tcp_listener_loop")
+            && listener_loop.contains("listener.accept()")
+            && listener_loop.contains("connections.abort_all()")
+            && listener_loop.contains("inbound listener ready")
+            && listener_loop.contains("inbound listener stopped"),
+        "SOCKS5 and mixed proxy inbound should delegate neutral TCP listener lifecycle to runtime/listener_loop"
     );
 }
 
 #[test]
 fn mieru_inbound_uses_adapter_request_model() {
-    let inbound = read("src/inbound/mieru.rs");
+    let inbound = read("src/adapters/mieru/inbound/listener.rs");
+    let udp = read("src/adapters/mieru/inbound/listener/udp.rs");
     let adapter = read("src/adapters/mieru/inbound.rs");
     let protocol_inbound = fs::read_to_string(repo_root().join("protocols/mieru/src/inbound.rs"))
         .expect("read mieru protocol inbound source");
@@ -1970,8 +2380,14 @@ fn mieru_inbound_uses_adapter_request_model() {
         inbound.contains("pub(crate) profile: MieruInboundProfile")
             && inbound.contains("profile: MieruInboundProfile")
             && inbound.contains(".profile")
-            && inbound.contains(".accept_request(&self.mieru_inbound, &mut metered)")
-            && inbound.contains("self.profile.inbound_auth()")
+            && inbound.contains(".accept_client(&self.mieru_inbound, metered)")
+            && !inbound.contains(".accept_tunneled_stream(&self.mieru_inbound, metered)")
+            && !inbound.contains(".accept_request(&self.mieru_inbound, &mut metered)")
+            && !inbound.contains("self.profile.inbound_auth()")
+            && protocol_inbound.contains("pub async fn accept_tunneled_stream")
+            && protocol_inbound.contains("pub async fn accept_client<S>")
+            && protocol_inbound.contains("MieruInboundAcceptedSession::from_session_stream")
+            && protocol_inbound.contains("session.apply_auth(self.inbound_auth())")
             && !inbound.contains("pub(crate) users: Vec<(String, String)>")
             && !inbound.contains("users: Vec<(String, String)>")
             && !inbound.contains("accept_request(&mut metered, &self.users)")
@@ -1989,35 +2405,57 @@ fn mieru_inbound_uses_adapter_request_model() {
         "Mieru inbound listener should receive a protocol-owned profile instead of raw user/password tuples"
     );
     assert!(
-        inbound.contains("struct MieruAcceptedSessionHandler")
-            && inbound.contains("impl mieru::MieruInboundSessionHandler")
-            && inbound.contains("async fn handle_tcp_session")
-            && inbound.contains("async fn handle_udp_session")
-            && inbound.contains("mieru::dispatch_inbound_session")
+        !inbound.contains("struct MieruAcceptedSessionHandler")
+            && !inbound.contains("impl mieru::MieruInboundSessionHandler")
+            && !inbound.contains("async fn handle_tcp_session")
+            && !inbound.contains("async fn handle_udp_session")
+            && !inbound.contains("mieru::dispatch_inbound_session")
+            && !inbound.contains("MieruInboundAcceptedSession::from_session_stream")
+            && inbound.contains(".accept_client(&self.mieru_inbound, metered)")
+            && inbound.contains("struct MieruAcceptedSessionBridge")
+            && inbound.contains("impl MieruInboundAcceptedSessionDispatcher<MieruClientStream>")
+            && inbound.contains(".dispatch_with(&mut bridge)")
+            && !inbound.contains(".dispatch(")
+            && !inbound.contains("mieru::MieruInboundAcceptedSession::Udp")
+            && !inbound.contains("mieru::MieruInboundAcceptedSession::Tcp")
             && !inbound.contains("mieru::classify_inbound_session(&session)")
-            && !inbound.contains("mieru::MieruInboundSessionKind::Udp")
-            && !inbound.contains("mieru::MieruInboundSessionKind::Tcp")
+            && !inbound.contains("mieru::MieruInboundSessionKind::")
             && !inbound.contains("session.network")
+            && !udp.contains("session.auth")
+            && !inbound.contains("auth.as_ref()")
+            && inbound.contains(".run_mieru_udp_relay(")
+            && inbound.contains("stream, &session, responder, auth, self.inbound_tag")
+            && protocol_inbound.contains("pub enum MieruInboundAcceptedSession")
+            && protocol_inbound.contains("pub trait MieruInboundAcceptedSessionDispatcher")
+            && protocol_inbound.contains("auth: Option<SessionAuth>")
+            && protocol_inbound.contains("responder: crate::udp::MieruInboundUdpResponder")
+            && protocol_inbound.contains("auth: session.auth.clone()")
+            && protocol_inbound.contains("responder: MieruInbound.accept_udp_session()")
+            && protocol_inbound.contains("pub fn from_session_stream")
+            && protocol_inbound.contains("pub async fn dispatch")
+            && protocol_inbound.contains("pub async fn dispatch_with")
             && protocol_inbound.contains("pub enum MieruInboundSessionKind")
             && protocol_inbound.contains("pub fn classify_inbound_session")
-            && protocol_inbound.contains("pub trait MieruInboundSessionHandler")
-            && protocol_inbound.contains("pub async fn dispatch_inbound_session")
+            && !protocol_inbound.contains("MieruInboundSessionHandler")
+            && !protocol_inbound.contains("dispatch_inbound_session")
             && protocol_lib.contains("classify_inbound_session")
-            && protocol_lib.contains("dispatch_inbound_session")
-            && protocol_lib.contains("MieruInboundSessionHandler")
+            && !protocol_lib.contains("dispatch_inbound_session")
+            && !protocol_lib.contains("MieruInboundSessionHandler")
+            && protocol_lib.contains("MieruInboundAcceptedSessionDispatcher")
             && protocol_lib.contains("MieruInboundSessionKind"),
-        "Mieru inbound glue should ask protocols/mieru to dispatch accepted sessions"
+        "Mieru inbound glue should consume protocol-owned session classification without implementing protocol callback handlers"
     );
 }
 
 #[test]
 fn shadowsocks_inbound_uses_adapter_request_model() {
-    let inbound = read("src/inbound/shadowsocks.rs");
-    let udp = read("src/inbound/shadowsocks/udp.rs");
+    let inbound = read("src/adapters/shadowsocks/inbound/listener.rs");
+    let udp = read("src/adapters/shadowsocks/inbound/listener/udp.rs");
     let adapter = read("src/adapters/shadowsocks/inbound.rs");
     let protocol_inbound =
         fs::read_to_string(repo_root().join("protocols/shadowsocks/src/inbound.rs"))
             .expect("read shadowsocks protocol inbound source");
+    let protocol_udp = read_repo_module_tree("protocols/shadowsocks/src/udp.rs");
 
     assert!(
         inbound.contains("struct ShadowsocksInboundRequest")
@@ -2035,6 +2473,9 @@ fn shadowsocks_inbound_uses_adapter_request_model() {
     );
     assert!(
         inbound.contains("pub(crate) profile: ShadowsocksInboundProfile")
+            && inbound.contains(
+                "pub(crate) udp_session: shadowsocks::udp::ShadowsocksInboundAcceptedUdpSession"
+            )
             && !inbound.contains("pub(crate) cipher: CipherKind")
             && !inbound.contains("pub(crate) password: String")
             && !inbound.contains("profile.cipher_name()")
@@ -2042,18 +2483,27 @@ fn shadowsocks_inbound_uses_adapter_request_model() {
         "Shadowsocks inbound listener should receive a protocol-owned profile, not raw cipher/password"
     );
     assert!(
-        inbound.contains("ShadowsocksInboundTcpState")
-            && inbound.contains("profile.tcp_state()")
-            && inbound.contains("tcp_state.check_accept_replay(&accept)")
+        inbound.contains("ShadowsocksInboundTcpAcceptor")
+            && inbound.contains("ShadowsocksInboundTcpAcceptor::new(profile.clone())")
+            && inbound.contains("self.acceptor")
+            && inbound.contains(".accept_stream(metered)")
+            && !inbound.contains("ShadowsocksInboundTcpState")
+            && !inbound.contains("profile.tcp_state()")
+            && !inbound.contains("tcp_state.check_accept_replay(&accept)")
             && !inbound.contains("ReplaySaltPool")
             && !inbound.contains("request_salt")
-            && !inbound.contains("is_2022()"),
-        "Shadowsocks inbound listener should delegate TCP replay state and salt checks to the protocol crate"
+            && !inbound.contains("is_2022()")
+            && protocol_inbound.contains("pub struct ShadowsocksInboundTcpAcceptor")
+            && protocol_inbound.contains("pub async fn accept_stream")
+            && protocol_inbound.contains("self.tcp_state.check_accept_replay(&accept)")
+            && protocol_inbound.contains("session.apply_auth(self.profile.inbound_auth())"),
+        "Shadowsocks inbound listener should delegate TCP accept normalization, replay state, and salt checks to the protocol crate"
     );
     assert!(
         adapter.contains("shadowsocks::inbound_profile_from_config_cipher_password")
             && adapter.contains("cipher.as_str()")
             && adapter.contains("password.as_str()")
+            && adapter.contains("let udp_session = profile.accept_udp_session_with_auth();")
             && !adapter.contains("ShadowsocksInboundProfile::from_config_cipher_password")
             && !adapter.contains("ShadowsocksInboundProfile::from_config_parts")
             && !adapter.contains("CipherKind::from_str")
@@ -2075,8 +2525,8 @@ fn shadowsocks_inbound_uses_adapter_request_model() {
     assert!(
         udp.contains("async fn ss_udp_relay_loop")
             && !udp.contains("struct SsProtocolResponse")
-            && udp.contains("ShadowsocksDatagramUdpResponder")
-            && udp.contains(".send_response_for_target_proxy_session_to_client_tokio")
+            && !udp.contains("ShadowsocksDatagramUdpResponder")
+            && !udp.contains(".send_response_for_target_proxy_session_to_client_tokio")
             && !udp.contains("ShadowsocksInboundUdpClientResponse::new")
             && !udp.contains(".send_response_for_proxy_session_to_sender_tokio")
             && !udp.contains(".send_response_for_proxy_session_to_client_tokio")
@@ -2086,13 +2536,26 @@ fn shadowsocks_inbound_uses_adapter_request_model() {
             && !udp.contains("address_from_socket_addr(sender)")
             && udp.contains("run_datagram_udp_relay")
             && !udp.contains("dispatch_inbound_udp_packet"),
-        "Shadowsocks UDP relay should live in src/inbound/shadowsocks/udp.rs, route through the shared UDP dispatch helper, and delegate response framing to protocols/shadowsocks"
+        "Shadowsocks UDP relay should live in src/adapters/shadowsocks/inbound/listener/udp.rs, route through the shared UDP dispatch helper, and delegate response framing to protocols/shadowsocks"
     );
     assert!(
-        udp.contains("ShadowsocksInboundProfile")
-            && udp.contains("profile.udp_responder()")
+        !udp.contains("ShadowsocksInboundProfile")
+            && !udp.contains("profile.accept_udp_session_with_auth()")
+            && udp.contains("accepted: shadowsocks::udp::ShadowsocksInboundAcceptedUdpSession")
+            && udp.contains("accepted.into_datagram_relay_parts()")
+            && !udp.contains("accepted.into_parts()")
+            && !udp.contains("profile.udp_responder()")
             && !udp.contains("profile.udp_session()")
-            && udp.contains("profile.inbound_auth()")
+            && !udp.contains("profile.inbound_auth()")
+            && protocol_udp.contains("pub struct ShadowsocksInboundAcceptedUdpSession")
+            && protocol_udp.contains("pub fn into_datagram_relay_parts")
+            && protocol_inbound.contains("pub fn accept_udp_session")
+            && protocol_inbound.contains("pub fn accept_udp_session_with_auth")
+            && protocol_inbound.contains(
+                "ShadowsocksInboundAcceptedUdpSession::new(self.accept_udp_session(), self.inbound_auth())"
+            )
+            && protocol_udp
+                .contains("impl DatagramUdpResponder<std::sync::Arc<tokio::net::UdpSocket>>")
             && !udp.contains("profile.principal_key()")
             && !udp.contains("CipherKind")
             && !udp.contains("password: &str")
@@ -2103,10 +2566,10 @@ fn shadowsocks_inbound_uses_adapter_request_model() {
 
 #[test]
 fn inbound_auth_identity_stays_in_protocol_crates() {
-    let shadowsocks_inbound = read("src/inbound/shadowsocks.rs");
-    let shadowsocks_udp = read("src/inbound/shadowsocks/udp.rs");
-    let trojan_inbound = read("src/inbound/trojan.rs");
-    let mieru_inbound = read("src/inbound/mieru.rs");
+    let shadowsocks_inbound = read("src/adapters/shadowsocks/inbound/listener.rs");
+    let shadowsocks_udp = read("src/adapters/shadowsocks/inbound/listener/udp.rs");
+    let trojan_inbound = read("src/adapters/trojan/inbound/listener.rs");
+    let mieru_inbound = read("src/adapters/mieru/inbound/listener.rs");
 
     let shadowsocks_protocol =
         fs::read_to_string(repo_root().join("protocols/shadowsocks/src/inbound.rs"))
@@ -2116,30 +2579,15 @@ fn inbound_auth_identity_stays_in_protocol_crates() {
     let mieru_protocol = fs::read_to_string(repo_root().join("protocols/mieru/src/inbound.rs"))
         .expect("read mieru protocol inbound source");
 
-    for (source_name, source, required) in [
-        (
-            "src/inbound/shadowsocks.rs",
-            shadowsocks_inbound.as_str(),
-            "profile.inbound_auth()",
-        ),
-        (
-            "src/inbound/shadowsocks/udp.rs",
-            shadowsocks_udp.as_str(),
-            "profile.inbound_auth()",
-        ),
-        (
-            "src/inbound/trojan.rs",
-            trojan_inbound.as_str(),
-            "self.profile.inbound_auth()",
-        ),
-        (
-            "src/inbound/mieru.rs",
-            mieru_inbound.as_str(),
-            "self.profile.inbound_auth()",
-        ),
-    ] {
+    for (source_name, source, required) in [(
+        "src/adapters/shadowsocks/inbound/listener/udp.rs",
+        shadowsocks_udp.as_str(),
+        "accepted.into_datagram_relay_parts()",
+    )] {
         assert!(
             source.contains(required)
+                && !source.contains("profile.inbound_auth()")
+                && !source.contains("profile.accept_udp_session_with_auth()")
                 && !source.contains("SessionAuth::new(\"shadowsocks\")")
                 && !source.contains("SessionAuth::new(\"trojan\")")
                 && !source.contains("SessionAuth::new(\"mieru\")")
@@ -2148,52 +2596,85 @@ fn inbound_auth_identity_stays_in_protocol_crates() {
         );
     }
 
+    for (source_name, source) in [
+        (
+            "src/adapters/shadowsocks/inbound/listener.rs",
+            shadowsocks_inbound.as_str(),
+        ),
+        (
+            "src/adapters/trojan/inbound/listener.rs",
+            trojan_inbound.as_str(),
+        ),
+        (
+            "src/adapters/mieru/inbound/listener.rs",
+            mieru_inbound.as_str(),
+        ),
+    ] {
+        assert!(
+            !source.contains("SessionAuth::new(\"shadowsocks\")")
+                && !source.contains("SessionAuth::new(\"trojan\")")
+                && !source.contains("SessionAuth::new(\"mieru\")")
+                && !source.contains("principal_key = Some")
+                && !source.contains(".inbound_auth()"),
+            "{source_name} should let protocol-owned accept helpers apply inbound auth identity"
+        );
+    }
+
     assert!(
         shadowsocks_protocol.contains("pub fn inbound_auth(&self) -> SessionAuth")
             && trojan_protocol.contains("pub fn inbound_auth(&self) -> SessionAuth")
-            && mieru_protocol.contains("pub fn inbound_auth(&self) -> SessionAuth"),
-        "protocol crates should own their inbound auth identity construction"
+            && mieru_protocol.contains("pub fn inbound_auth(&self) -> SessionAuth")
+            && shadowsocks_protocol.contains("session.apply_auth(self.profile.inbound_auth())")
+            && trojan_protocol.contains("session.apply_auth(self.inbound_auth())")
+            && mieru_protocol.contains("session.apply_auth(self.inbound_auth())"),
+        "protocol crates should own their inbound auth identity construction and TCP accept normalization"
     );
 }
 
 #[test]
 fn stream_udp_inbound_direct_responses_use_client_response_models() {
-    let stream_udp = read("src/inbound/stream_udp.rs");
-    let mux_udp = read("src/inbound/mux_udp.rs");
-    let trojan_udp_inbound = read("src/inbound/trojan/udp.rs");
-    let mieru_udp_inbound = read("src/inbound/mieru/udp.rs");
-    let hysteria2_inbound = read("src/inbound/hysteria2/udp.rs");
-    let vless_udp_inbound = read("src/inbound/vless/udp_session.rs");
-    let vless_mux_inbound = read("src/inbound/vless/mux_udp.rs");
-    let vmess_udp_inbound = read("src/inbound/vmess/udp_session.rs");
-    let vmess_mux_inbound = read("src/inbound/vmess/mux_udp.rs");
+    let stream_udp = read("src/runtime/stream_udp.rs");
+    let mux_udp = read("src/runtime/mux_udp.rs");
+    let packet_session_udp = read("src/runtime/packet_session_udp.rs");
+    let trojan_udp_inbound = read("src/adapters/trojan/inbound/listener/udp.rs");
+    let mieru_udp_inbound = read("src/adapters/mieru/inbound/listener/udp.rs");
+    let hysteria2_inbound = read("src/adapters/hysteria2/inbound/listener/udp.rs");
+    let vless_udp_inbound = read("src/adapters/vless/inbound/listener/udp_session.rs");
+    let vless_mux_inbound = read("src/adapters/vless/inbound/listener/mux_udp.rs");
+    let vmess_udp_inbound = read("src/adapters/vmess/inbound/listener/udp_session.rs");
+    let vmess_mux_inbound = read("src/adapters/vmess/inbound/listener/mux_udp.rs");
     let trojan_protocol = fs::read_to_string(repo_root().join("protocols/trojan/src/inbound.rs"))
         .expect("read trojan protocol inbound source");
-    let mieru_protocol = fs::read_to_string(repo_root().join("protocols/mieru/src/udp.rs"))
-        .expect("read mieru protocol udp source");
+    let mieru_protocol = read_repo_module_tree("protocols/mieru/src/udp.rs");
     let hysteria2_protocol = fs::read_to_string(repo_root().join("protocols/hysteria2/src/udp.rs"))
         .expect("read hysteria2 protocol udp source");
     let vless_protocol = fs::read_to_string(repo_root().join("protocols/vless/src/shared.rs"))
         .expect("read vless protocol shared source");
+    let vless_protocol_inbound =
+        fs::read_to_string(repo_root().join("protocols/vless/src/inbound.rs"))
+            .expect("read vless protocol inbound source");
     let vmess_protocol = fs::read_to_string(repo_root().join("protocols/vmess/src/udp.rs"))
         .expect("read vmess protocol udp source");
 
     assert!(
-        stream_udp.contains("record_direct_udp_response_parts")
-            && stream_udp.contains("write_direct_response")
-            && stream_udp.contains("write_upstream_response")
-            && stream_udp.contains("write_chain_response")
+        stream_udp.contains("run_packet_session_udp_relay")
+            && packet_session_udp.contains("record_direct_udp_response_parts")
+            && packet_session_udp.contains("write_direct_response")
+            && packet_session_udp.contains("write_upstream_response")
+            && packet_session_udp.contains("write_chain_response")
             && !trojan_udp_inbound.contains("record_direct_udp_response_parts")
             && !trojan_udp_inbound.contains("udp_response_target_from_socket_addr(sender)")
             && !trojan_udp_inbound.contains("TrojanInboundUdpClientResponse::new")
-            && trojan_udp_inbound.contains("TrojanStreamUdpResponder")
-            && trojan_udp_inbound.contains("impl StreamUdpResponder<TcpRelayStream>")
             && trojan_udp_inbound.contains("run_stream_udp_relay")
             && trojan_udp_inbound.contains("StreamUdpRelayRequest")
-            && trojan_udp_inbound.contains("trojan::TrojanInbound.udp_responder()")
-            && trojan_udp_inbound.contains("self.inner.read_inbound_dispatch(client)")
-            && trojan_udp_inbound.contains("self.inner")
-            && trojan_udp_inbound.contains(".write_response_for_target")
+            && !trojan_udp_inbound.contains("trojan::TrojanInbound.accept_udp_session()")
+            && trojan_udp_inbound.contains("responder: trojan::TrojanInboundUdpResponder")
+            && !trojan_udp_inbound.contains("trojan::TrojanInbound.udp_responder()")
+            && !trojan_udp_inbound.contains("TrojanStreamUdpResponder")
+            && !trojan_udp_inbound.contains("impl StreamUdpResponder<TcpRelayStream>")
+            && !trojan_udp_inbound.contains("self.inner.read_inbound_dispatch(client)")
+            && !trojan_udp_inbound.contains("self.inner")
+            && !trojan_udp_inbound.contains(".write_response_for_target")
             && !trojan_udp_inbound.contains("udp_session.write_client_response_for_target")
             && !trojan_udp_inbound.contains("write_direct_response")
             && !trojan_udp_inbound.contains("write_upstream_response")
@@ -2202,7 +2683,10 @@ fn stream_udp_inbound_direct_responses_use_client_response_models() {
             && trojan_protocol.contains("pub async fn write_client_response")
             && trojan_protocol.contains("pub async fn write_client_response_for_target")
             && trojan_protocol.contains("pub struct TrojanInboundUdpResponder")
+            && trojan_protocol.contains("responder: TrojanInboundUdpResponder")
+            && trojan_protocol.contains("responder: TrojanInbound.accept_udp_session()")
             && trojan_protocol.contains("impl TrojanInboundUdpResponder")
+            && trojan_protocol.contains("impl<S> StreamUdpResponder<S> for TrojanInboundUdpResponder")
             && !trojan_protocol.contains("pub async fn write_response_to_socket_addr_tokio")
             && !trojan_protocol.contains("fn address_from_socket_addr"),
         "Trojan inbound UDP direct response glue should pass neutral target data to protocol-owned response APIs"
@@ -2211,15 +2695,17 @@ fn stream_udp_inbound_direct_responses_use_client_response_models() {
         !mieru_udp_inbound.contains("record_direct_udp_response_parts")
             && !mieru_udp_inbound.contains("udp_response_target_from_socket_addr(sender)")
             && !mieru_udp_inbound.contains("MieruInboundUdpClientResponse::new")
-            && mieru_udp_inbound.contains("MieruStreamUdpResponder")
-            && mieru_udp_inbound.contains("impl StreamUdpResponder<MieruClientStream>")
             && mieru_udp_inbound.contains("run_stream_udp_relay")
             && mieru_udp_inbound.contains("StreamUdpRelayRequest")
-            && mieru_udp_inbound.contains("mieru::MieruInbound.udp_responder()")
-            && mieru_udp_inbound.contains("self.inner")
-            && mieru_udp_inbound.contains(".read_inbound_dispatch_tokio(client")
+            && !mieru_udp_inbound.contains("mieru::MieruInbound.accept_udp_session()")
+            && mieru_udp_inbound.contains("responder: mieru::udp::MieruInboundUdpResponder")
+            && !mieru_udp_inbound.contains("mieru::MieruInbound.udp_responder()")
+            && !mieru_udp_inbound.contains("MieruStreamUdpResponder")
+            && !mieru_udp_inbound.contains("impl StreamUdpResponder<MieruClientStream>")
+            && !mieru_udp_inbound.contains("self.inner")
+            && !mieru_udp_inbound.contains(".read_inbound_dispatch_tokio(client")
             && !mieru_udp_inbound.contains("read_buf")
-            && mieru_udp_inbound.contains(".write_response_for_target_tokio")
+            && !mieru_udp_inbound.contains(".write_response_for_target_tokio")
             && !mieru_udp_inbound.contains("udp_session.write_client_response_for_target_tokio")
             && !mieru_udp_inbound.contains("write_direct_response")
             && !mieru_udp_inbound.contains("write_upstream_response")
@@ -2229,7 +2715,8 @@ fn stream_udp_inbound_direct_responses_use_client_response_models() {
             && mieru_protocol.contains("pub async fn write_client_response_for_target_tokio")
             && mieru_protocol.contains("pub struct MieruInboundUdpResponder")
             && mieru_protocol.contains("impl MieruInboundUdpResponder")
-            && mieru_protocol.contains("read_buf: [u8; 65536]")
+            && mieru_protocol.contains("impl<S> StreamUdpResponder<S> for MieruInboundUdpResponder")
+            && mieru_protocol.contains("read_buf: Vec<u8>")
             && !mieru_protocol.contains("read_inbound_dispatch_with_buffer_tokio")
             && !mieru_protocol.contains("pub async fn write_response_for_sender_tokio")
             && !mieru_protocol.contains("fn address_from_socket_addr"),
@@ -2240,16 +2727,20 @@ fn stream_udp_inbound_direct_responses_use_client_response_models() {
             && !hysteria2_inbound.contains("udp_response_target_from_socket_addr(sender)")
             && !hysteria2_inbound.contains("Hysteria2InboundUdpClientResponse::new")
             && hysteria2_inbound.contains("run_datagram_udp_relay")
-            && hysteria2_inbound.contains("impl DatagramUdpResponder<Arc<quinn::Connection>>")
-            && hysteria2_inbound.contains("hysteria2::Hysteria2Inbound.udp_responder()")
-            && hysteria2_inbound.contains("self.inner")
-            && hysteria2_inbound.contains(".send_response_for_target_proxy_session")
+            && !hysteria2_inbound.contains("impl DatagramUdpResponder<Arc<quinn::Connection>>")
+            && !hysteria2_inbound.contains("hysteria2::Hysteria2Inbound.accept_udp_session()")
+            && hysteria2_inbound.contains("responder: hysteria2::Hysteria2InboundUdpResponder")
+            && !hysteria2_inbound.contains("hysteria2::Hysteria2Inbound.udp_responder()")
+            && !hysteria2_inbound.contains("self.inner")
+            && !hysteria2_inbound.contains(".send_response_for_target_proxy_session")
             && !hysteria2_inbound.contains("udp_session.send_client_response_for_target_proxy_session")
             && !hysteria2_inbound.contains("send_response_to_socket_addr_for_proxy_session")
             && hysteria2_protocol.contains("pub fn send_client_response_for_proxy_session")
             && hysteria2_protocol.contains("pub fn send_client_response_for_target_proxy_session")
             && hysteria2_protocol.contains("pub struct Hysteria2InboundUdpResponder")
             && hysteria2_protocol.contains("impl Hysteria2InboundUdpResponder")
+            && hysteria2_protocol
+                .contains("impl DatagramUdpResponder<Arc<quinn::Connection>>")
             && !hysteria2_protocol.contains("pub fn send_response_to_socket_addr")
             && !hysteria2_protocol.contains("fn address_from_socket_addr"),
         "Hysteria2 inbound UDP direct response glue should pass neutral target data to protocol-owned response APIs"
@@ -2260,33 +2751,38 @@ fn stream_udp_inbound_direct_responses_use_client_response_models() {
             && !vless_mux_inbound.contains("udp_response_target_from_socket_addr(sender)")
             && !vless_udp_inbound.contains("VlessInboundUdpClientResponse::new")
             && !vless_mux_inbound.contains("VlessInboundUdpClientResponse::new")
-            && vless_udp_inbound.contains("VlessStreamUdpResponder")
-            && vless_udp_inbound.contains("impl<S> StreamUdpResponder<MeteredStream<S>>")
             && vless_udp_inbound.contains("run_stream_udp_relay")
             && vless_udp_inbound.contains("StreamUdpRelayRequest")
-            && vless_udp_inbound.contains("vless::VlessInbound.udp_responder()")
-            && vless_udp_inbound.contains("self.inner")
-            && vless_udp_inbound.contains(".read_inbound_dispatch_tokio(client")
+            && !vless_udp_inbound.contains(".accept_udp_session(&mut client)")
+            && vless_udp_inbound.contains("responder: vless::VlessInboundUdpResponder")
+            && vless_protocol_inbound.contains(".accept_udp_session(&mut stream)")
+            && !vless_udp_inbound.contains("vless::VlessInbound.udp_responder()")
+            && !vless_udp_inbound.contains("VlessStreamUdpResponder")
+            && !vless_udp_inbound.contains("impl<S> StreamUdpResponder<MeteredStream<S>>")
+            && !vless_udp_inbound.contains(".read_inbound_dispatch_tokio(client")
             && !vless_udp_inbound.contains("read_buf")
-            && vless_udp_inbound.contains(".write_response_for_target_tokio")
+            && !vless_udp_inbound.contains(".write_response_for_target_tokio")
             && !vless_udp_inbound.contains("udp_session.write_client_response_for_target_tokio")
             && !vless_udp_inbound.contains("write_direct_response")
             && !vless_udp_inbound.contains("write_upstream_response")
             && !vless_udp_inbound.contains("write_chain_response")
             && vless_udp_inbound.contains("record_client_io")
-            && vless_udp_inbound.contains("record_session_inbound_traffic(self.session_id")
+            && vless_udp_inbound.contains("record_session_inbound_traffic(session_id")
             && !vless_mux_inbound.contains("record_direct_udp_response_parts")
-            && vless_mux_inbound.contains("vless::VlessInbound.mux_udp_responder")
-            && vless_mux_inbound.contains("impl MuxUdpResponder for VlessMuxUdpResponder")
-            && vless_mux_inbound.contains("self.inner.write_response_for_target")
-            && vless_mux_inbound.contains("self.inner.end_inbound_stream")
+            && !vless_mux_inbound.contains("vless::VlessInbound.mux_udp_responder")
+            && vless_mux_inbound.contains("responder,")
+            && !vless_mux_inbound.contains("VlessMuxUdpResponder")
+            && !vless_mux_inbound.contains("impl MuxUdpResponder")
+            && !vless_mux_inbound.contains("write_response_for_target")
+            && !vless_mux_inbound.contains("end_inbound_stream")
             && !vless_mux_inbound.contains(".send_mux_client_response_for_target")
-            && mux_udp.contains("write_direct_response_sync")
-            && mux_udp.contains("write_upstream_response_sync")
-            && mux_udp.contains("write_chain_response_sync")
-            && !vless_mux_inbound.contains("write_direct_response_sync")
-            && !vless_mux_inbound.contains("write_upstream_response_sync")
-            && !vless_mux_inbound.contains("write_chain_response_sync")
+            && mux_udp.contains("run_packet_session_udp_relay")
+            && packet_session_udp.contains("write_direct_response")
+            && packet_session_udp.contains("write_upstream_response")
+            && packet_session_udp.contains("write_chain_response")
+            && !vless_mux_inbound.contains("write_direct_response")
+            && !vless_mux_inbound.contains("write_upstream_response")
+            && !vless_mux_inbound.contains("write_chain_response")
             && !vless_udp_inbound.contains("write_response_to_socket_addr_tokio")
             && !vless_mux_inbound.contains("send_mux_response_to_socket_addr")
             && vless_protocol.contains("pub async fn write_client_response_tokio")
@@ -2297,6 +2793,8 @@ fn stream_udp_inbound_direct_responses_use_client_response_models() {
             && !vless_protocol.contains("read_inbound_dispatch_with_buffer_tokio")
             && vless_protocol.contains("pub struct VlessInboundMuxUdpResponder")
             && vless_protocol.contains("impl VlessInboundMuxUdpResponder")
+            && vless_protocol.contains("impl<S> StreamUdpResponder<S> for VlessInboundUdpResponder")
+            && vless_protocol.contains("impl MuxUdpResponder for VlessInboundMuxUdpResponder")
             && vless_protocol.contains("pub fn send_mux_client_response")
             && vless_protocol.contains("pub fn send_mux_client_response_for_target")
             && !vless_protocol.contains("pub async fn write_response_to_socket_addr_tokio")
@@ -2310,31 +2808,34 @@ fn stream_udp_inbound_direct_responses_use_client_response_models() {
             && !vmess_mux_inbound.contains("udp_response_target_from_socket_addr(sender)")
             && !vmess_udp_inbound.contains("VmessInboundUdpClientResponse::new")
             && !vmess_mux_inbound.contains("VmessInboundUdpClientResponse::new")
-            && vmess_udp_inbound.contains("VmessStreamUdpResponder")
-            && vmess_udp_inbound.contains("impl StreamUdpResponder<TcpRelayStream>")
             && vmess_udp_inbound.contains("run_stream_udp_relay")
             && vmess_udp_inbound.contains("StreamUdpRelayRequest")
-            && vmess_udp_inbound.contains("vmess::VmessInbound.udp_responder_for(&session)")
-            && vmess_udp_inbound.contains("self.inner")
-            && vmess_udp_inbound.contains(".read_inbound_dispatch_tokio(client")
+            && vmess_udp_inbound.contains("responder,")
+            && !vmess_udp_inbound.contains("vmess::VmessInbound.udp_responder_for(&session)")
+            && !vmess_udp_inbound.contains("VmessStreamUdpResponder")
+            && !vmess_udp_inbound.contains("impl StreamUdpResponder<TcpRelayStream>")
+            && !vmess_udp_inbound.contains(".read_inbound_dispatch_tokio(client")
             && !vmess_udp_inbound.contains("read_buf")
-            && vmess_udp_inbound.contains(".write_response_for_target_tokio")
+            && !vmess_udp_inbound.contains(".write_response_for_target_tokio")
             && !vmess_udp_inbound.contains("udp_session.write_client_response_for_target_tokio")
             && !vmess_udp_inbound.contains("write_direct_response")
             && !vmess_udp_inbound.contains("write_upstream_response")
             && !vmess_udp_inbound.contains("write_chain_response")
             && !vmess_mux_inbound.contains("record_direct_udp_response_parts")
-            && vmess_mux_inbound.contains("vmess::VmessInbound.mux_udp_responder_for")
-            && vmess_mux_inbound.contains("impl MuxUdpResponder for VmessMuxUdpResponder")
-            && vmess_mux_inbound.contains("self.inner.write_response_for_target")
-            && vmess_mux_inbound.contains("self.inner.end_inbound_stream")
+            && !vmess_mux_inbound.contains("vmess::VmessInbound.mux_udp_responder_for")
+            && vmess_mux_inbound.contains("responder,")
+            && !vmess_mux_inbound.contains("VmessMuxUdpResponder")
+            && !vmess_mux_inbound.contains("impl MuxUdpResponder")
+            && !vmess_mux_inbound.contains("write_response_for_target")
+            && !vmess_mux_inbound.contains("end_inbound_stream")
             && !vmess_mux_inbound.contains(".write_mux_client_response_for_target")
-            && mux_udp.contains("write_direct_response_sync")
-            && mux_udp.contains("write_upstream_response_sync")
-            && mux_udp.contains("write_chain_response_sync")
-            && !vmess_mux_inbound.contains("write_direct_response_sync")
-            && !vmess_mux_inbound.contains("write_upstream_response_sync")
-            && !vmess_mux_inbound.contains("write_chain_response_sync")
+            && mux_udp.contains("run_packet_session_udp_relay")
+            && packet_session_udp.contains("write_direct_response")
+            && packet_session_udp.contains("write_upstream_response")
+            && packet_session_udp.contains("write_chain_response")
+            && !vmess_mux_inbound.contains("write_direct_response")
+            && !vmess_mux_inbound.contains("write_upstream_response")
+            && !vmess_mux_inbound.contains("write_chain_response")
             && !vmess_udp_inbound.contains("write_response_to_socket_addr_tokio")
             && !vmess_mux_inbound.contains("write_mux_response_to_socket_addr")
             && vmess_protocol.contains("pub async fn write_client_response_tokio")
@@ -2345,6 +2846,8 @@ fn stream_udp_inbound_direct_responses_use_client_response_models() {
             && !vmess_protocol.contains("read_inbound_dispatch_with_buffer_tokio")
             && vmess_protocol.contains("pub struct VmessInboundMuxUdpResponder")
             && vmess_protocol.contains("impl VmessInboundMuxUdpResponder")
+            && vmess_protocol.contains("impl<S> StreamUdpResponder<S> for VmessInboundUdpResponder")
+            && vmess_protocol.contains("impl MuxUdpResponder for VmessInboundMuxUdpResponder")
             && vmess_protocol.contains("pub fn write_mux_client_response")
             && vmess_protocol.contains("pub fn write_mux_client_response_for_target")
             && !vmess_protocol.contains("pub async fn write_response_to_socket_addr_tokio")
@@ -2356,7 +2859,8 @@ fn stream_udp_inbound_direct_responses_use_client_response_models() {
 
 #[test]
 fn trojan_inbound_uses_adapter_request_model() {
-    let inbound = read("src/inbound/trojan.rs");
+    let inbound = read("src/adapters/trojan/inbound/listener.rs");
+    let udp = read("src/adapters/trojan/inbound/listener/udp.rs");
     let adapter = read("src/adapters/trojan/inbound.rs");
     let protocol_inbound = fs::read_to_string(repo_root().join("protocols/trojan/src/inbound.rs"))
         .expect("read trojan protocol inbound source");
@@ -2381,8 +2885,16 @@ fn trojan_inbound_uses_adapter_request_model() {
         inbound.contains("pub(crate) profile: TrojanInboundProfile")
             && inbound.contains("pub(crate) tls_acceptor: crate::transport::TlsAcceptor")
             && inbound.contains("profile: TrojanInboundProfile")
-            && inbound.contains("self.profile.accept(self.trojan_inbound, &mut sock)")
-            && inbound.contains("self.profile.inbound_auth()")
+            && inbound.contains(".profile")
+            && inbound.contains(".accept_client(handler.trojan_inbound")
+            && !inbound.contains(".accept_session(self.trojan_inbound, &mut sock)")
+            && !inbound.contains("self.profile.accept(self.trojan_inbound, &mut sock)")
+            && !inbound.contains("self.profile.inbound_auth()")
+            && protocol_inbound.contains("pub async fn accept_session")
+            && protocol_inbound.contains("pub async fn accept_client<S: AsyncSocket>")
+            && protocol_inbound.contains("TrojanInboundAcceptedSession::from_session_stream")
+            && protocol_inbound.contains("let mut session = accept.session")
+            && protocol_inbound.contains("session.apply_auth(self.inbound_auth())")
             && !inbound.contains("pub(crate) password: String")
             && !inbound.contains("password: String")
             && !inbound.contains("pub(crate) tls: Option<zero_config::TlsConfig>")
@@ -2400,35 +2912,56 @@ fn trojan_inbound_uses_adapter_request_model() {
         "Trojan inbound listener should receive protocol-owned profile plus adapter-built TLS acceptor instead of raw password/TLS config"
     );
     assert!(
-        inbound.contains("struct TrojanAcceptedSessionHandler")
-            && inbound.contains("impl trojan::TrojanInboundSessionHandler")
-            && inbound.contains("async fn handle_tcp_session")
-            && inbound.contains("async fn handle_udp_session")
-            && inbound.contains("trojan::dispatch_inbound_session")
+        !inbound.contains("struct TrojanAcceptedSessionHandler")
+            && !inbound.contains("impl trojan::TrojanInboundSessionHandler")
+            && !inbound.contains("async fn handle_tcp_session")
+            && !inbound.contains("async fn handle_udp_session")
+            && !inbound.contains("trojan::dispatch_inbound_session")
+            && !inbound.contains("TrojanInboundAcceptedSession::from_session_stream")
+            && inbound.contains(".accept_client(handler.trojan_inbound")
+            && inbound.contains("struct TrojanAcceptedSessionBridge")
+            && inbound.contains("impl TrojanInboundAcceptedSessionDispatcher<TrojanAcceptedStream>")
+            && inbound.contains(".dispatch_with(&mut bridge)")
+            && !inbound.contains(".dispatch(")
+            && !inbound.contains("trojan::TrojanInboundAcceptedSession::Udp")
+            && !inbound.contains("trojan::TrojanInboundAcceptedSession::Tcp")
             && !inbound.contains("trojan::classify_inbound_session(&session)")
-            && !inbound.contains("trojan::TrojanInboundSessionKind::Udp")
-            && !inbound.contains("trojan::TrojanInboundSessionKind::Tcp")
+            && !inbound.contains("trojan::TrojanInboundSessionKind::")
             && !inbound.contains("session.network")
+            && !udp.contains("session.auth")
+            && !inbound.contains("auth.as_ref()")
+            && inbound.contains(".run_trojan_udp_relay(")
+            && inbound.contains("TcpRelayStream::new(stream.into_inner())")
+            && protocol_inbound.contains("pub enum TrojanInboundAcceptedSession")
+            && protocol_inbound.contains("pub trait TrojanInboundAcceptedSessionDispatcher")
+            && protocol_inbound.contains("auth: Option<SessionAuth>")
+            && protocol_inbound.contains("responder: TrojanInboundUdpResponder")
+            && protocol_inbound.contains("auth: session.auth.clone()")
+            && protocol_inbound.contains("responder: TrojanInbound.accept_udp_session()")
+            && protocol_inbound.contains("pub fn from_session_stream")
+            && protocol_inbound.contains("pub async fn dispatch")
+            && protocol_inbound.contains("pub async fn dispatch_with")
             && protocol_inbound.contains("pub enum TrojanInboundSessionKind")
             && protocol_inbound.contains("pub fn classify_inbound_session")
-            && protocol_inbound.contains("pub trait TrojanInboundSessionHandler")
-            && protocol_inbound.contains("pub async fn dispatch_inbound_session")
+            && !protocol_inbound.contains("TrojanInboundSessionHandler")
+            && !protocol_inbound.contains("dispatch_inbound_session")
             && protocol_lib.contains("classify_inbound_session")
-            && protocol_lib.contains("dispatch_inbound_session")
-            && protocol_lib.contains("TrojanInboundSessionHandler")
+            && !protocol_lib.contains("dispatch_inbound_session")
+            && !protocol_lib.contains("TrojanInboundSessionHandler")
+            && protocol_lib.contains("TrojanInboundAcceptedSessionDispatcher")
             && protocol_lib.contains("TrojanInboundSessionKind"),
-        "Trojan inbound glue should ask protocols/trojan to dispatch accepted sessions"
+        "Trojan inbound glue should consume protocol-owned session classification without implementing protocol callback handlers"
     );
 }
 
 #[test]
 fn vmess_inbound_uses_adapter_request_model() {
-    let inbound = read("src/inbound/vmess/listener.rs");
-    let model = read("src/inbound/vmess/model.rs");
-    let root = read("src/inbound/vmess/mod.rs");
-    let transport = read("src/inbound/vmess/transport.rs");
+    let inbound = read("src/adapters/vmess/inbound/listener/listener.rs");
+    let model = read("src/adapters/vmess/inbound/listener/model.rs");
+    let root = read("src/adapters/vmess/inbound/listener.rs");
+    let transport = read("src/adapters/vmess/inbound/listener/transport.rs");
     let adapter = read("src/adapters/vmess/inbound.rs");
-    let helper_path = manifest_dir().join("src/inbound/vmess/helpers.rs");
+    let helper_path = manifest_dir().join("src/adapters/vmess/inbound/listener/helpers.rs");
     let protocol_inbound = fs::read_to_string(repo_root().join("protocols/vmess/src/inbound.rs"))
         .expect("read vmess protocol inbound source");
     let protocol_stream = fs::read_to_string(repo_root().join("protocols/vmess/src/stream.rs"))
@@ -2478,11 +3011,17 @@ fn vmess_inbound_uses_adapter_request_model() {
         protocol_inbound.contains("pub struct VmessInboundProfile")
             && protocol_inbound.contains("pub fn from_users(users: Vec<VmessUser>) -> Self")
             && protocol_inbound.contains("pub async fn accept_tcp<S: AsyncSocket>")
+            && protocol_inbound.contains("pub async fn accept_tcp_stream<S: AsyncSocket>")
+            && protocol_inbound.contains("pub async fn accept_client<S: AsyncSocket>")
+            && protocol_inbound.contains("VmessInboundAcceptedStream::from_session_stream")
             && model.contains("pub(crate) profile: vmess::VmessInboundProfile")
             && model.contains("pub(crate) tls_acceptor: crate::transport::TlsAcceptor")
             && root.contains("profile: VmessInboundProfile")
-            && root.contains(".profile")
-            && root.contains(".accept_tcp(self.vmess_inbound, &mut sock)")
+            && transport.contains(".profile")
+            && !root.contains(".accept_tcp_stream(")
+            && !transport.contains(".accept_tcp_stream(")
+            && transport.contains(".accept_client(handler.vmess_inbound")
+            && transport.contains(".accept_client(vmess")
             && inbound.contains("profile.is_empty()")
             && !model.contains("tls: Option<Box<zero_config::TlsConfig>>")
             && !inbound.contains("build_tls_acceptor")
@@ -2506,8 +3045,13 @@ fn vmess_inbound_uses_adapter_request_model() {
     );
     assert!(
         !helper_path.exists()
-            && root.contains("vmess::wrap_tcp_inbound_stream")
-            && transport.contains("vmess::wrap_tcp_inbound_stream")
+            && !root.contains("vmess::wrap_tcp_inbound_stream")
+            && !transport.contains("vmess::wrap_tcp_inbound_stream")
+            && !root.contains("accepted.session.clone()")
+            && !transport.contains("accepted.session.clone()")
+            && !root.contains(".accept_tcp(self.vmess_inbound")
+            && !transport.contains(".accept_tcp(handler.vmess_inbound")
+            && !transport.contains(".accept_tcp(vmess")
             && !root.contains("wrap_vmess_client")
             && !transport.contains("wrap_vmess_client")
             && !root.contains("VmessAeadStream")
@@ -2525,11 +3069,13 @@ fn vmess_inbound_uses_adapter_request_model() {
 
 #[test]
 fn vless_inbound_users_are_protocol_parsed() {
-    let listener = read("src/inbound/vless/listener.rs");
-    let model = read("src/inbound/vless/model.rs");
-    let session = read("src/inbound/vless/session.rs");
-    let helpers = read("src/inbound/vless/helpers.rs");
+    let listener = read("src/adapters/vless/inbound/listener/listener.rs");
+    let model = read("src/adapters/vless/inbound/listener/model.rs");
+    let session = read("src/adapters/vless/inbound/listener/session.rs");
+    let fallback = read("src/adapters/vless/inbound/listener/fallback.rs");
+    let helpers = read("src/adapters/vless/inbound/listener/helpers.rs");
     let adapter = read("src/adapters/vless/inbound.rs");
+    let transport_metered = read("src/transport/metered.rs");
     let protocol_inbound = fs::read_to_string(repo_root().join("protocols/vless/src/inbound.rs"))
         .expect("read vless protocol inbound source");
 
@@ -2600,12 +3146,42 @@ fn vless_inbound_users_are_protocol_parsed() {
             && !session.contains("VlessConfiguredUsers::new")
             && model.contains("profile: vless::VlessInboundProfile")
             && session.contains("profile: vless::VlessInboundProfile")
-            && session.contains(".accept_tcp_with_auth_context(vless::VlessInbound, &mut metered)")
+            && session.contains(".accept_client(vless::VlessInbound, metered)")
+            && !session.contains(".accept_tcp_with_auth_context(vless::VlessInbound")
             && !session.contains(".accept_tcp_with_auth_and_id(vless::VlessInbound, &mut metered)")
             && protocol_inbound.contains("pub struct VlessInboundProfile")
             && protocol_inbound.contains("pub struct VlessAcceptedSession")
+            && protocol_inbound.contains("pub struct VlessAcceptedClient")
+            && protocol_inbound.contains("pub struct VlessClientAcceptError")
+            && protocol_inbound.contains("pub trait VlessFallbackCapture")
+            && protocol_inbound.contains("pub struct VlessFallbackReplay")
+            && protocol_inbound.contains("pub fn into_fallback_replay")
+            && protocol_inbound.contains("pub async fn write_replay_head")
+            && protocol_inbound.contains("pub async fn replay_to_upstream")
+            && !session.contains("impl<S> vless::VlessFallbackCapture")
+            && transport_metered.contains("impl<S> vless::VlessFallbackCapture")
+            && transport_metered.contains("vless::VlessFallbackReplay::new(stream, replay_head)")
+            && session.contains("rejected.into_fallback_replay()")
+            && session.contains("metered.into_unrecorded_inner()")
+            && !session.contains("into_inner().into_parts()")
+            && fallback.contains("vless::VlessFallbackReplay")
+            && fallback.contains("fallback_replay.replay_to_upstream(&mut upstream).await")
+            && !fallback.contains("fallback_replay.write_replay_head")
+            && !fallback.contains("fallback_replay.into_stream()")
+            && !session.contains("let (inner, head)")
+            && !fallback.contains("write_all(&mut upstream, &head)")
+            && !listener.contains("AsyncWriteExt::write_all")
+            && !listener.contains("&hello.consumed")
+            && !listener.contains("relay_fallback_no_tls")
+            && !listener.contains("vless::VlessFallbackReplay::new")
+            && listener.contains("vless::fallback_replay_for_alpns")
+            && listener.contains("vless::VlessFallbackAlpnDecision::Replay")
+            && listener.contains(".relay_fallback(fallback_replay, fb)")
+            && protocol_inbound.contains("pub fn fallback_replay_for_alpns")
+            && protocol_inbound.contains("pub enum VlessFallbackAlpnDecision")
             && protocol_inbound.contains("VlessInboundMuxContext::from_uuid")
             && protocol_inbound.contains("pub async fn accept_tcp_with_auth_context")
+            && protocol_inbound.contains("pub async fn accept_client")
             && protocol_inbound
                 .contains("pub fn from_users(users: Vec<VlessConfiguredUser>) -> Self")
             && protocol_inbound.contains("let auth = VlessConfiguredUsers::new(&self.users)")
@@ -2615,26 +3191,42 @@ fn vless_inbound_users_are_protocol_parsed() {
         "VLESS user store should live in protocols/vless, not proxy inbound helpers"
     );
     assert!(
-        session.contains("struct VlessAcceptedSessionHandler")
-            && session.contains("impl<S> vless::VlessInboundSessionHandler")
-            && session.contains("async fn handle_tcp_session")
-            && session.contains("async fn handle_udp_session")
-            && session.contains("async fn handle_mux_session")
-            && session.contains("vless::dispatch_inbound_session")
+        !session.contains("struct VlessAcceptedSessionHandler")
+            && !session.contains("impl<S> vless::VlessInboundSessionHandler")
+            && !session.contains("async fn handle_tcp_session")
+            && !session.contains("async fn handle_udp_session")
+            && !session.contains("async fn handle_mux_session")
+            && !session.contains("vless::dispatch_inbound_session")
+            && session.contains("accepted.into_route_with_sni(sni)")
+            && session.contains("route.dispatch_with(&mut bridge).await")
+            && !session.contains(".dispatch(")
+            && session.contains("struct VlessAcceptedClientBridge")
+            && session.contains("impl<S> vless::VlessAcceptedClientRouteDispatcher")
+            && !session.contains("session.sni = sni")
+            && !session.contains("let auth = session.auth.clone()")
+            && !session.contains("vless::VlessAcceptedClientRoute::Mux")
+            && !session.contains("vless::VlessAcceptedClientRoute::Udp")
+            && !session.contains("vless::VlessAcceptedClientRoute::Tcp")
             && !session.contains("vless::classify_inbound_session(&session)")
-            && !session.contains("vless::VlessInboundSessionKind::Mux")
-            && !session.contains("vless::VlessInboundSessionKind::Udp")
-            && !session.contains("vless::VlessInboundSessionKind::Tcp")
+            && !session.contains("vless::VlessInboundSessionKind::")
             && !session.contains("session.network")
             && !session.contains("VlessInbound::is_mux_session(&session)")
+            && protocol_inbound.contains("pub enum VlessAcceptedClientRoute")
+            && protocol_inbound.contains("pub fn into_route")
+            && protocol_inbound.contains("pub fn into_route_with_sni")
+            && protocol_inbound.contains("pub async fn dispatch")
+            && protocol_inbound.contains("pub trait VlessAcceptedClientRouteDispatcher")
+            && protocol_inbound.contains("pub async fn dispatch_with")
+            && protocol_inbound.contains("session.sni = sni")
+            && protocol_inbound.contains("auth: session.auth.clone()")
             && protocol_inbound.contains("pub enum VlessInboundSessionKind")
             && protocol_inbound.contains("pub fn classify_inbound_session")
-            && protocol_inbound.contains("pub trait VlessInboundSessionHandler")
-            && protocol_inbound.contains("pub async fn dispatch_inbound_session")
+            && !protocol_inbound.contains("VlessInboundSessionHandler")
+            && !protocol_inbound.contains("dispatch_inbound_session")
             && protocol_inbound.contains("VlessInbound::is_mux_session(session)")
             && protocol_inbound.contains("VlessInboundSessionKind::Udp")
             && protocol_inbound.contains("VlessInboundSessionKind::Mux"),
-        "VLESS inbound glue should ask protocols/vless to dispatch accepted sessions"
+        "VLESS inbound glue should consume protocol-owned session classification without implementing protocol callback handlers"
     );
     assert!(
         model.contains("struct VlessInboundRequest")
@@ -2690,9 +3282,9 @@ fn vless_inbound_users_are_protocol_parsed() {
 
 #[test]
 fn hysteria2_inbound_uses_adapter_request_model() {
-    let inbound = read("src/inbound/hysteria2.rs").replace("\r\n", "\n");
-    let udp = read("src/inbound/hysteria2/udp.rs");
-    let datagram_udp = read("src/inbound/datagram_udp.rs");
+    let inbound = read("src/adapters/hysteria2/inbound/listener.rs").replace("\r\n", "\n");
+    let udp = read("src/adapters/hysteria2/inbound/listener/udp.rs");
+    let datagram_udp = read("src/runtime/datagram_udp.rs");
     let adapter = read("src/adapters/hysteria2/inbound.rs");
     let protocol_udp = fs::read_to_string(repo_root().join("protocols/hysteria2/src/udp.rs"))
         .expect("read hysteria2 protocol udp source");
@@ -2754,17 +3346,47 @@ fn hysteria2_inbound_uses_adapter_request_model() {
         );
     }
     assert!(
-        inbound.contains("profile\n            .authenticate_quic_connection(&conn, &mut auth_stream)")
-            && inbound.contains("Hysteria2Inbound.accept_tcp_stream(&mut stream).await")
-            && inbound.contains(".send_connect_ok(client)")
-            && inbound.contains(".send_connect_error(client, \"blocked\")")
-            && inbound.contains(".send_connect_error(client, \"outbound failed\")")
+        inbound.contains("profile\n            .accept_authenticated_quic_session(conn, Hysteria2Stream::new)")
+            && inbound.contains("accepted\n            .dispatch_session(Hysteria2Stream::new, &mut bridge)")
+            && !inbound.contains("accepted.accept_next_tcp_stream(Hysteria2Stream::new)")
+            && inbound.contains("Hysteria2InboundTcpAcceptor::new()")
+            && inbound.contains("impl Hysteria2AcceptedQuicDispatcher<Hysteria2Stream>")
+            && inbound.contains("dispatch_udp_session")
+            && inbound.contains("dispatch_tcp_stream")
+            && !inbound.contains("handler.acceptor.accept_stream(&mut stream).await")
+            && !inbound.contains(".accept_bi()")
+            && inbound.contains(".send_ok(client)")
+            && inbound.contains(".send_error(client, \"blocked\")")
+            && inbound.contains(".send_error(client, \"outbound failed\")")
+            && !inbound.contains("Hysteria2Inbound.accept_tcp_stream(&mut stream).await")
+            && !inbound.contains(".send_connect_ok(client)")
+            && !inbound.contains(".send_connect_error(client, \"blocked\")")
+            && !inbound.contains(".send_connect_error(client, \"outbound failed\")")
+            && !inbound.contains("let mut auth_stream = Hysteria2Stream::new")
+            && !inbound.contains("drop(auth_stream)")
             && !inbound.contains("connect_ok_response()")
             && !inbound.contains("connect_error_response(")
             && !inbound.contains("AsyncSocket::write_all")
-            && protocol_inbound.contains("pub async fn authenticate_quic_connection")
+            && protocol_inbound.contains("pub struct Hysteria2AcceptedQuicConnection")
+            && protocol_inbound.contains("pub trait Hysteria2AcceptedQuicDispatcher")
+            && protocol_inbound.contains("pub async fn accept_authenticated_quic_session")
+            && protocol_inbound.contains("pub async fn accept_next_tcp_stream")
+            && protocol_inbound.contains("pub async fn dispatch_session")
+            && protocol_inbound.contains("self.accept_next_tcp_stream(stream_factory)")
+            && protocol_inbound.contains("self.accept_udp_session()")
+            && protocol_inbound.contains("pub struct Hysteria2InboundTcpAcceptor")
+            && protocol_inbound.contains("pub async fn accept_stream")
+            && protocol_inbound.contains("pub async fn send_ok")
+            && protocol_inbound.contains("pub async fn send_error")
+            && protocol_inbound.contains("async fn accept_authenticated_quic_connection")
+            && !protocol_inbound.contains("pub async fn accept_authenticated_quic_connection")
+            && protocol_inbound.contains(".accept_bi()")
+            && protocol_inbound.contains("let mut auth_stream = stream_factory(send, recv)")
+            && protocol_inbound.contains("async fn authenticate_quic_connection")
+            && !protocol_inbound.contains("pub async fn authenticate_quic_connection")
             && protocol_inbound.contains("conn.export_keying_material")
-            && protocol_inbound.contains("pub async fn authenticate_connection")
+            && protocol_inbound.contains("async fn authenticate_connection")
+            && !protocol_inbound.contains("pub async fn authenticate_connection")
             && protocol_inbound.contains("pub async fn accept_tcp_stream")
             && protocol_inbound.contains("pub async fn send_connect_ok")
             && protocol_inbound.contains("pub async fn send_connect_error")
@@ -2781,7 +3403,7 @@ fn hysteria2_inbound_uses_adapter_request_model() {
             && !inbound.contains("async fn hysteria2_datagram_loop")
             && !inbound.contains("UdpPipe::new")
             && !inbound.contains("record_direct_udp_response_received"),
-        "Hysteria2 inbound root should keep QUIC listener/TCP stream glue while datagram relay glue lives in src/inbound/hysteria2/udp.rs"
+        "Hysteria2 inbound root should keep QUIC listener/TCP stream glue while datagram relay glue lives in src/adapters/hysteria2/inbound/listener/udp.rs"
     );
     for private_helper in [
         "build_auth_error",
@@ -2817,11 +3439,19 @@ fn hysteria2_inbound_uses_adapter_request_model() {
         );
     }
     assert!(
-        udp.contains("hysteria2::Hysteria2Inbound.udp_responder()")
+        !udp.contains("hysteria2::Hysteria2Inbound.accept_udp_session()")
+            && udp.contains("responder: hysteria2::Hysteria2InboundUdpResponder")
+            && !inbound.contains("accepted.accept_udp_session()")
+            && inbound.contains("dispatch_udp_session")
+            && protocol_inbound.contains("pub fn accept_udp_session(&self)")
+            && protocol_inbound.contains("Hysteria2Inbound.accept_udp_session()")
+            && !udp.contains("hysteria2::Hysteria2Inbound.udp_responder()")
             && !udp.contains("hysteria2::Hysteria2Inbound.udp_session()")
-            && udp.contains("impl DatagramUdpResponder<Arc<quinn::Connection>>")
-            && udp.contains("self.inner")
-            && udp.contains(".read_inbound_dispatch_from_datagram")
+            && !udp.contains("impl DatagramUdpResponder<Arc<quinn::Connection>>")
+            && !udp.contains("Hysteria2DatagramUdpResponder")
+            && !udp.contains("self.inner")
+            && !udp.contains(".read_inbound_dispatch_from_datagram")
+            && protocol_udp.contains("impl DatagramUdpResponder<Arc<quinn::Connection>>")
             && !udp.contains("pending_dispatch:")
             && !udp.contains("Hysteria2InboundUdpTrackedDispatch")
             && udp.contains("run_datagram_udp_relay")
@@ -2836,11 +3466,11 @@ fn hysteria2_inbound_uses_adapter_request_model() {
             && !udp.contains("udp_session.record_proxy_session_for_parts")
             && !udp.contains("parts.request_session_id()")
             && !udp.contains("request_session_id")
-            && udp.contains("self.inner.record_pending_dispatch_success(session_id)")
+            && !udp.contains("self.inner.record_pending_dispatch_success(session_id)")
             && !udp.contains("self.inner.record_dispatch_success(session_id, &tracked)")
             && !udp.contains("parts.record_dispatch_success")
             && !udp.contains("udp_session.record_dispatched_proxy_session")
-            && udp.contains(".send_response_for_target_proxy_session")
+            && !udp.contains(".send_response_for_target_proxy_session")
             && !udp.contains("udp_session.send_client_response_for_target_proxy_session")
             && !udp.contains("write_optional_direct_response")
             && !udp.contains("write_optional_upstream_response")
@@ -2871,7 +3501,7 @@ fn hysteria2_inbound_uses_adapter_request_model() {
             && datagram_udp.contains("UdpDispatch::new(inbound_tag)")
             && datagram_udp.contains("dispatch.poll_refs()")
             && datagram_udp.contains("upstream_udp.recv_response")
-            && datagram_udp.contains("wait_for_upstream_idle(socks5_idle)")
+            && datagram_udp.contains("wait_for_upstream_idle(upstream_idle_deadline)")
             && datagram_udp.contains("dispatch_inbound_udp_packet")
             && datagram_udp.contains("record_direct_udp_response_parts")
             && datagram_udp.contains("record_upstream_udp_response_received")
@@ -2968,13 +3598,13 @@ fn inbound_root_does_not_reexport_protocol_request_models() {
 fn protocol_inbound_roots_do_not_define_request_models() {
     for (root, model, request) in [
         (
-            "src/inbound/vless/mod.rs",
-            "src/inbound/vless/model.rs",
+            "src/adapters/vless/inbound/listener.rs",
+            "src/adapters/vless/inbound/listener/model.rs",
             "VlessInboundRequest",
         ),
         (
-            "src/inbound/vmess/mod.rs",
-            "src/inbound/vmess/model.rs",
+            "src/adapters/vmess/inbound/listener.rs",
+            "src/adapters/vmess/inbound/listener/model.rs",
             "VmessInboundRequest",
         ),
     ] {
@@ -2993,13 +3623,13 @@ fn protocol_inbound_roots_do_not_define_request_models() {
 
 #[test]
 fn vless_inbound_root_does_not_reexport_session_models() {
-    let root = read("src/inbound/vless/mod.rs");
-    let listener = read("src/inbound/vless/listener.rs");
+    let root = read("src/adapters/vless/inbound/listener.rs");
+    let listener = read("src/adapters/vless/inbound/listener/listener.rs");
 
     for forbidden in ["VlessStreamRequest", "VlessStreamTransport"] {
         assert!(
             !root.contains(forbidden),
-            "src/inbound/vless/mod.rs should expose listener entrypoints, not session model `{forbidden}`"
+            "src/adapters/vless/inbound/listener.rs should expose listener entrypoints, not session model `{forbidden}`"
         );
         assert!(
             listener.contains("use super::session::{VlessStreamRequest, VlessStreamTransport};"),
@@ -3126,17 +3756,49 @@ fn adapter_root_does_not_import_protocol_udp_request_types() {
 }
 
 #[test]
+fn proxy_does_not_reintroduce_protocol_udp_bucket() {
+    assert!(
+        !manifest_dir().join("src/protocol_udp").exists(),
+        "zero-proxy must not keep protocol UDP glue in a top-level src/protocol_udp bucket"
+    );
+
+    for path in rust_sources_under("src") {
+        let source = relative(&path);
+        let content = fs::read_to_string(&path).expect("read rust source");
+        for forbidden in ["crate::protocol_udp", "mod protocol_udp;"] {
+            assert!(
+                !content.contains(forbidden),
+                "{source} should not reference the removed protocol_udp bucket through `{forbidden}`"
+            );
+        }
+    }
+}
+
+#[test]
 fn shadowsocks_udp_root_delegates_packet_path_and_flow_building() {
     let root = read("src/adapters/shadowsocks/udp.rs");
     let packet_path = read("src/adapters/shadowsocks/udp/packet_path.rs");
     let flow = read("src/adapters/shadowsocks/udp/flow.rs");
 
-    for required in ["mod packet_path;", "mod flow;"] {
+    for required in [
+        "mod flow;",
+        "mod managed;",
+        "mod packet_path;",
+        "packet_path::carrier_descriptor",
+        "packet_path::build",
+        "packet_path::datagram_source",
+        "flow::start",
+        "managed::handler",
+    ] {
         assert!(
             root.contains(required),
-            "src/adapters/shadowsocks/udp.rs should wire `{required}` as protocol-local UDP glue"
+            "src/adapters/shadowsocks/udp.rs should delegate through local UDP bridge `{required}`"
         );
     }
+    assert!(
+        !root.contains("crate::protocol_udp"),
+        "src/adapters/shadowsocks/udp.rs should not delegate through the removed protocol_udp bucket"
+    );
     for forbidden in [
         "ShadowsocksUdpFlowConfig::new",
         "packet_path.cache_key()",
@@ -3152,18 +3814,22 @@ fn shadowsocks_udp_root_delegates_packet_path_and_flow_building() {
         );
     }
     assert!(
-        packet_path.contains("shadowsocks::udp::udp_packet_path_carrier_descriptor_from_config")
-            && packet_path.contains("shadowsocks::udp::udp_packet_path_carrier_codec_from_config")
+        root.contains("shadowsocks::udp::udp_packet_path_carrier_descriptor_from_config")
+            && root.contains("shadowsocks::udp::udp_packet_path_carrier_codec_from_config")
+            && root.contains("shadowsocks::udp::udp_packet_path_datagram_source_build_from_config")
+            && root.contains("shadowsocks::udp::udp_flow_resume_from_config")
+            && !packet_path.contains("shadowsocks::udp::udp_packet_path_carrier_descriptor_from_config")
+            && !packet_path.contains("shadowsocks::udp::udp_packet_path_carrier_codec_from_config")
             && !packet_path.contains("ShadowsocksUdpFlowConfig::new")
             && !packet_path.contains(".packet_path_spec()")
-            && packet_path.contains("udp_packet_path_carrier_descriptor_from_config")
-            && packet_path.contains("udp_packet_path_carrier_codec_from_config")
+            && !packet_path.contains("udp_packet_path_carrier_descriptor_from_config")
+            && !packet_path.contains("udp_packet_path_carrier_codec_from_config")
             && packet_path.contains("packet_path_carrier_descriptor_from_build")
             && !packet_path.contains(".into_codec()")
             && !packet_path.contains("descriptor.cache_key()")
             && !packet_path.contains("descriptor.server()")
             && !packet_path.contains("descriptor.port()")
-            && packet_path.contains("udp_packet_path_datagram_source_build_from_config")
+            && !packet_path.contains("udp_packet_path_datagram_source_build_from_config")
             && packet_path.contains("udp_datagram_source_from_build")
             && !packet_path.contains("spec.datagram_source_parts()")
             && !packet_path.contains("datagram.into_parts()")
@@ -3180,7 +3846,7 @@ fn shadowsocks_udp_root_delegates_packet_path_and_flow_building() {
             && !packet_path.contains("spec.codec()")
             && !packet_path.contains(".packet_path_cache_key()")
             && !packet_path.contains(".packet_path_codec()")
-            && flow.contains("shadowsocks::udp::udp_flow_resume_from_config")
+            && !flow.contains("shadowsocks::udp::udp_flow_resume_from_config")
             && !flow.contains("ShadowsocksUdpFlowConfig::new")
             && !flow.contains(".flow_resume()")
             && flow.contains("ManagedDatagramStart")
@@ -3197,12 +3863,25 @@ fn hysteria2_udp_root_delegates_packet_path_and_flow_building() {
     let packet_path = read("src/adapters/hysteria2/udp/packet_path.rs");
     let flow = read("src/adapters/hysteria2/udp/flow.rs");
 
-    for required in ["mod packet_path;", "mod flow;"] {
+    for required in [
+        "mod connector;",
+        "mod flow;",
+        "mod managed;",
+        "mod packet_path;",
+        "packet_path::carrier_descriptor",
+        "packet_path::build",
+        "flow::start",
+        "managed::handler",
+    ] {
         assert!(
             root.contains(required),
-            "src/adapters/hysteria2/udp.rs should wire `{required}` as protocol-local UDP glue"
+            "src/adapters/hysteria2/udp.rs should delegate through local UDP bridge `{required}`"
         );
     }
+    assert!(
+        !root.contains("crate::protocol_udp"),
+        "src/adapters/hysteria2/udp.rs should not delegate through the removed protocol_udp bucket"
+    );
     for forbidden in [
         "Hysteria2UdpFlowConfig::new",
         "packet_path.cache_key()",
@@ -3220,10 +3899,13 @@ fn hysteria2_udp_root_delegates_packet_path_and_flow_building() {
         );
     }
     assert!(
-        packet_path.contains("hysteria2::udp::udp_packet_path_carrier_descriptor_from_config")
+        root.contains("hysteria2::udp::udp_packet_path_carrier_descriptor_from_config")
+            && root.contains("hysteria2::udp::udp_packet_path_carrier_build_from_config")
+            && root.contains("hysteria2::udp::udp_flow_resume_from_config")
+            && !packet_path.contains("hysteria2::udp::udp_packet_path_carrier_descriptor_from_config")
             && !packet_path.contains("Hysteria2UdpFlowConfig::new")
             && !packet_path.contains(".packet_path_spec()")
-            && packet_path.contains("udp_packet_path_carrier_build_from_config")
+            && !packet_path.contains("udp_packet_path_carrier_build_from_config")
             && packet_path.contains("packet_path_carrier_descriptor_from_build")
             && !packet_path.contains("descriptor.cache_key()")
             && !packet_path.contains("descriptor.server()")
@@ -3239,7 +3921,7 @@ fn hysteria2_udp_root_delegates_packet_path_and_flow_building() {
             && !packet_path.contains(".packet_path_cache_key()")
             && !packet_path.contains(".packet_path_codec()")
             && packet_path.contains("connector::open_udp_packet_path_build")
-            && flow.contains("hysteria2::udp::udp_flow_resume_from_config")
+            && !flow.contains("hysteria2::udp::udp_flow_resume_from_config")
             && !flow.contains("Hysteria2UdpFlowConfig::new")
             && !flow.contains(".flow_resume()")
             && flow.contains("ManagedDatagramStart")
@@ -3322,15 +4004,62 @@ fn socks5_udp_root_delegates_packet_path_and_flow_building() {
     let root = read("src/adapters/socks5/udp.rs");
     let packet_path = read("src/adapters/socks5/udp/packet_path.rs");
     let flow = read("src/adapters/socks5/udp/flow.rs");
+    let protocol_udp = read_repo_module_tree("protocols/socks5/src/udp.rs");
 
-    for required in ["mod packet_path;", "mod flow;"] {
+    for required in [
+        "mod active;",
+        "mod flow;",
+        "mod packet_path;",
+        "mod runtime;",
+        "packet_path::carrier_descriptor",
+        "packet_path::build",
+        "flow::start",
+        "Box::<runtime::Socks5UdpRuntime>::default()",
+    ] {
         assert!(
             root.contains(required),
-            "src/adapters/socks5/udp.rs should wire `{required}` as protocol-local UDP glue"
+            "src/adapters/socks5/udp.rs should delegate through local UDP bridge `{required}`"
         );
     }
+    assert!(
+        !root.contains("mod model;")
+            && !root.contains("mod send;")
+            && !manifest_dir()
+                .join("src/adapters/socks5/udp/model.rs")
+                .exists()
+            && !manifest_dir()
+                .join("src/adapters/socks5/udp/send.rs")
+                .exists()
+            && !protocol_udp.contains("trait Socks5UdpAssociationHandle")
+            && !protocol_udp.contains("trait Socks5UdpPacketPathAssociation")
+            && !protocol_udp.contains("pub struct Socks5TrackedUdpAssociation<A>")
+            && !protocol_udp.contains("struct Socks5UdpFlowStart")
+            && !manifest_dir()
+                .join("src/adapters/socks5/udp/establish.rs")
+                .exists()
+            && !root.contains("mod establish;")
+            && !flow.contains("struct Socks5UdpFlowStart"),
+        "SOCKS5 UDP bridge should stay thin without a separate proxy establish layer while protocols/socks5 keeps protocol semantics"
+    );
+    assert!(
+        !root.contains("crate::protocol_udp"),
+        "src/adapters/socks5/udp.rs should not delegate through the removed protocol_udp bucket"
+    );
+    assert!(
+        root.contains("ResolvedLeafOutbound::Socks5")
+            && root.contains("socks5::udp::Socks5UdpFlowConfig::new")
+            && root.contains("config.packet_path_spec().carrier_descriptor()")
+            && root.contains("config.packet_path_spec().carrier_build()")
+            && root.contains("config.flow_resume()")
+            && !protocol_udp.contains("pub fn udp_packet_path_carrier_descriptor_from_config(")
+            && !protocol_udp.contains("pub fn udp_packet_path_carrier_build_from_config(")
+            && !protocol_udp.contains("pub fn udp_flow_resume_from_config("),
+        "src/adapters/socks5/udp.rs should build one protocol-owned UDP config object and delegate through its helpers"
+    );
     for forbidden in [
-        "Socks5UdpFlowConfig::new",
+        "socks5::udp::udp_packet_path_carrier_descriptor_from_config",
+        "socks5::udp::udp_packet_path_carrier_build_from_config",
+        "socks5::udp::udp_flow_resume_from_config",
         "packet_path.cache_key()",
         ".packet_path_cache_key()",
         ".packet_path_association_config()",
@@ -3342,12 +4071,33 @@ fn socks5_udp_root_delegates_packet_path_and_flow_building() {
             "src/adapters/socks5/udp.rs should be a UDP capability facade and not own `{forbidden}`"
         );
     }
+    for (source, content) in [
+        (
+            "src/adapters/socks5/udp/packet_path.rs",
+            packet_path.as_str(),
+        ),
+        ("src/adapters/socks5/udp/flow.rs", flow.as_str()),
+    ] {
+        for forbidden in [
+            "ResolvedLeafOutbound",
+            "Socks5Adapter",
+            "ProtocolSupportCapability",
+            "udp_packet_path_carrier_descriptor_from_config",
+            "udp_packet_path_carrier_build_from_config",
+            "udp_flow_resume_from_config",
+        ] {
+            assert!(
+                !content.contains(forbidden),
+                "{source} should receive adapter-built SOCKS5 UDP requests instead of owning `{forbidden}`"
+            );
+        }
+    }
     assert!(
-        packet_path.contains("socks5::udp::udp_packet_path_carrier_descriptor_from_config")
+        !packet_path.contains("socks5::udp::udp_packet_path_carrier_descriptor_from_config")
             && !packet_path.contains("Socks5UdpFlowConfig::new")
             && !packet_path.contains("packet_path.cache_key()")
             && !packet_path.contains(".packet_path_spec()")
-            && packet_path.contains("udp_packet_path_carrier_build_from_config")
+            && !packet_path.contains("udp_packet_path_carrier_build_from_config")
             && packet_path.contains("packet_path_carrier_descriptor_from_build")
             && !packet_path.contains("descriptor.cache_key()")
             && !packet_path.contains("descriptor.server()")
@@ -3360,9 +4110,13 @@ fn socks5_udp_root_delegates_packet_path_and_flow_building() {
             && !packet_path.contains(".packet_path_cache_key()")
             && !packet_path.contains("config.association_target()")
             && !packet_path.contains(".packet_path_association_config()")
-            && flow.contains("socks5::udp::udp_flow_resume_from_config")
+            && packet_path.contains("packet_path_carrier_association_target")
+            && packet_path.contains("ActiveUpstreamSocks5UdpAssociation::establish")
+            && packet_path.contains("packet_path_payload_carrier(association)")
+            && !flow.contains("socks5::udp::udp_flow_resume_from_config")
             && !flow.contains("Socks5UdpFlowConfig::new")
             && !flow.contains(".flow_resume()")
+            && !flow.contains("struct Socks5UdpFlowStart")
             && flow.contains("ManagedRelayStart")
             && flow.contains(".start_tracked_managed_relay(")
             && !flow.contains("ManagedUdpSend {")
@@ -3544,6 +4298,7 @@ fn hysteria2_tcp_udp_connect_glue_lives_in_adapter_connector() {
     let adapter = read("src/adapters/hysteria2.rs");
     let tcp = read("src/adapters/hysteria2/tcp.rs");
     let connector = read("src/adapters/hysteria2/connector.rs");
+    let udp_connector = read("src/adapters/hysteria2/udp/connector.rs");
     let managed = read("src/adapters/hysteria2/udp/managed.rs");
     let packet_path = read("src/adapters/hysteria2/udp/packet_path.rs");
     let protocol_outbound =
@@ -3571,8 +4326,10 @@ fn hysteria2_tcp_udp_connect_glue_lives_in_adapter_connector() {
             && !connector.contains("Hysteria2Outbound\n            .authenticate_connection")
             && !connector.contains("authenticate_with_password")
             && !connector.contains("export_keying_material")
-            && connector.contains("connect_raw_with_udp_profile"),
-        "Hysteria2 adapter connector should own proxy-local QUIC stream opening while protocols/hysteria2 owns auth and TCP connect framing"
+            && !connector.contains("connect_raw_with_udp_profile")
+            && udp_connector.contains("struct Hysteria2UdpConnector")
+            && udp_connector.contains("connect_raw_with_udp_profile"),
+        "Hysteria2 TCP connector stays adapter-local while UDP QUIC connector glue lives under adapters/hysteria2/udp"
     );
     assert!(
         protocol_outbound.contains("pub async fn authenticate_connection")
@@ -3817,14 +4574,18 @@ fn vless_tcp_connect_uses_request_model() {
 #[test]
 fn socks5_tcp_adapter_uses_protocol_target_model() {
     let adapter = read("src/adapters/socks5/tcp.rs");
+    let protocol_lib = fs::read_to_string(repo_root().join("protocols/socks5/src/lib.rs"))
+        .expect("read socks5 protocol lib source");
     let protocol_outbound =
         fs::read_to_string(repo_root().join("protocols/socks5/src/outbound.rs"))
             .expect("read socks5 protocol outbound source");
 
     assert!(
-        adapter.contains("socks5::tcp_outbound_profile_from_config")
+        adapter.contains("socks5::Socks5TcpConnectSpec::from_config_parts")
+            && adapter.contains("socks5::Socks5TcpOutboundProfile::from_config_parts")
             && adapter.contains(".establish_tcp_tunnel(")
-            && !adapter.contains("Socks5TcpOutboundProfile::from_config_parts")
+            && adapter.contains("connect.server()")
+            && adapter.contains("connect.port()")
             && !adapter.contains("Socks5TcpTunnelTarget::new")
             && !adapter.contains("Socks5TcpTunnelTarget {")
             && !adapter.contains("Socks5OutboundAuth")
@@ -3832,15 +4593,29 @@ fn socks5_tcp_adapter_uses_protocol_target_model() {
         "SOCKS5 TCP adapter should use a protocol-owned outbound profile and avoid constructing tunnel targets directly"
     );
     assert!(
-        protocol_outbound.contains("pub struct Socks5TcpOutboundProfile")
+        protocol_outbound.contains("pub struct Socks5TcpConnectSpec")
+            && protocol_outbound.contains("pub fn from_config_parts(")
+            && protocol_outbound.contains("pub fn server(&self) -> &str")
+            && protocol_outbound.contains("pub fn port(&self) -> u16")
+            && protocol_outbound.contains("self.profile.establish_tcp_tunnel(stream, session).await")
+            && protocol_outbound.contains("pub struct Socks5TcpOutboundProfile")
             && protocol_outbound.contains("pub fn from_config_parts")
-            && protocol_outbound.contains("pub fn tcp_outbound_profile_from_config")
             && protocol_outbound.contains("pub async fn establish_tcp_tunnel")
-            && protocol_outbound.contains("impl<'a> Socks5TcpTunnelTarget<'a>")
-            && protocol_outbound.contains("pub fn outbound_auth")
+            && protocol_outbound.contains("struct Socks5TcpTunnelTarget<'a>")
+            && !protocol_outbound.contains("pub struct Socks5TcpTunnelTarget<'a>")
+            && protocol_outbound.contains("fn outbound_auth")
+            && !protocol_outbound.contains("pub fn outbound_auth")
             && protocol_outbound.contains(".zip(password)")
-            && protocol_outbound.contains("Socks5OutboundAuth { username, password }"),
+            && protocol_outbound.contains("Socks5OutboundAuth { username, password }")
+            && !protocol_outbound.contains("pub fn tcp_connect_spec_from_config")
+            && !protocol_outbound.contains("pub fn tcp_outbound_profile_from_config"),
         "SOCKS5 protocol crate should own TCP profile, target auth construction, and tunnel establishment details"
+    );
+    assert!(
+        !protocol_lib.contains("Socks5TcpTunnelTarget")
+            && !protocol_lib.contains("tcp_connect_spec_from_config")
+            && !protocol_lib.contains("tcp_outbound_profile_from_config"),
+        "SOCKS5 crate root should not re-export the TCP tunnel target helper"
     );
 }
 
@@ -3850,6 +4625,8 @@ fn mieru_tcp_connect_glue_lives_in_adapter_tcp_module() {
     let adapter = read("src/adapters/mieru/tcp.rs");
     let protocol_outbound = fs::read_to_string(repo_root().join("protocols/mieru/src/outbound.rs"))
         .expect("read mieru protocol outbound source");
+    let protocol_tunnel = fs::read_to_string(repo_root().join("protocols/mieru/src/tunnel.rs"))
+        .expect("read mieru tunnel protocol source");
 
     assert!(
         !outbound.exists(),
@@ -3878,10 +4655,25 @@ fn mieru_tcp_connect_glue_lives_in_adapter_tcp_module() {
             && protocol_outbound.contains("pub struct MieruTcpStream")
             && protocol_outbound.contains("pub struct MieruTcpTunnelTarget")
             && protocol_outbound.contains("pub async fn establish_tcp_tunnel")
-            && protocol_outbound.contains("async fn socks5_connect")
+            && protocol_outbound.contains("super::tunnel::request_tcp_connect")
+            && protocol_outbound.contains("super::tunnel::build_udp_associate_request")
+            && protocol_outbound.contains("super::tunnel::validate_success_response")
+            && !protocol_outbound.contains("async fn socks5_connect")
+            && !protocol_outbound.contains("async fn send_udp_associate_request")
+            && !protocol_outbound.contains("async fn read_udp_associate_response")
             && protocol_outbound.contains("encrypt_client_data")
             && protocol_outbound.contains("decrypt_server_data_with_consumed"),
         "Mieru protocol crate should own TCP encrypted stream and tunneled SOCKS5 connect details"
+    );
+    assert!(
+        protocol_tunnel.contains("pub(crate) async fn accept_tunneled_session")
+            && protocol_tunnel.contains("pub(crate) async fn request_tcp_connect")
+            && protocol_tunnel.contains("pub(crate) fn build_udp_associate_request")
+            && protocol_tunnel.contains("pub(crate) fn validate_success_response")
+            && protocol_tunnel.contains("async fn read_request")
+            && protocol_tunnel.contains("async fn write_request")
+            && protocol_tunnel.contains("async fn read_success_response"),
+        "Mieru protocol crate should centralize socks5-in-tunnel TCP/UDP negotiation in a dedicated protocol-owned module"
     );
 }
 
@@ -3894,7 +4686,10 @@ fn adapter_roots_keep_inbound_runtime_details_in_inbound_modules() {
         ),
         (
             "http_connect",
-            &["run_http_connect_listener_with_bound", "bound.into_tcp()"],
+            &[
+                "listener::run_http_connect_listener_with_bound",
+                "bound.into_tcp()",
+            ],
         ),
         (
             "hysteria2",
@@ -3984,7 +4779,10 @@ fn udp_dispatch_modules_do_not_use_wildcard_parent_imports() {
 
 #[test]
 fn protocol_inbound_submodules_do_not_use_wildcard_parent_imports() {
-    for root in ["src/inbound/vless", "src/inbound/vmess"] {
+    for root in [
+        "src/adapters/vless/inbound/listener",
+        "src/adapters/vmess/inbound/listener",
+    ] {
         for path in rust_sources_under(root) {
             let source = relative(&path);
             let content = fs::read_to_string(&path).expect("read inbound protocol module");
@@ -4078,6 +4876,7 @@ fn protocol_named_inbound_modules_stay_runtime_glue_not_dispatch_or_packet_owner
 fn tcp_inbound_source_address_conversion_lives_in_platform_layer() {
     let platform = fs::read_to_string(repo_root().join("crates/platform/tokio/src/lib.rs"))
         .expect("read zero-platform-tokio source");
+    let listener_loop = read("src/runtime/listener_loop.rs");
 
     assert!(
         platform.contains("pub fn remote_ip_to_socket_addr")
@@ -4089,13 +4888,13 @@ fn tcp_inbound_source_address_conversion_lives_in_platform_layer() {
 
     for source_path in [
         "src/inbound/direct.rs",
-        "src/inbound/http_connect.rs",
-        "src/inbound/mixed.rs",
-        "src/inbound/socks5.rs",
-        "src/inbound/shadowsocks.rs",
-        "src/inbound/trojan.rs",
-        "src/inbound/mieru.rs",
-        "src/inbound/vmess/listener.rs",
+        "src/adapters/http_connect/inbound/listener.rs",
+        "src/adapters/mixed/inbound/listener.rs",
+        "src/adapters/socks5/inbound/listener.rs",
+        "src/adapters/shadowsocks/inbound/listener.rs",
+        "src/adapters/trojan/inbound/listener.rs",
+        "src/adapters/mieru/inbound/listener.rs",
+        "src/adapters/vmess/inbound/listener/listener.rs",
     ] {
         let source = read(source_path);
         assert!(
@@ -4108,22 +4907,59 @@ fn tcp_inbound_source_address_conversion_lives_in_platform_layer() {
         );
     }
 
+    assert!(
+        listener_loop.contains("zero_platform_tokio::remote_ip_to_socket_addr(remote_addr)"),
+        "neutral TCP listener loop should own accepted peer source address conversion"
+    );
+
+    let socks5 = read("src/adapters/socks5/inbound/listener.rs");
+    assert!(
+        socks5.contains("run_tcp_listener_loop")
+            && socks5.contains("source_addr: Option<std::net::SocketAddr>")
+            && !socks5.contains("zero_platform_tokio::remote_ip_to_socket_addr"),
+        "SOCKS5 inbound should consume the neutral listener-loop source address instead of converting it locally"
+    );
+
     for source_path in [
         "src/inbound/direct.rs",
-        "src/inbound/http_connect.rs",
-        "src/inbound/mixed.rs",
-        "src/inbound/socks5.rs",
-        "src/inbound/shadowsocks.rs",
-        "src/inbound/trojan.rs",
-        "src/inbound/mieru.rs",
-        "src/inbound/vmess/listener.rs",
+        "src/adapters/http_connect/inbound/listener.rs",
+        "src/adapters/mixed/inbound/listener.rs",
+        "src/adapters/mieru/inbound/listener.rs",
+        "src/adapters/shadowsocks/inbound/listener.rs",
+        "src/adapters/socks5/inbound/listener.rs",
+        "src/adapters/trojan/inbound/listener.rs",
+        "src/adapters/vless/inbound/listener/listener.rs",
+        "src/adapters/vmess/inbound/listener/listener.rs",
     ] {
         let source = read(source_path);
         assert!(
-            source.contains("zero_platform_tokio::remote_ip_to_socket_addr"),
-            "{source_path} should call the platform listener source address helper"
+            source.contains("run_tcp_listener_loop")
+                && source.contains("TcpListenerLoopRequest")
+                && !source.contains("listener.accept()")
+                && !source.contains("JoinSet")
+                && !source.contains("zero_platform_tokio::remote_ip_to_socket_addr")
+                && !source.contains("inbound listener ready")
+                && !source.contains("inbound listener stopped"),
+            "{source_path} should delegate neutral TCP listener lifecycle and source conversion to runtime/listener_loop"
         );
     }
+
+    let hysteria2 = read("src/adapters/hysteria2/inbound/listener.rs");
+    let vless_session = read("src/adapters/vless/inbound/listener/session.rs");
+    assert!(
+        hysteria2.contains("run_quic_listener_loop")
+            && hysteria2.contains("QuicListenerLoopRequest")
+            && !hysteria2.contains("quic_inbound.accept_connection()")
+            && !hysteria2.contains("inbound listener ready")
+            && !hysteria2.contains("inbound listener stopped"),
+        "Hysteria2 inbound should delegate neutral QUIC listener lifecycle to runtime/listener_loop"
+    );
+    assert!(
+        !vless_session.contains("run_vless_quic_accept_loop")
+            && !vless_session.contains("quic_inbound.accept()")
+            && vless_session.contains("handle_vless_client"),
+        "VLESS QUIC accept lifecycle should live in runtime/listener_loop, leaving vless/session.rs to handle accepted streams"
+    );
 
     for source_path in ["src/inbound/system.rs", "src/inbound/tun.rs"] {
         let source = read(source_path);
@@ -4137,6 +4973,17 @@ fn tcp_inbound_source_address_conversion_lives_in_platform_layer() {
             "{source_path} should delegate stack SocketAddress to SocketAddr conversion to zero-platform-tokio"
         );
     }
+
+    let system = read("src/inbound/system.rs");
+    assert!(
+        system.contains("run_system_tcp_stack_loop")
+            && system.contains("SystemTcpStackLoopRequest")
+            && !system.contains("tokio::select!")
+            && !system.contains("JoinSet")
+            && !system.contains("stack.accept()")
+            && !system.contains("connections.abort_all()"),
+        "system inbound should delegate neutral stack accept lifecycle to runtime/listener_loop"
+    );
 }
 
 #[test]
@@ -4149,7 +4996,10 @@ fn tcp_tls_async_socket_bridge_lives_in_transport_layer() {
         "generic tokio AsyncRead/AsyncWrite to AsyncSocket bridge should live in transport glue"
     );
 
-    for source_path in ["src/inbound/trojan.rs", "src/inbound/vmess/mod.rs"] {
+    for source_path in [
+        "src/adapters/trojan/inbound/listener.rs",
+        "src/adapters/vmess/inbound/listener/transport.rs",
+    ] {
         let source = read(source_path);
         assert!(
             source.contains("AsyncSocketStream::new")
@@ -4165,8 +5015,13 @@ fn tcp_tls_async_socket_bridge_lives_in_transport_layer() {
 #[test]
 fn vless_fallback_recording_stream_lives_in_transport_layer() {
     let transport = read("src/transport/stream.rs");
-    let vless_helpers = read("src/inbound/vless/helpers.rs");
-    let vless_session = read("src/inbound/vless/session.rs");
+    let transport_metered = read("src/transport/metered.rs");
+    let vless_helpers = read("src/adapters/vless/inbound/listener/helpers.rs");
+    let vless_listener = read("src/adapters/vless/inbound/listener/listener.rs");
+    let vless_session = read("src/adapters/vless/inbound/listener/session.rs");
+    let vless_fallback = read("src/adapters/vless/inbound/listener/fallback.rs");
+    let protocol_inbound = fs::read_to_string(repo_root().join("protocols/vless/src/inbound.rs"))
+        .expect("read vless protocol inbound source");
 
     assert!(
         transport.contains("struct RecordingStream")
@@ -4177,8 +5032,45 @@ fn vless_fallback_recording_stream_lives_in_transport_layer() {
     assert!(
         vless_session.contains("RecordingStream::new(client)")
             && vless_session.contains("use crate::transport::{")
-            && !vless_session.contains("use super::{RecordingStream"),
-        "VLESS session glue should use the transport-owned recording stream"
+            && vless_session.contains("metered.into_unrecorded_inner()")
+            && !vless_session.contains("impl<S> vless::VlessFallbackCapture")
+            && !vless_session.contains("vless::VlessFallbackReplay::new")
+            && transport_metered.contains("impl<S> vless::VlessFallbackCapture")
+            && transport_metered.contains("vless::VlessFallbackReplay::new(stream, replay_head)")
+            && transport_metered.contains("pub(crate) fn into_unrecorded_inner(self) -> S")
+            && !vless_session.contains("use super::{RecordingStream")
+            && !vless_session.contains("into_inner().into_parts()")
+            && !vless_session.contains("let (inner, head)"),
+        "VLESS session glue should use transport-owned recording stream bridges instead of unpacking the recording wrapper"
+    );
+    assert!(
+        protocol_inbound.contains("pub trait VlessFallbackCapture")
+            && protocol_inbound.contains("pub struct VlessFallbackReplay")
+            && protocol_inbound.contains("pub async fn write_replay_head")
+            && protocol_inbound.contains("pub async fn replay_to_upstream")
+            && protocol_inbound.contains("writer.write_all(&self.replay_head).await")
+            && protocol_inbound.contains("writer.write_all(&replay_head).await")
+            && vless_fallback.contains("fallback_replay.replay_to_upstream(&mut upstream).await")
+            && !vless_fallback.contains("fallback_replay.write_replay_head")
+            && !vless_fallback.contains("fallback_replay.into_stream()")
+            && !vless_fallback.contains("tokio::io::AsyncWriteExt::write_all(&mut upstream")
+            && !vless_fallback.contains("&head"),
+        "protocols/vless should own fallback replay head semantics while proxy fallback only connects and relays"
+    );
+    assert!(
+        protocol_inbound.contains("pub struct VlessFallbackAlpnPolicy")
+            && protocol_inbound.contains("pub fn fallback_alpn_matches")
+            && protocol_inbound.contains("pub fn fallback_replay_for_alpns")
+            && protocol_inbound.contains("pub enum VlessFallbackAlpnDecision")
+            && protocol_inbound.contains("VlessFallbackAlpnDecision::Replay")
+            && protocol_inbound.contains("client_alpns.into_iter().any")
+            && vless_listener.contains("vless::fallback_replay_for_alpns")
+            && vless_listener.contains("vless::VlessFallbackAlpnDecision::Replay")
+            && !vless_listener.contains("vless::fallback_alpn_matches")
+            && !vless_listener.contains("vless::VlessFallbackReplay::new")
+            && !vless_listener.contains(".and_then(|fb| fb.alpn.as_ref().zip(Some(fb)))")
+            && !vless_listener.contains(".find(|a| *a == expected)"),
+        "protocols/vless should own fallback ALPN matching and replay construction while proxy listener only selects the configured fallback target"
     );
     assert!(
         vless_helpers.contains("upgrade_vless_reality_server")
@@ -4191,7 +5083,7 @@ fn vless_fallback_recording_stream_lives_in_transport_layer() {
 
 #[test]
 fn mieru_inbound_stream_uses_protocol_codec_not_crypto_primitives() {
-    for path in rust_sources_under("src/inbound/mieru") {
+    for path in rust_sources_under("src/adapters/mieru/inbound/listener") {
         let source = relative(&path);
         let content = fs::read_to_string(&path).expect("read mieru inbound module");
 
@@ -4210,23 +5102,37 @@ fn mieru_inbound_stream_uses_protocol_codec_not_crypto_primitives() {
         }
     }
 
-    let inbound = read("src/inbound/mieru.rs");
+    let inbound = read("src/adapters/mieru/inbound/listener.rs");
     let protocol_inbound = fs::read_to_string(repo_root().join("protocols/mieru/src/inbound.rs"))
         .expect("read mieru protocol inbound source");
+    let protocol_tunnel = fs::read_to_string(repo_root().join("protocols/mieru/src/tunnel.rs"))
+        .expect("read mieru protocol tunnel source");
     assert!(
-        inbound.contains("type MieruClientStream = mieru::MieruInboundStream<TcpRelayStream>")
-            && inbound.contains("mieru::MieruInboundStream::new")
-            && inbound.contains("client.accept_tunneled_socks5_session().await")
-            && !manifest_dir().join("src/inbound/mieru/model.rs").exists(),
-        "Mieru proxy inbound should use a protocol-owned data-phase stream wrapper"
+        inbound.contains(
+            "type MieruClientStream = mieru::MieruInboundStream<MeteredStream<TcpRelayStream>>"
+        )
+            && inbound.contains(".accept_client(&self.mieru_inbound, metered)")
+            && !inbound.contains(".accept_tunneled_stream(&self.mieru_inbound, metered)")
+            && !inbound.contains("mieru::MieruInboundStream::new")
+            && !inbound.contains("client.accept_tunneled_socks5_session().await")
+            && !inbound.contains("session.apply_auth(self.profile.inbound_auth())")
+            && protocol_inbound.contains("pub async fn accept_tunneled_stream")
+            && protocol_inbound.contains("pub async fn accept_client<S>")
+            && protocol_inbound.contains("MieruInboundAcceptedSession::from_session_stream")
+            && protocol_inbound.contains("let mut client = MieruInboundStream::new(stream, accept)")
+            && protocol_inbound.contains("client.accept_tunneled_socks5_session().await")
+            && protocol_inbound.contains("session.apply_auth(self.inbound_auth())")
+            && !manifest_dir()
+                .join("src/adapters/mieru/inbound/listener/model.rs")
+                .exists(),
+        "Mieru proxy inbound should use protocol-owned tunneled stream acceptance and data-phase wrapper"
     );
     for required in [
         "pub struct MieruInboundStream",
         "impl<S> AsyncRead for MieruInboundStream<S>",
         "impl<S> AsyncWrite for MieruInboundStream<S>",
         "accept_tunneled_socks5_session",
-        "read_tunneled_socks5_request",
-        "write_tunneled_socks5_success",
+        "super::tunnel::accept_tunneled_session(self).await",
         "decrypt_client_data_with_consumed",
         "encrypt_server_data",
     ] {
@@ -4235,6 +5141,13 @@ fn mieru_inbound_stream_uses_protocol_codec_not_crypto_primitives() {
             "protocols/mieru should own Mieru inbound stream detail `{required}`"
         );
     }
+    assert!(
+        protocol_tunnel.contains("pub(crate) async fn accept_tunneled_session")
+            && protocol_tunnel.contains("async fn read_request")
+            && protocol_tunnel.contains("async fn write_success_response")
+            && protocol_tunnel.contains("enum MieruTunnelRequest"),
+        "protocols/mieru should keep tunneled SOCKS5 request parsing and success response framing in the dedicated tunnel module"
+    );
     for forbidden in [
         "MieruInboundDataCodec",
         "decrypt_client_data_with_consumed",
@@ -4253,7 +5166,7 @@ fn mieru_inbound_stream_uses_protocol_codec_not_crypto_primitives() {
 
 #[test]
 fn shadowsocks_udp_inbound_uses_protocol_codec_not_datagram_primitives() {
-    for path in rust_sources_under("src/inbound/shadowsocks") {
+    for path in rust_sources_under("src/adapters/shadowsocks/inbound/listener") {
         let source = relative(&path);
         let content = fs::read_to_string(&path).expect("read shadowsocks inbound module");
 
@@ -4271,46 +5184,49 @@ fn shadowsocks_udp_inbound_uses_protocol_codec_not_datagram_primitives() {
         }
     }
 
-    let udp = read("src/inbound/shadowsocks/udp.rs");
-    let protocol_inbound = repo_root().join("protocols/shadowsocks/src/inbound.rs");
-    let protocol_inbound =
-        fs::read_to_string(protocol_inbound).expect("read shadowsocks protocol inbound source");
+    let udp = read("src/adapters/shadowsocks/inbound/listener/udp.rs");
+    let protocol_udp = read_repo_module_tree("protocols/shadowsocks/src/udp.rs");
     let protocol_shared =
         fs::read_to_string(repo_root().join("protocols/shadowsocks/src/shared.rs"))
             .expect("read shadowsocks protocol shared source");
     let protocol_lib = fs::read_to_string(repo_root().join("protocols/shadowsocks/src/lib.rs"))
         .expect("read shadowsocks protocol lib source");
-    let inbound_packet_struct = protocol_inbound
+    let inbound_packet_struct = protocol_udp
         .split("pub struct ShadowsocksInboundUdpPacket")
         .nth(1)
         .and_then(|content| content.split("impl ShadowsocksInboundUdpPacket").next())
         .expect("Shadowsocks inbound UDP packet struct section");
-    let inbound_dispatch_struct =
-        struct_block(&protocol_inbound, "ShadowsocksInboundUdpDispatchParts");
-    let inbound_response_struct = protocol_inbound
+    let inbound_dispatch_struct = struct_block(&protocol_udp, "ShadowsocksInboundUdpDispatchParts");
+    let inbound_response_struct = protocol_udp
         .split("pub struct ShadowsocksInboundUdpResponse")
         .nth(1)
         .and_then(|content| content.split("impl ShadowsocksInboundUdpResponse").next())
         .expect("Shadowsocks inbound UDP response struct section");
     assert!(
-        udp.contains("profile.udp_responder()")
+        !udp.contains("profile.accept_udp_session_with_auth()")
+            && !udp.contains("ShadowsocksInboundProfile")
+            && udp.contains("accepted: shadowsocks::udp::ShadowsocksInboundAcceptedUdpSession")
+            && udp.contains("accepted.into_datagram_relay_parts()")
+            && !udp.contains("accepted.into_parts()")
+            && !udp.contains("profile.inbound_auth()")
+            && !udp.contains("profile.udp_responder()")
             && !udp.contains("profile.udp_session()")
-            && udp.contains("self.inner")
-            && udp.contains(".read_inbound_dispatch_from_socket_tokio")
+            && !udp.contains("self.inner")
+            && !udp.contains(".read_inbound_dispatch_from_socket_tokio")
             && !udp.contains("self.inner.decode_inbound_dispatch")
             && udp.contains("run_datagram_udp_relay")
             && !udp.contains("dispatch_inbound_udp_packet")
             && !udp.contains("request.into_dispatch_parts().into_parts()")
             && !udp.contains("pending_client_addr")
             && !udp.contains("SocketAddr")
-            && udp.contains("self.inner")
-            && udp.contains(".record_pending_dispatch_success")
+            && !udp.contains("self.inner")
+            && !udp.contains(".record_pending_dispatch_success")
             && !udp.contains("self.inner.record_dispatch_success")
             && !udp.contains("dispatch_parts.record_dispatch_success")
             && !udp.contains("udp_session.record_dispatched_client_session")
             && !udp.contains("udp_session.record_client_session")
-            && udp.contains("self.inner")
-            && udp.contains(".send_response_for_target_proxy_session_to_client_tokio")
+            && !udp.contains("self.inner")
+            && !udp.contains(".send_response_for_target_proxy_session_to_client_tokio")
             && !udp.contains("write_optional_direct_response")
             && !udp.contains("write_optional_chain_response")
             && !udp.contains("ShadowsocksInboundUdpClientResponse::new")
@@ -4332,46 +5248,48 @@ fn shadowsocks_udp_inbound_uses_protocol_codec_not_datagram_primitives() {
             && !udp.contains("ShadowsocksInboundUdpCodec")
             && !udp.contains(".encode_response(")
             && !udp.contains("udp_session.encode_response_to_client")
-            && protocol_inbound.contains("struct ShadowsocksInboundUdpCodec")
-            && protocol_inbound.contains("struct ShadowsocksInboundUdpSession")
-            && protocol_inbound.contains("struct ShadowsocksInboundUdpResponder")
-            && protocol_inbound.contains("impl ShadowsocksInboundUdpResponder")
-            && protocol_inbound.contains("pending_client: Option<std::net::SocketAddr>")
-            && protocol_inbound.contains("fn decode_request")
-            && protocol_inbound.contains("fn decode_dispatch_parts")
-            && protocol_inbound.contains("fn decode_inbound_dispatch")
-            && protocol_inbound.contains("struct ShadowsocksInboundUdpResponse")
-            && protocol_inbound.contains("struct ShadowsocksInboundUdpDispatchParts")
-            && protocol_inbound.contains("fn into_dispatch_parts")
-            && protocol_inbound.contains("fn into_inbound_dispatch")
-            && protocol_inbound.contains("fn pipe_parts")
-            && protocol_inbound.contains("fn into_parts(self) -> (Address, u16, Vec<u8>, Option<u64>)")
+            && protocol_udp.contains("struct ShadowsocksInboundUdpCodec")
+            && protocol_udp.contains("struct ShadowsocksInboundUdpSession")
+            && protocol_udp.contains("struct ShadowsocksInboundUdpResponder")
+            && protocol_udp.contains("impl ShadowsocksInboundUdpResponder")
+            && protocol_udp
+                .contains("impl DatagramUdpResponder<std::sync::Arc<tokio::net::UdpSocket>>")
+            && protocol_udp.contains("pending_client: Option<std::net::SocketAddr>")
+            && protocol_udp.contains("fn decode_request")
+            && protocol_udp.contains("fn decode_dispatch_parts")
+            && protocol_udp.contains("fn decode_inbound_dispatch")
+            && protocol_udp.contains("struct ShadowsocksInboundUdpResponse")
+            && protocol_udp.contains("struct ShadowsocksInboundUdpDispatchParts")
+            && protocol_udp.contains("fn into_dispatch_parts")
+            && protocol_udp.contains("fn into_inbound_dispatch")
+            && protocol_udp.contains("fn pipe_parts")
+            && protocol_udp.contains("fn into_parts(self) -> (Address, u16, Vec<u8>, Option<u64>)")
             && !inbound_dispatch_struct.contains("pub target: Address")
             && !inbound_dispatch_struct.contains("pub port: u16")
             && !inbound_dispatch_struct.contains("pub payload: Vec<u8>")
             && !inbound_dispatch_struct.contains("pub client_session_id: Option<u64>")
-            && protocol_inbound.contains("struct ShadowsocksInboundUdpResponseTarget")
-            && protocol_inbound.contains("fn encode_response_to_client")
-            && protocol_inbound.contains("fn response_frame")
-            && protocol_inbound.contains("fn response_frame_for_proxy_session")
-            && protocol_inbound.contains("fn response_datagram_for_proxy_session")
-            && protocol_inbound.contains("fn send_response_to_client_tokio")
-            && protocol_inbound.contains("fn send_proxy_session_response_to_client_tokio")
-            && protocol_inbound.contains("fn send_client_response_to_client_tokio")
-            && protocol_inbound.contains("fn send_proxy_session_client_response_to_client_tokio")
-            && protocol_inbound.contains("fn send_client_response_for_proxy_session_to_client_tokio")
-            && protocol_inbound.contains("fn send_response_for_target_proxy_session_to_client_tokio")
-            && protocol_inbound.contains("fn read_inbound_dispatch_from_socket_tokio")
-            && protocol_inbound.contains("fn record_pending_dispatch_success")
-            && !protocol_inbound.contains("fn send_response_for_proxy_session_to_client_tokio")
-            && !protocol_inbound.contains("fn send_response_for_proxy_session_to_sender_tokio")
-            && protocol_inbound.contains("struct ShadowsocksInboundUdpResponseDatagram")
-            && protocol_inbound.contains("proxy_sessions:")
-            && protocol_inbound.contains("proxy_clients:")
-            && protocol_inbound.contains("fn record_proxy_session")
-            && protocol_inbound.contains("fn record_client_session")
-            && protocol_inbound.contains("pub fn record_dispatch_success")
-            && protocol_inbound.contains("fn response_target_for_proxy_session")
+            && protocol_udp.contains("struct ShadowsocksInboundUdpResponseTarget")
+            && protocol_udp.contains("fn encode_response_to_client")
+            && protocol_udp.contains("fn response_frame")
+            && protocol_udp.contains("fn response_frame_for_proxy_session")
+            && protocol_udp.contains("fn response_datagram_for_proxy_session")
+            && protocol_udp.contains("fn send_response_to_client_tokio")
+            && protocol_udp.contains("fn send_proxy_session_response_to_client_tokio")
+            && protocol_udp.contains("fn send_client_response_to_client_tokio")
+            && protocol_udp.contains("fn send_proxy_session_client_response_to_client_tokio")
+            && protocol_udp.contains("fn send_client_response_for_proxy_session_to_client_tokio")
+            && protocol_udp.contains("fn send_response_for_target_proxy_session_to_client_tokio")
+            && protocol_udp.contains("fn read_inbound_dispatch_from_socket_tokio")
+            && protocol_udp.contains("fn record_pending_dispatch_success")
+            && !protocol_udp.contains("fn send_response_for_proxy_session_to_client_tokio")
+            && !protocol_udp.contains("fn send_response_for_proxy_session_to_sender_tokio")
+            && protocol_udp.contains("struct ShadowsocksInboundUdpResponseDatagram")
+            && protocol_udp.contains("proxy_sessions:")
+            && protocol_udp.contains("proxy_clients:")
+            && protocol_udp.contains("fn record_proxy_session")
+            && protocol_udp.contains("fn record_client_session")
+            && protocol_udp.contains("pub fn record_dispatch_success")
+            && protocol_udp.contains("fn response_target_for_proxy_session")
             && !inbound_packet_struct.contains("pub target: Address")
             && !inbound_packet_struct.contains("pub payload: Vec<u8>")
             && !inbound_packet_struct.contains("pub client_session_id: Option<u64>")
@@ -4486,8 +5404,12 @@ fn generic_udp_dispatch_does_not_encode_protocol_packets_directly() {
 
 #[test]
 fn http_connect_redirect_response_framing_stays_in_protocol_crate() {
-    let inbound = read("src/inbound/http_connect.rs");
-    let mixed = read("src/inbound/mixed.rs");
+    assert!(
+        !manifest_dir().join("src/inbound/http_connect.rs").exists(),
+        "HTTP CONNECT protocol inbound glue should not live under src/inbound"
+    );
+    let inbound = read("src/adapters/http_connect/inbound/listener.rs");
+    let mixed = read("src/adapters/mixed/inbound/listener.rs");
     let redirect = read("src/runtime/http_redirect.rs");
     let protocol_inbound =
         fs::read_to_string(repo_root().join("protocols/http-connect/src/inbound.rs"))
@@ -4515,18 +5437,27 @@ fn http_connect_redirect_response_framing_stays_in_protocol_crate() {
         inbound.contains(".send_success_response(")
             && inbound.contains(".send_blocked_response(")
             && inbound.contains(".send_upstream_failure_response(")
-            && inbound.contains(".send_method_not_allowed_response(")
-            && inbound.contains(".send_bad_request_response(")
-            && mixed.contains(".send_method_not_allowed_response(")
-            && mixed.contains(".send_bad_request_response(")
+            && inbound.contains(".send_accept_error_response(")
+            && mixed.contains(".send_accept_error_response(")
+            && !inbound.contains(".send_method_not_allowed_response(")
+            && !inbound.contains(".send_bad_request_response(")
+            && !mixed.contains(".send_method_not_allowed_response(")
+            && !mixed.contains(".send_bad_request_response(")
+            && !inbound.contains("CoreError::Unsupported")
+            && !inbound.contains("CoreError::Protocol")
+            && !mixed.contains("CoreError::Unsupported")
+            && !mixed.contains("CoreError::Protocol")
             && !inbound.contains("HttpConnectResponse")
             && !mixed.contains("HttpConnectResponse"),
-        "HTTP CONNECT inbound glue should use protocol-owned semantic response methods instead of selecting concrete response frames"
+        "HTTP CONNECT inbound glue should ask the protocol crate to handle accept-error responses instead of selecting concrete response frames"
     );
     assert!(
         protocol_inbound.contains("pub async fn send_success_response")
             && protocol_inbound.contains("pub async fn send_bad_request_response")
             && protocol_inbound.contains("pub async fn send_method_not_allowed_response")
+            && protocol_inbound.contains("pub async fn send_accept_error_response")
+            && protocol_inbound.contains("Error::Unsupported(_)")
+            && protocol_inbound.contains("Error::Protocol(_)")
             && protocol_inbound.contains("pub async fn send_blocked_response")
             && protocol_inbound.contains("pub async fn send_upstream_failure_response")
             && protocol_inbound.contains("HttpConnectResponse::ConnectionEstablished")
@@ -4610,22 +5541,30 @@ fn socks5_udp_association_runtime_state_stays_out_of_outbound_module() {
     let outbound = manifest_dir().join("src/outbound/socks5.rs");
     let adapter = read("src/adapters/socks5/udp.rs");
     let active = read("src/adapters/socks5/udp/active.rs");
-    let establish = read("src/adapters/socks5/udp/establish.rs");
-    let model = read("src/adapters/socks5/udp/model.rs");
-    let protocol_udp = fs::read_to_string(repo_root().join("protocols/socks5/src/udp.rs"))
-        .expect("read socks5 udp");
+    let flow = read("src/adapters/socks5/udp/flow.rs");
+    let model = manifest_dir().join("src/adapters/socks5/udp/model.rs");
+    let protocol_udp = read_repo_module_tree("protocols/socks5/src/udp.rs");
     let packet_path_source = read("src/adapters/socks5/udp/packet_path.rs");
-    let send_source = read("src/adapters/socks5/udp/send.rs");
     let send = manifest_dir().join("src/adapters/socks5/udp/send.rs");
     let runtime_source = read("src/adapters/socks5/udp/runtime.rs");
     let runtime = manifest_dir().join("src/adapters/socks5/udp/runtime.rs");
+    let registered_upstream = read("src/runtime/udp_flow/registered/upstream.rs");
     let packet_path = manifest_dir().join("src/adapters/socks5/udp/packet_path.rs");
+    let establish = manifest_dir().join("src/adapters/socks5/udp/establish.rs");
     let old_protocol_runtime = manifest_dir().join("src/protocol_runtime/socks5_udp.rs");
     let old_protocol_runtime_dir = manifest_dir().join("src/protocol_runtime/socks5_udp");
 
     assert!(
         !outbound.exists(),
         "SOCKS5 should not need a protocol-named proxy outbound module; TCP glue lives in adapters/socks5/tcp.rs and protocol handshake lives in protocols/socks5"
+    );
+    assert!(
+        !model.exists(),
+        "SOCKS5 UDP association model traits should live in protocols/socks5/src/udp.rs, not proxy adapter model.rs"
+    );
+    assert!(
+        !send.exists(),
+        "SOCKS5 UDP send request model should live in protocols/socks5/src/udp.rs, not proxy adapter send.rs"
     );
 
     for forbidden in [
@@ -4646,6 +5585,7 @@ fn socks5_udp_association_runtime_state_stays_out_of_outbound_module() {
         active.contains("struct ActiveUpstreamSocks5UdpAssociation")
             && active.contains("Socks5EstablishedUdpAssociation<TokioSocket, TokioDatagramSocket>")
             && active.contains("Socks5EstablishedUdpAssociation::from_relay_socket_address")
+            && active.contains("crate::runtime::udp_helpers::resolve_udp_peer_endpoint(")
             && active.contains("socket_addr_to_socket_address(relay_addr)")
             && !active.contains("fn socket_address_from_std")
             && !active.contains("fn ip_address_from_std")
@@ -4653,75 +5593,74 @@ fn socks5_udp_association_runtime_state_stays_out_of_outbound_module() {
             && !active.contains("IpAddress::V4")
             && !active.contains("IpAddress::V6")
             && !active.contains("socket_addr_to_ip(relay_addr)")
+            && !active.contains(".direct_connector()\n            .resolve_address(")
+            && !active.contains("TokioDatagramSocket::bind_addr(")
             && !active.contains("Socks5UdpAssociation::from_relay_endpoint")
-            && active.contains("impl Socks5UdpAssociationHandle for ActiveUpstreamSocks5UdpAssociation")
-            && active.contains("impl Socks5UdpPacketPathAssociation for ActiveUpstreamSocks5UdpAssociation")
-            && establish.contains("trait Socks5UdpAssociationEstablisher")
-            && establish.contains("struct DefaultSocks5UdpAssociationEstablisher")
-            && establish.contains("fn default_establisher()")
-            && establish.contains("fn establish_shared_packet_path_association")
-            && establish.contains("fn establish_shared_packet_path_carrier")
-            && establish.contains("packet_path_carrier_association_target")
-            && !establish.contains("carrier.into_association_target()")
-            && establish.contains("ActiveUpstreamSocks5UdpAssociation::establish")
-            && runtime_source.contains("Box<dyn Socks5UdpAssociationEstablisher>")
-            && runtime_source.contains("establish::default_establisher()")
-            && !runtime_source.contains("DefaultSocks5UdpAssociationEstablisher")
-            && packet_path_source.contains("establish_shared_packet_path_carrier")
+            && active.contains("UpstreamAssociationCloseReason")
+            && active.contains("UpstreamAssociationTransport<")
+            && active.contains("let (relay_address, relay_port) = target.establish_with_control(&mut control).await?")
+            && !active.contains("impl Socks5UdpAssociationHandle for ActiveUpstreamSocks5UdpAssociation")
+            && !active.contains("impl Socks5UdpPacketPathAssociation for ActiveUpstreamSocks5UdpAssociation")
+            && !establish.exists()
+            && runtime_source.contains(".runtime")
+            && runtime_source.contains(".send_packet(")
+            && packet_path_source.contains("packet_path_carrier_association_target")
+            && packet_path_source.contains("ActiveUpstreamSocks5UdpAssociation::establish(proxy, target, 0)")
+            && packet_path_source.contains("packet_path_payload_carrier(association)")
+            && !packet_path_source.contains("establish_shared_packet_path_carrier")
             && !packet_path_source.contains("establish_shared_packet_path_association")
             && !packet_path_source.contains("into_association_target()")
-            && runtime_source.contains("association.recv_response_parts(buf).await?")
-            && model.contains("fn recv_response_parts(")
+            && registered_upstream.contains("async fn ensure_association")
+            && registered_upstream.contains("A::establish(proxy, association.clone(), session_id).await")
+            && registered_upstream.contains("association.close(UpstreamAssociationCloseReason::Closed);")
+            && registered_upstream.contains("association.close(UpstreamAssociationCloseReason::Dropped);")
+            && registered_upstream.contains("association.recv_response_parts(buf).await?")
+            && registered_upstream.contains("self.upstream.insert(association, a)")
             && active.contains(".recv_response_parts(buf)")
-            && protocol_udp.contains("pub async fn recv_response_parts")
-            && !runtime_source.contains("response.into_parts()")
+            && !registered_upstream.contains("response.into_parts()")
             && !runtime_source.contains("upstream_response_from_socks5")
             && !runtime_source.contains("Socks5InboundUdpResponse")
             && !runtime_source.contains("Socks5Inbound")
-            && !runtime_source.contains("decode_response_parts")
-            && !runtime_source.contains("response.target().clone()")
-            && !runtime_source.contains("response.payload().to_vec()")
-            && runtime_source.contains("struct TrackedSocks5UdpAssociation")
-            && runtime_source.contains("let target = association.identity()")
-            && runtime_source.contains("let record = target.lifecycle_record()")
-            && runtime_source.contains("let record = assoc.lifecycle_record()")
-            && runtime_source.contains("TrackedSocks5UdpAssociation::new(target, a)")
-            && runtime_source.contains("!a.identity().matches(&target)")
+            && !registered_upstream.contains("decode_response_parts")
+            && !registered_upstream.contains("response.target().clone()")
+            && !registered_upstream.contains("response.payload().to_vec()")
+            && !protocol_udp.contains("pub struct Socks5TrackedUdpAssociation<A>")
+            && !protocol_udp.contains("pub struct Socks5TrackedUdpAssociationState<A>")
+            && registered_upstream.contains("!self.upstream.matches_target(&association)")
+            && registered_upstream.contains("let (outbound_tag, server, port) = association.log_parts()")
+            && registered_upstream.contains("let (record, association) = assoc.into_parts()")
+            && registered_upstream.contains("association.recv_response_parts(buf).await?")
             && !runtime_source.contains("Socks5UdpAssociationSnapshot")
             && !runtime_source.contains("Socks5UdpAssociationTargetSnapshot")
-            && !runtime_source.contains(".upstream_endpoint()")
-            && !runtime_source.contains("association.outbound_tag()")
-            && !runtime_source.contains("association.server()")
-            && !runtime_source.contains("association.port()")
-            && !runtime_source.contains("target.server()")
-            && !runtime_source.contains("target.port()")
-            && !runtime_source.contains("active.server()")
-            && !runtime_source.contains("active.port()")
-            && !packet_path_source.contains("DefaultSocks5UdpAssociationEstablisher")
-            && !runtime_source.contains("use super::active::ActiveUpstreamSocks5UdpAssociation")
-            && !packet_path_source.contains("use super::active::ActiveUpstreamSocks5UdpAssociation")
+            && !registered_upstream.contains(".upstream_endpoint()")
+            && runtime_source.contains("into_log_parts")
+            && !registered_upstream.contains("active.server()")
+            && !registered_upstream.contains("active.port()")
             && !active.contains("Socks5UdpAssociation::new")
             && !active.contains("Socks5UdpAssociationTarget::new")
             && !active.contains("Socks5OwnedUdpAssociationConfig")
             && !active.contains("Socks5UdpRelay,")
             && !active.contains("Socks5UdpRelayEndpoint")
-            && active.contains("socks5::udp::establish_udp_relay_with_control")
+            && !active.contains("socks5::udp::establish_udp_relay_with_control")
             && !active.contains("_control:")
             && !active.contains("relay:")
             && !active.contains("Socks5UdpRelayTarget")
             && !active.contains("Socks5OutboundAuth")
-            && !active.contains(".establish_udp_relay("),
-        "SOCKS5 UDP active association wrapper should store the protocol-owned association handle behind narrow proxy traits"
+            && !active.contains(".establish_udp_relay(")
+            && !active.contains("relay_target.address")
+            && !active.contains("relay_target.port")
+            && active.contains("let server = target.server().to_owned();")
+            && active.contains("let port = target.port();")
+            && active.contains("association: Socks5EstablishedUdpAssociation<TokioSocket, TokioDatagramSocket>,"),
+        "SOCKS5 UDP active association wrapper should stay as thin concrete bridge glue over protocol-owned association semantics"
     );
     for source in [
         ("src/adapters/socks5/udp.rs", adapter.as_str()),
         ("src/adapters/socks5/udp/active.rs", active.as_str()),
-        ("src/adapters/socks5/udp/model.rs", model.as_str()),
         (
             "src/adapters/socks5/udp/packet_path.rs",
             packet_path_source.as_str(),
         ),
-        ("src/adapters/socks5/udp/send.rs", send_source.as_str()),
     ] {
         for forbidden in [
             "Socks5OutboundAuth",
@@ -4739,67 +5678,70 @@ fn socks5_udp_association_runtime_state_stays_out_of_outbound_module() {
         }
     }
     assert!(
-        model.contains("enum UpstreamAssociationCloseReason")
-            && !model
-                .lines()
-                .any(|line| line.trim() == "pub(super) struct Socks5UdpAssociation {")
-            && model.contains("trait Socks5UdpAssociationHandle")
-            && !model.contains("fn identity(&self)")
-            && !model.contains("fn outbound_tag(&self)")
-            && !model.contains("fn upstream_endpoint(&self)")
-            && !model.contains("struct Socks5UdpAssociationSnapshot")
-            && !model.contains("fn from_association(association: &dyn Socks5UdpAssociationHandle)")
-            && !model.contains("struct Socks5UdpAssociationTargetSnapshot")
-            && !model.contains("fn from_target(target: &socks5::udp::Socks5UdpAssociationTarget)")
-            && !model.contains("association.upstream_endpoint()")
-            && !model.contains("target.outbound_tag().to_owned()")
-            && !model.contains("target.server().to_owned()")
-            && !model.contains("target.port()")
-            && model.contains("type BoxedSocks5UdpAssociation")
-            && model.contains("trait Socks5UdpPacketPathAssociation")
-            && model.contains("type SharedSocks5UdpPacketPathAssociation")
+        !model.exists()
+            && !establish.exists()
+            && !flow.contains("struct Socks5UdpFlowStart")
+            && !runtime_source.contains("struct TrackedSocks5UdpAssociation")
+            && !runtime_source.contains("struct Socks5UdpAssociationIdentity")
+            && !runtime_source.contains("struct Socks5UdpAssociationLifecycleRecord")
+            && runtime_source.contains("type Socks5UpstreamAssociationRuntime = UpstreamAssociationRuntime<")
             && protocol_udp.contains("struct Socks5UdpAssociationTarget")
-            && protocol_udp.contains("struct Socks5UdpAssociationIdentity")
-            && protocol_udp.contains("struct Socks5UdpAssociationLifecycleRecord")
-            && protocol_udp.contains("struct Socks5UdpAssociationEndpoint")
-            && protocol_udp.contains("pub fn identity(&self) -> Socks5UdpAssociationIdentity")
-            && protocol_udp.contains("pub fn lifecycle_record(&self) -> Socks5UdpAssociationLifecycleRecord")
-            && protocol_udp.contains("pub fn connect_endpoint(&self) -> Socks5UdpAssociationEndpoint")
             && protocol_udp.contains("pub fn from_relay_socket_address")
-            && protocol_udp.contains("pub fn identity(&self) -> Socks5UdpAssociationIdentity")
-            && protocol_udp.contains("pub fn matches(&self, other: &Self) -> bool")
-            && active.contains("target.connect_endpoint().into_parts()")
-            && !active.contains("self.association.identity()")
-            && !active.contains("self.association.outbound_tag()")
-            && !active.contains("target.server()")
-            && !active.contains("target.port()")
             && protocol_udp.contains("struct Socks5EstablishedUdpAssociation")
+            && !protocol_udp.contains("pub struct Socks5TrackedUdpAssociation<A>")
+            && !protocol_udp.contains("pub struct Socks5TrackedUdpAssociationState<A>")
             && protocol_udp.contains("outbound_tag: alloc::string::String")
             && protocol_udp.contains("packet_path_carrier_association_target")
-            && protocol_udp.contains("pub fn matches(&self, outbound_tag: &str, server: &str, port: u16) -> bool"),
-        "SOCKS5 UDP association handles should live under adapters/socks5/udp/model.rs while protocol association targets stay in protocols/socks5"
+            && protocol_udp.contains("pub async fn establish_with_control<S>(")
+            && protocol_udp.contains("pub fn log_parts(&self) -> (&str, &str, u16)")
+            && protocol_udp.contains("pub fn into_log_parts(self) -> (alloc::string::String, alloc::string::String, u16)")
+            && protocol_udp.contains("pub fn matches(&self, outbound_tag: &str, server: &str, port: u16) -> bool")
+            && !protocol_udp.contains("pub struct Socks5UdpAssociationConfig")
+            && !protocol_udp.contains("pub struct Socks5OwnedUdpAssociationConfig")
+            && !protocol_udp.contains("pub struct Socks5UdpRelayTargetAddress")
+            && !protocol_udp.contains("pub async fn establish_udp_relay_with_control")
+            && !protocol_udp.contains("pub fn association_config(&self)")
+            && !protocol_udp.contains("trait Socks5UdpAssociationHandle")
+            && !protocol_udp.contains("trait Socks5UdpPacketPathAssociation")
+            && !protocol_udp.contains("struct Socks5UdpAssociationIdentity")
+            && !protocol_udp.contains("struct Socks5UdpAssociationLifecycleRecord")
+            && !protocol_udp.contains("struct Socks5UdpAssociationEndpoint"),
+        "SOCKS5 UDP protocol target/association semantics should stay in protocols/socks5 while proxy runtime keeps only lifecycle tracking"
     );
     assert!(
-        !send_source.contains("send_socks5_udp_packet")
-            && !send_source.contains("ensure_socks5_udp_association")
-            && !send_source.contains("runtime.upstream")
-            && !send_source.contains("runtime.idle_deadline")
-            && runtime_source.contains("pub(super) async fn send_packet")
-            && runtime_source.contains("async fn ensure_association")
-            && runtime_source.contains("fn drop_after_send_error")
-            && runtime_source.contains("upstream: Option<TrackedSocks5UdpAssociation>")
-            && runtime_source.contains("association: BoxedSocks5UdpAssociation")
-            && !runtime_source.contains("Option<ActiveUpstreamSocks5UdpAssociation>")
-            && !runtime_source.contains("-> Option<ActiveUpstreamSocks5UdpAssociation>"),
-        "SOCKS5 UDP upstream association lifecycle should be owned by runtime.rs behind a neutral association handle"
+        !send.exists()
+            && !runtime_source.contains("pub(super) async fn send_packet")
+            && !runtime_source.contains("async fn ensure_association")
+            && !runtime_source.contains("fn drop_after_send_error")
+            && runtime_source.contains("runtime: Socks5UpstreamAssociationRuntime")
+            && runtime_source.contains(
+                "type Socks5UpstreamAssociationRuntime = UpstreamAssociationRuntime<\n    socks5::udp::Socks5UdpAssociationTarget,\n    ActiveUpstreamSocks5UdpAssociation,\n>;"
+            )
+            && runtime_source.contains(".send_packet(")
+            && runtime_source.contains("self.runtime.recv_upstream_response(buf).await")
+            && runtime_source.contains("self.runtime.upstream_outbound_tag()")
+            && runtime_source.contains(".close_dropped()")
+            && runtime_source.contains(".close_idle()")
+            && runtime_source.contains("self.runtime.close_all_upstreams()")
+            && registered_upstream.contains("pub(crate) struct UpstreamAssociationRuntime<")
+            && registered_upstream.contains("pub(crate) trait UpstreamAssociationTarget")
+            && registered_upstream.contains("pub(crate) trait UpstreamAssociationTransport")
+            && !runtime_source.contains("association: BoxedSocks5UdpAssociation"),
+        "SOCKS5 UDP upstream association lifecycle should be delegated into the registered runtime helper, leaving the adapter runtime as a thin bridge"
     );
     assert!(
         !packet_path_source.contains("socks5::parse_udp_packet")
             && !packet_path_source.contains("socks5::decode_udp_associate_response")
-            && packet_path_source.contains("SharedSocks5UdpPacketPathAssociation")
-            && !packet_path_source.contains("Arc<ActiveUpstreamSocks5UdpAssociation>")
-            && packet_path_source.contains(".recv_payload(buf).await"),
-        "SOCKS5 packet-path carrier should use a neutral association handle and delegate protocol response decoding to protocols/socks5"
+            && packet_path_source.contains("packet_path_payload_carrier(association)")
+            && !packet_path_source.contains("SharedSocks5UdpPacketPathAssociation")
+            && !packet_path_source.contains("struct Socks5PacketPath")
+            && active.contains("impl crate::runtime::udp_flow::packet_path::PacketPathPayloadTransport")
+            && active.contains("ActiveUpstreamSocks5UdpAssociation::recv_payload(self, buf).await")
+            && read("src/runtime/udp_flow/packet_path.rs")
+                .contains("pub(crate) trait PacketPathPayloadTransport")
+            && read("src/runtime/udp_flow/packet_path.rs")
+                .contains("pub(crate) fn packet_path_payload_carrier("),
+        "SOCKS5 packet-path carrier should use the generic runtime payload carrier wrapper over the concrete bridge association"
     );
     assert!(
         !adapter.contains("Socks5UdpPacketSend")
@@ -4807,8 +5749,8 @@ fn socks5_udp_association_runtime_state_stays_out_of_outbound_module() {
         "SOCKS5 UDP adapter facade should not expose packet-send request models"
     );
     assert!(
-        send.exists() && runtime.exists() && packet_path.exists(),
-        "SOCKS5 UDP runtime should be split into send.rs, runtime.rs, and packet_path.rs"
+        !send.exists() && runtime.exists() && packet_path.exists(),
+        "SOCKS5 UDP proxy bridge should keep runtime.rs and packet_path.rs but not a protocol-owned send.rs model"
     );
     assert!(
         !old_protocol_runtime.exists() && !old_protocol_runtime_dir.exists(),
@@ -5688,8 +6630,7 @@ fn vless_vmess_udp_packet_models_do_not_expose_raw_fields() {
         .expect("read protocols/vless/src/shared.rs");
     let vmess_udp = fs::read_to_string(repo_root().join("protocols/vmess/src/udp.rs"))
         .expect("read protocols/vmess/src/udp.rs");
-    let socks5_shared = fs::read_to_string(repo_root().join("protocols/socks5/src/shared.rs"))
-        .expect("read protocols/socks5/src/shared.rs");
+    let socks5_udp = read_repo_module_tree("protocols/socks5/src/udp.rs");
 
     for (source_name, source, struct_name) in [
         (
@@ -5718,8 +6659,8 @@ fn vless_vmess_udp_packet_models_do_not_expose_raw_fields() {
             "VmessInboundUdpPayload",
         ),
         (
-            "protocols/socks5/src/shared.rs",
-            socks5_shared.as_str(),
+            "protocols/socks5/src/udp.rs",
+            socks5_udp.as_str(),
             "Socks5UdpPacket",
         ),
     ] {
@@ -5754,8 +6695,7 @@ fn protocol_udp_packet_models_do_not_expose_raw_fields() {
     let shadowsocks_outbound =
         fs::read_to_string(repo_root().join("protocols/shadowsocks/src/outbound.rs"))
             .expect("read protocols/shadowsocks/src/outbound.rs");
-    let mieru_udp = fs::read_to_string(repo_root().join("protocols/mieru/src/udp.rs"))
-        .expect("read protocols/mieru/src/udp.rs");
+    let mieru_udp = read_repo_module_tree("protocols/mieru/src/udp.rs");
     let mieru_outbound = fs::read_to_string(repo_root().join("protocols/mieru/src/outbound.rs"))
         .expect("read protocols/mieru/src/outbound.rs");
 
@@ -6346,10 +7286,10 @@ fn h2_udp_stream_pump_uses_protocol_flow_resume_boundary() {
 
 #[test]
 fn inbound_vmess_mux_task_models_do_not_live_in_proxy_model() {
-    let root = read("src/inbound/vmess/mux.rs");
-    let mux_udp = read("src/inbound/vmess/mux_udp.rs");
-    let mux_tcp = read("src/inbound/mux_tcp.rs");
-    let model = read("src/inbound/vmess/model.rs");
+    let root = read("src/adapters/vmess/inbound/listener/mux.rs");
+    let mux_udp = read("src/adapters/vmess/inbound/listener/mux_udp.rs");
+    let mux_tcp = read("src/runtime/mux_tcp.rs");
+    let model = read("src/adapters/vmess/inbound/listener/model.rs");
 
     for forbidden in [
         "struct VmessMuxTcpStreamTask",
@@ -6372,6 +7312,36 @@ fn inbound_vmess_mux_task_models_do_not_live_in_proxy_model() {
             "inbound/vmess/model.rs should only keep inbound request models, not MUX runtime task fields `{forbidden}`"
         );
     }
+    let protocol_mux = fs::read_to_string(repo_root().join("protocols/vmess/src/mux.rs"))
+        .expect("read protocols/vmess/src/mux.rs");
+    let handler_section = root
+        .split("impl Proxy {")
+        .next()
+        .expect("VMess mux handler section");
+    assert!(
+        handler_section.contains(".dispatch_next_opened_route(self.reader, &mut bridge)")
+            && !handler_section.contains(".next_opened_route(self.reader)")
+            && !handler_section.contains("route.dispatch_with(&mut bridge).await")
+            && handler_section.contains("VmessMuxOpenedRouteBridge")
+            && handler_section.contains("impl vmess::mux::VmessInboundMuxOpenedRouteDispatcher")
+            && !handler_section.contains("VmessInboundMuxOpenedRoute::Tcp")
+            && !handler_section.contains("VmessInboundMuxOpenedRoute::Udp")
+            && !handler_section.contains("opened.into_route")
+            && !handler_section.contains("opened: vmess::mux::VmessInboundMuxTcpOpenedStream")
+            && !handler_section.contains("opened: vmess::mux::VmessInboundMuxUdpOpenedStream")
+            && handler_section.contains("up_rx: tokio::sync::mpsc::UnboundedReceiver<Vec<u8>>")
+            && protocol_mux.contains("pub enum VmessInboundMuxOpenedRoute")
+            && protocol_mux.contains("pub trait VmessInboundMuxOpenedRouteDispatcher")
+            && protocol_mux.contains("pub async fn dispatch_with")
+            && protocol_mux.contains("pub async fn next_opened_route")
+            && protocol_mux.contains("pub async fn dispatch_next_opened_route")
+            && protocol_mux.contains("route.dispatch_with(dispatcher).await")
+            && protocol_mux.contains("opened.into_route(writer)")
+            && protocol_mux.contains("responder: crate::udp::VmessInboundMuxUdpResponder")
+            && protocol_mux.contains("pub struct VmessInboundMuxTcpOpenedStream")
+            && protocol_mux.contains("pub struct VmessInboundMuxUdpOpenedStream"),
+        "VMess proxy MUX handler should consume protocol-owned opened-stream route handoff, not protocol kind classification"
+    );
     assert!(
         !root.contains("read_mux_frame_from_tokio"),
         "VMess inbound MUX runtime should use the protocol mux frame reader helper"
@@ -6382,9 +7352,11 @@ fn inbound_vmess_mux_task_models_do_not_live_in_proxy_model() {
             && !root.contains("vmess mux udp dispatch init failed")
             && !root.contains("udp_session.write_mux_response_to_socket_addr")
             && mux_udp.contains("run_mux_udp_relay")
-            && mux_udp.contains("VmessMuxUdpResponder")
+            && mux_udp.contains("responder,")
+            && !mux_udp.contains("vmess::VmessInbound.mux_udp_responder_for")
+            && !mux_udp.contains("VmessMuxUdpResponder")
             && !mux_udp.contains("record_direct_udp_response_parts"),
-        "VMess inbound MUX root should delegate UDP relay glue to src/inbound/vmess/*udp*.rs modules"
+        "VMess inbound MUX root should delegate UDP relay glue to src/adapters/vmess/inbound/listener/*udp*.rs modules"
     );
     assert!(
         root.contains("spawn_mux_tcp_stream_task")
@@ -6393,14 +7365,24 @@ fn inbound_vmess_mux_task_models_do_not_live_in_proxy_model() {
             && root.contains("MuxTcpStreamTask")
             && mux_tcp.contains("pub(crate) fn spawn_mux_tcp_stream_task")
             && mux_tcp.contains("pub(crate) struct MuxTcpStreamTask")
-            && mux_tcp.contains("TcpPipe::new(&proxy)")
+            && mux_tcp.contains("open_mux_tcp_upstream(&proxy")
+            && mux_tcp.contains("TcpPipe::new(proxy)")
             && mux_tcp.contains("close_stream().await")
             && mux_tcp.contains("relay_stream(mux_session_id, uplink, upstream).await"),
         "VMess inbound MUX root should delegate TCP sub-stream route/dispatch glue to inbound/mux_tcp.rs"
     );
     assert!(
-        root.contains("vmess::mux::VmessInboundMuxServer::from_tokio_writer(writer)")
-            && root.contains("mux_server\n                .dispatch_next_opened_stream(&mut reader, &mut handler)")
+        !root.contains("vmess::VmessInbound.accept_mux_session_from_tokio_writer(writer)")
+            && !root.contains("tokio::io::split(client)")
+            && protocol_mux.contains("let (reader, writer) = tokio::io::split(stream)")
+            && protocol_mux.contains("accept_mux_session_from_tokio_writer(writer)")
+            && root.contains("mux_server: vmess::mux::VmessInboundMuxServer")
+            && root.contains("impl<R> MuxOpenedDispatcher")
+            && root.contains(".dispatch_next_opened_route(self.reader, &mut bridge)")
+            && !root.contains(".next_opened_route(self.reader)")
+            && !root.contains(".read_opened_stream(self.reader)")
+            && !root.contains("vmess::mux::VmessInboundMuxEvent::Opened(opened)")
+            && root.contains("run_mux_session_loop")
             && !root.contains("vmess::mux::VmessInboundMuxSession::new()")
             && !root.contains("mux_session.read_inbound_action(&mut reader)")
             && !root.contains("streams.apply_inbound_action(action)"),
@@ -6418,17 +7400,17 @@ fn inbound_vmess_mux_task_models_do_not_live_in_proxy_model() {
             "VMess inbound MUX runtime should not inspect raw mux frame status; found `{forbidden}`"
         );
     }
-    let protocol_mux = fs::read_to_string(repo_root().join("protocols/vmess/src/mux.rs"))
-        .expect("read protocols/vmess/src/mux.rs");
     for required in [
         "VmessInboundMuxAction",
         "VmessInboundMuxSession",
         "VmessInboundMuxWriter",
         "VmessMuxServerEvent",
+        "VmessInboundMuxEvent",
         "read_mux_server_event",
-        "pub trait VmessInboundMuxOpenedHandler",
         "pub async fn read_inbound_action",
-        "pub async fn dispatch_next_opened_stream",
+        "pub async fn read_opened_stream",
+        "pub async fn next_opened_stream",
+        "pub async fn next_opened_route",
         "pub fn write_inbound_stream_data",
         "pub fn write_inbound_stream_payload",
         "pub fn end_inbound_stream",
@@ -6446,9 +7428,23 @@ fn inbound_vmess_mux_task_models_do_not_live_in_proxy_model() {
         "protocols/vmess should classify raw VMess MUX frames into server events and proxy-facing actions"
     );
     assert!(
-        !root.contains("opened.into_kind()")
-            && protocol_mux.contains("VmessInboundMuxOpenedKind")
-            && protocol_mux.contains("pub fn into_kind")
+        root.contains(".dispatch_next_opened_route(self.reader, &mut bridge)")
+            && !root.contains(".next_opened_route(self.reader)")
+            && !root.contains("opened.into_route(writer)")
+            && !root.contains("route.dispatch_with(&mut bridge).await")
+            && root.contains("VmessMuxOpenedRouteBridge")
+            && root.contains("impl vmess::mux::VmessInboundMuxOpenedRouteDispatcher")
+            && !root.contains("VmessInboundMuxOpenedRoute::Tcp")
+            && !root.contains("VmessInboundMuxOpenedRoute::Udp")
+            && !root.contains("opened.into_kind()")
+            && protocol_mux.contains("VmessInboundMuxOpenedRoute")
+            && protocol_mux.contains("pub trait VmessInboundMuxOpenedRouteDispatcher")
+            && protocol_mux.contains("pub async fn dispatch_with")
+            && protocol_mux.contains("pub async fn dispatch_next_opened_route")
+            && protocol_mux.contains("route.dispatch_with(dispatcher).await")
+            && protocol_mux.contains("pub fn into_route")
+            && protocol_mux.contains("pub async fn next_opened_route")
+            && protocol_mux.contains("opened.into_route(writer)")
             && protocol_mux.contains("match session.network")
             && protocol_mux.contains("VmessInboundMuxAction::OpenStream")
             && protocol_mux.contains("VmessInboundMuxOpenedStream::new")
@@ -6512,9 +7508,11 @@ fn inbound_vmess_mux_task_models_do_not_live_in_proxy_model() {
             && protocol_mux.contains("pub struct VmessInboundMuxServer")
             && protocol_mux.contains("pub fn from_tokio_writer")
             && protocol_mux.contains("pub async fn read_opened_stream")
+            && protocol_mux.contains("pub async fn next_opened_stream")
             && protocol_mux.contains("self.streams.apply_inbound_action(action)")
             && protocol_mux.contains("pub async fn relay_inbound_mux_stream")
             && protocol_mux.contains("write_inbound_stream_payload(&writer, session_id")
+            && protocol_mux.contains("pub fn accept_mux_session_from_tokio_writer")
             && root.contains("vmess::mux::relay_inbound_mux_stream"),
         "VMess inbound MUX downstream payload selection, relay pump, and stream table should live in protocols/vmess"
     );
@@ -6528,32 +7526,54 @@ fn inbound_vmess_mux_task_models_do_not_live_in_proxy_model() {
 
 #[test]
 fn vmess_transport_dispatch_uses_protocol_session_classification() {
-    let transport = read("src/inbound/vmess/transport.rs");
+    let transport = read("src/adapters/vmess/inbound/listener/transport.rs");
+    let protocol_inbound = fs::read_to_string(repo_root().join("protocols/vmess/src/inbound.rs"))
+        .expect("read protocols/vmess/src/inbound.rs");
     let protocol_mux = fs::read_to_string(repo_root().join("protocols/vmess/src/mux.rs"))
         .expect("read protocols/vmess/src/mux.rs");
 
     assert!(
-        transport.contains("dispatch_vmess_session")
-            && transport.contains("struct VmessAcceptedSessionHandler")
-            && transport.contains("impl<H> vmess::mux::VmessInboundSessionHandler")
-            && transport.contains("async fn handle_tcp_session")
-            && transport.contains("async fn handle_udp_session")
-            && transport.contains("async fn handle_mux_session")
-            && transport.contains("vmess::mux::dispatch_inbound_session")
+        transport.contains("dispatch_vmess_client")
+            && !transport.contains("struct VmessAcceptedSessionHandler")
+            && !transport.contains("impl<H> vmess::mux::VmessInboundSessionHandler")
+            && !transport.contains("async fn handle_tcp_session")
+            && !transport.contains("async fn handle_udp_session")
+            && !transport.contains("async fn handle_mux_session")
+            && !transport.contains("vmess::mux::dispatch_inbound_session")
+            && !transport.contains("VmessInboundAcceptedStream::from_session_stream")
+            && transport.contains(".accept_client(handler.vmess_inbound")
+            && transport.contains(".accept_client(vmess")
+            && transport.contains(".dispatch_with(&mut bridge)")
+            && !transport.contains(".dispatch(")
+            && transport.contains("struct VmessAcceptedStreamBridge")
+            && transport.contains("impl<S, H> vmess::mux::VmessInboundAcceptedStreamDispatcher")
+            && !transport.contains("vmess::mux::VmessInboundAcceptedStream::Udp")
+            && !transport.contains("vmess::mux::VmessInboundAcceptedStream::Mux")
+            && !transport.contains("vmess::mux::VmessInboundAcceptedStream::Tcp")
+            && transport.contains("auth,")
+            && !transport.contains("session.auth")
             && !transport.contains("vmess::mux::classify_inbound_session(&session)")
-            && !transport.contains("vmess::mux::VmessInboundSessionKind::Udp")
-            && !transport.contains("vmess::mux::VmessInboundSessionKind::Mux")
-            && !transport.contains("vmess::mux::VmessInboundSessionKind::Tcp")
+            && !transport.contains("vmess::mux::VmessInboundSessionKind::")
             && !transport.contains("session.network")
             && !transport.contains("Network::Udp")
             && !transport.contains("is_mux_cool_session"),
-        "VMess transport inbound glue should ask protocols/vmess to dispatch authenticated sessions"
+        "VMess transport inbound glue should consume protocol-owned session classification without implementing protocol callback handlers"
     );
     assert!(
-        protocol_mux.contains("pub enum VmessInboundSessionKind")
+        protocol_inbound.contains("pub async fn accept_client<S: AsyncSocket>")
+            && protocol_inbound.contains("VmessInboundAcceptedStream::from_session_stream")
+            && protocol_mux.contains("pub enum VmessInboundAcceptedStream")
+            && protocol_mux.contains("pub fn from_session_stream")
+            && protocol_mux.contains("responder: crate::udp::VmessInboundUdpResponder")
+            && protocol_mux.contains("auth: Option<SessionAuth>")
+            && protocol_mux.contains("auth: session.auth.clone()")
+            && protocol_mux.contains("pub async fn dispatch")
+            && protocol_mux.contains("pub trait VmessInboundAcceptedStreamDispatcher")
+            && protocol_mux.contains("pub async fn dispatch_with")
+            && protocol_mux.contains("pub enum VmessInboundSessionKind")
             && protocol_mux.contains("pub fn classify_inbound_session")
-            && protocol_mux.contains("pub trait VmessInboundSessionHandler")
-            && protocol_mux.contains("pub async fn dispatch_inbound_session")
+            && !protocol_mux.contains("VmessInboundSessionHandler")
+            && !protocol_mux.contains("dispatch_inbound_session")
             && protocol_mux.contains("VmessInboundSessionKind::Udp")
             && protocol_mux.contains("VmessInboundSessionKind::Mux")
             && protocol_mux.contains("VmessInboundSessionKind::Tcp")
@@ -6564,12 +7584,13 @@ fn vmess_transport_dispatch_uses_protocol_session_classification() {
 
 #[test]
 fn vmess_inbound_udp_response_encoding_stays_in_protocol_crate() {
-    let helper_path = manifest_dir().join("src/inbound/vmess/helpers.rs");
-    let stream_udp = read("src/inbound/stream_udp.rs");
-    let shared_mux_udp = read("src/inbound/mux_udp.rs");
-    let mux = read("src/inbound/vmess/mux.rs");
-    let mux_udp = read("src/inbound/vmess/mux_udp.rs");
-    let udp_session = read("src/inbound/vmess/udp_session.rs");
+    let helper_path = manifest_dir().join("src/adapters/vmess/inbound/listener/helpers.rs");
+    let stream_udp = read("src/runtime/stream_udp.rs");
+    let packet_session_udp = read("src/runtime/packet_session_udp.rs");
+    let shared_mux_udp = read("src/runtime/mux_udp.rs");
+    let mux = read("src/adapters/vmess/inbound/listener/mux.rs");
+    let mux_udp = read("src/adapters/vmess/inbound/listener/mux_udp.rs");
+    let udp_session = read("src/adapters/vmess/inbound/listener/udp_session.rs");
     let protocol_udp = manifest_dir()
         .parent()
         .and_then(std::path::Path::parent)
@@ -6596,9 +7617,9 @@ fn vmess_inbound_udp_response_encoding_stays_in_protocol_crate() {
         !mux.contains("socks5::parse_udp_packet")
             && !mux.contains("socks5::decode_udp_associate_response")
             && !mux.contains("udp_response::decode_socks5_upstream_response")
-            && stream_udp.contains("upstream_udp.recv_response")
+            && packet_session_udp.contains("upstream_udp.recv_response")
             && !udp_session.contains("upstream_udp.recv_response")
-            && shared_mux_udp.contains("upstream_udp.recv_response")
+            && packet_session_udp.contains("upstream_udp.recv_response")
             && !mux_udp.contains("upstream_udp.recv_response")
             && !mux.contains("&pkt.target")
             && !mux.contains("pkt.port,")
@@ -6632,133 +7653,56 @@ fn vmess_inbound_udp_response_encoding_stays_in_protocol_crate() {
     }
     assert!(
         !mux.contains("VmessInboundUdpPayload")
-            && !mux.contains("VmessUdpPayloadMode")
-            && !mux.contains("decode_vmess_udp_payload")
-            && !mux.contains("encode_vmess_udp_response")
-            && !mux.contains("encode_vmess_mux_udp_response")
             && !mux.contains("vmess::VmessInboundUdpCodec")
-            && !mux.contains("fn vmess_udp_response_mode")
-            && !mux.contains("vmess::VmessUdpPayloadMode")
-            && !mux.contains("vmess::VmessUdpPayloadState")
-            && !mux.contains("payload_mode")
-            && !mux.contains("input.state")
-            && !mux.contains("VmessInboundUdpCodec.decode_datagram")
-            && !mux.contains(".response_mode(payload_mode)")
             && udp_session.contains("run_stream_udp_relay")
-            && udp_session.contains("impl StreamUdpResponder<TcpRelayStream>")
-            && udp_session.contains("vmess::VmessInbound.udp_responder_for(&session)")
-            && mux_udp.contains("vmess::VmessInbound.mux_udp_responder_for")
-            && udp_session.contains(".read_inbound_dispatch_tokio(client")
-            && !udp_session.contains("read_buf")
-            && mux_udp.contains("self.inner.decode_inbound_dispatch")
-            && stream_udp.contains("dispatch_inbound_udp_packet")
+            && udp_session.contains("responder,")
+            && mux_udp.contains("run_mux_udp_relay")
+            && mux_udp.contains("responder,")
+            && stream_udp.contains("run_packet_session_udp_relay")
+            && shared_mux_udp.contains("run_packet_session_udp_relay")
+            && packet_session_udp.contains("dispatch_inbound_udp_packet")
+            && packet_session_udp.contains("record_direct_udp_response_parts")
+            && packet_session_udp.contains("record_upstream_udp_response_received")
+            && packet_session_udp.contains("write_direct_response")
+            && packet_session_udp.contains("write_upstream_response")
+            && packet_session_udp.contains("write_chain_response")
             && !udp_session.contains("dispatch_inbound_udp_packet")
-            && shared_mux_udp.contains("dispatch_inbound_udp_packet")
-            && !mux_udp.contains("dispatch_inbound_udp_packet")
-            && !mux.contains("decode_dispatch_parts(&payload)")
-            && !mux.contains("client.read(&mut client_buf)")
-            && !mux.contains("decode_dispatch_parts(&client_buf[..n])")
-            && udp_session.contains("self.inner")
-            && udp_session.contains(".write_response_for_target_tokio")
-            && !udp_session.contains("udp_session.write_client_response_for_target_tokio")
-            && stream_udp.contains("write_direct_response")
-            && stream_udp.contains("write_upstream_response")
-            && stream_udp.contains("write_chain_response")
-            && !udp_session.contains("write_direct_response")
-            && !udp_session.contains("write_upstream_response")
-            && !udp_session.contains("write_chain_response")
-            && stream_udp.contains("record_direct_udp_response_parts")
+            && !udp_session.contains("upstream_udp.recv_response")
             && !udp_session.contains("record_direct_udp_response_parts")
-            && !udp_session.contains("udp_response_target_from_socket_addr(sender)")
-            && !udp_session.contains("udp_session.write_response_to_socket_addr_tokio")
-            && mux_udp.contains("self.inner.write_response_for_target")
-            && shared_mux_udp.contains("write_direct_response_sync")
-            && shared_mux_udp.contains("write_upstream_response_sync")
-            && shared_mux_udp.contains("write_chain_response_sync")
-            && !mux_udp.contains("write_direct_response_sync")
-            && !mux_udp.contains("write_upstream_response_sync")
-            && !mux_udp.contains("write_chain_response_sync")
-            && shared_mux_udp.contains("record_direct_udp_response_parts")
-            && !mux_udp.contains("record_direct_udp_response_parts")
-            && !mux_udp.contains("udp_response_target_from_socket_addr(sender)")
-            && !mux_udp.contains("udp_session.write_mux_response_to_socket_addr")
-            && !udp_session.contains("udp_session(session.target.clone(), session.port)")
-            && !mux.contains("request.target")
-            && !mux.contains("request.port")
-            && !mux.contains("request.payload")
-            && !mux.contains("request.client_session_id")
-            && !mux.contains("request.pipe_parts()")
-            && !mux.contains("request.into_parts()")
-            && !mux.contains("request.into_dispatch_parts()")
-            && stream_udp.contains("record_upstream_udp_response_received")
             && !udp_session.contains("record_upstream_udp_response_received")
-            && shared_mux_udp.contains("record_upstream_udp_response_received")
+            && !udp_session.contains("write_direct_response")
+            && !mux_udp.contains("dispatch_inbound_udp_packet")
+            && !mux_udp.contains("upstream_udp.recv_response")
+            && !mux_udp.contains("record_direct_udp_response_parts")
             && !mux_udp.contains("record_upstream_udp_response_received")
-            && !udp_session.contains("VmessInboundUdpClientResponse::new")
-            && !mux_udp.contains("VmessInboundUdpClientResponse::new")
-            && !udp_session.contains("udp_session.write_response_tokio(\n")
-            && !mux_udp.contains("udp_session.write_mux_response(\n")
-            && !mux.contains("client_session_id: None")
-            && !mux.contains("request.target().clone()")
-            && !mux.contains("request.payload()")
-            && !mux.contains("pkt.target()")
-            && !mux.contains("pkt.payload()")
-            && !udp_session.contains("Address::Ipv4")
-            && !udp_session.contains("Address::Ipv6")
-            && !mux_udp.contains("Address::Ipv4")
-            && !mux_udp.contains("Address::Ipv6")
-            && !udp_session.contains("VmessInboundUdpCodec.encode_response_for_state")
-            && !mux.contains("VmessInboundUdpCodec.encode_mux_response_for_state")
-            && !mux_udp.contains("VmessInboundUdpCodec.encode_mux_response_for_state")
-            && !mux_udp.contains("write_mux_client_response_for_target")
+            && !mux_udp.contains("write_direct_response")
             && protocol_udp.contains("struct VmessInboundUdpCodec")
             && protocol_udp.contains("struct VmessInboundUdpSession")
             && protocol_udp.contains("struct VmessInboundUdpResponder")
-            && protocol_udp.contains("impl VmessInboundUdpResponder")
             && protocol_udp.contains("struct VmessInboundMuxUdpResponder")
-            && protocol_udp.contains("impl VmessInboundMuxUdpResponder")
-            && protocol_udp.contains("struct VmessInboundUdpRequest")
-            && protocol_udp.contains("struct VmessInboundUdpDispatchParts")
-            && !protocol_dispatch_parts.contains("pub target: Address")
-            && !protocol_dispatch_parts.contains("pub port: u16")
-            && !protocol_dispatch_parts.contains("pub payload: Vec<u8>")
-            && !protocol_dispatch_parts.contains("pub client_session_id: Option<u64>")
-            && protocol_udp.contains("fn pipe_parts")
-            && protocol_udp.contains("fn into_parts")
-            && protocol_udp.contains("fn into_dispatch_parts")
-            && protocol_udp.contains("fn into_inbound_dispatch")
             && protocol_udp.contains("pub fn decode_request")
             && protocol_udp.contains("pub fn decode_dispatch_parts")
             && protocol_udp.contains("pub fn decode_mux_dispatch_parts")
-            && protocol_udp.contains("pub fn decode_mux_inbound_dispatch")
-            && protocol_udp.contains("pub async fn read_dispatch_parts_tokio")
             && protocol_udp.contains("pub async fn read_inbound_dispatch_tokio")
-            && protocol_udp.contains("fn response_mode")
-            && protocol_udp.contains("fn encode_response")
-            && protocol_udp.contains("fn encode_response_for_state")
-            && protocol_udp.contains("fn write_response_tokio")
             && protocol_udp.contains("fn write_client_response_tokio")
-            && protocol_udp.contains("fn encode_mux_response")
-            && protocol_udp.contains("fn encode_mux_response_for_state")
-            && protocol_udp.contains("fn write_mux_response")
             && protocol_udp.contains("fn write_mux_client_response")
-            && !protocol_udp.contains("fn write_response_to_ip_tokio")
-            && !protocol_udp.contains("fn write_mux_response_to_ip")
-            && !protocol_udp.contains("fn write_response_to_socket_addr_tokio")
-            && !protocol_udp.contains("fn write_mux_response_to_socket_addr")
-            && protocol_udp.contains("fn decode_datagram"),
+            && !protocol_dispatch_parts.contains("pub target: Address")
+            && !protocol_dispatch_parts.contains("pub port: u16")
+            && !protocol_dispatch_parts.contains("pub payload: Vec<u8>")
+            && !protocol_dispatch_parts.contains("pub client_session_id: Option<u64>"),
         "VMess inbound UDP packet framing and response mode selection should go through protocols/vmess inbound codec"
     );
     assert!(
         mux.contains("spawn_vmess_mux_udp_stream_task")
             && !mux.contains("vmess mux udp direct response send failed")
             && !mux.contains("udp_session.write_mux_response_to_socket_addr")
-            && shared_mux_udp.contains("mux udp direct response encode failed")
-            && mux_udp.contains("vmess::VmessInbound.mux_udp_responder_for")
-            && mux_udp.contains("self.inner.write_response_for_target")
+            && packet_session_udp.contains("packet session udp direct response encode failed")
+            && mux_udp.contains("responder,")
+            && !mux_udp.contains("vmess::VmessInbound.mux_udp_responder_for")
+            && !mux_udp.contains("self.inner.write_response_for_target")
             && !mux_udp.contains("udp_session.write_mux_client_response")
             && !mux_udp.contains("udp_session.write_mux_response_to_socket_addr")
-            && shared_mux_udp.contains("dispatch_inbound_udp_packet")
+            && packet_session_udp.contains("dispatch_inbound_udp_packet")
             && !mux_udp.contains("dispatch_inbound_udp_packet"),
         "VMess MUX root should only spawn UDP sub-stream glue while shared MUX UDP glue owns MUX UDP dispatch"
     );
@@ -6797,12 +7741,14 @@ fn vmess_inbound_udp_response_encoding_stays_in_protocol_crate() {
 
 #[test]
 fn inbound_vless_mux_task_model_does_not_live_in_proxy_model() {
-    let root = read("src/inbound/vless/mux.rs");
-    let shared_mux_udp = read("src/inbound/mux_udp.rs");
-    let mux_udp = read("src/inbound/vless/mux_udp.rs");
-    let model = read("src/inbound/vless/model.rs");
+    let root = read("src/adapters/vless/inbound/listener/mux.rs");
+    let packet_session_udp = read("src/runtime/packet_session_udp.rs");
+    let mux_udp = read("src/adapters/vless/inbound/listener/mux_udp.rs");
+    let model = read("src/adapters/vless/inbound/listener/model.rs");
     let protocol_mux = fs::read_to_string(repo_root().join("protocols/vless/src/mux.rs"))
         .expect("read protocols/vless/src/mux.rs");
+    let protocol_inbound = fs::read_to_string(repo_root().join("protocols/vless/src/inbound.rs"))
+        .expect("read protocols/vless/src/inbound.rs");
 
     assert!(
         !root.contains("struct VlessMuxUdpStreamTask")
@@ -6812,9 +7758,55 @@ fn inbound_vless_mux_task_model_does_not_live_in_proxy_model() {
             && !model.contains("SessionAuth"),
         "VLESS inbound MUX task model should not be a proxy model-layer struct"
     );
+    let handler_section = root
+        .split("impl Proxy {")
+        .next()
+        .expect("VLESS mux handler section");
     assert!(
-        root.contains("VlessInboundMuxServer::from_context")
-            && root.contains("mux_server\n                .dispatch_next_opened_stream(&mut client, &mut handler)")
+        handler_section.contains(".dispatch_next_opened_route(self.client, &mut bridge)")
+            && !handler_section.contains(".next_opened_route(self.client)")
+            && !handler_section.contains(".next_opened_route_with_auth(self.client")
+            && !handler_section.contains("self.auth")
+            && !handler_section.contains("route.dispatch_with(&mut bridge).await")
+            && handler_section.contains("VlessMuxOpenedRouteBridge")
+            && handler_section.contains("impl vless::mux::VlessInboundMuxOpenedRouteDispatcher")
+            && !handler_section.contains("VlessInboundMuxOpenedRoute::Tcp")
+            && !handler_section.contains("VlessInboundMuxOpenedRoute::Udp")
+            && !handler_section.contains("opened.into_route_with_auth")
+            && !handler_section.contains("opened: vless::mux::VlessInboundMuxTcpOpenedStream")
+            && !handler_section.contains("opened: vless::mux::VlessInboundMuxUdpOpenedStream")
+            && !handler_section.contains("opened.into_parts_with_auth(self.auth.as_ref())")
+            && !handler_section.contains("session.apply_auth")
+            && handler_section.contains("up_rx: tokio::sync::mpsc::UnboundedReceiver<Vec<u8>>")
+            && protocol_mux.contains("pub struct VlessInboundMuxTcpOpenedStream")
+            && protocol_mux.contains("pub struct VlessInboundMuxUdpOpenedStream")
+            && protocol_mux.contains("pub enum VlessInboundMuxOpenedRoute")
+            && protocol_mux.contains("pub trait VlessInboundMuxOpenedRouteDispatcher")
+            && protocol_mux.contains("pub async fn dispatch_with")
+            && protocol_mux.contains("pub async fn dispatch_next_opened_route")
+            && protocol_mux.contains("route.dispatch_with(dispatcher).await")
+            && protocol_mux.contains("auth: Option<SessionAuth>")
+            && protocol_mux.contains("pub fn into_route_with_auth")
+            && protocol_mux.contains("pub async fn next_opened_route")
+            && protocol_mux.contains("pub async fn next_opened_route_with_auth")
+            && protocol_mux.contains("opened.into_route_with_auth(auth, writer)")
+            && protocol_mux.contains("session.apply_auth(auth.clone())"),
+        "VLESS proxy MUX handler should consume protocol-owned opened-stream route handoff and let protocols/vless normalize session auth"
+    );
+    assert!(
+        !root.contains(".accept_mux_session_with_auth(&mut client, mux_context, auth)")
+            && root.contains("mux_server: vless::mux::VlessInboundMuxServer")
+            && protocol_inbound.contains(".accept_mux_session_with_auth(&mut stream, mux_context, auth)")
+            && !root.contains("VlessInboundMuxServer::from_context")
+            && root.contains("impl<S> MuxOpenedDispatcher")
+            && root.contains(".dispatch_next_opened_route(self.client, &mut bridge)")
+            && !root.contains(".next_opened_route(self.client)")
+            && !root.contains(".next_opened_route_with_auth(self.client")
+            && !root.contains("self.auth")
+            && root.contains("run_mux_session_loop")
+            && !root.contains("dispatch_next_opened_stream")
+            && !protocol_mux.contains("dispatch_next_opened_stream")
+            && !protocol_mux.contains("VlessInboundMuxOpenedHandler")
             && !root.contains("let writer = mux_server.writer()")
             && root.contains("writer,")
             && root.contains("vless::mux::relay_inbound_mux_stream")
@@ -6848,6 +7840,7 @@ fn inbound_vless_mux_task_model_does_not_live_in_proxy_model() {
             && protocol_mux.contains("pub struct VlessInboundMuxServer")
             && protocol_mux.contains("pub enum VlessInboundMuxEvent")
             && protocol_mux.contains("pub async fn next_opened_stream")
+            && protocol_mux.contains("pub async fn next_opened_route_with_auth")
             && protocol_mux.contains("pub async fn relay_inbound_mux_stream")
             && protocol_mux.contains("pub fn channel()")
             && protocol_mux.contains("pub fn write_inbound_stream_payload")
@@ -6858,22 +7851,25 @@ fn inbound_vless_mux_task_model_does_not_live_in_proxy_model() {
         root.contains("spawn_vless_mux_udp_stream_task")
             && !root.contains("vless mux udp dispatch init failed")
             && !root.contains("record_direct_udp_response_received")
-            && shared_mux_udp.contains("mux udp dispatch init failed")
-            && shared_mux_udp.contains("record_direct_udp_response_parts")
+            && packet_session_udp.contains("packet session udp dispatch init failed")
+            && packet_session_udp.contains("record_direct_udp_response_parts")
             && mux_udp.contains("run_mux_udp_relay")
             && !mux_udp.contains("record_direct_udp_response_parts"),
-        "VLESS inbound MUX root should delegate UDP sub-stream dispatch to src/inbound/vless/mux_udp.rs"
+        "VLESS inbound MUX root should delegate UDP sub-stream dispatch to src/adapters/vless/inbound/listener/mux_udp.rs"
     );
 }
 
 #[test]
 fn vless_inbound_udp_packet_framing_stays_in_protocol_crate() {
-    let helper = read("src/inbound/vless/helpers.rs");
-    let stream_udp = read("src/inbound/stream_udp.rs");
-    let shared_mux_udp = read("src/inbound/mux_udp.rs");
-    let udp_session = read("src/inbound/vless/udp_session.rs");
-    let mux_root = read("src/inbound/vless/mux.rs");
-    let mux = read("src/inbound/vless/mux_udp.rs");
+    let helper = read("src/adapters/vless/inbound/listener/helpers.rs");
+    let stream_udp = read("src/runtime/stream_udp.rs");
+    let packet_session_udp = read("src/runtime/packet_session_udp.rs");
+    let shared_mux_udp = read("src/runtime/mux_udp.rs");
+    let udp_session = read("src/adapters/vless/inbound/listener/udp_session.rs");
+    let mux_root = read("src/adapters/vless/inbound/listener/mux.rs");
+    let mux = read("src/adapters/vless/inbound/listener/mux_udp.rs");
+    let _protocol_inbound = fs::read_to_string(repo_root().join("protocols/vless/src/inbound.rs"))
+        .expect("read protocols/vless/src/inbound.rs");
     let protocol_shared = manifest_dir()
         .parent()
         .and_then(std::path::Path::parent)
@@ -6883,7 +7879,7 @@ fn vless_inbound_udp_packet_framing_stays_in_protocol_crate() {
         fs::read_to_string(protocol_shared).expect("read vless protocol shared source");
     let protocol_udp = fs::read_to_string(repo_root().join("protocols/vless/src/udp.rs"))
         .expect("read vless protocol udp source");
-    let protocol_mux = fs::read_to_string(repo_root().join("protocols/vless/src/mux.rs"))
+    let _protocol_mux = fs::read_to_string(repo_root().join("protocols/vless/src/mux.rs"))
         .expect("read vless protocol mux source");
     let protocol_lib = fs::read_to_string(repo_root().join("protocols/vless/src/lib.rs"))
         .expect("read vless protocol lib source");
@@ -6905,7 +7901,7 @@ fn vless_inbound_udp_packet_framing_stays_in_protocol_crate() {
         !udp_session.contains("socks5::parse_udp_packet")
             && !udp_session.contains("socks5::decode_udp_associate_response")
             && !udp_session.contains("udp_response::decode_socks5_upstream_response")
-            && stream_udp.contains("upstream_udp.recv_response")
+            && packet_session_udp.contains("upstream_udp.recv_response")
             && !udp_session.contains("upstream_udp.recv_response")
             && !udp_session.contains("&pkt.target")
             && !udp_session.contains("pkt.port,")
@@ -6918,7 +7914,7 @@ fn vless_inbound_udp_packet_framing_stays_in_protocol_crate() {
         !mux.contains("socks5::parse_udp_packet")
             && !mux.contains("socks5::decode_udp_associate_response")
             && !mux.contains("udp_response::decode_socks5_upstream_response")
-            && shared_mux_udp.contains("upstream_udp.recv_response")
+            && packet_session_udp.contains("upstream_udp.recv_response")
             && !mux.contains("upstream_udp.recv_response")
             && !mux.contains("&pkt.target")
             && !mux.contains("pkt.port,")
@@ -6943,132 +7939,46 @@ fn vless_inbound_udp_packet_framing_stays_in_protocol_crate() {
     }
     assert!(
         !helper.contains("VlessInboundUdpPacket")
-            && !helper.contains("decode_vless_udp_packet")
-            && !helper.contains("encode_vless_udp_response")
-            && !helper.contains("encode_vless_mux_udp_response")
             && !helper.contains("vless::VlessInboundUdpCodec")
             && !udp_session.contains("vless::VlessInboundUdpCodec")
             && !mux.contains("vless::VlessInboundUdpCodec")
             && udp_session.contains("run_stream_udp_relay")
-            && udp_session.contains("impl<S> StreamUdpResponder<MeteredStream<S>>")
-            && udp_session.contains("vless::VlessInbound.udp_responder()")
-            && udp_session.contains(".read_inbound_dispatch_tokio(client")
-            && !udp_session.contains("read_buf")
-            && stream_udp.contains("dispatch_inbound_udp_packet")
-            && !udp_session.contains("dispatch_inbound_udp_packet")
-            && !udp_session.contains("udp_session.decode_dispatch_parts")
-            && !udp_session.contains("client.read(&mut buffer)")
-            && !udp_session.contains("decode_dispatch_parts(&buffer[..n])")
-            && udp_session.contains("self.inner")
-            && udp_session.contains(".write_response_for_target_tokio")
-            && !udp_session.contains("udp_session.write_client_response_for_target_tokio")
-            && stream_udp.contains("write_direct_response")
-            && stream_udp.contains("write_upstream_response")
-            && stream_udp.contains("write_chain_response")
-            && !udp_session.contains("write_direct_response")
-            && !udp_session.contains("write_upstream_response")
-            && !udp_session.contains("write_chain_response")
-            && stream_udp.contains("record_direct_udp_response_parts")
-            && !udp_session.contains("record_direct_udp_response_parts")
-            && !udp_session.contains("udp_response_target_from_socket_addr(sender)")
-            && !udp_session.contains("udp_session.write_response_to_socket_addr_tokio")
-            && !udp_session.contains("request.target")
-            && !udp_session.contains("request.port")
-            && !udp_session.contains("request.payload")
-            && !udp_session.contains("request.client_session_id")
-            && !udp_session.contains("request.pipe_parts()")
-            && !udp_session.contains("request.into_parts()")
-            && !udp_session.contains("request.into_dispatch_parts()")
-            && stream_udp.contains("record_upstream_udp_response_received")
-            && !udp_session.contains("record_upstream_udp_response_received")
-            && !udp_session.contains("VlessInboundUdpClientResponse::new")
-            && !udp_session.contains("udp_session.write_response_tokio(\n")
-            && !udp_session.contains("client_session_id: None")
-            && !udp_session.contains("request.target().clone()")
-            && !udp_session.contains("request.payload()")
-            && !udp_session.contains("pkt.target()")
-            && !udp_session.contains("pkt.payload()")
-            && !udp_session.contains("zero_core::Address::Ipv4")
-            && !udp_session.contains("zero_core::Address::Ipv6")
-            && !udp_session.contains("VlessInboundUdpCodec.encode_response")
+            && udp_session.contains("responder: vless::VlessInboundUdpResponder")
             && mux.contains("run_mux_udp_relay")
-            && mux.contains("impl MuxUdpResponder for VlessMuxUdpResponder")
-            && mux.contains("vless::VlessInbound.mux_udp_responder")
-            && mux.contains("self.inner.decode_inbound_dispatch")
-            && shared_mux_udp.contains("dispatch_inbound_udp_packet")
+            && mux.contains("responder,")
+            && stream_udp.contains("run_packet_session_udp_relay")
+            && shared_mux_udp.contains("run_packet_session_udp_relay")
+            && packet_session_udp.contains("dispatch_inbound_udp_packet")
+            && packet_session_udp.contains("record_direct_udp_response_parts")
+            && packet_session_udp.contains("record_upstream_udp_response_received")
+            && packet_session_udp.contains("write_direct_response")
+            && packet_session_udp.contains("write_upstream_response")
+            && packet_session_udp.contains("write_chain_response")
+            && !udp_session.contains("dispatch_inbound_udp_packet")
+            && !udp_session.contains("upstream_udp.recv_response")
+            && !udp_session.contains("record_direct_udp_response_parts")
+            && !udp_session.contains("record_upstream_udp_response_received")
+            && !udp_session.contains("write_direct_response")
             && !mux.contains("dispatch_inbound_udp_packet")
-            && !mux.contains("decode_dispatch_parts(&payload)")
-            && mux.contains("self.inner.write_response_for_target")
-            && shared_mux_udp.contains("write_direct_response_sync")
-            && shared_mux_udp.contains("write_upstream_response_sync")
-            && shared_mux_udp.contains("write_chain_response_sync")
-            && !mux.contains("write_direct_response_sync")
-            && !mux.contains("write_upstream_response_sync")
-            && !mux.contains("write_chain_response_sync")
-            && shared_mux_udp.contains("record_direct_udp_response_parts")
+            && !mux.contains("upstream_udp.recv_response")
             && !mux.contains("record_direct_udp_response_parts")
-            && !mux.contains("udp_response_target_from_socket_addr(sender)")
-            && !mux.contains("udp_session.send_mux_response_to_socket_addr")
-            && mux.contains("self.inner.end_inbound_stream")
-            && !mux.contains(".send_mux_client_response_for_target")
-            && !mux.contains("writer.end_inbound_stream")
-            && !mux.contains(".send_inbound_downlink(")
-            && protocol_mux.contains(".send_inbound_downlink(")
-            && !mux.contains("mux.send_inbound_stream_payload(&mut client, sid, &payload)")
-            && !mux.contains("writer.end(")
-            && !mux.contains("request.target")
-            && !mux.contains("request.port")
-            && !mux.contains("request.payload")
-            && !mux.contains("request.client_session_id")
-            && !mux.contains("request.pipe_parts()")
-            && !mux.contains("request.into_parts()")
-            && !mux.contains("request.into_dispatch_parts()")
-            && shared_mux_udp.contains("record_upstream_udp_response_received")
             && !mux.contains("record_upstream_udp_response_received")
-            && !mux.contains("VlessInboundUdpClientResponse::new")
-            && !mux.contains("udp_session.send_mux_response(\n")
-            && !mux.contains("client_session_id: None")
-            && !mux.contains("request.target().clone()")
-            && !mux.contains("request.payload()")
-            && !mux.contains("pkt.target()")
-            && !mux.contains("pkt.payload()")
-            && !mux.contains("zero_core::Address::Ipv4")
-            && !mux.contains("zero_core::Address::Ipv6")
-            && !mux.contains("VlessInboundUdpCodec.encode_mux_response")
-            && !mux.contains("send_mux_client_response_for_target")
-            && !udp_session.contains("decode_datagram")
-            && !mux.contains("VlessInboundUdpCodec.decode_datagram")
+            && !mux.contains("write_direct_response")
             && protocol_shared.contains("struct VlessInboundUdpCodec")
             && protocol_shared.contains("struct VlessInboundUdpSession")
             && protocol_shared.contains("struct VlessInboundUdpResponder")
-            && protocol_shared.contains("impl VlessInboundUdpResponder")
             && protocol_shared.contains("struct VlessInboundMuxUdpResponder")
-            && protocol_shared.contains("impl VlessInboundMuxUdpResponder")
-            && protocol_shared.contains("struct VlessInboundUdpRequest")
             && protocol_shared.contains("struct VlessInboundUdpDispatchParts")
+            && protocol_shared.contains("fn decode_request")
+            && protocol_shared.contains("fn decode_dispatch_parts")
+            && protocol_shared.contains("fn decode_mux_dispatch_parts")
+            && protocol_shared.contains("fn read_inbound_dispatch_tokio")
+            && protocol_shared.contains("fn write_client_response_tokio")
+            && protocol_shared.contains("fn send_mux_client_response")
             && !protocol_dispatch_parts.contains("pub target: Address")
             && !protocol_dispatch_parts.contains("pub port: u16")
             && !protocol_dispatch_parts.contains("pub payload: Vec<u8>")
             && !protocol_dispatch_parts.contains("pub client_session_id: Option<u64>")
-            && protocol_shared.contains("fn pipe_parts")
-            && protocol_shared.contains("fn into_parts")
-            && protocol_shared.contains("fn into_dispatch_parts")
-            && protocol_shared.contains("fn into_inbound_dispatch")
-            && protocol_shared.contains("fn decode_request")
-            && protocol_shared.contains("fn decode_dispatch_parts")
-            && protocol_shared.contains("fn decode_mux_dispatch_parts")
-            && protocol_shared.contains("fn decode_mux_inbound_dispatch")
-            && protocol_shared.contains("fn read_dispatch_parts_tokio")
-            && protocol_shared.contains("fn read_inbound_dispatch_tokio")
-            && protocol_shared.contains("fn decode_datagram")
-            && protocol_shared.contains("fn encode_response")
-            && protocol_shared.contains("fn write_response_tokio")
-            && protocol_shared.contains("fn write_client_response_tokio")
-            && protocol_shared.contains("fn encode_mux_response")
-            && protocol_shared.contains("fn send_mux_response")
-            && protocol_shared.contains("fn send_mux_client_response")
-            && !protocol_shared.contains("fn write_response_to_ip_tokio")
-            && !protocol_shared.contains("fn send_mux_response_to_ip")
             && !protocol_shared.contains("fn write_response_to_socket_addr_tokio")
             && !protocol_shared.contains("fn send_mux_response_to_socket_addr"),
         "VLESS inbound UDP packet framing should go directly through the protocols/vless inbound codec from inbound glue"
@@ -7078,10 +7988,11 @@ fn vless_inbound_udp_packet_framing_stays_in_protocol_crate() {
             && !mux_root.contains("UdpPipe::new")
             && !mux_root.contains("vless::VlessInbound.udp_session()")
             && !mux_root.contains("record_direct_udp_response_received")
-            && shared_mux_udp.contains("dispatch_inbound_udp_packet")
+            && packet_session_udp.contains("dispatch_inbound_udp_packet")
             && !mux.contains("dispatch_inbound_udp_packet")
             && mux.contains("run_mux_udp_relay")
-            && mux.contains("vless::VlessInbound.mux_udp_responder")
+            && mux.contains("responder,")
+            && !mux.contains("vless::VlessInbound.mux_udp_responder")
             && !mux.contains("vless::VlessInbound.udp_session()"),
         "VLESS MUX root should only spawn UDP sub-stream glue while shared MUX UDP glue owns UDP dispatch"
     );
@@ -7148,7 +8059,7 @@ fn upstream_udp_response_decode_lives_behind_registered_handler() {
 
     assert_src_pattern_confined(
         "socks5::decode_udp_associate_response",
-        &["src/inbound/socks5/udp_associate/upstream_response.rs"],
+        &["src/adapters/socks5/inbound/listener/udp_associate/upstream_response.rs"],
         &[],
         "raw SOCKS5 UDP response decoding should not leak into generic inbound response bridging",
     );
@@ -7159,7 +8070,9 @@ fn upstream_udp_response_decode_lives_behind_registered_handler() {
             && !response.contains("fn payload(&self)")
             && upstream.contains("Result<UpstreamUdpResponse, EngineError>")
             && state.contains("recv_response")
-            && socks5_runtime.contains("association.recv_response_parts(buf).await?")
+            && upstream.contains("if let Some(association) = self.upstream.association() {")
+            && upstream.contains("association.recv_response_parts(buf).await?")
+            && socks5_runtime.contains("self.runtime.recv_upstream_response(buf).await")
             && !socks5_runtime.contains("socks5::Socks5Inbound")
             && !socks5_runtime.contains(".decode_response_parts(")
             && !socks5_runtime.contains("Socks5InboundUdpCodec")
@@ -7170,9 +8083,10 @@ fn upstream_udp_response_decode_lives_behind_registered_handler() {
 
 #[test]
 fn trojan_inbound_udp_packet_framing_stays_in_protocol_crate() {
-    let root = read("src/inbound/trojan.rs");
-    let stream_udp = read("src/inbound/stream_udp.rs");
-    let inbound = read("src/inbound/trojan/udp.rs");
+    let root = read("src/adapters/trojan/inbound/listener.rs");
+    let stream_udp = read("src/runtime/stream_udp.rs");
+    let packet_session_udp = read("src/runtime/packet_session_udp.rs");
+    let inbound = read("src/adapters/trojan/inbound/listener/udp.rs");
     let protocol_outbound = manifest_dir()
         .parent()
         .and_then(std::path::Path::parent)
@@ -7198,7 +8112,7 @@ fn trojan_inbound_udp_packet_framing_stays_in_protocol_crate() {
             && !root.contains("async fn run_trojan_udp_relay")
             && !root.contains("UdpPipe::new")
             && !root.contains("record_direct_udp_response_received"),
-        "Trojan inbound root should keep listener/session glue while UDP relay glue lives in src/inbound/trojan/udp.rs"
+        "Trojan inbound root should keep listener/session glue while UDP relay glue lives in src/adapters/trojan/inbound/listener/udp.rs"
     );
 
     for forbidden in [
@@ -7219,7 +8133,7 @@ fn trojan_inbound_udp_packet_framing_stays_in_protocol_crate() {
     assert!(
         !inbound.contains("socks5::decode_udp_associate_response")
             && !inbound.contains("udp_response::decode_socks5_upstream_response")
-            && stream_udp.contains("upstream_udp.recv_response")
+            && packet_session_udp.contains("upstream_udp.recv_response")
             && !inbound.contains("upstream_udp.recv_response")
             && !inbound.contains("&pkt.target")
             && !inbound.contains("pkt.port,")
@@ -7230,23 +8144,27 @@ fn trojan_inbound_udp_packet_framing_stays_in_protocol_crate() {
     );
 
     assert!(
-        stream_udp.contains("dispatch_inbound_udp_packet")
-            && stream_udp.contains("record_direct_udp_response_parts")
-            && stream_udp.contains("record_upstream_udp_response_received")
-            && stream_udp.contains("write_direct_response")
-            && stream_udp.contains("write_upstream_response")
-            && stream_udp.contains("write_chain_response")
+        stream_udp.contains("run_packet_session_udp_relay")
+            && packet_session_udp.contains("dispatch_inbound_udp_packet")
+            && packet_session_udp.contains("record_direct_udp_response_parts")
+            && packet_session_udp.contains("record_upstream_udp_response_received")
+            && packet_session_udp.contains("write_direct_response")
+            && packet_session_udp.contains("write_upstream_response")
+            && packet_session_udp.contains("write_chain_response")
             && inbound.contains("run_stream_udp_relay")
-            && inbound.contains("impl StreamUdpResponder<TcpRelayStream>")
-            && inbound.contains("trojan::TrojanInbound.udp_responder()")
-            && inbound.contains("self.inner.read_inbound_dispatch(client)")
+            && !inbound.contains("trojan::TrojanInbound.accept_udp_session()")
+            && inbound.contains("responder: trojan::TrojanInboundUdpResponder")
+            && !inbound.contains("trojan::TrojanInbound.udp_responder()")
+            && !inbound.contains("impl StreamUdpResponder<TcpRelayStream>")
+            && !inbound.contains("TrojanStreamUdpResponder")
+            && !inbound.contains("self.inner.read_inbound_dispatch(client)")
             && !inbound.contains("dispatch_inbound_udp_packet")
             && !inbound.contains("udp_session.read_dispatch_view(&mut client)")
             && !inbound.contains("view.pipe_parts()")
             && !inbound.contains("parts.pipe_parts()")
             && !inbound.contains("parts.into_pipe_parts()")
-            && inbound.contains("self.inner")
-            && inbound.contains(".write_response_for_target")
+            && !inbound.contains("self.inner")
+            && !inbound.contains(".write_response_for_target")
             && !inbound.contains("udp_session.write_client_response_for_target")
             && !inbound.contains("write_direct_response")
             && !inbound.contains("write_upstream_response")
@@ -7344,7 +8262,7 @@ fn trojan_inbound_udp_packet_framing_stays_in_protocol_crate() {
 
 #[test]
 fn mieru_client_stream_model_lives_outside_inbound_root() {
-    let root = read("src/inbound/mieru.rs");
+    let root = read("src/adapters/mieru/inbound/listener.rs");
     let protocol_inbound = fs::read_to_string(repo_root().join("protocols/mieru/src/inbound.rs"))
         .expect("read mieru protocol inbound source");
     let protocol_lib = fs::read_to_string(repo_root().join("protocols/mieru/src/lib.rs"))
@@ -7380,7 +8298,9 @@ fn mieru_client_stream_model_lives_outside_inbound_root() {
         );
     }
     assert!(
-        !manifest_dir().join("src/inbound/mieru/model.rs").exists(),
+        !manifest_dir()
+            .join("src/adapters/mieru/inbound/listener/model.rs")
+            .exists(),
         "Mieru proxy inbound should not keep a protocol data-phase stream model"
     );
 
@@ -7420,22 +8340,18 @@ fn mieru_client_stream_model_lives_outside_inbound_root() {
 
 #[test]
 fn mieru_inbound_udp_packet_framing_stays_in_protocol_crate() {
-    let root = read("src/inbound/mieru.rs");
-    let stream_udp = read("src/inbound/stream_udp.rs");
-    let inbound = read("src/inbound/mieru/udp.rs");
-    let protocol_udp = manifest_dir()
-        .parent()
-        .and_then(std::path::Path::parent)
-        .expect("workspace root")
-        .join("protocols/mieru/src/udp.rs");
-    let protocol_udp = fs::read_to_string(protocol_udp).expect("read mieru protocol udp source");
+    let root = read("src/adapters/mieru/inbound/listener.rs");
+    let stream_udp = read("src/runtime/stream_udp.rs");
+    let packet_session_udp = read("src/runtime/packet_session_udp.rs");
+    let inbound = read("src/adapters/mieru/inbound/listener/udp.rs");
+    let protocol_udp = read_repo_module_tree("protocols/mieru/src/udp.rs");
 
     assert!(
         root.contains("mod udp;")
             && !root.contains("async fn run_mieru_udp_relay")
             && !root.contains("UdpPipe::new")
             && !root.contains("record_direct_udp_response_received"),
-        "Mieru inbound root should keep listener/session glue while UDP relay glue lives in src/inbound/mieru/udp.rs"
+        "Mieru inbound root should keep listener/session glue while UDP relay glue lives in src/adapters/mieru/inbound/listener/udp.rs"
     );
 
     for forbidden in [
@@ -7455,15 +8371,19 @@ fn mieru_inbound_udp_packet_framing_stays_in_protocol_crate() {
     }
 
     assert!(
-        stream_udp.contains("dispatch_inbound_udp_packet")
-            && stream_udp.contains("record_direct_udp_response_parts")
-            && stream_udp.contains("write_direct_response")
-            && stream_udp.contains("write_upstream_response")
-            && stream_udp.contains("write_chain_response")
+        stream_udp.contains("run_packet_session_udp_relay")
+            && packet_session_udp.contains("dispatch_inbound_udp_packet")
+            && packet_session_udp.contains("record_direct_udp_response_parts")
+            && packet_session_udp.contains("write_direct_response")
+            && packet_session_udp.contains("write_upstream_response")
+            && packet_session_udp.contains("write_chain_response")
             && inbound.contains("run_stream_udp_relay")
-            && inbound.contains("impl StreamUdpResponder<MieruClientStream>")
-            && inbound.contains("mieru::MieruInbound.udp_responder()")
-            && inbound.contains(".read_inbound_dispatch_tokio(client")
+            && !inbound.contains("mieru::MieruInbound.accept_udp_session()")
+            && inbound.contains("responder: mieru::udp::MieruInboundUdpResponder")
+            && !inbound.contains("mieru::MieruInbound.udp_responder()")
+            && !inbound.contains("impl StreamUdpResponder<MieruClientStream>")
+            && !inbound.contains("MieruStreamUdpResponder")
+            && !inbound.contains(".read_inbound_dispatch_tokio(client")
             && !inbound.contains("read_buf")
             && !inbound.contains("dispatch_inbound_udp_packet")
             && !inbound.contains("udp_session.read_dispatch_view_tokio")
@@ -7493,8 +8413,8 @@ fn mieru_inbound_udp_packet_framing_stays_in_protocol_crate() {
             && !inbound.contains("fn addr_from_ip")
             && !inbound.contains("record_direct_udp_response_parts")
             && !inbound.contains("udp_response_target_from_socket_addr(sender)")
-            && inbound.contains("self.inner")
-            && inbound.contains(".write_response_for_target_tokio")
+            && !inbound.contains("self.inner")
+            && !inbound.contains(".write_response_for_target_tokio")
             && !inbound.contains("udp_session.write_client_response_for_target_tokio")
             && !inbound.contains("write_direct_response")
             && !inbound.contains("write_upstream_response")
@@ -7510,6 +8430,7 @@ fn mieru_inbound_udp_packet_framing_stays_in_protocol_crate() {
             && protocol_udp.contains("struct MieruInboundUdpSession")
             && protocol_udp.contains("struct MieruInboundUdpResponder")
             && protocol_udp.contains("impl MieruInboundUdpResponder")
+            && protocol_udp.contains("impl<S> StreamUdpResponder<S> for MieruInboundUdpResponder")
             && protocol_udp.contains("struct MieruInboundUdpRequest")
             && protocol_udp.contains("struct MieruInboundUdpDispatchParts")
             && protocol_udp.contains("struct MieruInboundUdpClientResponse")
@@ -7588,11 +8509,10 @@ fn socks5_udp_send_details_stay_out_of_udp_dispatch() {
 
 #[test]
 fn socks5_udp_upstream_association_uses_outbound_tag_for_session_lookup() {
-    let model = read("src/adapters/socks5/udp/model.rs");
-    let send = read("src/adapters/socks5/udp/send.rs");
+    let model = manifest_dir().join("src/adapters/socks5/udp/model.rs");
+    let send = manifest_dir().join("src/adapters/socks5/udp/send.rs");
     let runtime = read("src/adapters/socks5/udp/runtime.rs");
-    let protocol_udp = fs::read_to_string(repo_root().join("protocols/socks5/src/udp.rs"))
-        .expect("read socks5 udp");
+    let protocol_udp = read_repo_module_tree("protocols/socks5/src/udp.rs");
     let protocol_outbound =
         fs::read_to_string(repo_root().join("protocols/socks5/src/outbound.rs"))
             .expect("read socks5 outbound");
@@ -7600,53 +8520,48 @@ fn socks5_udp_upstream_association_uses_outbound_tag_for_session_lookup() {
     let response = read("src/runtime/udp_flow/helpers.rs");
 
     assert!(
-        send.contains("resume.association_send(")
-            && send.contains("association.into_target()")
-            && !send.contains(".flow(")
-            && !send.contains(".association_target()")
-            && !send.contains("association.target()")
-            && !send.contains("resume.association_target(")
+        !send.exists()
+            && runtime.contains("resume.association_target(")
+            && !runtime.contains("association.into_target()")
+            && !runtime.contains(".flow(")
+            && !runtime.contains(".association_target()")
+            && !runtime.contains("association.target()")
             && protocol_udp.contains("struct Socks5UdpAssociationTarget")
-            && protocol_outbound.contains("pub struct Socks5UdpAssociationSend")
-            && protocol_outbound.contains("pub fn association_send(")
-            && protocol_outbound.contains("pub fn into_target(self) -> Socks5UdpAssociationTarget")
-            && protocol_outbound.contains("pub struct Socks5UdpFlowSpec")
-            && protocol_outbound.contains("pub fn flow(")
-            && protocol_udp.contains("Socks5UdpAssociationSend")
-            && protocol_udp.contains("Socks5UdpFlowSpec")
+            && !protocol_outbound.contains("pub struct Socks5UdpAssociationSend")
+            && !protocol_outbound.contains("pub fn association_send(")
+            && !protocol_outbound
+                .contains("pub fn into_target(self) -> Socks5UdpAssociationTarget")
+            && !protocol_outbound.contains("pub struct Socks5UdpFlowSpec")
+            && !protocol_outbound.contains("pub fn flow(")
+            && !protocol_udp.contains("Socks5UdpAssociationSend")
+            && !protocol_udp.contains("Socks5UdpFlowSpec")
             && protocol_udp.contains("outbound_tag: alloc::string::String")
-            && !model
-                .lines()
-                .any(|line| line.trim() == "pub(super) struct Socks5UdpAssociation {")
-            && !model
-                .lines()
-                .any(|line| line.trim() == "pub(super) tag: String,"),
+            && !model.exists(),
         "SOCKS5 UDP association identity should be named outbound_tag, not a generic tag"
     );
     assert!(
         upstream.contains("send_upstream(inbound_tag, request)")
             && runtime.contains("let Some(outbound_tag) = request.outbound_tag")
-            && runtime.contains("tag: outbound_tag")
+            && runtime.contains("outbound_tag.to_owned()")
             && !upstream.contains("tag: inbound_tag"),
         "SOCKS5 UDP runtime must pass the outbound tag into the upstream association through neutral upstream dispatch"
     );
     assert!(
-        send.contains("resume.association_send(")
-            && !send.contains("resume.association_target(")
-            && !send.contains(".association_target()")
-            && !send.contains("association.target()")
-            && runtime.contains("let target = association.identity()")
-            && runtime.contains("!a.identity().matches(&target)")
-            && runtime.contains("let record = target.lifecycle_record()")
-            && runtime.contains("let record = assoc.lifecycle_record()")
-            && runtime.contains("TrackedSocks5UdpAssociation::new(target, a)")
-            && runtime.contains("target: association,")
-            && runtime.contains("record.outbound_tag()")
-            && !runtime.contains("target.outbound_tag()")
-            && !runtime.contains("active.outbound_tag != target.outbound_tag")
-            && !runtime.contains("&target.outbound_tag")
-            && !send.contains("association.tag"),
-        "SOCKS5 UDP runtime state should store and match the relay outbound tag"
+        !runtime.contains("resume.association_send(")
+            && runtime.contains("resume.association_target(")
+            && !runtime.contains(".association_target()")
+            && !runtime.contains("association.target()")
+            && upstream.contains("!self.upstream.matches_target(&association)")
+            && upstream.contains("let (outbound_tag, server, port) = association.log_parts()")
+            && upstream.contains("let (record, association) = assoc.into_parts()")
+            && upstream.contains("let _ = self.upstream.insert(association, a);")
+            && upstream.contains("let (target, association) = association.into_parts()")
+            && !runtime.contains("association.into_target()")
+            && !upstream.contains("active.outbound_tag != target.outbound_tag")
+            && !upstream.contains("&target.outbound_tag")
+            && !upstream.contains("association.tag")
+            && runtime.contains("Socks5UdpAssociationTarget::into_log_parts"),
+        "SOCKS5 UDP upstream helper should store and match the relay outbound tag while the SOCKS5 runtime stays thin"
     );
     assert!(
         response.contains("association.outbound_tag")
@@ -7658,7 +8573,7 @@ fn socks5_udp_upstream_association_uses_outbound_tag_for_session_lookup() {
 
 #[test]
 fn socks5_udp_association_close_details_stay_out_of_udp_associate_loop() {
-    let associate = read("src/inbound/socks5/udp_associate.rs");
+    let associate = read("src/adapters/socks5/inbound/listener/udp_associate.rs");
 
     for forbidden in [
         "UpstreamAssociationCloseReason",
@@ -7689,21 +8604,33 @@ fn socks5_udp_associate_loop_delegates_dispatch_and_direct_response_framing() {
             .exists(),
         "SOCKS5 UDP associate submodules should not live under protocol_runtime"
     );
+    assert!(
+        !manifest_dir()
+            .join("src/adapters/socks5/inbound/listener/udp_associate/protocol_glue.rs")
+            .exists(),
+        "SOCKS5 UDP associate should not keep proxy-local protocol_glue for protocol-owned responder/session APIs"
+    );
 
-    let associate = read("src/inbound/socks5/udp_associate.rs");
-    let chain_response = read("src/inbound/socks5/udp_associate/chain_response.rs");
-    let cleanup = read("src/inbound/socks5/udp_associate/cleanup.rs");
-    let dispatch = read("src/inbound/socks5/udp_associate/dispatch.rs");
-    let direct_response = read("src/inbound/socks5/udp_associate/direct_response.rs");
-    let idle_timeout = read("src/inbound/socks5/udp_associate/idle_timeout.rs");
-    let protocol_glue = read("src/inbound/socks5/udp_associate/protocol_glue.rs");
-    let relay_socket = read("src/inbound/socks5/udp_associate/relay_socket.rs");
-    let setup = read("src/inbound/socks5/udp_associate/setup.rs");
-    let upstream_response = read("src/inbound/socks5/udp_associate/upstream_response.rs");
+    for removed in [
+        "src/adapters/socks5/inbound/listener/udp_associate/chain_response.rs",
+        "src/adapters/socks5/inbound/listener/udp_associate/cleanup.rs",
+        "src/adapters/socks5/inbound/listener/udp_associate/idle_timeout.rs",
+        "src/adapters/socks5/inbound/listener/udp_associate/upstream_response.rs",
+    ] {
+        assert!(
+            !manifest_dir().join(removed).exists(),
+            "{removed} should be folded into neutral runtime UDP association orchestration"
+        );
+    }
+
+    let associate = read("src/adapters/socks5/inbound/listener/udp_associate.rs");
+    let association_runtime = read("src/runtime/udp_association.rs");
+    let dispatch = read("src/adapters/socks5/inbound/listener/udp_associate/dispatch.rs");
+    let direct_response =
+        read("src/adapters/socks5/inbound/listener/udp_associate/direct_response.rs");
+    let relay_socket = read("src/adapters/socks5/inbound/listener/udp_associate/relay_socket.rs");
+    let setup = read("src/adapters/socks5/inbound/listener/udp_associate/setup.rs");
     let adapter_active = read("src/adapters/socks5/udp/active.rs");
-    let protocol_shared = fs::read_to_string(repo_root().join("protocols/socks5/src/shared.rs"))
-        .expect("read protocols/socks5/src/shared.rs");
-    let protocol_dispatch_parts = struct_block(&protocol_shared, "Socks5InboundUdpDispatchParts");
 
     for forbidden in [
         "UdpPipeInput",
@@ -7711,14 +8638,11 @@ fn socks5_udp_associate_loop_delegates_dispatch_and_direct_response_framing() {
         "DnsResolver",
         ".resolver.resolve(",
         "async fn dispatch_packet",
-        "async fn forward_direct_udp_response",
         "async fn forward_chain_response",
         "socks5::encode_udp_associate_response(&address_from_socket_addr",
         "direct_response_session_id",
         "record_session_outbound_rx",
         "record_session_inbound_tx",
-        "failed to forward direct UDP response",
-        "socks5::encode_udp_associate_response(target",
         "failed to send UDP chain response to client",
         "failed to build SOCKS5 UDP chain response",
         "chain upstream read error",
@@ -7728,68 +8652,105 @@ fn socks5_udp_associate_loop_delegates_dispatch_and_direct_response_framing() {
         "upstream_response_session_id",
         "record_udp_upstream_recv_failure",
         "log_udp_upstream_association_dropped",
-        "failed to attribute upstream UDP response",
         "async fn handle_idle_timeout",
         "fn handle_idle_timeout",
         "drop_socks5_idle",
         "log_udp_upstream_association_idle_timeout",
-        "async fn handle_relay_packet",
-        "client_udp_addr.is_none",
-        "failed to process UDP packet",
-        "dropping udp packet from unexpected sender",
-        "Socks5Reply::Succeeded",
-        "send_response_with_bound",
-        "bind_addr(SocketAddr::new",
-        "socks5 udp association ready",
-        "drain_traffic",
+        "tokio::select!",
+        "UdpDispatch::new",
+        "poll_refs",
+        "wait_for_upstream_idle",
+        "join_next",
         "finish_all",
         "log_completed_udp_flow",
     ] {
         assert!(
             !associate.contains(forbidden),
-            "SOCKS5 UDP associate loop should delegate dispatch/direct response details; found `{forbidden}`"
+            "SOCKS5 UDP associate entrypoint should delegate runtime loop details; found `{forbidden}`"
         );
     }
 
     assert!(
+        associate.contains("run_udp_association_loop")
+            && associate.contains("UdpAssociationLoopRequest")
+            && associate.contains("Socks5UdpAssociationHandler::new(request)")
+            && associate.contains("pub(in crate::adapters) async fn run_socks5_udp_associate")
+            && !associate.contains("impl Proxy")
+            && !associate.contains("handle_socks5_udp_associate")
+            && setup.contains("pub(super) async fn setup_association")
+            && !setup.contains("Proxy")
+            && !setup.contains("_proxy"),
+        "SOCKS5 UDP associate entrypoint should call the neutral runtime association loop with a protocol handler"
+    );
+
+    assert!(
+        association_runtime.contains("pub(crate) trait UdpAssociationHandler")
+            && association_runtime.contains("pub(crate) async fn run_udp_association_loop")
+            && association_runtime.contains("UdpDispatch::new")
+            && association_runtime.contains("dispatch.poll_refs()")
+            && association_runtime.contains("wait_for_upstream_idle")
+            && association_runtime.contains("chain_tasks.join_next()")
+            && association_runtime.contains("record_upstream_udp_response_received")
+            && association_runtime.contains("record_chain_udp_response_parts")
+            && association_runtime.contains("write_upstream_response")
+            && association_runtime.contains("write_chain_response")
+            && association_runtime.contains("drop_idle_upstream_association")
+            && association_runtime.contains("drop_upstream_association")
+            && association_runtime.contains("finish_all")
+            && association_runtime.contains("log_completed_udp_flow")
+            && !association_runtime.contains("socks5::")
+            && !association_runtime.contains("Socks5"),
+        "runtime/udp_association should own neutral UDP association loop, response accounting, idle cleanup, and finish logging without naming SOCKS5"
+    );
+
+    assert!(
         dispatch.contains("async fn dispatch_packet")
             && dispatch.contains("dispatch_inbound_udp_packet")
-            && dispatch.contains("protocol_glue::decode_dispatch")
+            && dispatch.contains("association: &socks5::udp::Socks5InboundUdpAssociationSession")
+            && !dispatch.contains("socks5::Socks5Inbound")
+            && !dispatch.contains(".udp_responder()")
+            && dispatch.contains("struct Socks5InboundUdpDispatchBridge")
+            && dispatch.contains("impl socks5::udp::Socks5InboundUdpDispatchActionDispatcher")
+            && dispatch.contains("async fn dispatch_local_dns")
+            && dispatch.contains("async fn dispatch_inbound_packet")
+            && dispatch.contains(".dispatch_client_packet(packet, &mut bridge)")
             && dispatch.contains("request.into_inbound_dispatch()")
             && dispatch.contains("protocol_overhead.record")
             && !dispatch.contains("let protocol = request.protocol();")
             && !dispatch.contains("UdpPipeInput {")
             && !dispatch.contains("ProtocolType::Socks5")
-            && !dispatch.contains(".decode_dispatch_parts_or_resolve_local_dns(")
-            && protocol_glue.contains(".decode_dispatch_parts_or_resolve_local_dns(")
-            && !dispatch.contains(".resolver.resolve("),
-        "SOCKS5 UDP packet dispatch should live in inbound/socks5/udp_associate/dispatch.rs"
+            && dispatch.contains("proxy.resolver.resolve(domain).await")
+            && !dispatch.contains("decode_dispatch_or_local_dns(")
+            && !dispatch.contains("decode_dispatch_action")
+            && !dispatch.contains("action.local_dns_domain()")
+            && !dispatch.contains("action.dispatch_view()")
+            && !dispatch.contains("Socks5InboundUdpDispatchAction::LocalDns")
+            && !dispatch.contains("Socks5InboundUdpDispatchAction::Dispatch"),
+        "SOCKS5 UDP packet dispatch should stay as protocol responder glue over runtime UDP pipe dispatch"
     );
     assert!(
-        direct_response.contains("async fn write_socks5_direct_response")
-            && direct_response.contains("async fn forward_relay_socket_response")
-            && direct_response.contains("async fn forward_dispatch_socket_response")
+        direct_response.contains("async fn forward_relay_socket_response")
             && direct_response.contains("record_direct_udp_response_parts")
             && direct_response.contains("write_direct_response")
-            && direct_response.contains("UdpDirectResponseParts")
             && read("src/runtime/udp_flow/helpers.rs").contains("direct_response_session_id")
-            && direct_response.contains("protocol_glue::send_client_response_for_target")
-            && !direct_response.contains("socks5::Socks5Inbound.udp_responder()")
+            && direct_response
+                .contains("association: &socks5::udp::Socks5InboundUdpAssociationSession")
+            && !direct_response.contains("socks5::Socks5Inbound")
+            && !direct_response.contains(".udp_responder()")
+            && direct_response.contains(".send_current_client_response_for_target")
+            && direct_response.contains(".send_current_client_peer_response")
             && !direct_response.contains(".send_client_response_for_target")
-            && protocol_glue.contains("socks5::Socks5Inbound.udp_responder()")
-            && protocol_glue.contains(".send_client_response_for_target")
+            && !direct_response.contains(".send_client_response(")
             && !direct_response.contains("Socks5UdpClientResponse::new")
             && !direct_response.contains("record_direct_udp_response_received")
             && !direct_response.contains("udp_response_target_from_socket_addr")
             && !direct_response.contains("socket_addr_to_socket_address(client_addr)")
-            && protocol_glue.contains("socket_addr_to_socket_address(client_addr)")
             && !direct_response.contains("socket_addr_to_socket_address(sender)")
             && !direct_response.contains("fn socket_address_from_std")
             && !direct_response.contains("fn ip_address_from_std")
             && !direct_response.contains("Socks5UdpRelayEndpoint")
             && !direct_response.contains("Socks5UdpRelayError")
-            && !direct_response.contains("into_mapped(EngineError::from)")
-            && protocol_glue.contains("into_mapped(EngineError::from)")
+            && direct_response.contains("into_mapped(EngineError::from)")
             && !direct_response.contains("address_from_socket_addr(sender)")
             && !direct_response.contains("socket_addr_to_ip(sender)")
             && !direct_response.contains("udp_session.response_frame")
@@ -7799,29 +8760,38 @@ fn socks5_udp_associate_loop_delegates_dispatch_and_direct_response_framing() {
         "SOCKS5 UDP direct response metering should live in proxy while framing stays behind protocol helpers"
     );
     assert!(
-        chain_response.contains("async fn handle_chain_result")
-            && chain_response.contains("pub(super) struct ChainResponseRequest")
-            && chain_response.contains("struct ForwardChainResponseRequest")
-            && chain_response.contains("write_chain_response")
-            && chain_response.contains("protocol_glue::send_client_response_for_target")
-            && !chain_response.contains("socks5::Socks5Inbound.udp_responder()")
-            && !chain_response.contains(".send_client_response_for_target")
-            && !chain_response.contains("Socks5UdpClientResponse::new")
-            && !chain_response.contains("socket_addr_to_socket_address(client_addr)")
-            && !chain_response.contains("use zero_core::Address")
-            && !chain_response.contains("socket_addr_to_ip(client_addr)")
-            && !chain_response.contains("udp_session.response_frame")
-            && !chain_response.contains("Socks5Inbound.udp_session()")
-            && !chain_response.contains("Socks5InboundUdpCodec")
-            && !chain_response.contains("socks5::encode_udp_associate_response(")
-            && chain_response.contains("failed to send SOCKS5 UDP chain response to client")
-            && chain_response.contains("chain response task panicked"),
-        "SOCKS5 UDP chain response result handling should live in proxy while framing stays behind protocol helpers"
-    );
-    assert!(
-        upstream_response.contains("write_upstream_response")
-            && !upstream_response.contains("response.accounting.record_sent"),
-        "SOCKS5 UDP upstream response writes should share neutral response accounting glue"
+        relay_socket.contains("impl UdpAssociationHandler for Socks5UdpAssociationHandler")
+            && relay_socket.contains("Socks5InboundUdpAssociationSession")
+            && !relay_socket.contains("Socks5InboundUdpRelaySession")
+            && !relay_socket.contains("Socks5InboundUdpResponder")
+            && relay_socket.contains("struct Socks5UdpRelayPacketBridge")
+            && relay_socket.contains("association: socks5::udp::Socks5InboundUdpAssociationSession")
+            && relay_socket.contains("self.association")
+            && relay_socket.contains(".dispatch_relay_packet(sender, payload, &mut bridge)")
+            && relay_socket.contains("impl socks5::udp::Socks5InboundUdpRelayPacketDispatcher")
+            && relay_socket.contains("async fn dispatch_client_packet")
+            && relay_socket.contains("async fn dispatch_peer_response")
+            && relay_socket.contains("async fn dispatch_unexpected_sender")
+            && !relay_socket.contains("Socks5InboundUdpRelayPacketAction::ClientPacket")
+            && !relay_socket.contains("Socks5InboundUdpRelayPacketAction::PeerResponse")
+            && !relay_socket.contains("Socks5InboundUdpRelayPacketAction::UnexpectedSender")
+            && !relay_socket.contains("Socks5InboundUdpPeerResponse::from_parts")
+            && !relay_socket.contains(".handle_packet(")
+            && !relay_socket.contains("self.association.classify_packet(sender, payload)")
+            && !relay_socket.contains("action.client_payload()")
+            && !relay_socket.contains("action.peer_sender_payload()")
+            && !relay_socket.contains("action.unexpected_sender()")
+            && !relay_socket.contains("impl socks5::udp::Socks5InboundUdpRelayPacketHandler")
+            && relay_socket.contains("async fn write_upstream_response")
+            && relay_socket.contains("async fn write_chain_response")
+            && relay_socket.contains("forward_relay_peer_response")
+            && !relay_socket.contains("response.into_sender_payload()")
+            && !relay_socket.contains("fn client_addr")
+            && !association_runtime.contains("fn client_addr")
+            && !association_runtime.contains(".client_addr()")
+            && !relay_socket.contains("client_udp_addr.is_none")
+            && !relay_socket.contains("*request.client_udp_addr"),
+        "SOCKS5 UDP relay socket glue should adapt protocol-owned relay classification and response encoding to the neutral runtime association loop"
     );
     assert!(
         setup.contains("send_success_response_with_bound")
@@ -7829,12 +8799,11 @@ fn socks5_udp_associate_loop_delegates_dispatch_and_direct_response_framing() {
             && !setup.contains("send_response_with_bound"),
         "SOCKS5 UDP associate setup should ask protocols/socks5 to choose the success reply frame"
     );
+
     for (path, source) in [
         ("dispatch.rs", &dispatch),
         ("direct_response.rs", &direct_response),
-        ("chain_response.rs", &chain_response),
-        ("upstream_response.rs", &upstream_response),
-        ("protocol_glue.rs", &protocol_glue),
+        ("relay_socket.rs", &relay_socket),
     ] {
         for forbidden in ["socks5::parse_udp_packet", "socks5::build_udp_packet"] {
             assert!(
@@ -7842,14 +8811,6 @@ fn socks5_udp_associate_loop_delegates_dispatch_and_direct_response_framing() {
                 "SOCKS5 UDP associate {path} should use semantic associate packet helpers instead of `{forbidden}`"
             );
         }
-    }
-    for (path, source) in [
-        ("dispatch.rs", &dispatch),
-        ("direct_response.rs", &direct_response),
-        ("chain_response.rs", &chain_response),
-        ("upstream_response.rs", &upstream_response),
-        ("protocol_glue.rs", &protocol_glue),
-    ] {
         for forbidden in [
             "socks5::decode_udp_associate_request",
             "socks5::decode_udp_associate_response",
@@ -7861,41 +8822,55 @@ fn socks5_udp_associate_loop_delegates_dispatch_and_direct_response_framing() {
             );
         }
     }
+
     assert!(
-        protocol_glue.contains("socks5::Socks5Inbound.udp_responder()")
-            && protocol_glue.contains("udp_responder")
-            && protocol_glue.contains(".decode_dispatch_parts_or_resolve_local_dns(")
+        dispatch.contains("association: &socks5::udp::Socks5InboundUdpAssociationSession")
+            && !dispatch.contains("socks5::Socks5Inbound")
+            && !dispatch.contains("udp_responder()")
             && dispatch.contains("request.protocol_overhead()")
             && dispatch.contains("request.into_inbound_dispatch()")
             && dispatch.contains("dispatch_inbound_udp_packet")
             && dispatch.contains("protocol_overhead.record")
-            && !dispatch.contains("Socks5InboundUdpDispatchAction")
-            && !dispatch.contains("decode_dispatch_action")
+            && dispatch.contains("impl socks5::udp::Socks5InboundUdpDispatchActionDispatcher")
+            && dispatch.contains(".dispatch_client_packet(packet, &mut bridge)")
+            && !dispatch.contains("Socks5InboundUdpDispatchAction::LocalDns")
+            && !dispatch.contains("Socks5InboundUdpDispatchAction::Dispatch")
             && !dispatch.contains("udp_packet.into_dispatch_parts()")
             && !dispatch.contains("protocol_overhead_len")
-            && !upstream_response.contains("socks5::Socks5Inbound.udp_responder()")
-            && upstream_response.contains("record_upstream_udp_response_received")
-            && upstream_response.contains("protocol_glue::send_client_response_for_target")
-            && !upstream_response.contains(".send_client_response_for_target")
-            && !upstream_response.contains("Socks5UdpClientResponse::new")
-            && !upstream_response.contains("udp_session.response_session_key_parts")
-            && !upstream_response.contains(".send_encoded_response_to_client")
-            && !upstream_response.contains("relay.send_to_addr(payload")
-            && !upstream_response.contains("udp_session.response_key")
-            && !direct_response.contains("socks5::Socks5Inbound.udp_responder()")
+            && relay_socket.contains("association: socks5::udp::Socks5InboundUdpAssociationSession")
+            && relay_socket.contains("socks5::Socks5Inbound.accept_udp_association(request)")
+            && !relay_socket.contains("socks5::Socks5Inbound.accept_udp_association(request).into_parts()")
+            && !relay_socket.contains("socks5::Socks5Inbound.udp_responder()")
+            && !relay_socket.contains("socks5::Socks5Inbound.udp_relay_session()")
+            && relay_socket.contains("self.write_client_response")
+            && !relay_socket.contains("socks5::udp::Socks5InboundUdpRelaySession")
+            && !relay_socket.contains("Socks5UdpClientResponse::new")
+            && !relay_socket.contains(".send_client_response(")
+            && relay_socket.contains(".send_current_client_response_for_target")
+            && !relay_socket.contains(".send_current_client_peer_response")
+            && !relay_socket.contains(".send_client_response_for_target")
+            && direct_response
+                .contains("association: &socks5::udp::Socks5InboundUdpAssociationSession")
+            && !direct_response.contains("socks5::Socks5Inbound")
+            && !direct_response.contains(".udp_responder()")
             && !direct_response.contains("Socks5UdpClientResponse::new")
-            && direct_response.contains("protocol_glue::send_client_response_for_target")
-            && !chain_response.contains("socks5::Socks5Inbound.udp_responder()")
-            && chain_response.contains("protocol_glue::send_client_response_for_target")
+            && !direct_response.contains(".send_client_response(")
+            && direct_response.contains(".send_current_client_response_for_target")
+            && direct_response.contains(".send_current_client_peer_response_parts")
+            && !direct_response.contains(".send_client_response_for_target")
             && !dispatch.contains("Socks5Inbound.udp_session()")
-            && !upstream_response.contains("Socks5Inbound.udp_session()")
             && !direct_response.contains("Socks5Inbound.udp_session()")
-            && !chain_response.contains("Socks5Inbound.udp_session()")
+            && !relay_socket.contains("Socks5Inbound.udp_session()")
             && !dispatch.contains("Socks5InboundUdpCodec")
-            && !upstream_response.contains("Socks5InboundUdpCodec")
             && !direct_response.contains("Socks5InboundUdpCodec")
-            && !chain_response.contains("Socks5InboundUdpCodec")
-            && !protocol_glue.contains("Socks5InboundUdpCodec"),
+            && !relay_socket.contains("Socks5InboundUdpCodec")
+            && relay_socket.contains(".dispatch_relay_packet(sender, payload, &mut bridge)")
+            && relay_socket.contains("impl socks5::udp::Socks5InboundUdpRelayPacketDispatcher")
+            && !relay_socket.contains("Socks5InboundUdpPeerResponse::from_parts")
+            && !relay_socket.contains("self.association.classify_packet(sender, payload)")
+            && !relay_socket.contains("action.client_payload()")
+            && !relay_socket.contains("action.peer_sender_payload()")
+            && !relay_socket.contains("action.unexpected_sender()"),
         "SOCKS5 UDP associate dispatch/attribution should use the protocol-owned inbound UDP responder"
     );
     assert!(
@@ -7917,77 +8892,110 @@ fn socks5_udp_associate_loop_delegates_dispatch_and_direct_response_framing() {
             && !dispatch.contains("udp_packet.target()")
             && !dispatch.contains("udp_packet.port()")
             && !dispatch.contains("udp_packet.dns_domain_request()")
-            && !upstream_response.contains("response.target()")
-            && !upstream_response.contains("response.port()")
-            && !upstream_response.contains(".send_response_to_client_target")
-            && !chain_response.contains(".send_response_to_client_target")
-            && !protocol_glue.contains(".send_response_to_client_target"),
+            && !relay_socket.contains("response.target()")
+            && !relay_socket.contains("response.port()")
+            && !relay_socket.contains(".send_response_to_client_target")
+            && !direct_response.contains(".send_response_to_client_target"),
         "SOCKS5 UDP associate dispatch should consume protocol-owned dispatch parts instead of rebuilding session facts"
     );
-    let protocol_udp = fs::read_to_string(repo_root().join("protocols/socks5/src/udp.rs"))
-        .expect("read protocols/socks5/src/udp.rs");
+
+    let protocol_udp = read_repo_module_tree("protocols/socks5/src/udp.rs");
+    let protocol_inbound = fs::read_to_string(repo_root().join("protocols/socks5/src/inbound.rs"))
+        .expect("read protocols/socks5/src/inbound.rs");
     assert!(
-        protocol_udp.contains("pub async fn send_response_to_client")
-            && protocol_udp.contains("pub struct Socks5InboundUdpResponder")
-            && protocol_udp.contains("pub async fn send_response_to_client_target")
-            && protocol_udp.contains("pub struct Socks5UdpClientResponse")
-            && protocol_udp.contains("pub async fn send_client_response")
-            && protocol_udp.contains("pub async fn send_client_response_for_target")
-            && protocol_udp.contains("pub async fn send_encoded_response_to_client")
-            && protocol_udp.contains("SocketAddress")
-            && !protocol_udp.contains("pub async fn send_response_to_client_endpoint")
-            && !protocol_udp.contains("pub async fn send_response_to_client_socket_addr")
-            && !protocol_udp.contains("fn address_from_ip")
-            && protocol_udp.contains("pub fn decode_dispatch_action")
-            && protocol_udp.contains("pub async fn decode_dispatch_parts_or_resolve_local_dns")
-            && protocol_udp.contains("pub fn local_dns_domain_request")
-            && protocol_shared.contains("pub struct Socks5InboundUdpProtocolOverhead")
-            && protocol_shared.contains("pub fn protocol_overhead(&self)")
-            && protocol_shared.contains("pub fn into_pipe_parts(self)")
-            && protocol_shared.contains("pub fn into_inbound_dispatch(self)")
-            && protocol_shared.contains("pub fn pipe_parts(&self)")
-            && protocol_shared.contains("pub fn record_protocol_overhead")
-            && protocol_udp.contains("pub fn response_session_key_parts")
-            && protocol_udp.contains("pub fn into_mapped")
-            && protocol_udp.contains("response_frame(")
-            && protocol_udp.contains("response_key(")
-            && protocol_udp.contains("pub struct Socks5InboundUdpRelaySession")
-            && protocol_udp.contains("pub trait Socks5InboundUdpRelayPacketHandler")
-            && protocol_udp.contains("pub async fn handle_packet")
-            && protocol_udp.contains("pub enum Socks5InboundUdpRelayPacketAction")
-            && protocol_udp.contains("pub fn classify_packet")
+        protocol_udp.contains("pub struct Socks5InboundUdpAssociationSession")
+            && protocol_udp.contains("pub trait Socks5InboundUdpDispatchActionDispatcher")
+            && protocol_udp.contains("pub trait Socks5InboundUdpRelayPacketDispatcher")
+            && protocol_udp.contains("pub async fn dispatch_relay_packet")
+            && protocol_udp.contains("pub async fn dispatch_client_packet")
+            && protocol_udp.contains("pub async fn send_current_client_response_for_target")
+            && protocol_udp.contains("pub async fn send_current_client_peer_response_parts")
+            && protocol_udp.contains("pub fn accept_udp_association")
+            && protocol_udp.contains("struct Socks5InboundUdpResponder")
+            && protocol_udp.contains("struct Socks5InboundUdpRelaySession")
+            && protocol_udp.contains("enum Socks5InboundUdpRelayPacketAction")
             && protocol_udp.contains("client: Option<SocketAddress>")
             && protocol_udp.contains("self.client = Some(sender)")
             && protocol_udp.contains("Socks5InboundUdpRelayPacketAction::ClientPacket")
-            && protocol_udp.contains("Socks5InboundUdpRelayPacketAction::PeerResponse"),
+            && protocol_udp.contains("Socks5InboundUdpRelayPacketAction::PeerResponse")
+            && !protocol_udp.contains("pub struct Socks5InboundUdpResponder")
+            && !protocol_udp.contains("pub struct Socks5InboundUdpRelaySession")
+            && !protocol_udp.contains("pub struct Socks5InboundUdpSession")
+            && !protocol_udp.contains("pub struct Socks5InboundUdpResponseFrame")
+            && !protocol_udp.contains("pub struct Socks5InboundUdpResponseKey")
+            && !protocol_udp.contains("pub struct Socks5UdpClientResponse")
+            && !protocol_udp.contains("pub enum Socks5InboundUdpRelayPacketAction")
+            && !protocol_udp.contains("pub async fn send_response_to_client")
+            && !protocol_udp.contains("pub async fn send_response_to_client_target")
+            && !protocol_udp.contains("pub async fn send_client_response")
+            && !protocol_udp.contains("pub async fn send_client_response_for_target")
+            && !protocol_udp.contains("pub async fn send_encoded_response_to_client")
+            && !protocol_udp.contains("pub fn response_session_key_parts")
+            && !protocol_udp.contains("pub fn into_parts(self) -> (Socks5InboundUdpRelaySession, Socks5InboundUdpResponder)")
+            && !protocol_udp.contains("pub async fn send_response_to_client_endpoint")
+            && !protocol_udp.contains("pub async fn send_response_to_client_socket_addr")
+            && !protocol_udp.contains("fn address_from_ip")
+            && !protocol_udp.contains("pub fn decode_dispatch_action")
+            && protocol_udp.contains("fn decode_dispatch_action")
+            && !protocol_udp.contains("pub async fn decode_dispatch_parts_or_resolve_local_dns")
+            && !protocol_udp.contains("pub fn local_dns_domain_request")
+            && !protocol_udp.contains("pub fn decode_dispatch_parts")
+            && !protocol_udp.contains("pub fn request_dispatch_parts")
+            && !protocol_udp.contains("pub fn decode_response_parts")
+            && protocol_udp.contains("pub struct Socks5InboundUdpProtocolOverhead")
+            && protocol_udp.contains("pub fn protocol_overhead(&self)")
+            && protocol_udp.contains("pub fn into_pipe_parts(self)")
+            && protocol_udp.contains("pub fn into_inbound_dispatch(self)")
+            && protocol_udp.contains("pub fn pipe_parts(&self)")
+            && protocol_udp.contains("pub fn record_protocol_overhead")
+            && protocol_udp.contains("pub fn into_mapped")
+            && !protocol_udp.contains("Socks5InboundUdpRelayPacketHandler")
+            && !protocol_udp.contains("pub async fn handle_packet")
+            && !protocol_udp.contains("pub fn classify_packet")
+            && !protocol_udp.contains("pub fn client_payload(&self)")
+            && !protocol_udp.contains("pub fn peer_sender_payload(&self)")
+            && !protocol_udp.contains("pub fn unexpected_sender(&self)"),
         "protocols/socks5 should own UDP associate response framing, attribution helpers, and relay packet classification state"
     );
     assert!(
-        !protocol_dispatch_parts.contains("pub target: Address")
-            && !protocol_dispatch_parts.contains("pub port: u16")
-            && !protocol_dispatch_parts.contains("pub payload: Vec<u8>")
-            && !protocol_dispatch_parts.contains("pub client_session_id: Option<u64>")
-            && protocol_shared.contains("fn into_parts(self) -> (Address, u16, Vec<u8>, Option<u64>)"),
+        protocol_udp.contains("pub(crate) struct Socks5InboundUdpDispatchParts")
+            && !protocol_udp.contains("pub target: Address")
+            && !protocol_udp.contains("pub port: u16")
+            && !protocol_udp.contains("pub payload: Vec<u8>")
+            && !protocol_udp.contains("pub client_session_id: Option<u64>")
+            && protocol_udp.contains("fn into_parts(self) -> (Address, u16, Vec<u8>, Option<u64>)"),
         "SOCKS5 inbound UDP dispatch parts should expose a one-shot neutral parts API instead of public fields"
     );
     assert!(
-        protocol_glue.contains("Socks5InboundUdpRelaySession::new()")
-            && associate.contains("protocol_glue::new_relay_session()")
-            && !associate.contains("Socks5InboundUdpRelaySession::new()")
-            && associate.contains(".client()")
-            && associate.contains("socket_address_to_socket_addr")
-            && associate.contains("relay_session: &mut relay_session")
+        protocol_udp.contains("pub struct Socks5InboundUdpAssociationSession")
+            && protocol_udp.contains("pub fn accept_udp_association")
+            && protocol_udp.contains("pub async fn dispatch_relay_packet")
+            && protocol_udp.contains("pub async fn dispatch_client_packet")
+            && protocol_udp.contains("pub async fn send_current_client_response_for_target")
+            && protocol_udp.contains("pub async fn send_current_client_peer_response_parts")
+            && !protocol_udp.contains("pub async fn send_client_response_for_target")
+            && !protocol_udp.contains("pub fn into_parts(self) -> (Socks5InboundUdpRelaySession, Socks5InboundUdpResponder)")
+            && relay_socket.contains("socks5::Socks5Inbound.accept_udp_association(request)")
+            && !relay_socket.contains("socks5::Socks5Inbound.accept_udp_association(request).into_parts()")
+            && !relay_socket.contains("socks5::Socks5Inbound.udp_relay_session()")
+            && !relay_socket.contains("socks5::Socks5Inbound.udp_responder()")
+            && !relay_socket.contains("Socks5InboundUdpRelaySession::new()")
+            && !relay_socket.contains(".client()")
+            && !relay_socket.contains("response.into_sender_payload()")
+            && !relay_socket.contains("socket_address_to_socket_addr")
+            && direct_response.contains("socket_address_to_socket_addr")
             && !associate.contains("Option<SocketAddr>")
+            && associate.contains("request: Socks5UdpAssociateRequest")
+            && !associate.contains("_request: Socks5UdpAssociateRequest")
+            && !relay_socket.contains("*request.client_udp_addr")
             && !associate.contains("client_udp_addr.is_none"),
-        "SOCKS5 UDP associate loop should keep client endpoint ownership in the protocol relay session"
+        "SOCKS5 UDP associate loop should keep client endpoint ownership in the protocol relay session while proxy owns dispatch orchestration"
     );
     assert!(
         adapter_active.contains("into_mapped(EngineError::from)")
             && !adapter_active.contains("Socks5UdpRelayError::"),
         "SOCKS5 UDP adapter should use protocol-owned relay error mapping instead of unpacking relay error variants"
     );
-    let protocol_inbound = fs::read_to_string(repo_root().join("protocols/socks5/src/inbound.rs"))
-        .expect("read protocols/socks5/src/inbound.rs");
     assert!(
         protocol_inbound.contains("pub async fn send_success_response_with_bound")
             && protocol_inbound.contains("Socks5Reply::Succeeded"),
@@ -8000,47 +9008,20 @@ fn socks5_udp_associate_loop_delegates_dispatch_and_direct_response_framing() {
     ] {
         assert!(
             !dispatch.contains(forbidden)
-                && !upstream_response.contains(forbidden)
                 && !direct_response.contains(forbidden)
-                && !chain_response.contains(forbidden)
-                && !protocol_glue.contains(forbidden),
+                && !relay_socket.contains(forbidden),
             "SOCKS5 UDP associate glue should not rebuild protocol packet accounting/framing detail `{forbidden}`"
         );
     }
     assert!(
-        upstream_response.contains("async fn handle_upstream_response")
-            && upstream_response.contains("record_upstream_udp_response_received")
-            && upstream_response.contains("record_udp_upstream_recv_failure")
-            && upstream_response.contains("UpstreamUdpResponse")
-            && !upstream_response.contains("upstream_association_view")
-            && !upstream_response.contains("upstream_response_session_id")
-            && !upstream_response.contains("failed to attribute upstream UDP response"),
-        "SOCKS5 UDP upstream response glue should delegate success attribution to runtime helpers and keep cleanup local"
-    );
-    assert!(
-        idle_timeout.contains("fn handle_idle_timeout")
-            && idle_timeout.contains("drop_idle_upstream_association")
-            && idle_timeout.contains("log_udp_upstream_association_idle_timeout"),
-        "SOCKS5 UDP idle timeout cleanup should live in inbound/socks5/udp_associate/idle_timeout.rs"
-    );
-    assert!(
-        relay_socket.contains("async fn handle_relay_packet")
-            && relay_socket.contains("pub(super) struct RelayPacketRequest")
-            && relay_socket.contains("Socks5InboundUdpRelaySession")
-            && relay_socket.contains(".handle_packet(")
-            && relay_socket.contains("impl socks5::udp::Socks5InboundUdpRelayPacketHandler")
-            && relay_socket.contains("async fn handle_client_packet")
-            && relay_socket.contains("async fn handle_peer_response")
-            && relay_socket.contains("async fn handle_unexpected_sender")
-            && !relay_socket.contains(".classify_packet(")
-            && !relay_socket.contains("Socks5InboundUdpRelayPacketAction::ClientPacket")
-            && !relay_socket.contains("Socks5InboundUdpRelayPacketAction::PeerResponse")
-            && !relay_socket.contains("Socks5InboundUdpRelayPacketAction::UnexpectedSender")
-            && !relay_socket.contains("client_udp_addr.is_none")
-            && !relay_socket.contains("*request.client_udp_addr")
-            && relay_socket.contains("failed to process UDP packet")
-            && relay_socket.contains("dropping udp packet from unexpected sender"),
-        "SOCKS5 UDP relay socket glue should ask protocols/socks5 to classify client packets and peer responses"
+        association_runtime.contains("async fn handle_upstream_response")
+            && association_runtime.contains("record_upstream_udp_response_received")
+            && association_runtime.contains("record_udp_upstream_recv_failure")
+            && association_runtime.contains("UpstreamUdpResponse")
+            && !association_runtime.contains("upstream_association_view")
+            && !association_runtime.contains("upstream_response_session_id")
+            && !association_runtime.contains("failed to attribute upstream UDP response"),
+        "UDP upstream response attribution and cleanup should live in neutral runtime association glue"
     );
     assert!(
         setup.contains("async fn setup_association")
@@ -8052,11 +9033,26 @@ fn socks5_udp_associate_loop_delegates_dispatch_and_direct_response_framing() {
             && setup.contains("drain_traffic"),
         "SOCKS5 UDP associate bind/response setup should live in inbound/socks5/udp_associate/setup.rs"
     );
+}
+
+#[test]
+fn socks5_protocol_udp_module_stays_runtime_neutral() {
+    let protocol_udp = read_repo_module_tree("protocols/socks5/src/udp.rs");
+
     assert!(
-        cleanup.contains("fn finish_dispatch")
-            && cleanup.contains("finish_all")
-            && cleanup.contains("log_completed_udp_flow"),
-        "SOCKS5 UDP associate cleanup should live in inbound/socks5/udp_associate/cleanup.rs"
+        protocol_udp.contains("use zero_traits::{AsyncSocket, DatagramSocket, IpAddress, SocketAddress, UdpRelayProtocol};")
+            && protocol_udp.contains("pub struct Socks5EstablishedUdpAssociation<C, S>")
+            && protocol_udp.contains("pub struct Socks5InboundUdpAssociationSession")
+            && protocol_udp.contains("S: AsyncSocket")
+            && protocol_udp.contains("S: DatagramSocket")
+            && !protocol_udp.contains("TokioDatagramSocket")
+            && !protocol_udp.contains("TokioSocket")
+            && !protocol_udp.contains("tokio::")
+            && !protocol_udp.contains("crate::runtime::")
+            && !protocol_udp.contains("use crate::runtime::")
+            && !protocol_udp.contains("use tokio::")
+            && !protocol_udp.contains("use zero_platform_tokio::"),
+        "protocols/socks5/src/udp.rs should own SOCKS5 UDP semantics over zero-traits sockets, not runtime- or tokio-specific UDP transport"
     );
 }
 
@@ -11804,8 +12800,7 @@ fn mieru_udp_managed_connector_is_thin_protocol_glue() {
         .expect("read zero-transport manifest");
     let protocol_lib = fs::read_to_string(repo_root().join("protocols/mieru/src/lib.rs"))
         .expect("read mieru protocol lib source");
-    let protocol_udp = fs::read_to_string(repo_root().join("protocols/mieru/src/udp.rs"))
-        .expect("read mieru protocol udp source");
+    let protocol_udp = read_repo_module_tree("protocols/mieru/src/udp.rs");
     let connector_flow_impl = impl_block(&protocol_udp, "MieruUdpConnectorFlow");
 
     for removed in [
@@ -12216,7 +13211,7 @@ fn mieru_udp_packet_stream_tasks_live_outside_manager() {
 #[test]
 fn h2_udp_datagram_codec_lives_outside_manager() {
     let managed = read("src/adapters/hysteria2/udp/managed.rs");
-    let connector = read("src/adapters/hysteria2/connector.rs");
+    let connector = read("src/adapters/hysteria2/udp/connector.rs");
     let transport = fs::read_to_string(repo_root().join("crates/transport/src/hysteria2_quic.rs"))
         .expect("read zero-transport hysteria2_quic source");
     let adapter = read("src/adapters/hysteria2/udp.rs");
@@ -12232,7 +13227,7 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
     let adapter_flow = read("src/adapters/hysteria2/udp/flow.rs");
     let adapter_packet_path = read("src/adapters/hysteria2/udp/packet_path.rs");
     let profile_connector_uses = connector
-        .matches("Hysteria2Connector::from_udp_profile")
+        .matches("Hysteria2UdpConnector::from_udp_profile")
         .count();
 
     for forbidden in [
@@ -12262,9 +13257,10 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
             && !adapter.contains("Hysteria2UdpFlowConfig")
             && !adapter.contains("Hysteria2UdpFlowConfig::new")
             && !adapter.contains("Hysteria2UdpFlowConfig {")
-            && adapter_flow.contains("hysteria2::udp::udp_flow_resume_from_config")
+            && adapter.contains("hysteria2::udp::udp_flow_resume_from_config")
             && !adapter_flow.contains("Hysteria2UdpFlowConfig::new")
-            && adapter_packet_path
+            && adapter.contains("hysteria2::udp::udp_packet_path_carrier_descriptor_from_config")
+            && !adapter_packet_path
                 .contains("hysteria2::udp::udp_packet_path_carrier_descriptor_from_config")
             && !adapter_packet_path.contains("Hysteria2UdpFlowConfig::new")
             && protocol_udp.contains("pub(crate) fn udp_flow_codec(")
@@ -12344,13 +13340,16 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
         !adapter.contains("Hysteria2UdpFlowResume::new")
             && !adapter.contains(".flow_resume()")
             && !adapter.contains(".packet_path_spec()")
-            && adapter_flow.contains("hysteria2::udp::udp_flow_resume_from_config")
+            && adapter.contains("hysteria2::udp::udp_flow_resume_from_config")
             && !adapter_flow.contains(".flow_resume()")
-            && adapter_packet_path
+            && adapter.contains("hysteria2::udp::udp_packet_path_carrier_descriptor_from_config")
+            && !adapter_packet_path
                 .contains("hysteria2::udp::udp_packet_path_carrier_descriptor_from_config")
             && !adapter_packet_path.contains(".packet_path_spec()")
-            && adapter_packet_path.contains("udp_packet_path_carrier_build_from_config")
-            && adapter_packet_path.contains("udp_packet_path_carrier_descriptor_from_config")
+            && adapter.contains("udp_packet_path_carrier_build_from_config")
+            && adapter.contains("udp_packet_path_carrier_descriptor_from_config")
+            && !adapter_packet_path.contains("udp_packet_path_carrier_build_from_config")
+            && !adapter_packet_path.contains("udp_packet_path_carrier_descriptor_from_config")
             && !adapter_packet_path.contains("spec.carrier()")
             && !adapter_packet_path.contains("spec.cache_key()")
             && !adapter_packet_path.contains("spec.carrier_cache_key()")
@@ -12518,16 +13517,16 @@ fn h2_packet_path_carrier_uses_protocol_built_codec() {
         .expect("read hysteria2 protocol udp source");
     let protocol_lib = fs::read_to_string(repo_root().join("protocols/hysteria2/src/lib.rs"))
         .expect("read hysteria2 protocol lib source");
-    let connector = read("src/adapters/hysteria2/connector.rs");
+    let connector = read("src/adapters/hysteria2/udp/connector.rs");
     let profile_connector_uses = connector
-        .matches("Hysteria2Connector::from_udp_profile")
+        .matches("Hysteria2UdpConnector::from_udp_profile")
         .count();
 
     assert!(
         !adapter.contains("hysteria2::udp_flow_codec")
             && !adapter.contains("hysteria2::udp_cache_key")
             && !adapter.contains("Hysteria2UdpFlowConfig")
-            && adapter_packet_path.contains("hysteria2::udp::udp_packet_path_carrier_descriptor_from_config")
+            && adapter.contains("hysteria2::udp::udp_packet_path_carrier_descriptor_from_config")
             && !adapter_packet_path.contains("Hysteria2UdpFlowConfig"),
         "Hysteria2 packet-path adapter submodule should request protocol-built packet-path cache identity and codec through a protocol config helper"
     );
@@ -12631,7 +13630,7 @@ fn h2_udp_packet_stream_tasks_live_outside_manager() {
         .expect("read hysteria2 protocol udp source");
     let transport = fs::read_to_string(repo_root().join("crates/transport/src/hysteria2_quic.rs"))
         .expect("read zero-transport hysteria2_quic source");
-    let connector = read("src/adapters/hysteria2/connector.rs");
+    let connector = read("src/adapters/hysteria2/udp/connector.rs");
 
     for forbidden in [
         "Hysteria2Connector",
@@ -12691,7 +13690,7 @@ fn h2_udp_packet_stream_tasks_live_outside_manager() {
             && protocol_udp.contains("send_datagram")
             && protocol_udp.contains("read_datagram")
             && connector.contains("hysteria2::udp::start_udp_flow_with_initial_packet")
-            && connector.contains("Hysteria2Connector::from_udp_profile")
+            && connector.contains("Hysteria2UdpConnector::from_udp_profile")
             && connector.contains("connect_raw_with_udp_profile")
             && !transport.contains("pub async fn establish_hysteria2_udp_flow_stream")
             && !transport.contains("Hysteria2UdpFlowStreamRequest")
@@ -12709,6 +13708,7 @@ fn h2_transport_delegates_protocol_handshake_to_protocol_crate() {
     let transport_manifest = fs::read_to_string(repo_root().join("crates/transport/Cargo.toml"))
         .expect("read zero-transport manifest");
     let connector = read("src/adapters/hysteria2/connector.rs");
+    let udp_connector = read("src/adapters/hysteria2/udp/connector.rs");
     let protocol_outbound =
         fs::read_to_string(repo_root().join("protocols/hysteria2/src/outbound.rs"))
             .expect("read hysteria2 protocol outbound source");
@@ -12745,7 +13745,8 @@ fn h2_transport_delegates_protocol_handshake_to_protocol_crate() {
             && !connector.contains("client_fingerprint: Option<String>")
             && connector.contains("hysteria2::Hysteria2OutboundProfile")
             && !connector.contains("password: String")
-            && connector.contains("connect_raw_with_udp_profile")
+            && !connector.contains("connect_raw_with_udp_profile")
+            && udp_connector.contains("connect_raw_with_udp_profile")
             && !connector.contains("profile.password()")
             && connector.contains(".authenticate_connection(")
             && connector.contains(".establish_tcp_connect(")
@@ -12937,21 +13938,21 @@ fn shadowsocks_udp_datagram_codec_lives_outside_manager() {
             && !adapter.contains("ShadowsocksUdpFlowConfig::new")
             && !adapter.contains(".flow_resume()")
             && !adapter.contains(".packet_path_spec()")
-            && adapter_flow.contains("shadowsocks::udp::udp_flow_resume_from_config")
+            && adapter.contains("shadowsocks::udp::udp_flow_resume_from_config")
             && !adapter_flow.contains("ShadowsocksUdpFlowConfig::new")
             && !adapter_flow.contains(".flow_resume()")
-            && adapter_packet_path.contains("shadowsocks::udp::udp_packet_path_carrier_descriptor_from_config")
-            && adapter_packet_path.contains("shadowsocks::udp::udp_packet_path_carrier_codec_from_config")
+            && adapter.contains("shadowsocks::udp::udp_packet_path_carrier_descriptor_from_config")
+            && adapter.contains("shadowsocks::udp::udp_packet_path_carrier_codec_from_config")
             && !adapter_packet_path.contains("ShadowsocksUdpFlowConfig::new")
             && !adapter_packet_path.contains(".packet_path_spec()")
-            && adapter_packet_path.contains("udp_packet_path_carrier_descriptor_from_config")
-            && adapter_packet_path.contains("udp_packet_path_carrier_codec_from_config")
+            && !adapter_packet_path.contains("udp_packet_path_carrier_descriptor_from_config")
+            && !adapter_packet_path.contains("udp_packet_path_carrier_codec_from_config")
             && adapter_packet_path.contains("packet_path_carrier_descriptor_from_build")
             && !adapter_packet_path.contains(".into_codec()")
             && !adapter_packet_path.contains("descriptor.cache_key()")
             && !adapter_packet_path.contains("descriptor.server()")
             && !adapter_packet_path.contains("descriptor.port()")
-            && adapter_packet_path.contains("udp_packet_path_datagram_source_build_from_config")
+            && !adapter_packet_path.contains("udp_packet_path_datagram_source_build_from_config")
             && adapter_packet_path.contains("udp_datagram_source_from_build")
             && !adapter_packet_path.contains("spec.datagram_source_parts()")
             && adapter_packet_path.contains("udp_datagram_source_from_build(datagram)")
@@ -13187,7 +14188,7 @@ fn shadowsocks_udp_flow_cipher_is_protocol_parsed() {
         !adapter.contains("CipherKind::from_str")
             && !adapter.contains("ShadowsocksUdpFlowResume::from_config")
             && !adapter.contains("ShadowsocksUdpFlowConfig::new")
-            && adapter_flow.contains("shadowsocks::udp::udp_flow_resume_from_config")
+            && adapter.contains("shadowsocks::udp::udp_flow_resume_from_config")
             && !adapter_flow.contains("ShadowsocksUdpFlowConfig::new")
             && protocol_outbound.contains("pub fn parse_udp_cipher("),
         "Shadowsocks UDP adapter should ask protocols/shadowsocks to parse ordinary UDP flow cipher config"
@@ -13256,7 +14257,7 @@ fn shadowsocks_udp_flow_cipher_is_protocol_parsed() {
         !adapter.contains("ShadowsocksUdpFlowResume::from_config")
             && !adapter.contains("ShadowsocksUdpFlowConfig::new")
             && !adapter.contains(".flow_resume()")
-            && adapter_flow.contains("shadowsocks::udp::udp_flow_resume_from_config")
+            && adapter.contains("shadowsocks::udp::udp_flow_resume_from_config")
             && !adapter_flow.contains("ShadowsocksUdpFlowConfig::new")
             && !adapter_flow.contains(".flow_resume()")
             && !adapter.contains("ShadowsocksUdpFlowResume::new")
@@ -13365,10 +14366,10 @@ fn shadowsocks_packet_path_cipher_is_protocol_parsed() {
         !adapter.contains("CipherKind::from_str")
             && !adapter.contains("ShadowsocksUdpFlowResume::from_config")
             && !adapter.contains("ShadowsocksUdpFlowConfig::new")
-            && adapter_flow.contains("shadowsocks::udp::udp_flow_resume_from_config")
+            && adapter.contains("shadowsocks::udp::udp_flow_resume_from_config")
             && !adapter_flow.contains("ShadowsocksUdpFlowConfig::new")
-            && adapter_packet_path.contains("shadowsocks::udp::udp_packet_path_carrier_descriptor_from_config")
-            && adapter_packet_path.contains("shadowsocks::udp::udp_packet_path_carrier_codec_from_config")
+            && adapter.contains("shadowsocks::udp::udp_packet_path_carrier_descriptor_from_config")
+            && adapter.contains("shadowsocks::udp::udp_packet_path_carrier_codec_from_config")
             && !adapter_packet_path.contains("ShadowsocksUdpFlowConfig::new"),
         "Shadowsocks adapter should ask protocols/shadowsocks to parse packet-path carrier/datagram cipher config"
     );
@@ -13393,21 +14394,21 @@ fn shadowsocks_packet_path_cipher_is_protocol_parsed() {
             && !adapter.contains("resume.codec()")
             && !adapter.contains("resume.packet_path_codec()")
             && !adapter.contains("config.packet_path_spec()")
-            && adapter_packet_path.contains("shadowsocks::udp::udp_packet_path_carrier_descriptor_from_config")
-            && adapter_packet_path.contains("shadowsocks::udp::udp_packet_path_carrier_codec_from_config")
+            && adapter.contains("shadowsocks::udp::udp_packet_path_carrier_descriptor_from_config")
+            && adapter.contains("shadowsocks::udp::udp_packet_path_carrier_codec_from_config")
             && !adapter_packet_path.contains(".packet_path_spec()")
             && !adapter_packet_path.contains("packet_path.cache_key()")
             && !adapter_packet_path.contains("packet_path.codec()")
             && !adapter_packet_path.contains("UdpDatagramSourceParts")
             && !adapter_packet_path.contains(".into_codec()")
             && adapter_packet_path.contains("udp_datagram_source_from_build(datagram)")
-            && adapter_packet_path.contains("udp_packet_path_carrier_descriptor_from_config")
-            && adapter_packet_path.contains("udp_packet_path_carrier_codec_from_config")
+            && !adapter_packet_path.contains("udp_packet_path_carrier_descriptor_from_config")
+            && !adapter_packet_path.contains("udp_packet_path_carrier_codec_from_config")
             && adapter_packet_path.contains("packet_path_carrier_descriptor_from_build")
             && !adapter_packet_path.contains("descriptor.cache_key()")
             && !adapter_packet_path.contains("descriptor.server()")
             && !adapter_packet_path.contains("descriptor.port()")
-            && adapter_packet_path.contains("udp_packet_path_datagram_source_build_from_config")
+            && !adapter_packet_path.contains("udp_packet_path_datagram_source_build_from_config")
             && adapter_packet_path.contains("udp_datagram_source_from_build")
             && !adapter_packet_path.contains("spec.datagram_source_parts()")
             && adapter_packet_path.contains("udp_datagram_source_from_build(datagram)")
@@ -13468,13 +14469,16 @@ fn shadowsocks_packet_path_cipher_is_protocol_parsed() {
             && !adapter.contains("resume.packet_path_cache_key()")
             && !adapter.contains("packet_path.cache_key()")
             && !adapter_packet_path.contains("packet_path.cache_key()")
-            && adapter_packet_path.contains("udp_packet_path_carrier_descriptor_from_config")
-            && adapter_packet_path.contains("udp_packet_path_carrier_codec_from_config")
+            && adapter.contains("udp_packet_path_carrier_descriptor_from_config")
+            && adapter.contains("udp_packet_path_carrier_codec_from_config")
+            && !adapter_packet_path.contains("udp_packet_path_carrier_descriptor_from_config")
+            && !adapter_packet_path.contains("udp_packet_path_carrier_codec_from_config")
             && adapter_packet_path.contains("packet_path_carrier_descriptor_from_build")
             && !adapter_packet_path.contains("descriptor.cache_key()")
             && !adapter_packet_path.contains("descriptor.server()")
             && !adapter_packet_path.contains("descriptor.port()")
-            && adapter_packet_path.contains("udp_packet_path_datagram_source_build_from_config")
+            && adapter.contains("udp_packet_path_datagram_source_build_from_config")
+            && !adapter_packet_path.contains("udp_packet_path_datagram_source_build_from_config")
             && !adapter_packet_path.contains("spec.datagram_source_parts()")
             && adapter_packet_path.contains("udp_datagram_source_from_build(datagram)")
             && !adapter_packet_path.contains("spec.carrier()")
@@ -13531,11 +14535,10 @@ fn udp_build_traits_consume_protocol_parts() {
     let socks5_packet_path = read("src/adapters/socks5/udp/packet_path.rs");
     let shadowsocks_packet_path = read("src/adapters/shadowsocks/udp/packet_path.rs");
     let shadowsocks_managed = read("src/adapters/shadowsocks/udp/managed.rs");
-    let hysteria2_connector = read("src/adapters/hysteria2/connector.rs");
+    let hysteria2_connector = read("src/adapters/hysteria2/udp/connector.rs");
     let trojan_connector = read("src/adapters/trojan/udp/managed/connector.rs");
     let mieru_connector = read("src/adapters/mieru/udp/managed/connector.rs");
-    let socks5_shared = fs::read_to_string(repo_root().join("protocols/socks5/src/shared.rs"))
-        .expect("read socks5 shared source");
+    let socks5_udp = read_repo_module_tree("protocols/socks5/src/udp.rs");
     let shadowsocks_protocol =
         fs::read_to_string(repo_root().join("protocols/shadowsocks/src/outbound.rs"))
             .expect("read shadowsocks protocol outbound source");
@@ -13543,10 +14546,9 @@ fn udp_build_traits_consume_protocol_parts() {
         .expect("read hysteria2 protocol udp source");
     let trojan_protocol = fs::read_to_string(repo_root().join("protocols/trojan/src/outbound.rs"))
         .expect("read trojan protocol outbound source");
-    let mieru_protocol = fs::read_to_string(repo_root().join("protocols/mieru/src/udp.rs"))
-        .expect("read mieru protocol udp source");
-    let socks5_descriptor_impl = impl_block(&socks5_shared, "Socks5UdpPacketPathCarrierDescriptor");
-    let socks5_build_impl = impl_block(&socks5_shared, "Socks5UdpPacketPathCarrierBuild");
+    let mieru_protocol = read_repo_module_tree("protocols/mieru/src/udp.rs");
+    let socks5_descriptor_impl = impl_block(&socks5_udp, "Socks5UdpPacketPathCarrierDescriptor");
+    let socks5_build_impl = impl_block(&socks5_udp, "Socks5UdpPacketPathCarrierBuild");
     let shadowsocks_descriptor_impl = impl_block(
         &shadowsocks_protocol,
         "ShadowsocksUdpPacketPathCarrierDescriptor",
@@ -13576,9 +14578,9 @@ fn udp_build_traits_consume_protocol_parts() {
     );
     assert!(
         trojan_connector.contains("fn into_parts(self) -> (String, bool)")
-            && trojan_connector.contains("self.into_parts()")
+            && trojan_connector.contains("trojan::udp::TrojanUdpConnectorFlow::into_parts(self)")
             && mieru_connector.contains("fn into_parts(self) -> (String, bool)")
-            && mieru_connector.contains("self.into_parts()")
+            && mieru_connector.contains("mieru::udp::MieruUdpConnectorFlow::into_parts(self)")
             && !trojan_connector.contains("self.cache_key()")
             && !trojan_connector.contains("self.requires_relay_upstream()")
             && !mieru_connector.contains("self.cache_key()")
@@ -13599,8 +14601,10 @@ fn udp_build_traits_consume_protocol_parts() {
             && !datagram_manager.contains(".cache_key()")
             && hysteria2_connector.contains("fn into_cache_key(self) -> String")
             && shadowsocks_managed.contains("fn into_cache_key(self) -> String")
-            && hysteria2_connector.contains("self.into_cache_key()")
-            && shadowsocks_managed.contains("self.into_cache_key()")
+            && hysteria2_connector
+                .contains("hysteria2::udp::Hysteria2UdpConnectorFlow::into_cache_key(self)")
+            && shadowsocks_managed
+                .contains("shadowsocks::udp::ShadowsocksUdpSocketFlowSpec::into_cache_key(self)")
             && !hysteria2_connector.contains("self.cache_key()")
             && !shadowsocks_managed.contains("self.cache_key()"),
         "managed datagram connector flow builds should consume cache identity instead of exposing cache-key getters to proxy"
@@ -13611,16 +14615,21 @@ fn udp_build_traits_consume_protocol_parts() {
             && packet_path.contains("fn into_path_parts(self) -> (String, UdpDatagramKey)")
             && !packet_path.contains("fn server(&self) -> &str;")
             && !packet_path.contains("fn port(&self) -> u16;")
-            && socks5_packet_path.contains("self.into_parts()")
-            && shadowsocks_packet_path.contains("self.into_parts()")
-            && hysteria2_connector.contains("self.into_parts()")
+            && socks5_packet_path
+                .contains("socks5::udp::Socks5UdpPacketPathCarrierDescriptor::into_parts(self)")
+            && shadowsocks_packet_path.contains(
+                "shadowsocks::udp::ShadowsocksUdpPacketPathCarrierDescriptor::into_parts(self)"
+            )
+            && hysteria2_connector.contains(
+                "hysteria2::udp::Hysteria2UdpPacketPathCarrierDescriptor::into_parts(self)"
+            )
             && !socks5_packet_path.contains("self.server()")
             && !socks5_packet_path.contains("self.port()")
             && !shadowsocks_packet_path.contains("self.server()")
             && !shadowsocks_packet_path.contains("self.port()")
             && !hysteria2_connector.contains("self.server()")
             && !hysteria2_connector.contains("self.port()")
-            && socks5_shared.contains("pub fn into_parts(self) -> (String, String, u16)")
+            && socks5_udp.contains("pub fn into_parts(self) -> (String, String, u16)")
             && shadowsocks_protocol.contains(
                 "pub fn into_parts(self) -> (alloc::string::String, alloc::string::String, u16)"
             )
@@ -13726,13 +14735,7 @@ fn adapters_do_not_own_udp_packet_path_cache_key_formats() {
 
     let udp_root = read("src/runtime/udp_flow/registered/mod.rs");
     let packet_path_snapshot = read("src/runtime/udp_flow/packet_path.rs");
-    let socks5_shared = manifest_dir()
-        .parent()
-        .and_then(std::path::Path::parent)
-        .expect("workspace root")
-        .join("protocols/socks5/src/shared.rs");
-    let socks5_shared =
-        fs::read_to_string(socks5_shared).expect("read socks5 protocol shared source");
+    let socks5_udp = read_repo_module_tree("protocols/socks5/src/udp.rs");
     let socks5_lib = fs::read_to_string(repo_root().join("protocols/socks5/src/lib.rs"))
         .expect("read socks5 protocol lib source");
     let hysteria2_udp = manifest_dir()
@@ -13748,17 +14751,17 @@ fn adapters_do_not_own_udp_packet_path_cache_key_formats() {
         "protocol_runtime::udp should not own packet-path cache identity helpers"
     );
     assert!(
-        socks5_shared.contains("fn udp_cache_key(")
-            && !socks5_shared.contains("pub fn udp_cache_key(")
-            && socks5_shared.contains("socks5|"),
+        socks5_udp.contains("fn udp_cache_key(")
+            && !socks5_udp.contains("pub fn udp_cache_key(")
+            && socks5_udp.contains("socks5|"),
         "protocols/socks5 should own SOCKS5 cache identity construction internally"
     );
     let proxy_test_support = fs::read_to_string(manifest_dir().join("tests/support/mod.rs"))
         .expect("read proxy test support source");
     assert!(
-        socks5_shared.contains("pub(crate) struct Socks5UdpPacket")
-            && socks5_shared.contains("Socks5InboundUdpRequest")
-            && socks5_shared.contains("Socks5InboundUdpResponse")
+        socks5_udp.contains("pub(crate) struct Socks5UdpPacket")
+            && socks5_udp.contains("Socks5InboundUdpRequest")
+            && socks5_udp.contains("Socks5InboundUdpResponse")
             && !socks5_lib.contains("Socks5UdpPacket,")
             && !proxy_test_support.contains("socks5::udp::Socks5UdpPacket"),
         "SOCKS5 raw UDP packet model should remain protocol-private; public callers use inbound UDP request/response views"
@@ -13772,7 +14775,7 @@ fn adapters_do_not_own_udp_packet_path_cache_key_formats() {
         "encode_udp_associate_response_to_client",
     ] {
         assert!(
-            socks5_shared.contains(&format!("pub(crate) fn {private_helper}("))
+            socks5_udp.contains(&format!("pub(crate) fn {private_helper}("))
                 && !socks5_lib.contains(private_helper),
             "SOCKS5 UDP helper `{private_helper}` should stay crate-private and should not be re-exported"
         );
@@ -13781,12 +14784,15 @@ fn adapters_do_not_own_udp_packet_path_cache_key_formats() {
     let socks5_packet_path = read("src/adapters/socks5/udp/packet_path.rs");
     assert!(
         !socks5_adapter.contains("socks5::udp_cache_key")
-            && !socks5_adapter.contains("Socks5UdpFlowConfig::new")
-            && socks5_packet_path.contains("socks5::udp::udp_packet_path_carrier_descriptor_from_config")
+            && socks5_adapter.contains("Socks5UdpFlowConfig::new")
+            && !socks5_adapter.contains("socks5::udp::udp_packet_path_carrier_descriptor_from_config")
+            && !socks5_adapter.contains("socks5::udp::udp_packet_path_carrier_build_from_config")
+            && !socks5_adapter.contains("socks5::udp::udp_flow_resume_from_config")
+            && !socks5_packet_path.contains("socks5::udp::udp_packet_path_carrier_descriptor_from_config")
             && !socks5_packet_path.contains("Socks5UdpFlowConfig::new")
             && !socks5_packet_path.contains(".packet_path_spec()")
-            && socks5_packet_path.contains("udp_packet_path_carrier_build_from_config")
-            && socks5_packet_path.contains("udp_packet_path_carrier_descriptor_from_config")
+            && !socks5_packet_path.contains("udp_packet_path_carrier_build_from_config")
+            && !socks5_packet_path.contains("udp_packet_path_carrier_descriptor_from_config")
             && socks5_packet_path.contains("packet_path_carrier_descriptor_from_build")
             && !socks5_packet_path.contains("descriptor.cache_key()")
             && !socks5_packet_path.contains("descriptor.server()")
@@ -13798,21 +14804,26 @@ fn adapters_do_not_own_udp_packet_path_cache_key_formats() {
             && !socks5_packet_path.contains("spec.carrier_build().association_target()")
             && !socks5_packet_path.contains("carrier.association_target()")
             && !socks5_packet_path.contains("into_association_target()")
-            && socks5_shared.contains("pub fn packet_path_carrier_association_target")
-            && socks5_shared.contains("carrier.into_association_target()")
+            && socks5_udp.contains("pub fn packet_path_carrier_association_target")
+            && socks5_udp.contains("carrier.into_association_target()")
             && !socks5_packet_path.contains(".packet_path_cache_key()")
             && !socks5_adapter.contains("Socks5UdpFlowConfig {")
             && !socks5_packet_path.contains("Socks5UdpFlowConfig {")
-            && socks5_shared.contains("struct Socks5UdpFlowConfig")
-            && socks5_shared.contains("pub fn new(")
-            && socks5_shared.contains("pub struct Socks5UdpPacketPathSpec")
-            && socks5_shared.contains("pub fn packet_path_spec(&self)")
-            && socks5_shared.contains("pub fn udp_packet_path_spec_from_config(")
-            && !socks5_shared.contains("pub fn carrier_cache_key(&self)")
-            && !socks5_shared.contains("pub struct Socks5UdpPacketPathCarrier {")
-            && !socks5_shared.contains("pub fn packet_path_cache_key(&self)")
-            && !socks5_shared.contains("pub fn packet_path_association_config(&self)"),
-        "SOCKS5 adapter should request packet-path cache identity through a protocol-owned config helper"
+            && socks5_udp.contains("struct Socks5UdpFlowConfig")
+            && socks5_udp.contains("pub fn new(")
+            && socks5_udp.contains("pub struct Socks5UdpPacketPathSpec")
+            && socks5_udp.contains("pub fn packet_path_spec(&self)")
+            && socks5_udp.contains("pub fn carrier_descriptor(&self)")
+            && socks5_udp.contains("pub fn carrier_build(&self)")
+            && !socks5_udp.contains("pub fn udp_packet_path_spec_from_config(")
+            && !socks5_udp.contains("pub fn udp_packet_path_carrier_descriptor_from_config(")
+            && !socks5_udp.contains("pub fn udp_packet_path_carrier_build_from_config(")
+            && !socks5_udp.contains("pub fn udp_flow_resume_from_config(")
+            && !socks5_udp.contains("pub fn carrier_cache_key(&self)")
+            && !socks5_udp.contains("pub struct Socks5UdpPacketPathCarrier {")
+            && !socks5_udp.contains("pub fn packet_path_cache_key(&self)")
+            && !socks5_udp.contains("pub fn packet_path_association_config(&self)"),
+        "SOCKS5 adapter should request packet-path cache identity through one protocol-owned UDP config object"
     );
     assert!(
         hysteria2_udp.contains("fn udp_cache_key(")

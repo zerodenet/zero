@@ -1,4 +1,3 @@
-use std::net::{IpAddr, SocketAddr};
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use socks5::udp::Socks5EstablishedUdpAssociation;
@@ -6,9 +5,6 @@ use zero_core::Address;
 use zero_engine::EngineError;
 use zero_platform_tokio::{TokioDatagramSocket, TokioSocket};
 
-use super::model::{
-    Socks5UdpAssociationHandle, Socks5UdpPacketPathAssociation, UpstreamAssociationCloseReason,
-};
 use crate::runtime::Proxy;
 use crate::transport::MeteredStream;
 
@@ -25,42 +21,29 @@ impl ActiveUpstreamSocks5UdpAssociation {
         target: socks5::udp::Socks5UdpAssociationTarget,
         session_id: u64,
     ) -> Result<Self, EngineError> {
-        let (server, port) = target.connect_endpoint().into_parts();
+        let server = target.server().to_owned();
+        let port = target.port();
         let control = proxy
             .protocols
             .direct_connector()
             .connect_host(&server, port, proxy.resolver.as_ref())
             .await?;
         let mut control = MeteredStream::new(control);
-        let relay_target = socks5::udp::establish_udp_relay_with_control(
-            &mut control,
-            target.association_config(),
-        )
-        .await?;
+        let (relay_address, relay_port) = target.establish_with_control(&mut control).await?;
         proxy.record_session_outbound_traffic(session_id, control.drain_traffic());
         let control = control.into_inner();
-        let relay_addr = proxy
-            .protocols
-            .direct_connector()
-            .resolve_address(
-                &relay_target.address,
-                relay_target.port,
-                proxy.resolver.as_ref(),
-                "failed to resolve upstream socks5 udp relay",
-            )
-            .await?;
-
-        let bind_addr = match relay_addr {
-            SocketAddr::V4(_) => SocketAddr::new(IpAddr::V4(std::net::Ipv4Addr::UNSPECIFIED), 0),
-            SocketAddr::V6(_) => SocketAddr::new(IpAddr::V6(std::net::Ipv6Addr::UNSPECIFIED), 0),
-        };
-        let relay = TokioDatagramSocket::bind_addr(bind_addr).await?;
+        let (relay_addr, relay) = crate::runtime::udp_helpers::resolve_udp_peer_endpoint(
+            proxy,
+            &relay_address,
+            relay_port,
+            "failed to resolve upstream socks5 udp relay",
+        )
+        .await?;
 
         Ok(Self {
             proxy: proxy.clone(),
             close_recorded: AtomicBool::new(false),
             association: Socks5EstablishedUdpAssociation::from_relay_socket_address(
-                target,
                 control,
                 relay,
                 zero_platform_tokio::socket_addr_to_socket_address(relay_addr),
@@ -68,17 +51,20 @@ impl ActiveUpstreamSocks5UdpAssociation {
         })
     }
 
-    pub(super) fn close(self, reason: UpstreamAssociationCloseReason) {
+    pub(super) fn close(
+        self,
+        reason: crate::runtime::udp_flow::registered::UpstreamAssociationCloseReason,
+    ) {
         self.close_recorded.store(true, Ordering::Relaxed);
 
         match reason {
-            UpstreamAssociationCloseReason::Closed => {
+            crate::runtime::udp_flow::registered::UpstreamAssociationCloseReason::Closed => {
                 self.proxy.record_udp_upstream_association_closed();
             }
-            UpstreamAssociationCloseReason::IdleTimeout => {
+            crate::runtime::udp_flow::registered::UpstreamAssociationCloseReason::IdleTimeout => {
                 self.proxy.record_udp_upstream_association_idle_timeout();
             }
-            UpstreamAssociationCloseReason::Dropped => {
+            crate::runtime::udp_flow::registered::UpstreamAssociationCloseReason::Dropped => {
                 self.proxy.record_udp_upstream_association_dropped();
             }
         }
@@ -115,9 +101,36 @@ impl ActiveUpstreamSocks5UdpAssociation {
 }
 
 #[async_trait::async_trait]
-impl Socks5UdpAssociationHandle for ActiveUpstreamSocks5UdpAssociation {
-    fn close(self: Box<Self>, reason: UpstreamAssociationCloseReason) {
-        (*self).close(reason);
+impl crate::runtime::udp_flow::packet_path::PacketPathPayloadTransport
+    for ActiveUpstreamSocks5UdpAssociation
+{
+    async fn send_to(
+        &self,
+        target: &Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<(), EngineError> {
+        self.send_packet(target, port, payload).await?;
+        Ok(())
+    }
+
+    async fn recv_from(&self, buf: &mut [u8]) -> Result<usize, EngineError> {
+        ActiveUpstreamSocks5UdpAssociation::recv_payload(self, buf).await
+    }
+}
+
+#[async_trait::async_trait]
+impl
+    crate::runtime::udp_flow::registered::UpstreamAssociationTransport<
+        socks5::udp::Socks5UdpAssociationTarget,
+    > for ActiveUpstreamSocks5UdpAssociation
+{
+    async fn establish(
+        proxy: &Proxy,
+        target: socks5::udp::Socks5UdpAssociationTarget,
+        session_id: u64,
+    ) -> Result<Self, EngineError> {
+        Self::establish(proxy, target, session_id).await
     }
 
     async fn send_packet(
@@ -126,30 +139,18 @@ impl Socks5UdpAssociationHandle for ActiveUpstreamSocks5UdpAssociation {
         port: u16,
         payload: &[u8],
     ) -> Result<usize, EngineError> {
-        self.send_packet(target, port, payload).await
+        Self::send_packet(self, target, port, payload).await
     }
 
     async fn recv_response_parts(
         &self,
         buf: &mut [u8],
     ) -> Result<(Address, u16, Vec<u8>), EngineError> {
-        self.recv_response_parts(buf).await
-    }
-}
-
-#[async_trait::async_trait]
-impl Socks5UdpPacketPathAssociation for ActiveUpstreamSocks5UdpAssociation {
-    async fn send_packet(
-        &self,
-        target: &Address,
-        port: u16,
-        payload: &[u8],
-    ) -> Result<usize, EngineError> {
-        self.send_packet(target, port, payload).await
+        Self::recv_response_parts(self, buf).await
     }
 
-    async fn recv_payload(&self, buf: &mut [u8]) -> Result<usize, EngineError> {
-        self.recv_payload(buf).await
+    fn close(self, reason: crate::runtime::udp_flow::registered::UpstreamAssociationCloseReason) {
+        Self::close(self, reason);
     }
 }
 

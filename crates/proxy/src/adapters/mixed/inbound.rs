@@ -5,6 +5,8 @@ use crate::adapters::mixed::MixedAdapter;
 use crate::protocol_registry::BoundInbound;
 use crate::runtime::Proxy;
 
+mod listener;
+
 impl MixedAdapter {
     pub(super) fn spawn_inbound_impl(
         &self,
@@ -22,21 +24,13 @@ impl MixedAdapter {
                     "mixed adapter received non-mixed inbound config",
                 )));
             };
-            crate::inbound::run_mixed_listener_with_bound(
+            listener::run_mixed_listener_with_bound(
                 &p,
-                crate::inbound::MixedInboundRequest {
-                    socks5_auth: socks5::password_auth_from_config_users(socks5_users.iter().map(
-                        |user| {
-                            (
-                                user.username.as_str(),
-                                user.password.as_str(),
-                                user.principal_key.as_deref(),
-                                user.up_bps,
-                                user.down_bps,
-                            )
-                        },
-                    )),
-                    inbound,
+                listener::MixedInboundRequest {
+                    inbound_tag: inbound.tag,
+                    socks5_acceptor: socks5::Socks5InboundTcpAcceptor::from_config_users(
+                        crate::adapters::socks5::inbound::config_user_refs(socks5_users),
+                    ),
                 },
                 bound.into_tcp(),
                 shutdown_rx,

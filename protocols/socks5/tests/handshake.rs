@@ -1,8 +1,10 @@
+use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 
 use socks5::udp::{
-    Socks5InboundUdpCodec, Socks5UdpRelay, Socks5UdpRelayEndpoint, Socks5UdpRelayError,
+    Socks5EstablishedUdpAssociation, Socks5InboundUdpAssociationSession, Socks5InboundUdpCodec,
+    Socks5UdpRelayError,
 };
 use socks5::{
     Socks5Inbound, Socks5Outbound, Socks5OutboundAuth, Socks5PasswordAuth, Socks5Request,
@@ -67,7 +69,7 @@ impl Socks5PasswordAuth for TestPasswordAuth {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 struct MockDatagramSocket {
     state: Arc<Mutex<MockDatagramState>>,
 }
@@ -115,6 +117,77 @@ impl DatagramSocket for MockDatagramSocket {
             .expect("lock")
             .sends
             .push((buf.to_vec(), addr, port));
+        Ok(())
+    }
+}
+
+fn test_established_udp_association(
+    socket: MockDatagramSocket,
+) -> Socks5EstablishedUdpAssociation<MockSocket, MockDatagramSocket> {
+    Socks5EstablishedUdpAssociation::from_relay_socket_address(
+        MockSocket::new(&[]),
+        socket,
+        zero_traits::SocketAddress {
+            ip: IpAddress::V4([127, 0, 0, 1]),
+            port: 1080,
+        },
+    )
+}
+
+#[derive(Debug, Default)]
+struct CaptureInboundUdpDispatch {
+    local_dns: Vec<String>,
+    packets: Vec<(Address, u16, Vec<u8>, Option<u64>)>,
+}
+
+impl socks5::udp::Socks5InboundUdpDispatchActionDispatcher for CaptureInboundUdpDispatch {
+    type Error = Error;
+
+    async fn dispatch_local_dns(&mut self, domain: &str) -> Result<(), Self::Error> {
+        self.local_dns.push(domain.to_owned());
+        Ok(())
+    }
+
+    async fn dispatch_inbound_packet(
+        &mut self,
+        view: socks5::udp::Socks5InboundUdpDispatchView,
+    ) -> Result<(), Self::Error> {
+        self.packets.push(view.into_pipe_parts());
+        Ok(())
+    }
+}
+
+#[derive(Debug, Default)]
+struct CaptureRelayPacketDispatch {
+    client_packets: Vec<Vec<u8>>,
+    peer_response: Option<(zero_traits::SocketAddress, Vec<u8>)>,
+    unexpected_senders: Vec<zero_traits::SocketAddress>,
+}
+
+struct RelayPacketCapture<'a>(&'a RefCell<CaptureRelayPacketDispatch>);
+
+impl socks5::udp::Socks5InboundUdpRelayPacketDispatcher for RelayPacketCapture<'_> {
+    type Error = Error;
+
+    async fn dispatch_client_packet(&mut self, payload: &[u8]) -> Result<(), Self::Error> {
+        self.0.borrow_mut().client_packets.push(payload.to_vec());
+        Ok(())
+    }
+
+    async fn dispatch_peer_response(
+        &mut self,
+        sender: zero_traits::SocketAddress,
+        payload: &[u8],
+    ) -> Result<(), Self::Error> {
+        self.0.borrow_mut().peer_response = Some((sender, payload.to_vec()));
+        Ok(())
+    }
+
+    async fn dispatch_unexpected_sender(
+        &mut self,
+        sender: zero_traits::SocketAddress,
+    ) -> Result<(), Self::Error> {
+        self.0.borrow_mut().unexpected_senders.push(sender);
         Ok(())
     }
 }
@@ -447,22 +520,51 @@ fn inbound_udp_codec_decodes_requests_and_encodes_responses() {
 }
 
 #[tokio::test]
+async fn inbound_udp_association_dispatches_client_packets_through_protocol_dispatcher() {
+    let association = Socks5InboundUdpAssociationSession::new();
+    let codec = Socks5InboundUdpCodec;
+    let mut dispatch = CaptureInboundUdpDispatch::default();
+
+    let packet = codec
+        .encode_response_to_client(&Address::Domain("example.com".into()), 5353, b"ping")
+        .expect("build request");
+    association
+        .dispatch_client_packet(&packet, &mut dispatch)
+        .await
+        .expect("dispatch packet");
+
+    let dns_packet = codec
+        .encode_response_to_client(&Address::Domain("dns.example".into()), 53, b"dns")
+        .expect("build dns request");
+    association
+        .dispatch_client_packet(&dns_packet, &mut dispatch)
+        .await
+        .expect("dispatch dns packet");
+
+    assert_eq!(
+        dispatch.packets,
+        vec![(
+            Address::Domain("example.com".into()),
+            5353,
+            b"ping".to_vec(),
+            None,
+        )]
+    );
+    assert_eq!(dispatch.local_dns, vec!["dns.example".to_owned()]);
+}
+
+#[tokio::test]
 async fn udp_relay_wraps_socks5_packet_before_send() {
     let socket = MockDatagramSocket::default();
-    let relay = Socks5UdpRelay::new(
-        socket,
-        Socks5UdpRelayEndpoint {
-            address: IpAddress::V4([127, 0, 0, 1]),
-            port: 1080,
-        },
-    );
+    let sends = socket.clone();
+    let association = test_established_udp_association(socket);
 
-    let sent = relay
+    let sent = association
         .send_packet(&Address::Domain("example.com".into()), 5353, b"ping")
         .await
         .expect("send packet");
 
-    let sends = relay.socket().sends();
+    let sends = sends.sends();
     assert_eq!(sends.len(), 1);
     assert_eq!(sends[0].1, IpAddress::V4([127, 0, 0, 1]));
     assert_eq!(sends[0].2, 1080);
@@ -477,21 +579,113 @@ async fn udp_relay_wraps_socks5_packet_before_send() {
 }
 
 #[tokio::test]
+async fn inbound_udp_association_sends_peer_response_to_current_client() {
+    let socket = MockDatagramSocket::default();
+    let mut association = Socks5InboundUdpAssociationSession::new();
+    let relay_dispatch = RefCell::new(CaptureRelayPacketDispatch::default());
+
+    association
+        .dispatch_relay_packet(
+            zero_traits::SocketAddress {
+                ip: IpAddress::V4([127, 0, 0, 1]),
+                port: 10000,
+            },
+            b"client packet",
+            &mut RelayPacketCapture(&relay_dispatch),
+        )
+        .await
+        .expect("dispatch client packet");
+    association
+        .dispatch_relay_packet(
+            zero_traits::SocketAddress {
+                ip: IpAddress::V4([8, 8, 8, 8]),
+                port: 53,
+            },
+            b"pong",
+            &mut RelayPacketCapture(&relay_dispatch),
+        )
+        .await
+        .expect("dispatch peer response");
+
+    assert_eq!(
+        relay_dispatch.borrow().client_packets,
+        vec![b"client packet".to_vec()]
+    );
+    let (sender, payload) = relay_dispatch
+        .borrow_mut()
+        .peer_response
+        .take()
+        .expect("peer response");
+
+    let written = association
+        .send_current_client_peer_response_parts(&socket, sender, &payload)
+        .await
+        .expect("send response");
+
+    let sends = socket.sends();
+    assert_eq!(sends.len(), 1);
+    assert_eq!(sends[0].1, IpAddress::V4([127, 0, 0, 1]));
+    assert_eq!(sends[0].2, 10000);
+    assert_eq!(written, sends[0].0.len());
+
+    let decoded = Socks5InboundUdpCodec
+        .decode_response(&sends[0].0)
+        .expect("decode response");
+    assert_eq!(decoded.target(), &Address::Ipv4([8, 8, 8, 8]));
+    assert_eq!(decoded.port(), 53);
+    assert_eq!(decoded.payload(), b"pong");
+}
+
+#[tokio::test]
+async fn inbound_udp_association_uses_udp_associate_client_hint_when_present() {
+    let socket = MockDatagramSocket::default();
+    let mut association =
+        Socks5Inbound.accept_udp_association(socks5::udp::Socks5UdpAssociateRequest {
+            client_hint: Address::Ipv4([127, 0, 0, 1]),
+            client_port: 10000,
+        });
+    let relay_dispatch = RefCell::new(CaptureRelayPacketDispatch::default());
+
+    association
+        .dispatch_relay_packet(
+            zero_traits::SocketAddress {
+                ip: IpAddress::V4([8, 8, 8, 8]),
+                port: 53,
+            },
+            b"pong",
+            &mut RelayPacketCapture(&relay_dispatch),
+        )
+        .await
+        .expect("dispatch peer response");
+
+    let (sender, payload) = relay_dispatch
+        .borrow_mut()
+        .peer_response
+        .take()
+        .expect("peer response");
+
+    let written = association
+        .send_current_client_peer_response_parts(&socket, sender, &payload)
+        .await
+        .expect("send response");
+
+    let sends = socket.sends();
+    assert_eq!(sends.len(), 1);
+    assert_eq!(sends[0].1, IpAddress::V4([127, 0, 0, 1]));
+    assert_eq!(sends[0].2, 10000);
+    assert_eq!(written, sends[0].0.len());
+}
+
+#[tokio::test]
 async fn udp_relay_rejects_packets_from_unexpected_sender() {
     let socket = MockDatagramSocket::with_recv(vec![(
         b"payload".to_vec(),
         IpAddress::V4([127, 0, 0, 2]),
         1080,
     )]);
-    let relay = Socks5UdpRelay::new(
-        socket,
-        Socks5UdpRelayEndpoint {
-            address: IpAddress::V4([127, 0, 0, 1]),
-            port: 1080,
-        },
-    );
+    let association = test_established_udp_association(socket);
 
-    let error = relay
+    let error = association
         .recv_packet(&mut [0_u8; 32])
         .await
         .expect_err("unexpected sender");

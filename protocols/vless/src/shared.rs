@@ -2,7 +2,10 @@ use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
 #[cfg(feature = "reality")]
-use zero_core::{Address, Error, InboundUdpDispatch, ProtocolType};
+use zero_core::{
+    Address, Error, InboundUdpDispatch, MuxUdpDecodeFailure, MuxUdpResponder, ProtocolType,
+    StreamUdpResponder,
+};
 use zero_traits::AsyncSocket;
 
 pub const VLESS_VERSION: u8 = 0x00;
@@ -1031,6 +1034,30 @@ impl VlessInboundUdpResponder {
 }
 
 #[cfg(feature = "reality")]
+impl<S> StreamUdpResponder<S> for VlessInboundUdpResponder
+where
+    S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Send + Unpin,
+{
+    async fn read_inbound_dispatch(
+        &mut self,
+        client: &mut S,
+    ) -> Result<Option<InboundUdpDispatch>, Error> {
+        self.read_inbound_dispatch_tokio(client).await
+    }
+
+    async fn write_response_for_target(
+        &mut self,
+        client: &mut S,
+        target: &Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<usize, Error> {
+        self.write_response_for_target_tokio(client, target, port, payload)
+            .await
+    }
+}
+
+#[cfg(feature = "reality")]
 impl VlessInboundMuxUdpResponder {
     pub fn new(
         session: VlessInboundUdpSession,
@@ -1065,6 +1092,30 @@ impl VlessInboundMuxUdpResponder {
 
     pub fn end_inbound_stream(&self) -> Result<usize, Error> {
         self.writer.end_inbound_stream(self.mux_session_id)
+    }
+}
+
+#[cfg(feature = "reality")]
+impl MuxUdpResponder for VlessInboundMuxUdpResponder {
+    fn decode_inbound_dispatch(&mut self, payload: &[u8]) -> Result<InboundUdpDispatch, Error> {
+        VlessInboundMuxUdpResponder::decode_inbound_dispatch(self, payload)
+    }
+
+    fn write_response_for_target(
+        &mut self,
+        target: &Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<usize, Error> {
+        VlessInboundMuxUdpResponder::write_response_for_target(self, target, port, payload)
+    }
+
+    fn end_inbound_stream(&mut self) -> Result<usize, Error> {
+        VlessInboundMuxUdpResponder::end_inbound_stream(self)
+    }
+
+    fn decode_failure(&self) -> MuxUdpDecodeFailure {
+        MuxUdpDecodeFailure::Continue
     }
 }
 

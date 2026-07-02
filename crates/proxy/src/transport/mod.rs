@@ -15,9 +15,7 @@ pub(crate) use tcp_flow::is_block_error;
 pub(crate) use tcp_outbound::{
     extract_tcp_stream, EstablishedTcpOutbound, TcpOutboundFailure, TcpRouteResult,
 };
-pub(crate) use tcp_relay::{
-    copy_one_way, relay_bidirectional_metered, relay_bidirectional_metered_throttled,
-};
+pub(crate) use tcp_relay::{relay_bidirectional_metered, relay_bidirectional_metered_throttled};
 
 // Re-export transport implementations from zero-transport.
 // Only items used directly by proxy code are listed.
@@ -33,7 +31,7 @@ pub(crate) use zero_transport::hysteria2_quic::{
     QuicConnectionOptions,
 };
 #[cfg(feature = "vless")]
-pub(crate) use zero_transport::quic::{connect_quic, QuicInbound};
+pub(crate) use zero_transport::quic::{connect_quic, QuicInbound, QuicStream};
 #[cfg(feature = "vless")]
 pub(crate) use zero_transport::split_http::{accept_xhttp_inbound, SplitHttpRegistry};
 #[cfg(any(feature = "vless", feature = "trojan", feature = "vmess"))]

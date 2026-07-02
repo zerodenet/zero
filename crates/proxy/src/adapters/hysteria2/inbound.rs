@@ -6,6 +6,8 @@ use crate::protocol_registry::BoundInbound;
 use crate::runtime::Proxy;
 use crate::transport::QuicInbound;
 
+mod listener;
+
 impl Hysteria2Adapter {
     pub(super) async fn bind_inbound_impl(
         &self,
@@ -53,9 +55,9 @@ impl Hysteria2Adapter {
                     )));
                 }
             };
-            crate::inbound::run_hysteria2_listener_with_bound(
+            listener::run_hysteria2_listener_with_bound(
                 &p,
-                crate::inbound::hysteria2::Hysteria2InboundRequest { inbound, profile },
+                listener::Hysteria2InboundRequest { inbound, profile },
                 bound,
                 shutdown_rx,
             )

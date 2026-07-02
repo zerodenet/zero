@@ -5,6 +5,8 @@ use crate::adapters::trojan::TrojanAdapter;
 use crate::protocol_registry::BoundInbound;
 use crate::runtime::Proxy;
 
+mod listener;
+
 impl TrojanAdapter {
     pub(super) fn spawn_inbound_impl(
         &self,
@@ -38,9 +40,9 @@ impl TrojanAdapter {
             };
             let tls_acceptor =
                 crate::transport::build_tls_acceptor(&tls_cfg, p.config.source_dir())?;
-            crate::inbound::run_trojan_listener_with_bound(
+            listener::run_trojan_listener_with_bound(
                 &p,
-                crate::inbound::trojan::TrojanInboundRequest {
+                listener::TrojanInboundRequest {
                     inbound,
                     profile,
                     tls_acceptor,

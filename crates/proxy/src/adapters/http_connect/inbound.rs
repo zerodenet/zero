@@ -5,6 +5,8 @@ use crate::adapters::http_connect::HttpConnectAdapter;
 use crate::protocol_registry::BoundInbound;
 use crate::runtime::Proxy;
 
+pub(in crate::adapters) mod listener;
+
 impl HttpConnectAdapter {
     pub(super) fn spawn_inbound_impl(
         &self,
@@ -16,7 +18,7 @@ impl HttpConnectAdapter {
     ) {
         let p = proxy.clone();
         listeners.spawn(async move {
-            crate::inbound::run_http_connect_listener_with_bound(
+            listener::run_http_connect_listener_with_bound(
                 &p,
                 inbound,
                 bound.into_tcp(),

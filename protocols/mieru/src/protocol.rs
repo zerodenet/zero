@@ -11,9 +11,9 @@ use zero_traits::{
 #[cfg(feature = "crypto")]
 use zero_traits::AsyncSocket;
 
-use crate::udp::{MieruUdpAssociatePacket, MieruUdpAssociatePayload};
 #[cfg(feature = "crypto")]
-use crate::{MieruOutbound, MieruTcpTarget};
+use crate::outbound::{MieruOutbound, MieruTcpTarget};
+use crate::udp::{MieruUdpAssociatePacket, MieruUdpAssociatePayload};
 
 #[derive(Debug, Default, Clone, Copy)]
 pub struct MieruProtocol;

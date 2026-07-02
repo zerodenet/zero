@@ -5,7 +5,7 @@ use std::task::{Context, Poll};
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 use zero_traits::AsyncSocket;
 
-use super::stream::ClientStream;
+use super::stream::{ClientStream, RecordingStream};
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct StreamTraffic {
@@ -41,6 +41,23 @@ impl<S> MeteredStream<S> {
 
     pub(crate) fn into_inner(self) -> S {
         self.inner
+    }
+}
+
+impl<S> MeteredStream<RecordingStream<S>> {
+    pub(crate) fn into_unrecorded_inner(self) -> S {
+        let (inner, _) = self.inner.into_parts();
+        inner
+    }
+}
+
+#[cfg(feature = "vless")]
+impl<S> vless::VlessFallbackCapture for MeteredStream<RecordingStream<S>> {
+    type Stream = S;
+
+    fn into_vless_fallback_replay(self) -> vless::VlessFallbackReplay<Self::Stream> {
+        let (stream, replay_head) = self.inner.into_parts();
+        vless::VlessFallbackReplay::new(stream, replay_head)
     }
 }
 

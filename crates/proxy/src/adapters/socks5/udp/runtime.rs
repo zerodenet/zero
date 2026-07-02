@@ -4,82 +4,32 @@ use async_trait::async_trait;
 use tokio::time::Instant as TokioInstant;
 use zero_engine::EngineError;
 
-use super::establish::{
-    self, Socks5UdpAssociationEstablishRequest, Socks5UdpAssociationEstablisher,
-};
-use super::model::{
-    BoxedSocks5UdpAssociation, ClosedSocks5UdpAssociation, Socks5UdpAssociationView,
-    UpstreamAssociationCloseReason,
-};
-use super::send::{self, Socks5UdpSend};
+use super::active::ActiveUpstreamSocks5UdpAssociation;
 use crate::runtime::udp_dispatch::FlowFailure;
 use crate::runtime::udp_flow::managed::{ManagedUdpFlowRequest, ManagedUdpFlowResume};
-use crate::runtime::udp_flow::registered::UpstreamAssociationHandler;
+use crate::runtime::udp_flow::registered::{
+    UpstreamAssociationHandler, UpstreamAssociationRuntime, UpstreamAssociationTarget,
+};
 use crate::runtime::udp_flow::response::UpstreamUdpResponse;
 
-pub(crate) struct Socks5UdpRuntime {
-    pub(super) upstream: Option<TrackedSocks5UdpAssociation>,
-    pub(super) idle_deadline: Option<TokioInstant>,
-    establisher: Box<dyn Socks5UdpAssociationEstablisher>,
-}
+type Socks5UpstreamAssociationRuntime = UpstreamAssociationRuntime<
+    socks5::udp::Socks5UdpAssociationTarget,
+    ActiveUpstreamSocks5UdpAssociation,
+>;
 
-pub(super) struct TrackedSocks5UdpAssociation {
-    identity: socks5::udp::Socks5UdpAssociationIdentity,
-    association: BoxedSocks5UdpAssociation,
-}
-
-impl TrackedSocks5UdpAssociation {
-    fn new(
-        identity: socks5::udp::Socks5UdpAssociationIdentity,
-        association: BoxedSocks5UdpAssociation,
-    ) -> Self {
-        Self {
-            identity,
-            association,
-        }
-    }
-
+impl UpstreamAssociationTarget for socks5::udp::Socks5UdpAssociationTarget {
     fn outbound_tag(&self) -> &str {
-        self.identity.outbound_tag()
+        self.outbound_tag()
     }
 
-    fn identity(&self) -> &socks5::udp::Socks5UdpAssociationIdentity {
-        &self.identity
-    }
-
-    fn lifecycle_record(&self) -> socks5::udp::Socks5UdpAssociationLifecycleRecord {
-        self.identity.lifecycle_record()
-    }
-
-    fn close(self, reason: UpstreamAssociationCloseReason) {
-        self.association.close(reason);
-    }
-
-    async fn send_packet(
-        &self,
-        target: &zero_core::Address,
-        port: u16,
-        payload: &[u8],
-    ) -> Result<usize, EngineError> {
-        self.association.send_packet(target, port, payload).await
-    }
-
-    async fn recv_response_parts(
-        &self,
-        buf: &mut [u8],
-    ) -> Result<(zero_core::Address, u16, Vec<u8>), EngineError> {
-        self.association.recv_response_parts(buf).await
+    fn log_parts(&self) -> (&str, &str, u16) {
+        self.log_parts()
     }
 }
 
-impl Default for Socks5UdpRuntime {
-    fn default() -> Self {
-        Self {
-            upstream: None,
-            idle_deadline: None,
-            establisher: establish::default_establisher(),
-        }
-    }
+#[derive(Default)]
+pub(crate) struct Socks5UdpRuntime {
+    runtime: Socks5UpstreamAssociationRuntime,
 }
 
 impl Socks5UdpRuntime {
@@ -87,144 +37,6 @@ impl Socks5UdpRuntime {
         resume
             .as_ref::<socks5::udp::Socks5UdpFlowResume>()
             .is_some()
-    }
-
-    pub(crate) fn idle_deadline(&self) -> Option<TokioInstant> {
-        self.idle_deadline
-    }
-
-    pub(crate) fn touch_idle(&mut self, timeout: Duration) {
-        self.idle_deadline = Some(TokioInstant::now() + timeout);
-    }
-
-    fn take_upstream(&mut self) -> Option<TrackedSocks5UdpAssociation> {
-        self.idle_deadline = None;
-        self.upstream.take()
-    }
-
-    pub(crate) fn upstream_view(&self) -> Option<Socks5UdpAssociationView<'_>> {
-        self.upstream
-            .as_ref()
-            .map(|upstream| Socks5UdpAssociationView {
-                outbound_tag: upstream.outbound_tag(),
-            })
-    }
-
-    async fn send(
-        &mut self,
-        request: Socks5UdpSend<'_>,
-        inbound_tag: &str,
-    ) -> Result<usize, EngineError> {
-        send::send(request, inbound_tag, self).await
-    }
-
-    pub(super) async fn send_packet(
-        &mut self,
-        proxy: &crate::runtime::Proxy,
-        inbound_tag: &str,
-        association: socks5::udp::Socks5UdpAssociationTarget,
-        session: &zero_core::Session,
-        payload: &[u8],
-    ) -> Result<usize, EngineError> {
-        self.ensure_association(proxy, inbound_tag, association, session.id)
-            .await?;
-
-        let association_ref = self
-            .upstream
-            .as_ref()
-            .expect("successful establish stores upstream association");
-
-        match association_ref
-            .send_packet(&session.target, session.port, payload)
-            .await
-        {
-            Ok(sent) => {
-                proxy.record_udp_upstream_packet_sent();
-                self.idle_deadline = Some(TokioInstant::now() + proxy.udp_upstream_idle_timeout());
-                Ok(sent)
-            }
-            Err(error) => {
-                proxy.record_udp_upstream_send_failure();
-                self.drop_after_send_error(inbound_tag, &error);
-                Err(error)
-            }
-        }
-    }
-
-    async fn ensure_association(
-        &mut self,
-        proxy: &crate::runtime::Proxy,
-        inbound_tag: &str,
-        association: socks5::udp::Socks5UdpAssociationTarget,
-        session_id: u64,
-    ) -> Result<(), EngineError> {
-        let target = association.identity();
-        let needs_new_association = self
-            .upstream
-            .as_ref()
-            .map(|a| !a.identity().matches(&target))
-            .unwrap_or(true);
-
-        if !needs_new_association {
-            proxy.record_udp_upstream_association_reused();
-            let record = target.lifecycle_record();
-            crate::logging::log_udp_upstream_association_reused(
-                inbound_tag,
-                record.outbound_tag(),
-                record.server(),
-                record.port(),
-            );
-            return Ok(());
-        }
-
-        if let Some(a) = self.upstream.take() {
-            a.close(UpstreamAssociationCloseReason::Closed);
-            self.idle_deadline = None;
-        }
-
-        match self
-            .establisher
-            .establish_boxed(Socks5UdpAssociationEstablishRequest {
-                proxy,
-                target: association,
-                session_id,
-            })
-            .await
-        {
-            Ok(a) => {
-                proxy.record_udp_upstream_association_created();
-                self.idle_deadline = Some(TokioInstant::now() + proxy.udp_upstream_idle_timeout());
-                let record = target.lifecycle_record();
-                crate::logging::log_udp_upstream_association_created(
-                    inbound_tag,
-                    record.outbound_tag(),
-                    record.server(),
-                    record.port(),
-                    proxy.udp_upstream_idle_timeout(),
-                );
-                self.upstream = Some(TrackedSocks5UdpAssociation::new(target, a));
-                Ok(())
-            }
-            Err(error) => {
-                proxy.record_udp_upstream_association_failed();
-                Err(error)
-            }
-        }
-    }
-
-    pub(super) fn drop_after_send_error(&mut self, inbound_tag: &str, error: &EngineError) {
-        if let Some(assoc) = self.upstream.take() {
-            let record = assoc.lifecycle_record();
-            assoc.close(UpstreamAssociationCloseReason::Dropped);
-            crate::logging::log_udp_upstream_association_dropped(
-                inbound_tag,
-                record.outbound_tag(),
-                record.server(),
-                record.port(),
-                error,
-            );
-        }
-        self.idle_deadline = None;
     }
 
     pub(crate) async fn start_relay_flow(
@@ -249,62 +61,40 @@ impl Socks5UdpRuntime {
             ));
         };
 
-        self.send(
-            Socks5UdpSend {
+        let Some(resume) = request.resume.as_ref::<socks5::udp::Socks5UdpFlowResume>() else {
+            return Err(socks5_flow_mismatch(
+                "udp_socks5_resume",
+                request.server,
+                request.port,
+                "expected SOCKS5 UDP flow resume",
+            ));
+        };
+        let association = resume.association_target(
+            outbound_tag.to_owned(),
+            request.server.to_owned(),
+            request.port,
+        );
+
+        match self
+            .runtime
+            .send_packet(
                 proxy,
-                tag: outbound_tag,
-                server: request.server,
-                port: request.port,
-                resume: request.resume,
-                session: request.session,
-                payload: request.payload,
-            },
-            inbound_tag,
-        )
-        .await
-        .map_err(|error| FlowFailure {
-            stage: "udp_upstream_send",
-            error,
-            upstream: Some((request.server.to_string(), request.port)),
-        })
-    }
-
-    pub(crate) fn close_idle(&mut self) -> Option<ClosedSocks5UdpAssociation> {
-        self.take_upstream().map(|association| {
-            let record = association.lifecycle_record();
-            association.close(UpstreamAssociationCloseReason::IdleTimeout);
-            let (outbound_tag, server, port) = record.into_parts();
-            ClosedSocks5UdpAssociation {
-                outbound_tag,
-                server,
-                port,
+                inbound_tag,
+                association,
+                request.session,
+                request.payload,
+            )
+            .await
+        {
+            Ok(sent) => Ok(sent),
+            Err(error) => {
+                proxy.record_udp_upstream_send_failure();
+                Err(FlowFailure {
+                    stage: "udp_upstream_send",
+                    error,
+                    upstream: Some((request.server.to_string(), request.port)),
+                })
             }
-        })
-    }
-
-    pub(crate) fn close_dropped(&mut self) -> Option<ClosedSocks5UdpAssociation> {
-        self.take_upstream().map(|association| {
-            let record = association.lifecycle_record();
-            association.close(UpstreamAssociationCloseReason::Dropped);
-            let (outbound_tag, server, port) = record.into_parts();
-            ClosedSocks5UdpAssociation {
-                outbound_tag,
-                server,
-                port,
-            }
-        })
-    }
-
-    pub(crate) async fn recv_upstream_response(
-        &self,
-        buf: &mut [u8],
-    ) -> Result<UpstreamUdpResponse, EngineError> {
-        match self.upstream.as_ref() {
-            Some(association) => {
-                let (target, port, payload) = association.recv_response_parts(buf).await?;
-                Ok(UpstreamUdpResponse::new(target, port, payload))
-            }
-            None => std::future::pending::<Result<UpstreamUdpResponse, EngineError>>().await,
         }
     }
 }
@@ -327,43 +117,36 @@ impl UpstreamAssociationHandler for Socks5UdpRuntime {
         &self,
         buf: &mut [u8],
     ) -> Result<UpstreamUdpResponse, EngineError> {
-        self.recv_upstream_response(buf).await
+        self.runtime.recv_upstream_response(buf).await
     }
 
     fn upstream_outbound_tag(&self) -> Option<&str> {
-        self.upstream_view()
-            .map(|association| association.outbound_tag)
+        self.runtime.upstream_outbound_tag()
     }
 
     fn upstream_idle_deadline(&self) -> Option<TokioInstant> {
-        self.idle_deadline()
+        self.runtime.idle_deadline()
     }
 
     fn touch_upstream_idle(&mut self, timeout: Duration) {
-        self.touch_idle(timeout);
+        self.runtime.touch_idle(timeout);
     }
 
     fn drop_upstream_association(&mut self) -> Option<(String, String, u16)> {
-        self.close_dropped()
-            .map(closed_protocol_upstream_association)
+        self.runtime
+            .close_dropped()
+            .map(socks5::udp::Socks5UdpAssociationTarget::into_log_parts)
     }
 
     fn close_idle_upstream(&mut self) -> Option<(String, String, u16)> {
-        self.close_idle().map(closed_protocol_upstream_association)
+        self.runtime
+            .close_idle()
+            .map(socks5::udp::Socks5UdpAssociationTarget::into_log_parts)
     }
 
     fn close_all_upstreams(&mut self) {
-        if let Some(association) = self.upstream.take() {
-            association.close(UpstreamAssociationCloseReason::Closed);
-        }
-        self.idle_deadline = None;
+        self.runtime.close_all_upstreams();
     }
-}
-
-fn closed_protocol_upstream_association(
-    closed: ClosedSocks5UdpAssociation,
-) -> (String, String, u16) {
-    (closed.outbound_tag, closed.server, closed.port)
 }
 
 fn socks5_flow_mismatch(

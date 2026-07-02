@@ -1,5 +1,8 @@
 use tokio::sync::{broadcast, mpsc, oneshot};
-use zero_core::{Address, Error, InboundUdpDispatch, Network, ProtocolType, Session};
+use zero_core::{
+    Address, Error, InboundUdpDispatch, MuxUdpResponder, Network, ProtocolType, Session,
+    StreamUdpResponder,
+};
 use zero_traits::{AsyncSocket, UdpPacketFraming, UdpPacketTunnelProtocol};
 
 use crate::outbound::{VmessOutbound, VmessOutboundSession};
@@ -693,6 +696,29 @@ impl VmessInboundUdpResponder {
     }
 }
 
+impl<S> StreamUdpResponder<S> for VmessInboundUdpResponder
+where
+    S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Send + Unpin,
+{
+    async fn read_inbound_dispatch(
+        &mut self,
+        client: &mut S,
+    ) -> Result<Option<InboundUdpDispatch>, Error> {
+        self.read_inbound_dispatch_tokio(client).await
+    }
+
+    async fn write_response_for_target(
+        &mut self,
+        client: &mut S,
+        target: &Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<usize, Error> {
+        self.write_response_for_target_tokio(client, target, port, payload)
+            .await
+    }
+}
+
 impl VmessInboundMuxUdpResponder {
     pub fn new(
         session: VmessInboundUdpSession,
@@ -727,6 +753,25 @@ impl VmessInboundMuxUdpResponder {
 
     pub fn end_inbound_stream(&self) -> Result<usize, Error> {
         self.writer.end_inbound_stream(self.mux_session_id)
+    }
+}
+
+impl MuxUdpResponder for VmessInboundMuxUdpResponder {
+    fn decode_inbound_dispatch(&mut self, payload: &[u8]) -> Result<InboundUdpDispatch, Error> {
+        VmessInboundMuxUdpResponder::decode_inbound_dispatch(self, payload)
+    }
+
+    fn write_response_for_target(
+        &mut self,
+        target: &Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<usize, Error> {
+        VmessInboundMuxUdpResponder::write_response_for_target(self, target, port, payload)
+    }
+
+    fn end_inbound_stream(&mut self) -> Result<usize, Error> {
+        VmessInboundMuxUdpResponder::end_inbound_stream(self)
     }
 }
 

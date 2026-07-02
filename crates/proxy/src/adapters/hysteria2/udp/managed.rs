@@ -43,7 +43,7 @@ impl ManagedDatagramFlowConnector<hysteria2::udp::Hysteria2UdpFlowResume>
         resume: hysteria2::udp::Hysteria2UdpFlowResume,
         initial_packet: UdpPacketRef<'_>,
     ) -> Result<SharedManagedUdpConnection, EngineError> {
-        let connection = super::super::connector::establish_udp_flow_session(
+        let connection = super::connector::establish_udp_flow_session(
             endpoint,
             initial_packet.target,
             initial_packet.port,

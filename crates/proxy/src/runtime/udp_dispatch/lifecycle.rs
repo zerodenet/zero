@@ -80,11 +80,16 @@ impl UdpDispatch {
         Option<TokioInstant>,
         &mut JoinSet<ChainTask>,
     ) {
-        let (upstream_udp, socks5_idle, chain_tasks) = self.flow_state.poll_refs();
-        (&self.direct_socket, upstream_udp, socks5_idle, chain_tasks)
+        let (upstream_udp, upstream_idle_deadline, chain_tasks) = self.flow_state.poll_refs();
+        (
+            &self.direct_socket,
+            upstream_udp,
+            upstream_idle_deadline,
+            chain_tasks,
+        )
     }
 
-    /// View of the SOCKS5 upstream association, if established.
+    /// View of the active upstream association, if established.
     #[allow(dead_code)]
     pub(crate) fn upstream_association_view(&self) -> Option<UpstreamAssociationView<'_>> {
         self.flow_state
@@ -125,7 +130,7 @@ impl UdpDispatch {
             .upstream_response_session_id(outbound_tag, target, port)
     }
 
-    /// Drop the SOCKS5 upstream association after a receive error.
+    /// Drop the active upstream association after a receive error.
     pub(crate) fn drop_upstream_association(&mut self) -> Option<ClosedUpstreamAssociation> {
         self.flow_state
             .drop_upstream_association()

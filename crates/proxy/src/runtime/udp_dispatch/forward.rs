@@ -8,7 +8,7 @@
 //! | Category | Variants | Transport |
 //! |----------|----------|-----------|
 //! | `Direct` | `Direct` | Raw socket, no upstream manager |
-//! | `Relay` | `Socks5` | UDP ASSOCIATE relay through control stream |
+//! | `Relay` | registered relay upstream | Protocol-owned relay association over an upstream control path |
 //! | `Datagram` | `Shadowsocks`, `Hysteria2` | Datagram encode/decode over socket or QUIC |
 //! | `StreamPacket` | `Trojan`, `Mieru`, adapter-cached stream flows | UDP packets over established stream |
 //! | `PacketPathDatagram` | adapter-built packet-path snapshot | Datagram-over-carrier chain |

@@ -6,13 +6,15 @@ use alloc::string::String;
 use alloc::sync::Arc;
 #[cfg(feature = "crypto")]
 use alloc::vec::Vec;
-#[cfg(feature = "crypto")]
-use zero_core::Address;
+use zero_core::ProtocolType;
 #[cfg(feature = "crypto")]
 use zero_core::{Error, Network, Session, SessionAuth};
-use zero_core::{InboundUdpDispatch, ProtocolType};
+
 #[cfg(feature = "crypto")]
-use zero_traits::{DatagramCodec, UdpDatagramFraming};
+use crate::udp::{
+    ShadowsocksInboundAcceptedUdpSession, ShadowsocksInboundUdpCodec,
+    ShadowsocksInboundUdpResponder, ShadowsocksInboundUdpSession,
+};
 
 /// Shadowsocks inbound handler.
 #[derive(Debug, Default, Clone, Copy)]
@@ -84,6 +86,54 @@ impl ShadowsocksInboundTcpState {
     }
 }
 
+/// Protocol-owned TCP acceptor for one inbound listener.
+///
+/// This keeps Shadowsocks replay checks, session authentication metadata, and
+/// AEAD stream construction inside the protocol crate. Proxy adapters only
+/// pass the accepted socket in and receive the neutral session plus client
+/// stream back.
+#[cfg(feature = "crypto")]
+#[derive(Clone)]
+pub struct ShadowsocksInboundTcpAcceptor {
+    inbound: ShadowsocksInbound,
+    profile: ShadowsocksInboundProfile,
+    tcp_state: ShadowsocksInboundTcpState,
+}
+
+#[cfg(feature = "crypto")]
+impl ShadowsocksInboundTcpAcceptor {
+    pub fn new(profile: ShadowsocksInboundProfile) -> Self {
+        let tcp_state = profile.tcp_state();
+        Self {
+            inbound: ShadowsocksInbound,
+            profile,
+            tcp_state,
+        }
+    }
+
+    pub async fn accept_stream<S>(
+        &self,
+        mut stream: S,
+    ) -> Result<(Session, super::stream::ShadowsocksAeadStream<S>), Error>
+    where
+        S: zero_traits::AsyncSocket,
+    {
+        let accept = self
+            .profile
+            .accept_request(&self.inbound, &mut stream)
+            .await?;
+
+        self.tcp_state.check_accept_replay(&accept)?;
+
+        let mut session = accept.session.clone();
+        session.apply_auth(self.profile.inbound_auth());
+
+        let client = self.profile.into_aead_stream(accept, stream)?;
+
+        Ok((session, client))
+    }
+}
+
 #[cfg(feature = "crypto")]
 impl ShadowsocksInboundProfile {
     pub fn from_config(cipher_name: &str, password: &str) -> Result<Self, Error> {
@@ -138,6 +188,14 @@ impl ShadowsocksInboundProfile {
         ShadowsocksInboundUdpResponder::new(self.udp_session())
     }
 
+    pub fn accept_udp_session(&self) -> ShadowsocksInboundUdpResponder {
+        self.udp_responder()
+    }
+
+    pub fn accept_udp_session_with_auth(&self) -> ShadowsocksInboundAcceptedUdpSession {
+        ShadowsocksInboundAcceptedUdpSession::new(self.accept_udp_session(), self.inbound_auth())
+    }
+
     pub async fn accept_request<S: zero_traits::AsyncSocket>(
         &self,
         inbound: &ShadowsocksInbound,
@@ -163,635 +221,6 @@ pub fn inbound_profile_from_config_cipher_password(
     password: &str,
 ) -> Result<ShadowsocksInboundProfile, Error> {
     ShadowsocksInboundProfile::from_config_cipher_password(cipher_name, password)
-}
-
-/// Decoded Shadowsocks inbound UDP request.
-#[cfg(feature = "crypto")]
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ShadowsocksInboundUdpPacket {
-    target: Address,
-    port: u16,
-    payload: Vec<u8>,
-    /// Flow isolation id for SIP022/2022 UDP sessions. `None` for legacy AEAD.
-    client_session_id: Option<u64>,
-}
-
-#[cfg(feature = "crypto")]
-impl ShadowsocksInboundUdpPacket {
-    pub fn target(&self) -> &Address {
-        &self.target
-    }
-
-    pub fn port(&self) -> u16 {
-        self.port
-    }
-
-    pub fn payload(&self) -> &[u8] {
-        &self.payload
-    }
-
-    pub fn client_session_id(&self) -> Option<u64> {
-        self.client_session_id
-    }
-
-    pub fn into_parts(self) -> (Address, u16, Vec<u8>, Option<u64>) {
-        (self.target, self.port, self.payload, self.client_session_id)
-    }
-
-    pub fn into_dispatch_parts(self) -> ShadowsocksInboundUdpDispatchParts {
-        let (target, port, payload, client_session_id) = self.into_parts();
-        ShadowsocksInboundUdpDispatchParts {
-            target,
-            port,
-            payload,
-            client_session_id,
-        }
-    }
-}
-
-#[cfg(feature = "crypto")]
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ShadowsocksInboundUdpDispatchParts {
-    target: Address,
-    port: u16,
-    payload: Vec<u8>,
-    client_session_id: Option<u64>,
-}
-
-#[cfg(feature = "crypto")]
-impl ShadowsocksInboundUdpDispatchParts {
-    pub fn protocol(&self) -> ProtocolType {
-        ProtocolType::Shadowsocks
-    }
-
-    pub fn pipe_parts(&self) -> (&Address, u16, &[u8], Option<u64>) {
-        (
-            &self.target,
-            self.port,
-            &self.payload,
-            self.client_session_id,
-        )
-    }
-
-    pub fn into_parts(self) -> (Address, u16, Vec<u8>, Option<u64>) {
-        (self.target, self.port, self.payload, self.client_session_id)
-    }
-
-    pub fn into_inbound_dispatch(self) -> InboundUdpDispatch {
-        InboundUdpDispatch::new(
-            ProtocolType::Shadowsocks,
-            self.target,
-            self.port,
-            self.payload,
-            self.client_session_id,
-        )
-    }
-}
-
-#[cfg(feature = "crypto")]
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ShadowsocksInboundUdpResponse {
-    datagram: Vec<u8>,
-}
-
-#[cfg(feature = "crypto")]
-impl ShadowsocksInboundUdpResponse {
-    pub fn datagram(&self) -> &[u8] {
-        &self.datagram
-    }
-
-    pub fn into_datagram(self) -> Vec<u8> {
-        self.datagram
-    }
-}
-
-#[cfg(feature = "crypto")]
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ShadowsocksInboundUdpResponseTarget {
-    client_session_id: Option<u64>,
-    target: Address,
-    port: u16,
-}
-
-#[cfg(feature = "crypto")]
-impl ShadowsocksInboundUdpResponseTarget {
-    pub fn new(client_session_id: Option<u64>, target: Address, port: u16) -> Self {
-        Self {
-            client_session_id,
-            target,
-            port,
-        }
-    }
-
-    pub fn from_parts(client_session_id: Option<u64>, target: &Address, port: u16) -> Self {
-        Self::new(client_session_id, target.clone(), port)
-    }
-}
-
-#[cfg(feature = "crypto")]
-pub struct ShadowsocksInboundUdpClientResponse<'a> {
-    target: &'a Address,
-    port: u16,
-    payload: &'a [u8],
-}
-
-#[cfg(feature = "crypto")]
-impl<'a> ShadowsocksInboundUdpClientResponse<'a> {
-    pub fn new(target: &'a Address, port: u16, payload: &'a [u8]) -> Self {
-        Self {
-            target,
-            port,
-            payload,
-        }
-    }
-
-    pub fn payload_len(&self) -> usize {
-        self.payload.len()
-    }
-
-    fn target(&self) -> &'a Address {
-        self.target
-    }
-
-    fn port(&self) -> u16 {
-        self.port
-    }
-
-    fn payload(&self) -> &'a [u8] {
-        self.payload
-    }
-}
-
-/// Protocol-owned codec/state for Shadowsocks inbound UDP.
-///
-/// Runtime code owns socket I/O and routing, while this type owns
-/// Shadowsocks UDP decoding, SIP022 replay protection, and response encoding.
-#[cfg(feature = "crypto")]
-pub struct ShadowsocksInboundUdpCodec {
-    cipher: super::shared::CipherKind,
-    password: Vec<u8>,
-    #[cfg(feature = "blake3")]
-    replay_windows: std::collections::HashMap<u64, super::shared::ReplayWindow>,
-}
-
-#[cfg(feature = "crypto")]
-impl ShadowsocksInboundUdpCodec {
-    pub fn new(cipher: super::shared::CipherKind, password: &[u8]) -> Self {
-        Self {
-            cipher,
-            password: password.to_vec(),
-            #[cfg(feature = "blake3")]
-            replay_windows: std::collections::HashMap::new(),
-        }
-    }
-
-    pub fn decode_request(
-        &mut self,
-        datagram: &[u8],
-    ) -> Result<ShadowsocksInboundUdpPacket, Error> {
-        if self.cipher.is_blake3() {
-            #[cfg(feature = "blake3")]
-            {
-                let (target, port, payload, client_session_id, packet_id) =
-                    super::shared::decode_udp_datagram_2022_session(
-                        self.cipher,
-                        &self.password,
-                        datagram,
-                    )?;
-                if !self
-                    .replay_windows
-                    .entry(client_session_id)
-                    .or_default()
-                    .check_and_update(packet_id)
-                {
-                    return Err(Error::Protocol("ss: udp replay rejected"));
-                }
-                return Ok(ShadowsocksInboundUdpPacket {
-                    target,
-                    port,
-                    payload,
-                    client_session_id: Some(client_session_id),
-                });
-            }
-            #[cfg(not(feature = "blake3"))]
-            return Err(Error::Protocol(
-                "ss: 2022 udp decode requires `blake3` feature",
-            ));
-        }
-
-        let codec = super::outbound::ShadowsocksDatagramCodec {
-            cipher: self.cipher,
-            password: self.password.clone(),
-        };
-        let (target, port, payload) = codec
-            .decode(datagram)
-            .ok_or(Error::Protocol("ss: udp datagram decode failed"))?;
-        Ok(ShadowsocksInboundUdpPacket {
-            target,
-            port,
-            payload,
-            client_session_id: None,
-        })
-    }
-
-    pub fn encode_response(
-        &self,
-        client_session_id: Option<u64>,
-        target: &Address,
-        port: u16,
-        payload: &[u8],
-    ) -> Result<Vec<u8>, Error> {
-        if self.cipher.is_blake3() {
-            #[cfg(feature = "blake3")]
-            {
-                return super::shared::encode_udp_response_2022(
-                    self.cipher,
-                    &self.password,
-                    client_session_id.unwrap_or(0),
-                    target,
-                    port,
-                    payload,
-                );
-            }
-            #[cfg(not(feature = "blake3"))]
-            return Err(Error::Protocol(
-                "ss: 2022 udp encode requires `blake3` feature",
-            ));
-        }
-
-        <super::outbound::ShadowsocksOutbound as UdpDatagramFraming<
-            super::outbound::ShadowsocksUdpPacketTarget<'_>,
-            super::outbound::ShadowsocksUdpDecodeContext<'_>,
-        >>::encode_udp_datagram(
-            &super::outbound::ShadowsocksOutbound,
-            &super::outbound::ShadowsocksUdpPacketTarget {
-                target,
-                port,
-                payload,
-                cipher: self.cipher,
-                password: &self.password,
-            },
-        )
-    }
-
-    pub fn encode_response_to_client(
-        &self,
-        client_session_id: Option<u64>,
-        target: &Address,
-        port: u16,
-        payload: &[u8],
-    ) -> Result<ShadowsocksInboundUdpResponse, Error> {
-        Ok(ShadowsocksInboundUdpResponse {
-            datagram: self.encode_response(client_session_id, target, port, payload)?,
-        })
-    }
-
-    pub fn response_frame(
-        &self,
-        target: &ShadowsocksInboundUdpResponseTarget,
-        payload: &[u8],
-    ) -> Result<ShadowsocksInboundUdpResponse, Error> {
-        self.encode_response_to_client(
-            target.client_session_id,
-            &target.target,
-            target.port,
-            payload,
-        )
-    }
-}
-
-#[cfg(feature = "crypto")]
-pub struct ShadowsocksInboundUdpSession {
-    codec: ShadowsocksInboundUdpCodec,
-    proxy_sessions: std::collections::HashMap<u64, Option<u64>>,
-    proxy_clients: std::collections::HashMap<u64, std::net::SocketAddr>,
-}
-
-#[cfg(feature = "crypto")]
-pub struct ShadowsocksInboundUdpResponder {
-    session: ShadowsocksInboundUdpSession,
-    pending_client: Option<std::net::SocketAddr>,
-}
-
-#[cfg(feature = "crypto")]
-impl ShadowsocksInboundUdpSession {
-    pub fn new(codec: ShadowsocksInboundUdpCodec) -> Self {
-        Self {
-            codec,
-            proxy_sessions: std::collections::HashMap::new(),
-            proxy_clients: std::collections::HashMap::new(),
-        }
-    }
-
-    pub fn decode_request(
-        &mut self,
-        datagram: &[u8],
-    ) -> Result<ShadowsocksInboundUdpPacket, Error> {
-        self.codec.decode_request(datagram)
-    }
-
-    pub fn decode_dispatch_parts(
-        &mut self,
-        datagram: &[u8],
-    ) -> Result<ShadowsocksInboundUdpDispatchParts, Error> {
-        self.decode_request(datagram)
-            .map(ShadowsocksInboundUdpPacket::into_dispatch_parts)
-    }
-
-    pub fn decode_inbound_dispatch(
-        &mut self,
-        datagram: &[u8],
-    ) -> Result<InboundUdpDispatch, Error> {
-        self.decode_dispatch_parts(datagram)
-            .map(ShadowsocksInboundUdpDispatchParts::into_inbound_dispatch)
-    }
-
-    pub fn encode_response_to_client(
-        &self,
-        client_session_id: Option<u64>,
-        target: &Address,
-        port: u16,
-        payload: &[u8],
-    ) -> Result<ShadowsocksInboundUdpResponse, Error> {
-        self.codec
-            .encode_response_to_client(client_session_id, target, port, payload)
-    }
-
-    pub fn response_frame(
-        &self,
-        target: &ShadowsocksInboundUdpResponseTarget,
-        payload: &[u8],
-    ) -> Result<ShadowsocksInboundUdpResponse, Error> {
-        self.codec.response_frame(target, payload)
-    }
-
-    pub fn response_frame_for_proxy_session(
-        &self,
-        proxy_session_id: u64,
-        target: &Address,
-        port: u16,
-        payload: &[u8],
-    ) -> Result<ShadowsocksInboundUdpResponse, Error> {
-        let response_target =
-            self.response_target_for_proxy_session(proxy_session_id, target, port);
-        self.response_frame(&response_target, payload)
-    }
-
-    pub fn response_datagram_for_proxy_session(
-        &self,
-        proxy_session_id: u64,
-        target: &Address,
-        port: u16,
-        payload: &[u8],
-    ) -> Result<ShadowsocksInboundUdpResponseDatagram, Error> {
-        let datagram =
-            self.response_frame_for_proxy_session(proxy_session_id, target, port, payload)?;
-        Ok(ShadowsocksInboundUdpResponseDatagram {
-            datagram: datagram.into_datagram(),
-        })
-    }
-
-    pub async fn send_response_to_client_tokio(
-        &self,
-        socket: &tokio::net::UdpSocket,
-        proxy_session_id: u64,
-        target: &Address,
-        port: u16,
-        payload: &[u8],
-        client: std::net::SocketAddr,
-    ) -> Result<usize, Error> {
-        let datagram =
-            self.response_datagram_for_proxy_session(proxy_session_id, target, port, payload)?;
-        socket
-            .send_to(datagram.as_slice(), client)
-            .await
-            .map_err(|_| Error::Io("failed to send Shadowsocks UDP response"))
-    }
-
-    pub async fn send_client_response_to_client_tokio(
-        &self,
-        socket: &tokio::net::UdpSocket,
-        proxy_session_id: u64,
-        response: ShadowsocksInboundUdpClientResponse<'_>,
-        client: std::net::SocketAddr,
-    ) -> Result<usize, Error> {
-        self.send_response_to_client_tokio(
-            socket,
-            proxy_session_id,
-            response.target(),
-            response.port(),
-            response.payload(),
-            client,
-        )
-        .await
-    }
-
-    fn record_proxy_session(&mut self, proxy_session_id: u64, client_session_id: Option<u64>) {
-        if client_session_id.is_some() {
-            self.proxy_sessions
-                .insert(proxy_session_id, client_session_id);
-        }
-    }
-
-    fn record_client_session(
-        &mut self,
-        proxy_session_id: u64,
-        client_session_id: Option<u64>,
-        client: std::net::SocketAddr,
-    ) {
-        self.record_proxy_session(proxy_session_id, client_session_id);
-        self.proxy_clients.insert(proxy_session_id, client);
-    }
-
-    pub fn record_dispatch_success(
-        &mut self,
-        proxy_session_id: u64,
-        client_session_id: Option<u64>,
-        client: std::net::SocketAddr,
-    ) {
-        self.record_client_session(proxy_session_id, client_session_id, client);
-    }
-
-    pub async fn send_proxy_session_response_to_client_tokio(
-        &self,
-        socket: &tokio::net::UdpSocket,
-        proxy_session_id: u64,
-        target: &Address,
-        port: u16,
-        payload: &[u8],
-    ) -> Result<Option<usize>, Error> {
-        let Some(&client) = self.proxy_clients.get(&proxy_session_id) else {
-            return Ok(None);
-        };
-        self.send_response_to_client_tokio(socket, proxy_session_id, target, port, payload, client)
-            .await
-            .map(Some)
-    }
-
-    pub async fn send_proxy_session_client_response_to_client_tokio(
-        &self,
-        socket: &tokio::net::UdpSocket,
-        proxy_session_id: u64,
-        response: ShadowsocksInboundUdpClientResponse<'_>,
-    ) -> Result<Option<usize>, Error> {
-        let Some(&client) = self.proxy_clients.get(&proxy_session_id) else {
-            return Ok(None);
-        };
-        self.send_client_response_to_client_tokio(socket, proxy_session_id, response, client)
-            .await
-            .map(Some)
-    }
-
-    pub async fn send_client_response_for_proxy_session_to_client_tokio(
-        &self,
-        socket: &tokio::net::UdpSocket,
-        proxy_session_id: Option<u64>,
-        response: ShadowsocksInboundUdpClientResponse<'_>,
-    ) -> Result<Option<usize>, Error> {
-        let Some(proxy_session_id) = proxy_session_id else {
-            return Ok(None);
-        };
-        self.send_proxy_session_client_response_to_client_tokio(socket, proxy_session_id, response)
-            .await
-    }
-
-    pub async fn send_response_for_target_proxy_session_to_client_tokio(
-        &self,
-        socket: &tokio::net::UdpSocket,
-        proxy_session_id: Option<u64>,
-        target: &Address,
-        port: u16,
-        payload: &[u8],
-    ) -> Result<Option<usize>, Error> {
-        let Some(proxy_session_id) = proxy_session_id else {
-            return Ok(None);
-        };
-        self.send_proxy_session_response_to_client_tokio(
-            socket,
-            proxy_session_id,
-            target,
-            port,
-            payload,
-        )
-        .await
-    }
-
-    pub fn response_target_for_proxy_session(
-        &self,
-        proxy_session_id: u64,
-        target: &Address,
-        port: u16,
-    ) -> ShadowsocksInboundUdpResponseTarget {
-        ShadowsocksInboundUdpResponseTarget::from_parts(
-            self.proxy_sessions
-                .get(&proxy_session_id)
-                .copied()
-                .flatten(),
-            target,
-            port,
-        )
-    }
-}
-
-#[cfg(feature = "crypto")]
-impl ShadowsocksInboundUdpResponder {
-    pub fn new(session: ShadowsocksInboundUdpSession) -> Self {
-        Self {
-            session,
-            pending_client: None,
-        }
-    }
-
-    pub fn decode_inbound_dispatch(
-        &mut self,
-        datagram: &[u8],
-    ) -> Result<InboundUdpDispatch, Error> {
-        self.session.decode_inbound_dispatch(datagram)
-    }
-
-    pub async fn read_inbound_dispatch_from_socket_tokio(
-        &mut self,
-        socket: &tokio::net::UdpSocket,
-    ) -> Result<InboundUdpDispatch, Error> {
-        let mut buf = [0u8; 65536];
-        loop {
-            let (n, client) = socket
-                .recv_from(&mut buf)
-                .await
-                .map_err(|_| Error::Io("ss udp recv error"))?;
-            match self.decode_inbound_dispatch(&buf[..n]) {
-                Ok(dispatch) => {
-                    self.pending_client = Some(client);
-                    return Ok(dispatch);
-                }
-                Err(_) => continue,
-            }
-        }
-    }
-
-    pub fn record_dispatch_success(
-        &mut self,
-        proxy_session_id: u64,
-        client_session_id: Option<u64>,
-        client: std::net::SocketAddr,
-    ) {
-        self.session
-            .record_dispatch_success(proxy_session_id, client_session_id, client);
-    }
-
-    pub fn record_pending_dispatch_success(
-        &mut self,
-        proxy_session_id: u64,
-        client_session_id: Option<u64>,
-    ) {
-        if let Some(client) = self.pending_client.take() {
-            self.record_dispatch_success(proxy_session_id, client_session_id, client);
-        }
-    }
-
-    pub async fn send_response_for_target_proxy_session_to_client_tokio(
-        &self,
-        socket: &tokio::net::UdpSocket,
-        proxy_session_id: Option<u64>,
-        target: &Address,
-        port: u16,
-        payload: &[u8],
-    ) -> Result<Option<usize>, Error> {
-        self.session
-            .send_response_for_target_proxy_session_to_client_tokio(
-                socket,
-                proxy_session_id,
-                target,
-                port,
-                payload,
-            )
-            .await
-    }
-}
-
-#[cfg(feature = "crypto")]
-#[derive(Debug)]
-pub struct ShadowsocksInboundUdpResponseDatagram {
-    datagram: Vec<u8>,
-}
-
-#[cfg(feature = "crypto")]
-impl ShadowsocksInboundUdpResponseDatagram {
-    pub fn len(&self) -> usize {
-        self.datagram.len()
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.datagram.is_empty()
-    }
-
-    pub fn as_slice(&self) -> &[u8] {
-        &self.datagram
-    }
-
-    pub fn into_datagram(self) -> Vec<u8> {
-        self.datagram
-    }
 }
 
 impl ShadowsocksInbound {
@@ -997,14 +426,16 @@ impl ShadowsocksInbound {
     }
 }
 
+#[cfg(all(feature = "crypto", feature = "blake3"))]
 /// SIP022 3.1.3 detection-prevention drain cap (bytes). Bounds the drain so a
 /// malicious peer cannot hold the connection open indefinitely; typical active
 /// probes send far fewer bytes than this.
 const SS_2022_DRAIN_CAP: usize = 1 << 20; // 1 MiB
+#[cfg(all(feature = "crypto", feature = "blake3"))]
 /// Hard wall on how long a failed-handshake drain may block. A peer that sends
 /// a short probe and then holds the connection open would otherwise pin a task
 /// until the byte cap is reached; this keeps the anti-probe drain bounded.
-const SS_2022_DRAIN_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(2);
+const SS_2022_DRAIN_TIMEOUT: core::time::Duration = core::time::Duration::from_secs(2);
 
 /// Drain up to `cap` bytes (or `timeout`, or EOF) from `stream`, discarding
 /// them. Used after a failed 2022 handshake so closing the connection sends FIN

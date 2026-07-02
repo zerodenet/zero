@@ -6,7 +6,9 @@ use alloc::collections::BTreeMap;
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use zero_core::{Address, Error, InboundUdpDispatch, ProtocolType, UdpFlowPacket};
+use zero_core::{
+    Address, DatagramUdpResponder, Error, InboundUdpDispatch, ProtocolType, UdpFlowPacket,
+};
 use zero_traits::DatagramCodec;
 
 #[cfg(feature = "tokio")]
@@ -423,6 +425,33 @@ impl Hysteria2InboundUdpResponder {
             port,
             payload,
         )
+    }
+}
+
+#[cfg(feature = "tokio")]
+impl DatagramUdpResponder<Arc<quinn::Connection>> for Hysteria2InboundUdpResponder {
+    async fn read_inbound_dispatch(
+        &mut self,
+        conn: &Arc<quinn::Connection>,
+    ) -> Result<Option<InboundUdpDispatch>, Error> {
+        self.read_inbound_dispatch_from_datagram(conn)
+            .await
+            .map(Some)
+    }
+
+    fn on_dispatch_success(&mut self, session_id: u64, _dispatch: &InboundUdpDispatch) {
+        self.record_pending_dispatch_success(session_id);
+    }
+
+    async fn write_response_for_session(
+        &mut self,
+        conn: &Arc<quinn::Connection>,
+        session_id: Option<u64>,
+        target: &Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<Option<usize>, Error> {
+        self.send_response_for_target_proxy_session(conn, session_id, target, port, payload)
     }
 }
 

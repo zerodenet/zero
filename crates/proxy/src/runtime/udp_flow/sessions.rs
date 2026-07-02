@@ -157,7 +157,7 @@ impl UdpSessionFlows {
             .get(&UdpUpstreamResponseKey::new(outbound_tag, target, port))
             .and_then(|key| self.flows.get(key))
             .map(|flow| flow.session.id)
-            .or_else(|| self.single_socks5_flow_session_id(outbound_tag))
+            .or_else(|| self.single_tagged_upstream_flow_session_id(outbound_tag))
     }
 
     fn index_flow(&mut self, key: &UdpFlowKey, outbound: &UdpFlowOutbound) {
@@ -199,7 +199,7 @@ impl UdpSessionFlows {
         direct_flows.next().is_none().then_some(flow.session.id)
     }
 
-    fn single_socks5_flow_session_id(&self, outbound_tag: &str) -> Option<u64> {
+    fn single_tagged_upstream_flow_session_id(&self, outbound_tag: &str) -> Option<u64> {
         let mut upstream_flows = self
             .flows
             .values()

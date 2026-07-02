@@ -19,15 +19,14 @@ use std::net::SocketAddr;
 use async_trait::async_trait;
 use tokio::net::TcpStream;
 use tokio::sync::watch;
-use tokio::task::JoinSet;
-use tracing::{error, info};
+use tracing::info;
 
 use zero_core::{Address, Network, ProtocolType, Session};
 use zero_engine::EngineError;
 use zero_stack::SystemTcpStack;
-use zero_traits::TcpStack;
 
 use crate::runtime::inbound_protocol::{serve_inbound, InboundProtocol};
+use crate::runtime::listener_loop::{run_system_tcp_stack_loop, SystemTcpStackLoopRequest};
 use crate::runtime::Proxy;
 
 // ── Protocol handler ──────────────────────────────────────────────────
@@ -64,56 +63,38 @@ async fn system_tcp_loop(
     proxy: Proxy,
     stack: SystemTcpStack,
     tag: String,
-    mut shutdown: watch::Receiver<bool>,
+    shutdown: watch::Receiver<bool>,
 ) {
-    let mut connections = JoinSet::new();
-
-    loop {
-        tokio::select! {
-            biased;
-
-            _ = shutdown.changed() => {
-                if *shutdown.borrow() {
-                    info!("system inbound shutdown");
-                    break;
-                }
-                continue;
-            }
-
-            accepted = stack.accept() => {
-                match accepted {
-                    Some((stream, src, dst)) => {
-                        let session = Session::new(
-                            0,
-                            sockaddr_to_address(&dst),
-                            dst.port,
-                            Network::Tcp,
-                            ProtocolType::Unknown,
-                        );
-                        let src_addr = sockaddr_to_std(&src);
-                        let p = proxy.clone();
-                        let t = tag.clone();
-                        connections.spawn(async move {
-                            let _ = serve_inbound(
-                                &p, session, stream, &SystemProtocol, &t, Some(src_addr),
-                            ).await;
-                        });
-                    }
-                    None => break,
-                }
-            }
-
-            result = connections.join_next(), if !connections.is_empty() => {
-                if let Some(Err(e)) = result {
-                    if !e.is_cancelled() {
-                        error!(error = %e, "system connection task panicked");
-                    }
-                }
-            }
-        }
-    }
-
-    connections.abort_all();
+    run_system_tcp_stack_loop(SystemTcpStackLoopRequest {
+        proxy: &proxy,
+        inbound_tag: tag,
+        stack,
+        shutdown,
+        handler: |proxy: Proxy,
+                  tag: String,
+                  stream: TcpStream,
+                  source: zero_traits::SocketAddress,
+                  destination: zero_traits::SocketAddress| async move {
+            let session = Session::new(
+                0,
+                sockaddr_to_address(&destination),
+                destination.port,
+                Network::Tcp,
+                ProtocolType::Unknown,
+            );
+            let source_addr = sockaddr_to_std(&source);
+            let _ = serve_inbound(
+                &proxy,
+                session,
+                stream,
+                &SystemProtocol,
+                &tag,
+                Some(source_addr),
+            )
+            .await;
+        },
+    })
+    .await;
 }
 
 // ── Address helpers ────────────────────────────────────────────────────

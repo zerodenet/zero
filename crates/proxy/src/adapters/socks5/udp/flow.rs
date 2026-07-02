@@ -1,43 +1,11 @@
-use zero_core::Session;
-use zero_engine::ResolvedLeafOutbound;
-
-use crate::adapters::common::unreachable_udp_leaf;
-use crate::adapters::socks5::Socks5Adapter;
-use crate::protocol_registry::ProtocolSupportCapability;
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, ManagedRelayStart, UdpDispatch};
-use crate::runtime::Proxy;
 
 pub(super) async fn start(
-    adapter: &Socks5Adapter,
     dispatch: &mut UdpDispatch,
-    proxy: &Proxy,
-    session: &Session,
-    leaf: &ResolvedLeafOutbound<'_>,
-    payload: &[u8],
+    request: ManagedRelayStart<'_, socks5::udp::Socks5UdpFlowResume>,
 ) -> Result<FlowStartResult, FlowFailure> {
-    let ResolvedLeafOutbound::Socks5 {
-        tag,
-        server,
-        port,
-        username,
-        password,
-    } = leaf
-    else {
-        return Err(unreachable_udp_leaf(adapter.name(), leaf));
-    };
-    let resume = socks5::udp::udp_flow_resume_from_config(tag, server, *port, *username, *password);
     dispatch
-        .start_tracked_managed_relay(ManagedRelayStart {
-            proxy: Some(proxy),
-            tag,
-            session,
-            carrier: None,
-            tls_server_name: None,
-            server,
-            port: *port,
-            resume,
-            payload,
-        })
+        .start_tracked_managed_relay(request)
         .await
         .map_err(|failure| FlowFailure {
             stage: failure.stage,

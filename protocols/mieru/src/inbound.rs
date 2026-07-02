@@ -5,8 +5,8 @@ use core::pin::Pin;
 use core::task::{Context, Poll};
 use std::io;
 
-use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf};
-use zero_core::{Address, Error, Network, ProtocolType, Session, SessionAuth};
+use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
+use zero_core::{Error, Network, ProtocolType, Session, SessionAuth};
 use zero_traits::AsyncSocket;
 
 use crate::crypto::{try_derive_keys, MieruCipher};
@@ -57,6 +57,35 @@ impl MieruInboundProfile {
     ) -> Result<MieruAccept, Error> {
         inbound.accept_request(stream, &self.users).await
     }
+
+    pub async fn accept_tunneled_stream<S>(
+        &self,
+        inbound: &MieruInbound,
+        mut stream: S,
+    ) -> Result<(Session, MieruInboundStream<S>), Error>
+    where
+        S: AsyncSocket + AsyncRead + AsyncWrite + Unpin,
+    {
+        let accept = self.accept_request(inbound, &mut stream).await?;
+        let mut client = MieruInboundStream::new(stream, accept);
+        let mut session = client.accept_tunneled_socks5_session().await?;
+        session.apply_auth(self.inbound_auth());
+        Ok((session, client))
+    }
+
+    pub async fn accept_client<S>(
+        &self,
+        inbound: &MieruInbound,
+        stream: S,
+    ) -> Result<MieruInboundAcceptedSession<MieruInboundStream<S>>, Error>
+    where
+        S: AsyncSocket + AsyncRead + AsyncWrite + Unpin,
+    {
+        let (session, client) = self.accept_tunneled_stream(inbound, stream).await?;
+        Ok(MieruInboundAcceptedSession::from_session_stream(
+            session, client,
+        ))
+    }
 }
 
 pub fn inbound_profile_from_config_users<I, U>(users: I) -> MieruInboundProfile
@@ -104,6 +133,37 @@ pub enum MieruInboundSessionKind {
     Udp,
 }
 
+pub enum MieruInboundAcceptedSession<S> {
+    Tcp {
+        session: Session,
+        stream: S,
+    },
+    Udp {
+        auth: Option<SessionAuth>,
+        responder: crate::udp::MieruInboundUdpResponder,
+        session: Session,
+        stream: S,
+    },
+}
+
+pub trait MieruInboundAcceptedSessionDispatcher<S> {
+    type Error;
+
+    async fn dispatch_tcp_session(
+        &mut self,
+        session: Session,
+        stream: S,
+    ) -> Result<(), Self::Error>;
+
+    async fn dispatch_udp_session(
+        &mut self,
+        session: Session,
+        stream: S,
+        responder: crate::udp::MieruInboundUdpResponder,
+        auth: Option<SessionAuth>,
+    ) -> Result<(), Self::Error>;
+}
+
 pub fn classify_inbound_session(session: &Session) -> MieruInboundSessionKind {
     match session.network {
         Network::Udp => MieruInboundSessionKind::Udp,
@@ -111,21 +171,55 @@ pub fn classify_inbound_session(session: &Session) -> MieruInboundSessionKind {
     }
 }
 
-pub trait MieruInboundSessionHandler {
-    type Error;
+impl<S> MieruInboundAcceptedSession<S> {
+    pub fn from_session_stream(session: Session, stream: S) -> Self {
+        match classify_inbound_session(&session) {
+            MieruInboundSessionKind::Tcp => Self::Tcp { session, stream },
+            MieruInboundSessionKind::Udp => Self::Udp {
+                auth: session.auth.clone(),
+                responder: MieruInbound.accept_udp_session(),
+                session,
+                stream,
+            },
+        }
+    }
 
-    async fn handle_tcp_session(&mut self) -> Result<(), Self::Error>;
+    pub async fn dispatch<Tcp, TcpFut, Udp, UdpFut, E>(self, tcp: Tcp, udp: Udp) -> Result<(), E>
+    where
+        Tcp: FnOnce(Session, S) -> TcpFut,
+        TcpFut: core::future::Future<Output = Result<(), E>>,
+        Udp:
+            FnOnce(Session, S, crate::udp::MieruInboundUdpResponder, Option<SessionAuth>) -> UdpFut,
+        UdpFut: core::future::Future<Output = Result<(), E>>,
+    {
+        match self {
+            Self::Tcp { session, stream } => tcp(session, stream).await,
+            Self::Udp {
+                auth,
+                responder,
+                session,
+                stream,
+            } => udp(session, stream, responder, auth).await,
+        }
+    }
 
-    async fn handle_udp_session(&mut self) -> Result<(), Self::Error>;
-}
-
-pub async fn dispatch_inbound_session<H>(session: &Session, handler: &mut H) -> Result<(), H::Error>
-where
-    H: MieruInboundSessionHandler,
-{
-    match classify_inbound_session(session) {
-        MieruInboundSessionKind::Udp => handler.handle_udp_session().await,
-        MieruInboundSessionKind::Tcp => handler.handle_tcp_session().await,
+    pub async fn dispatch_with<D>(self, dispatcher: &mut D) -> Result<(), D::Error>
+    where
+        D: MieruInboundAcceptedSessionDispatcher<S>,
+    {
+        match self {
+            Self::Tcp { session, stream } => dispatcher.dispatch_tcp_session(session, stream).await,
+            Self::Udp {
+                auth,
+                responder,
+                session,
+                stream,
+            } => {
+                dispatcher
+                    .dispatch_udp_session(session, stream, responder, auth)
+                    .await
+            }
+        }
     }
 }
 
@@ -248,116 +342,8 @@ impl<S> MieruInboundStream<S> {
     where
         S: AsyncRead + AsyncWrite + Unpin,
     {
-        let request = read_tunneled_socks5_request(self).await?;
-        write_tunneled_socks5_success(self).await?;
-        Ok(request.into_session())
+        super::tunnel::accept_tunneled_session(self).await
     }
-}
-
-struct MieruTunneledSocks5Request {
-    target: Address,
-    port: u16,
-    network: Network,
-}
-
-impl MieruTunneledSocks5Request {
-    fn into_session(self) -> Session {
-        Session::new(0, self.target, self.port, self.network, ProtocolType::Mieru)
-    }
-}
-
-async fn read_tunneled_socks5_request<S>(
-    stream: &mut S,
-) -> Result<MieruTunneledSocks5Request, Error>
-where
-    S: AsyncRead + Unpin,
-{
-    let mut head = [0u8; 4];
-    stream
-        .read_exact(&mut head)
-        .await
-        .map_err(|_| Error::Io("mieru socks5: read request header"))?;
-
-    if head[0] != 0x05 {
-        return Err(Error::Protocol("mieru socks5: bad request version"));
-    }
-
-    let cmd = head[1];
-    let target = read_tunneled_socks5_address(stream, head[3]).await?;
-
-    let mut port_bytes = [0u8; 2];
-    stream
-        .read_exact(&mut port_bytes)
-        .await
-        .map_err(|_| Error::Io("mieru socks5: read request port"))?;
-    let port = u16::from_be_bytes(port_bytes);
-
-    let network = match cmd {
-        0x01 => Network::Tcp,
-        0x03 => Network::Udp,
-        _ => return Err(Error::Unsupported("mieru socks5: unsupported command")),
-    };
-
-    Ok(MieruTunneledSocks5Request {
-        target,
-        port,
-        network,
-    })
-}
-
-async fn read_tunneled_socks5_address<S>(stream: &mut S, atyp: u8) -> Result<Address, Error>
-where
-    S: AsyncRead + Unpin,
-{
-    match atyp {
-        0x01 => {
-            let mut ip = [0u8; 4];
-            stream
-                .read_exact(&mut ip)
-                .await
-                .map_err(|_| Error::Io("mieru socks5: read ipv4 address"))?;
-            Ok(Address::Ipv4(ip))
-        }
-        0x04 => {
-            let mut ip = [0u8; 16];
-            stream
-                .read_exact(&mut ip)
-                .await
-                .map_err(|_| Error::Io("mieru socks5: read ipv6 address"))?;
-            Ok(Address::Ipv6(ip))
-        }
-        0x03 => {
-            let mut len = [0u8; 1];
-            stream
-                .read_exact(&mut len)
-                .await
-                .map_err(|_| Error::Io("mieru socks5: read domain length"))?;
-            let mut domain = vec![0u8; len[0] as usize];
-            stream
-                .read_exact(&mut domain)
-                .await
-                .map_err(|_| Error::Io("mieru socks5: read domain"))?;
-            let domain = String::from_utf8(domain)
-                .map_err(|_| Error::Protocol("mieru socks5: invalid domain"))?;
-            Ok(Address::Domain(domain))
-        }
-        _ => Err(Error::Protocol("mieru socks5: bad address type")),
-    }
-}
-
-async fn write_tunneled_socks5_success<S>(stream: &mut S) -> Result<(), Error>
-where
-    S: AsyncWrite + Unpin,
-{
-    stream
-        .write_all(&[0x05, 0x00, 0x00, 0x01, 0, 0, 0, 0, 0, 0])
-        .await
-        .map_err(|_| Error::Io("mieru socks5: write success"))?;
-    stream
-        .flush()
-        .await
-        .map_err(|_| Error::Io("mieru socks5: flush success"))?;
-    Ok(())
 }
 
 impl<S> AsyncRead for MieruInboundStream<S>
@@ -505,6 +491,10 @@ impl MieruInbound {
 
     pub fn udp_responder(&self) -> crate::udp::MieruInboundUdpResponder {
         crate::udp::MieruInboundUdpResponder::new(self.udp_session())
+    }
+
+    pub fn accept_udp_session(&self) -> crate::udp::MieruInboundUdpResponder {
+        self.udp_responder()
     }
 
     /// Accept a mieru TCP connection — perform the mieru handshake only.

@@ -37,7 +37,7 @@ use alloc::vec::Vec;
 
 #[cfg(feature = "reality")]
 use tokio::sync::mpsc;
-use zero_core::{Address, Error, Network, ProtocolType, Session};
+use zero_core::{Address, Error, Network, ProtocolType, Session, SessionAuth};
 use zero_traits::AsyncSocket;
 
 use crate::shared::{read_exact, write_address, ATYP_DOMAIN, ATYP_IPV4, ATYP_IPV6};
@@ -157,6 +157,12 @@ pub struct VlessInboundMuxOpenedStream {
 
 #[cfg(feature = "reality")]
 pub enum VlessInboundMuxOpenedKind {
+    Tcp(VlessInboundMuxTcpOpenedStream),
+    Udp(VlessInboundMuxUdpOpenedStream),
+}
+
+#[cfg(feature = "reality")]
+pub enum VlessInboundMuxOpenedRoute {
     Tcp {
         session_id: u16,
         session: Session,
@@ -164,9 +170,69 @@ pub enum VlessInboundMuxOpenedKind {
     },
     Udp {
         session_id: u16,
+        port: u16,
+        up_rx: mpsc::UnboundedReceiver<Vec<u8>>,
+        responder: crate::shared::VlessInboundMuxUdpResponder,
+        auth: Option<SessionAuth>,
+    },
+}
+
+#[cfg(feature = "reality")]
+pub trait VlessInboundMuxOpenedRouteDispatcher {
+    type Error;
+
+    async fn dispatch_tcp_opened(
+        &mut self,
+        session_id: u16,
         session: Session,
         up_rx: mpsc::UnboundedReceiver<Vec<u8>>,
-    },
+    ) -> Result<bool, Self::Error>;
+
+    async fn dispatch_udp_opened(
+        &mut self,
+        session_id: u16,
+        port: u16,
+        up_rx: mpsc::UnboundedReceiver<Vec<u8>>,
+        responder: crate::shared::VlessInboundMuxUdpResponder,
+        auth: Option<SessionAuth>,
+    ) -> Result<bool, Self::Error>;
+}
+
+#[cfg(feature = "reality")]
+impl VlessInboundMuxOpenedRoute {
+    pub fn session_id(&self) -> u16 {
+        match self {
+            Self::Tcp { session_id, .. } | Self::Udp { session_id, .. } => *session_id,
+        }
+    }
+
+    pub async fn dispatch_with<D>(self, dispatcher: &mut D) -> Result<bool, D::Error>
+    where
+        D: VlessInboundMuxOpenedRouteDispatcher,
+    {
+        match self {
+            Self::Tcp {
+                session_id,
+                session,
+                up_rx,
+            } => {
+                dispatcher
+                    .dispatch_tcp_opened(session_id, session, up_rx)
+                    .await
+            }
+            Self::Udp {
+                session_id,
+                port,
+                up_rx,
+                responder,
+                auth,
+            } => {
+                dispatcher
+                    .dispatch_udp_opened(session_id, port, up_rx, responder, auth)
+                    .await
+            }
+        }
+    }
 }
 
 #[cfg(feature = "reality")]
@@ -190,17 +256,85 @@ impl VlessInboundMuxOpenedStream {
     pub fn into_kind(self) -> VlessInboundMuxOpenedKind {
         let (session_id, session, up_rx) = self.into_parts();
         match session.network {
-            Network::Tcp => VlessInboundMuxOpenedKind::Tcp {
+            Network::Tcp => VlessInboundMuxOpenedKind::Tcp(VlessInboundMuxTcpOpenedStream {
+                session_id,
+                session,
+                up_rx,
+            }),
+            Network::Udp => VlessInboundMuxOpenedKind::Udp(VlessInboundMuxUdpOpenedStream {
+                session_id,
+                session,
+                up_rx,
+            }),
+        }
+    }
+
+    pub fn into_route_with_auth(
+        self,
+        auth: Option<&SessionAuth>,
+        writer: VlessInboundMuxWriter,
+    ) -> VlessInboundMuxOpenedRoute {
+        let (session_id, mut session, up_rx) = self.into_parts();
+        if let Some(auth) = auth {
+            session.apply_auth(auth.clone());
+        }
+        match session.network {
+            Network::Tcp => VlessInboundMuxOpenedRoute::Tcp {
                 session_id,
                 session,
                 up_rx,
             },
-            Network::Udp => VlessInboundMuxOpenedKind::Udp {
+            Network::Udp => VlessInboundMuxOpenedRoute::Udp {
                 session_id,
-                session,
+                port: session.port,
                 up_rx,
+                responder: crate::shared::VlessInboundMuxUdpResponder::new(
+                    crate::shared::VlessInboundUdpSession::new(),
+                    writer,
+                    session_id,
+                ),
+                auth: auth.cloned(),
             },
         }
+    }
+}
+
+#[cfg(feature = "reality")]
+pub struct VlessInboundMuxTcpOpenedStream {
+    session_id: u16,
+    session: Session,
+    up_rx: mpsc::UnboundedReceiver<Vec<u8>>,
+}
+
+#[cfg(feature = "reality")]
+impl VlessInboundMuxTcpOpenedStream {
+    pub fn into_parts(self) -> (u16, Session, mpsc::UnboundedReceiver<Vec<u8>>) {
+        (self.session_id, self.session, self.up_rx)
+    }
+
+    pub fn into_parts_with_auth(
+        self,
+        auth: Option<&SessionAuth>,
+    ) -> (u16, Session, mpsc::UnboundedReceiver<Vec<u8>>) {
+        let (session_id, mut session, up_rx) = self.into_parts();
+        if let Some(auth) = auth {
+            session.apply_auth(auth.clone());
+        }
+        (session_id, session, up_rx)
+    }
+}
+
+#[cfg(feature = "reality")]
+pub struct VlessInboundMuxUdpOpenedStream {
+    session_id: u16,
+    session: Session,
+    up_rx: mpsc::UnboundedReceiver<Vec<u8>>,
+}
+
+#[cfg(feature = "reality")]
+impl VlessInboundMuxUdpOpenedStream {
+    pub fn into_parts(self) -> (u16, Session, mpsc::UnboundedReceiver<Vec<u8>>) {
+        (self.session_id, self.session, self.up_rx)
     }
 }
 
@@ -233,27 +367,7 @@ pub struct VlessInboundMuxServer {
     streams: VlessInboundMuxStreams,
     writer: VlessInboundMuxWriter,
     down_rx: mpsc::UnboundedReceiver<VlessInboundMuxDownlink>,
-}
-
-#[cfg(feature = "reality")]
-pub trait VlessInboundMuxOpenedHandler {
-    type Error: From<Error>;
-
-    async fn handle_tcp_opened(
-        &mut self,
-        session_id: u16,
-        session: Session,
-        up_rx: mpsc::UnboundedReceiver<Vec<u8>>,
-        writer: VlessInboundMuxWriter,
-    ) -> Result<bool, Self::Error>;
-
-    async fn handle_udp_opened(
-        &mut self,
-        session_id: u16,
-        session: Session,
-        up_rx: mpsc::UnboundedReceiver<Vec<u8>>,
-        writer: VlessInboundMuxWriter,
-    ) -> Result<(), Self::Error>;
+    auth: Option<SessionAuth>,
 }
 
 #[cfg(feature = "reality")]
@@ -265,11 +379,24 @@ impl VlessInboundMuxServer {
             streams: VlessInboundMuxStreams::new(),
             writer,
             down_rx,
+            auth: None,
         }
     }
 
     pub fn from_context(context: VlessInboundMuxContext) -> Self {
         Self::new(context.inbound_session())
+    }
+
+    pub fn from_context_with_auth(
+        context: VlessInboundMuxContext,
+        auth: Option<SessionAuth>,
+    ) -> Self {
+        Self::new(context.inbound_session()).with_auth(auth)
+    }
+
+    pub fn with_auth(mut self, auth: Option<SessionAuth>) -> Self {
+        self.auth = auth;
+        self
     }
 
     pub fn writer(&self) -> VlessInboundMuxWriter {
@@ -305,6 +432,55 @@ impl VlessInboundMuxServer {
         }
     }
 
+    pub async fn next_opened_route_with_auth<S>(
+        &mut self,
+        stream: &mut S,
+        auth: Option<&SessionAuth>,
+    ) -> Result<Option<VlessInboundMuxOpenedRoute>, Error>
+    where
+        S: AsyncSocket,
+    {
+        let writer = self.writer();
+        self.next_opened_stream(stream).await.map(|event| {
+            event.map(|event| match event {
+                VlessInboundMuxEvent::Opened(opened) => opened.into_route_with_auth(auth, writer),
+            })
+        })
+    }
+
+    pub async fn next_opened_route<S>(
+        &mut self,
+        stream: &mut S,
+    ) -> Result<Option<VlessInboundMuxOpenedRoute>, Error>
+    where
+        S: AsyncSocket,
+    {
+        let auth = self.auth.clone();
+        self.next_opened_route_with_auth(stream, auth.as_ref())
+            .await
+    }
+
+    pub async fn dispatch_next_opened_route<S, D>(
+        &mut self,
+        stream: &mut S,
+        dispatcher: &mut D,
+    ) -> Result<bool, D::Error>
+    where
+        S: AsyncSocket,
+        D: VlessInboundMuxOpenedRouteDispatcher,
+        D::Error: From<Error>,
+    {
+        let Some(route) = self.next_opened_route(stream).await? else {
+            return Ok(false);
+        };
+        let session_id = route.session_id();
+        let accepted = route.dispatch_with(dispatcher).await?;
+        if !accepted {
+            self.reject_opened_stream(stream, session_id).await?;
+        }
+        Ok(accepted)
+    }
+
     pub async fn reject_opened_stream<S>(
         &mut self,
         stream: &mut S,
@@ -316,54 +492,6 @@ impl VlessInboundMuxServer {
         self.streams
             .reject_opened_stream(&mut self.mux, stream, session_id)
             .await
-    }
-
-    pub async fn dispatch_next_opened_stream<S, H>(
-        &mut self,
-        stream: &mut S,
-        handler: &mut H,
-    ) -> Result<(), H::Error>
-    where
-        S: AsyncSocket,
-        H: VlessInboundMuxOpenedHandler,
-    {
-        let Some(event) = self
-            .next_opened_stream(stream)
-            .await
-            .map_err(H::Error::from)?
-        else {
-            return Ok(());
-        };
-
-        match event {
-            VlessInboundMuxEvent::Opened(opened) => match opened.into_kind() {
-                VlessInboundMuxOpenedKind::Tcp {
-                    session_id,
-                    session,
-                    up_rx,
-                } => {
-                    let accepted = handler
-                        .handle_tcp_opened(session_id, session, up_rx, self.writer())
-                        .await?;
-                    if !accepted {
-                        self.reject_opened_stream(stream, session_id)
-                            .await
-                            .map_err(H::Error::from)?;
-                    }
-                }
-                VlessInboundMuxOpenedKind::Udp {
-                    session_id,
-                    session,
-                    up_rx,
-                } => {
-                    handler
-                        .handle_udp_opened(session_id, session, up_rx, self.writer())
-                        .await?;
-                }
-            },
-        }
-
-        Ok(())
     }
 }
 

@@ -116,6 +116,29 @@ impl VmessInboundProfile {
             inbound.accept_tcp_multi(stream, &self.users).await
         }
     }
+
+    pub async fn accept_tcp_stream<S: AsyncSocket>(
+        &self,
+        inbound: VmessInbound,
+        mut stream: S,
+    ) -> Result<(Session, crate::stream::VmessAeadStream<S>), Error> {
+        let accepted = self.accept_tcp(inbound, &mut stream).await?;
+        let session = accepted.session.clone();
+        let client = crate::stream::wrap_tcp_inbound_stream(stream, accepted)?;
+        Ok((session, client))
+    }
+
+    pub async fn accept_client<S: AsyncSocket>(
+        &self,
+        inbound: VmessInbound,
+        stream: S,
+    ) -> Result<crate::mux::VmessInboundAcceptedStream<crate::stream::VmessAeadStream<S>>, Error>
+    {
+        let (session, client) = self.accept_tcp_stream(inbound, stream).await?;
+        Ok(crate::mux::VmessInboundAcceptedStream::from_session_stream(
+            session, client,
+        ))
+    }
 }
 
 pub fn inbound_profile_from_config_users<I, U>(users: I) -> Result<VmessInboundProfile, Error>

@@ -7,14 +7,12 @@
 use std::io;
 
 use async_trait::async_trait;
-use tokio::select;
 use tokio::sync::watch;
-use tokio::task::JoinSet;
-use tracing::{error, info};
 use zero_core::{Address, Network, ProtocolType, Session};
 use zero_engine::EngineError;
 
 use crate::runtime::inbound_protocol::{serve_inbound, InboundProtocol};
+use crate::runtime::listener_loop::{run_tcp_listener_loop, TcpListenerLoopRequest};
 use crate::runtime::Proxy;
 use crate::transport::TcpRelayStream;
 
@@ -64,74 +62,56 @@ pub(crate) async fn run_direct_listener_with_bound(
     proxy: &Proxy,
     request: DirectInboundRequest,
     listener: zero_platform_tokio::TokioListener,
-    mut shutdown: watch::Receiver<bool>,
+    shutdown: watch::Receiver<bool>,
 ) -> Result<(), EngineError> {
     let DirectInboundRequest {
         inbound,
         target,
         port,
     } = request;
-    let local_addr = listener.local_addr()?;
-    let mut connections = JoinSet::new();
     let handler = DirectInboundHandler;
 
-    info!(
-        inbound_tag = %inbound.tag, protocol = "direct",
-        target = ?target, port = ?port,
-        listen = %local_addr, "inbound listener ready"
-    );
-
-    loop {
-        select! {
-            changed = shutdown.changed() => {
-                match changed {
-                    Ok(()) if *shutdown.borrow() => break,
-                    Ok(()) => {}
-                    Err(_) => break,
-                }
-            }
-            accept_result = listener.accept() => {
-                match accept_result {
-                    Ok((stream, remote_addr)) => {
-                        let engine = proxy.clone();
-                        let tag = inbound.tag.clone();
-                        let tgt = target.clone();
-                        let pt = port;
-                        let h = handler.clone();
-                        let src = zero_platform_tokio::remote_ip_to_socket_addr(remote_addr);
-                        connections.spawn(async move {
-                            let address = match tgt.as_deref() {
-                                Some(d) if d.parse::<std::net::Ipv4Addr>().is_ok() => {
-                                    Address::Ipv4(d.parse::<std::net::Ipv4Addr>().unwrap().octets())
-                                }
-                                Some(d) if d.parse::<std::net::Ipv6Addr>().is_ok() => {
-                                    Address::Ipv6(d.parse::<std::net::Ipv6Addr>().unwrap().octets())
-                                }
-                                Some(d) => Address::Domain(d.to_owned()),
-                                None => return,
-                            };
-                            let session = Session::new(
-                                0, address, pt.unwrap_or(443),
-                                Network::Tcp, ProtocolType::Unknown,
-                            );
-                            let _ = serve_inbound(
-                                &engine, session, TcpRelayStream::from(stream),
-                                &h, &tag, src,
-                            ).await;
-                        });
+    run_tcp_listener_loop(TcpListenerLoopRequest {
+        proxy,
+        inbound_tag: inbound.tag,
+        protocol_name: "direct",
+        listener,
+        shutdown,
+        handler: move |engine: Proxy,
+                       tag: String,
+                       stream: zero_platform_tokio::TokioSocket,
+                       source_addr: Option<std::net::SocketAddr>| {
+            let target = target.clone();
+            let handler = handler.clone();
+            async move {
+                let address = match target.as_deref() {
+                    Some(value) if value.parse::<std::net::Ipv4Addr>().is_ok() => {
+                        Address::Ipv4(value.parse::<std::net::Ipv4Addr>().unwrap().octets())
                     }
-                    Err(e) => { error!(error = %e, "direct: accept error"); }
-                }
+                    Some(value) if value.parse::<std::net::Ipv6Addr>().is_ok() => {
+                        Address::Ipv6(value.parse::<std::net::Ipv6Addr>().unwrap().octets())
+                    }
+                    Some(value) => Address::Domain(value.to_owned()),
+                    None => return,
+                };
+                let session = Session::new(
+                    0,
+                    address,
+                    port.unwrap_or(443),
+                    Network::Tcp,
+                    ProtocolType::Unknown,
+                );
+                let _ = serve_inbound(
+                    &engine,
+                    session,
+                    TcpRelayStream::from(stream),
+                    &handler,
+                    &tag,
+                    source_addr,
+                )
+                .await;
             }
-            result = connections.join_next(), if !connections.is_empty() => {
-                if let Some(Err(e)) = result {
-                    if !e.is_cancelled() { error!(error = %e, "direct connection task panicked"); }
-                }
-            }
-        }
-    }
-
-    connections.abort_all();
-    info!(inbound_tag = %inbound.tag, protocol = "direct", listen = %local_addr, "inbound listener stopped");
-    Ok(())
+        },
+    })
+    .await
 }

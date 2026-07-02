@@ -53,6 +53,44 @@ pub(crate) trait PacketPathCarrier: Send + Sync {
     async fn recv_from(&self, buf: &mut [u8]) -> Result<usize, EngineError>;
 }
 
+/// Generic payload-based packet-path transport bridge.
+///
+/// Some protocol adapters expose an already-established upstream transport that
+/// can send target-addressed payloads and return stripped payloads directly.
+/// Runtime wraps those transports into a neutral `PacketPathCarrier` so
+/// adapters do not need to define one-off carrier structs.
+#[async_trait]
+pub(crate) trait PacketPathPayloadTransport: Send + Sync {
+    async fn send_to(&self, target: &Address, port: u16, payload: &[u8])
+        -> Result<(), EngineError>;
+
+    async fn recv_from(&self, buf: &mut [u8]) -> Result<usize, EngineError>;
+}
+
+struct PacketPathPayloadCarrier(Arc<dyn PacketPathPayloadTransport>);
+
+#[async_trait]
+impl PacketPathCarrier for PacketPathPayloadCarrier {
+    async fn send_to(
+        &self,
+        target: &Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<(), EngineError> {
+        self.0.send_to(target, port, payload).await
+    }
+
+    async fn recv_from(&self, buf: &mut [u8]) -> Result<usize, EngineError> {
+        self.0.recv_from(buf).await
+    }
+}
+
+pub(crate) fn packet_path_payload_carrier(
+    transport: Arc<dyn PacketPathPayloadTransport>,
+) -> Arc<dyn PacketPathCarrier> {
+    Arc::new(PacketPathPayloadCarrier(transport))
+}
+
 /// Carrier identity for cache lookup (cheap, computed before dialing).
 ///
 /// Produced by `UdpPacketPathCapability::udp_packet_path_carrier_descriptor`. The

@@ -247,7 +247,7 @@ where
 {
     let outbound = MieruOutbound::connect(&mut stream, target.username, target.password).await?;
     let mut mieru_stream = MieruTcpStream::new(stream, outbound);
-    socks5_connect(&mut mieru_stream, target.target, target.port).await?;
+    super::tunnel::request_tcp_connect(&mut mieru_stream, target.target, target.port).await?;
     Ok(mieru_stream)
 }
 
@@ -370,8 +370,35 @@ impl MieruUdpFlowIo {
         password: &str,
     ) -> Result<Self, Error> {
         let mut outbound = MieruOutbound::connect(stream, username, password).await?;
-        send_udp_associate_request(stream, &mut outbound).await?;
-        read_udp_associate_response(stream, &mut outbound).await?;
+        let assoc_req = super::tunnel::build_udp_associate_request()?;
+        let assoc_seg = outbound.encrypt_client_data(&assoc_req)?;
+        stream
+            .write_all(&assoc_seg)
+            .await
+            .map_err(|_| Error::Io("mieru udp assoc write"))?;
+
+        let mut assoc_raw = Vec::new();
+        let assoc_resp = loop {
+            match outbound.decrypt_server_data_with_consumed(&assoc_raw) {
+                Ok((segment, consumed)) => {
+                    assoc_raw.drain(..consumed);
+                    break segment.payload;
+                }
+                Err(Error::Protocol("mieru: need more data")) => {
+                    let mut scratch = [0u8; 4096];
+                    let n = stream
+                        .read(&mut scratch)
+                        .await
+                        .map_err(|_| Error::Io("mieru udp assoc read"))?;
+                    if n == 0 {
+                        return Err(Error::Protocol("mieru udp assoc: connection closed"));
+                    }
+                    assoc_raw.extend_from_slice(&scratch[..n]);
+                }
+                Err(error) => return Err(error),
+            }
+        };
+        super::tunnel::validate_success_response(&assoc_resp)?;
         Ok(Self {
             outbound,
             recv_raw: Vec::new(),
@@ -717,52 +744,6 @@ impl MieruOutbound {
     }
 }
 
-async fn send_udp_associate_request<S: AsyncSocket>(
-    stream: &mut S,
-    outbound: &mut MieruOutbound,
-) -> Result<(), Error> {
-    let assoc_req = [0x05u8, 0x03, 0x00, 0x01, 0, 0, 0, 0, 0, 0];
-    let assoc_seg = outbound.encrypt_client_data(&assoc_req)?;
-    stream
-        .write_all(&assoc_seg)
-        .await
-        .map_err(|_| Error::Io("mieru udp assoc write"))?;
-    Ok(())
-}
-
-async fn read_udp_associate_response<S: AsyncSocket>(
-    stream: &mut S,
-    outbound: &mut MieruOutbound,
-) -> Result<(), Error> {
-    let mut assoc_raw = Vec::new();
-    let assoc_resp = loop {
-        match outbound.decrypt_server_data_with_consumed(&assoc_raw) {
-            Ok((segment, consumed)) => {
-                assoc_raw.drain(..consumed);
-                break segment.payload;
-            }
-            Err(Error::Protocol("mieru: need more data")) => {
-                let mut scratch = [0u8; 4096];
-                let n = stream
-                    .read(&mut scratch)
-                    .await
-                    .map_err(|_| Error::Io("mieru udp assoc read"))?;
-                if n == 0 {
-                    return Err(Error::Protocol("mieru udp assoc: connection closed"));
-                }
-                assoc_raw.extend_from_slice(&scratch[..n]);
-            }
-            Err(error) => return Err(error),
-        }
-    };
-
-    if assoc_resp.len() < 4 || assoc_resp[0] != 0x05 || assoc_resp[1] != 0x00 {
-        return Err(Error::Protocol("mieru udp assoc rejected"));
-    }
-
-    Ok(())
-}
-
 fn segment_wire_len(segment: &Segment, has_nonce: bool) -> usize {
     let nonce_len = if has_nonce { 24 } else { 0 };
     let meta_len = METADATA_LEN + 16;
@@ -804,84 +785,13 @@ async fn read_exact<S: AsyncSocket>(
     Ok(())
 }
 
-async fn socks5_connect<S>(stream: &mut S, target: &Address, port: u16) -> Result<(), Error>
-where
-    S: AsyncRead + AsyncWrite + Unpin,
-{
-    let mut req = Vec::from([0x05, 0x01, 0x00]);
-    match target {
-        Address::Ipv4(ip) => {
-            req.push(0x01);
-            req.extend_from_slice(ip);
-        }
-        Address::Ipv6(ip) => {
-            req.push(0x04);
-            req.extend_from_slice(ip);
-        }
-        Address::Domain(domain) => {
-            let bytes = domain.as_bytes();
-            if bytes.len() > 255 {
-                return Err(Error::Protocol("mieru socks5: domain too long"));
-            }
-            req.push(0x03);
-            req.push(bytes.len() as u8);
-            req.extend_from_slice(bytes);
-        }
-    }
-    req.extend_from_slice(&port.to_be_bytes());
-    stream
-        .write_all(&req)
-        .await
-        .map_err(|_| Error::Io("mieru socks5: write request"))?;
-    stream
-        .flush()
-        .await
-        .map_err(|_| Error::Io("mieru socks5: flush request"))?;
-
-    let mut head = [0u8; 4];
-    stream
-        .read_exact(&mut head)
-        .await
-        .map_err(|_| Error::Io("mieru socks5: read response"))?;
-    if head[0] != 0x05 {
-        return Err(Error::Protocol("mieru socks5: bad reply version"));
-    }
-    if head[1] != 0x00 {
-        return Err(Error::Protocol("mieru socks5: connect rejected"));
-    }
-    let bind_addr_len = match head[3] {
-        0x01 => 4,
-        0x04 => 16,
-        0x03 => {
-            let mut len = [0u8; 1];
-            stream
-                .read_exact(&mut len)
-                .await
-                .map_err(|_| Error::Io("mieru socks5: read domain length"))?;
-            len[0] as usize
-        }
-        _ => return Err(Error::Protocol("mieru socks5: bad BND address type")),
-    };
-    let mut bind_addr = vec![0u8; bind_addr_len];
-    stream
-        .read_exact(&mut bind_addr)
-        .await
-        .map_err(|_| Error::Io("mieru socks5: read BND address"))?;
-    let mut bind_port = [0u8; 2];
-    stream
-        .read_exact(&mut bind_port)
-        .await
-        .map_err(|_| Error::Io("mieru socks5: read BND port"))?;
-    Ok(())
-}
-
 /// Credential parameters for a Mieru outbound session.
 ///
 /// The mieru session is target-agnostic (it is an encrypted tunnel); the
 /// proxy target is conveyed by a socks5 handshake the caller runs over the
 /// established session, matching upstream mieru.
 #[derive(Debug, Clone, Copy)]
-pub struct MieruTcpTarget<'a> {
+pub(crate) struct MieruTcpTarget<'a> {
     pub username: &'a str,
     pub password: &'a str,
 }

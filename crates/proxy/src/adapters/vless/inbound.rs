@@ -6,6 +6,8 @@ use crate::protocol_registry::BoundInbound;
 use crate::runtime::Proxy;
 use crate::transport::QuicInbound;
 
+mod listener;
+
 impl VlessAdapter {
     pub(super) async fn bind_inbound_impl(
         &self,
@@ -86,9 +88,9 @@ impl VlessAdapter {
                 .as_deref()
                 .map(|tls| crate::transport::build_tls_acceptor(tls, p.config.source_dir()))
                 .transpose()?;
-            crate::inbound::run_vless_listener_with_bound(
+            listener::run_vless_listener_with_bound(
                 &p,
-                crate::inbound::vless::model::VlessInboundRequest {
+                listener::model::VlessInboundRequest {
                     inbound,
                     profile,
                     reality,

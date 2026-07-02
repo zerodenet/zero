@@ -118,6 +118,27 @@ impl HttpConnectInbound {
             .await
     }
 
+    pub async fn send_accept_error_response<S>(
+        &self,
+        stream: &mut S,
+        error: &Error,
+    ) -> Result<bool, Error>
+    where
+        S: AsyncSocket,
+    {
+        match error {
+            Error::Unsupported(_) => {
+                self.send_method_not_allowed_response(stream).await?;
+                Ok(true)
+            }
+            Error::Protocol(_) => {
+                self.send_bad_request_response(stream).await?;
+                Ok(true)
+            }
+            _ => Ok(false),
+        }
+    }
+
     pub fn redirect_response(&self, status: u16, location: &str) -> String {
         format!("HTTP/1.1 {status} Found\r\nLocation: {location}\r\nConnection: close\r\n\r\n")
     }

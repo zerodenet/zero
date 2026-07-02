@@ -13,7 +13,10 @@ use crate::runtime::udp_flow::outbound::ManagedUdpFlowRef;
 use crate::runtime::udp_flow::response::UpstreamUdpResponse;
 
 use upstream::UpstreamAssociationState;
-pub(crate) use upstream::{UpstreamAssociationHandler, UpstreamUdpHandlers};
+pub(crate) use upstream::{
+    UpstreamAssociationCloseReason, UpstreamAssociationHandler, UpstreamAssociationRuntime,
+    UpstreamAssociationTarget, UpstreamAssociationTransport, UpstreamUdpHandlers,
+};
 
 mod forward;
 mod upstream;

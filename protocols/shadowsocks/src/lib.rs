@@ -15,7 +15,7 @@ pub use inbound::ShadowsocksInbound;
 #[cfg(feature = "crypto")]
 pub use inbound::{
     inbound_profile_from_config_cipher_password, ShadowsocksAccept, ShadowsocksInboundProfile,
-    ShadowsocksInboundTcpState, ShadowsocksInboundUdpResponder,
+    ShadowsocksInboundTcpAcceptor, ShadowsocksInboundTcpState,
 };
 pub use metadata::ShadowsocksProtocol;
 pub use outbound::ShadowsocksOutbound;

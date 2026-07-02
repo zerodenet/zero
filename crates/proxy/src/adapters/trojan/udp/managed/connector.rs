@@ -20,7 +20,7 @@ impl crate::runtime::udp_flow::managed::ManagedStreamConnectorFlowBuild
     for trojan::udp::TrojanUdpConnectorFlow
 {
     fn into_parts(self) -> (String, bool) {
-        self.into_parts()
+        trojan::udp::TrojanUdpConnectorFlow::into_parts(self)
     }
 }
 

@@ -14,19 +14,29 @@ use zero_engine::{Engine, EngineError};
 
 use crate::inventory::ProtocolInventory;
 
+pub(crate) mod datagram_udp;
 mod engine_facade;
 mod handle;
 pub(crate) mod http_redirect;
 pub(crate) mod inbound_protocol;
+pub(crate) mod listener_loop;
 mod listeners;
+pub(crate) mod mux_session;
+pub(crate) mod mux_tcp;
+pub(crate) mod mux_udp;
 pub(crate) mod orchestration;
+pub(crate) mod packet_session_udp;
 pub(crate) mod pipe;
 mod reload;
 mod running;
+pub(crate) mod stream_udp;
 mod tcp_dispatch;
+pub(crate) mod udp_association;
 pub(crate) mod udp_dispatch;
 pub(crate) mod udp_flow;
 pub(crate) mod udp_helpers;
+pub(crate) mod udp_inbound_dispatch;
+pub(crate) mod udp_response;
 
 pub use handle::ProxyHandle;
 pub use running::RunningProxy;
