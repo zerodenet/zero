@@ -208,6 +208,39 @@ impl VlessInboundMuxOpenedRoute {
         }
     }
 
+    pub async fn dispatch_with_handlers<E, FTcp, FTcpFut, FUdp, FUdpFut>(
+        self,
+        on_tcp_opened: FTcp,
+        on_udp_opened: FUdp,
+    ) -> Result<bool, E>
+    where
+        FTcp: FnOnce(u16, Session, mpsc::UnboundedReceiver<Vec<u8>>) -> FTcpFut,
+        FTcpFut: core::future::Future<Output = Result<bool, E>>,
+        FUdp: FnOnce(
+            u16,
+            u16,
+            mpsc::UnboundedReceiver<Vec<u8>>,
+            crate::udp::VlessInboundMuxUdpResponder,
+            Option<SessionAuth>,
+        ) -> FUdpFut,
+        FUdpFut: core::future::Future<Output = Result<bool, E>>,
+    {
+        match self {
+            Self::Tcp {
+                session_id,
+                session,
+                up_rx,
+            } => on_tcp_opened(session_id, session, up_rx).await,
+            Self::Udp {
+                session_id,
+                port,
+                up_rx,
+                responder,
+                auth,
+            } => on_udp_opened(session_id, port, up_rx, responder, auth).await,
+        }
+    }
+
     pub async fn dispatch_with<D>(self, dispatcher: &mut D) -> Result<bool, D::Error>
     where
         D: VlessInboundMuxOpenedRouteDispatcher,
@@ -477,6 +510,39 @@ impl VlessInboundMuxServer {
         };
         let session_id = route.session_id();
         let accepted = route.dispatch_with(dispatcher).await?;
+        if !accepted {
+            self.reject_opened_stream(stream, session_id).await?;
+        }
+        Ok(accepted)
+    }
+
+    pub async fn dispatch_next_opened_route_with_handlers<S, E, FTcp, FTcpFut, FUdp, FUdpFut>(
+        &mut self,
+        stream: &mut S,
+        on_tcp_opened: FTcp,
+        on_udp_opened: FUdp,
+    ) -> Result<bool, E>
+    where
+        S: AsyncSocket,
+        E: From<Error>,
+        FTcp: FnOnce(u16, Session, mpsc::UnboundedReceiver<Vec<u8>>) -> FTcpFut,
+        FTcpFut: core::future::Future<Output = Result<bool, E>>,
+        FUdp: FnOnce(
+            u16,
+            u16,
+            mpsc::UnboundedReceiver<Vec<u8>>,
+            crate::udp::VlessInboundMuxUdpResponder,
+            Option<SessionAuth>,
+        ) -> FUdpFut,
+        FUdpFut: core::future::Future<Output = Result<bool, E>>,
+    {
+        let Some(route) = self.next_opened_route(stream).await? else {
+            return Ok(false);
+        };
+        let session_id = route.session_id();
+        let accepted = route
+            .dispatch_with_handlers(on_tcp_opened, on_udp_opened)
+            .await?;
         if !accepted {
             self.reject_opened_stream(stream, session_id).await?;
         }

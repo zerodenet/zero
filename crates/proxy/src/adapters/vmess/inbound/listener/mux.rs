@@ -1,5 +1,7 @@
 //! VMess inbound: TLS accept, transport dispatch (WS/gRPC), protocol auth, route, TCP relay.
 
+use std::sync::Mutex;
+
 use tokio::task::JoinSet;
 use tracing::warn;
 use zero_engine::EngineError;
@@ -17,13 +19,6 @@ struct VmessMuxOpenedDispatcher<'a, R> {
     inbound_tag: &'a str,
 }
 
-struct VmessMuxOpenedRouteBridge<'a> {
-    proxy: &'a Proxy,
-    writer: vmess::mux::VmessInboundMuxWriter,
-    inbound_tag: &'a str,
-    tasks: &'a mut JoinSet<()>,
-}
-
 impl<R> MuxOpenedDispatcher for VmessMuxOpenedDispatcher<'_, R>
 where
     R: tokio::io::AsyncRead + Unpin,
@@ -31,16 +26,55 @@ where
     type Error = EngineError;
 
     async fn dispatch_next(&mut self, tasks: &mut JoinSet<()>) -> Result<bool, Self::Error> {
+        let tasks = Mutex::new(Some(tasks));
         let writer = self.mux_server.writer();
-        let mut bridge = VmessMuxOpenedRouteBridge {
-            proxy: self.proxy,
-            writer,
-            inbound_tag: self.inbound_tag,
-            tasks,
-        };
+        let proxy = self.proxy;
+        let inbound_tag = self.inbound_tag;
         match self
             .mux_server
-            .dispatch_next_opened_route(self.reader, &mut bridge)
+            .dispatch_next_opened_route_with_handlers(
+                self.reader,
+                |session_id, session, up_rx| {
+                    let tasks = tasks
+                        .lock()
+                        .expect("lock vmess mux tcp tasks")
+                        .take()
+                        .expect("single vmess mux tcp dispatch");
+                    let writer = writer.clone();
+                    let inbound_tag = inbound_tag.to_owned();
+                    async move {
+                        spawn_vmess_mux_tcp_stream_task(
+                            proxy,
+                            tasks,
+                            session_id,
+                            session,
+                            up_rx,
+                            writer,
+                            inbound_tag,
+                        );
+                        Ok::<(), EngineError>(())
+                    }
+                },
+                |session_id, up_rx, responder| {
+                    let tasks = tasks
+                        .lock()
+                        .expect("lock vmess mux udp tasks")
+                        .take()
+                        .expect("single vmess mux udp dispatch");
+                    let inbound_tag = inbound_tag.to_owned();
+                    async move {
+                        spawn_vmess_mux_udp_stream_task(
+                            proxy,
+                            tasks,
+                            session_id,
+                            up_rx,
+                            responder,
+                            inbound_tag,
+                        );
+                        Ok::<(), EngineError>(())
+                    }
+                },
+            )
             .await
         {
             Ok(keep_running) => Ok(keep_running),
@@ -49,65 +83,6 @@ where
                 Ok(false)
             }
         }
-    }
-}
-
-impl VmessMuxOpenedRouteBridge<'_> {
-    fn bridge_tcp_opened(
-        &mut self,
-        session_id: u16,
-        session: zero_core::Session,
-        up_rx: tokio::sync::mpsc::UnboundedReceiver<Vec<u8>>,
-    ) {
-        spawn_vmess_mux_tcp_stream_task(
-            self.proxy,
-            self.tasks,
-            session_id,
-            session,
-            up_rx,
-            self.writer.clone(),
-            self.inbound_tag.to_owned(),
-        );
-    }
-
-    fn bridge_udp_opened(
-        &mut self,
-        session_id: u16,
-        up_rx: tokio::sync::mpsc::UnboundedReceiver<Vec<u8>>,
-        responder: vmess::udp::VmessInboundMuxUdpResponder,
-    ) {
-        spawn_vmess_mux_udp_stream_task(
-            self.proxy,
-            self.tasks,
-            session_id,
-            up_rx,
-            responder,
-            self.inbound_tag.to_owned(),
-        );
-    }
-}
-
-impl vmess::mux::VmessInboundMuxOpenedRouteDispatcher for VmessMuxOpenedRouteBridge<'_> {
-    type Error = EngineError;
-
-    async fn dispatch_tcp_opened(
-        &mut self,
-        session_id: u16,
-        session: zero_core::Session,
-        up_rx: tokio::sync::mpsc::UnboundedReceiver<Vec<u8>>,
-    ) -> Result<(), Self::Error> {
-        self.bridge_tcp_opened(session_id, session, up_rx);
-        Ok(())
-    }
-
-    async fn dispatch_udp_opened(
-        &mut self,
-        session_id: u16,
-        up_rx: tokio::sync::mpsc::UnboundedReceiver<Vec<u8>>,
-        responder: vmess::udp::VmessInboundMuxUdpResponder,
-    ) -> Result<(), Self::Error> {
-        self.bridge_udp_opened(session_id, up_rx, responder);
-        Ok(())
     }
 }
 

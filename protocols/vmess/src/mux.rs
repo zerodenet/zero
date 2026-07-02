@@ -382,6 +382,36 @@ pub trait VmessInboundMuxOpenedRouteDispatcher {
 }
 
 impl VmessInboundMuxOpenedRoute {
+    pub async fn dispatch_with_handlers<E, FTcp, FTcpFut, FUdp, FUdpFut>(
+        self,
+        on_tcp_opened: FTcp,
+        on_udp_opened: FUdp,
+    ) -> Result<(), E>
+    where
+        FTcp: FnOnce(u16, Session, mpsc::UnboundedReceiver<Vec<u8>>) -> FTcpFut,
+        FTcpFut: core::future::Future<Output = Result<(), E>>,
+        FUdp: FnOnce(
+            u16,
+            mpsc::UnboundedReceiver<Vec<u8>>,
+            crate::udp::VmessInboundMuxUdpResponder,
+        ) -> FUdpFut,
+        FUdpFut: core::future::Future<Output = Result<(), E>>,
+    {
+        match self {
+            Self::Tcp {
+                session_id,
+                session,
+                up_rx,
+            } => on_tcp_opened(session_id, session, up_rx).await,
+            Self::Udp {
+                session_id,
+                up_rx,
+                responder,
+                ..
+            } => on_udp_opened(session_id, up_rx, responder).await,
+        }
+    }
+
     pub async fn dispatch_with<D>(self, dispatcher: &mut D) -> Result<(), D::Error>
     where
         D: VmessInboundMuxOpenedRouteDispatcher,
@@ -953,6 +983,33 @@ impl VmessInboundMuxServer {
             return Ok(true);
         };
         route.dispatch_with(dispatcher).await?;
+        Ok(true)
+    }
+
+    pub async fn dispatch_next_opened_route_with_handlers<R, E, FTcp, FTcpFut, FUdp, FUdpFut>(
+        &mut self,
+        reader: &mut R,
+        on_tcp_opened: FTcp,
+        on_udp_opened: FUdp,
+    ) -> Result<bool, E>
+    where
+        R: tokio::io::AsyncRead + Unpin,
+        E: From<Error>,
+        FTcp: FnOnce(u16, Session, mpsc::UnboundedReceiver<Vec<u8>>) -> FTcpFut,
+        FTcpFut: core::future::Future<Output = Result<(), E>>,
+        FUdp: FnOnce(
+            u16,
+            mpsc::UnboundedReceiver<Vec<u8>>,
+            crate::udp::VmessInboundMuxUdpResponder,
+        ) -> FUdpFut,
+        FUdpFut: core::future::Future<Output = Result<(), E>>,
+    {
+        let Some(route) = self.next_opened_route(reader).await? else {
+            return Ok(true);
+        };
+        route
+            .dispatch_with_handlers(on_tcp_opened, on_udp_opened)
+            .await?;
         Ok(true)
     }
 
