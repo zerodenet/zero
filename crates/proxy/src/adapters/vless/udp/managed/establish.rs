@@ -64,9 +64,7 @@ pub(super) async fn over_stream(
     proxy.record_session_outbound_tx(session.id, established.initial_packet_len as u64);
     Ok(ManagedStreamConnection::new(
         session.id,
-        managed_tuple_udp_connection(Arc::new(VlessManagedUdpSender {
-            connection: established.into_connection(),
-        })),
+        managed_tuple_udp_connection(Arc::new(established.into_connection())),
     ))
 }
 
@@ -99,26 +97,21 @@ pub(super) async fn direct_flow(
     .await
 }
 
-struct VlessManagedUdpSender {
-    connection: vless::udp::VlessUdpFlowConnection,
-}
-
 #[async_trait::async_trait]
-impl ManagedTupleUdpSender for VlessManagedUdpSender {
+impl ManagedTupleUdpSender for vless::udp::VlessUdpFlowConnection {
     async fn send(
         &self,
         target: &Address,
         port: u16,
         payload: &[u8],
     ) -> Result<usize, EngineError> {
-        self.connection
-            .send(target, port, payload)
+        vless::udp::VlessUdpFlowConnection::send(self, target, port, payload)
             .await
             .map_err(EngineError::from)
     }
 
     fn subscribe_responses(&self) -> vless::udp::VlessUdpFlowResponseReceiver {
-        self.connection.subscribe_responses()
+        vless::udp::VlessUdpFlowConnection::subscribe_responses(self)
     }
 
     fn closed_message(&self) -> &'static str {

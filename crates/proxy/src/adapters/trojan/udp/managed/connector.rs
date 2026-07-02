@@ -137,31 +137,24 @@ async fn packet_stream(
     let connection = trojan::udp::establish_udp_flow_with_resume(stream, session, &resume)
         .await
         .map_err(|error| EngineError::Io(std::io::Error::other(format!("{error}"))))?;
-    Ok(managed_packet_udp_connection(Arc::new(
-        TrojanManagedUdpSender { connection },
-    )))
-}
-
-struct TrojanManagedUdpSender {
-    connection: trojan::udp::TrojanUdpFlowConnection,
+    Ok(managed_packet_udp_connection(Arc::new(connection)))
 }
 
 #[async_trait::async_trait]
-impl ManagedPacketUdpSender for TrojanManagedUdpSender {
+impl ManagedPacketUdpSender for trojan::udp::TrojanUdpFlowConnection {
     async fn send(
         &self,
         target: &zero_core::Address,
         port: u16,
         payload: &[u8],
     ) -> Result<usize, EngineError> {
-        self.connection
-            .send(target, port, payload)
+        trojan::udp::TrojanUdpFlowConnection::send(self, target, port, payload)
             .await
             .map_err(|error| EngineError::Io(std::io::Error::other(format!("{error}"))))
     }
 
     fn subscribe_responses(&self) -> trojan::udp::TrojanUdpFlowResponseReceiver {
-        self.connection.subscribe_responses()
+        trojan::udp::TrojanUdpFlowConnection::subscribe_responses(self)
     }
 
     fn closed_message(&self) -> &'static str {

@@ -25,9 +25,7 @@ pub(super) async fn over_stream(
     proxy.record_session_outbound_tx(session.id, established.initial_packet_len as u64);
     Ok(ManagedStreamConnection::new(
         session.id,
-        managed_tuple_udp_connection(Arc::new(VmessManagedUdpSender {
-            connection: established.into_connection(),
-        })),
+        managed_tuple_udp_connection(Arc::new(established.into_connection())),
     ))
 }
 
@@ -61,9 +59,7 @@ pub(super) async fn direct_flow(
             .record_session_outbound_tx(request.session.id, established.initial_packet_len as u64);
         return Ok(ManagedStreamConnection::new(
             request.session.id,
-            managed_tuple_udp_connection(Arc::new(VmessManagedUdpSender {
-                connection: established.into_connection(),
-            })),
+            managed_tuple_udp_connection(Arc::new(established.into_connection())),
         ));
     }
 
@@ -93,26 +89,21 @@ pub(super) async fn direct_flow(
     .await
 }
 
-struct VmessManagedUdpSender {
-    connection: vmess::udp::VmessUdpFlowConnection,
-}
-
 #[async_trait::async_trait]
-impl ManagedTupleUdpSender for VmessManagedUdpSender {
+impl ManagedTupleUdpSender for vmess::udp::VmessUdpFlowConnection {
     async fn send(
         &self,
         target: &Address,
         port: u16,
         payload: &[u8],
     ) -> Result<usize, EngineError> {
-        self.connection
-            .send(target, port, payload)
+        vmess::udp::VmessUdpFlowConnection::send(self, target, port, payload)
             .await
             .map_err(EngineError::from)
     }
 
     fn subscribe_responses(&self) -> vmess::udp::VmessUdpFlowResponseReceiver {
-        self.connection.subscribe_responses()
+        vmess::udp::VmessUdpFlowConnection::subscribe_responses(self)
     }
 
     fn closed_message(&self) -> &'static str {
