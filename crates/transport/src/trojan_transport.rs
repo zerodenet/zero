@@ -38,15 +38,15 @@ impl TrojanTlsProfile {
     }
 }
 
-pub struct TrojanUdpTlsOptions<'a> {
+pub struct TrojanTlsOptions<'a> {
     pub tls_profile: TrojanTlsProfile,
     pub source_dir: Option<&'a Path>,
     pub server: &'a str,
 }
 
-pub async fn open_trojan_udp_tls_stream(
+pub async fn open_trojan_tls_stream(
     socket: TokioSocket,
-    options: TrojanUdpTlsOptions<'_>,
+    options: TrojanTlsOptions<'_>,
 ) -> Result<TcpRelayStream, EngineError> {
     crate::tls::connect_tls_upstream(
         socket,
@@ -57,9 +57,9 @@ pub async fn open_trojan_udp_tls_stream(
     .await
 }
 
-pub async fn open_trojan_udp_tls_relay_stream(
+pub async fn open_trojan_tls_relay_stream(
     stream: TcpRelayStream,
-    options: TrojanUdpTlsOptions<'_>,
+    options: TrojanTlsOptions<'_>,
 ) -> Result<TcpRelayStream, EngineError> {
     crate::tls::connect_tls_stream(
         stream,

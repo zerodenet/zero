@@ -8,8 +8,8 @@ use crate::runtime::udp_flow::managed::{
 };
 use crate::runtime::Proxy;
 use crate::transport::{
-    open_trojan_udp_tls_relay_stream, open_trojan_udp_tls_stream, TcpRelayStream, TrojanTlsProfile,
-    TrojanUdpTlsOptions,
+    open_trojan_tls_relay_stream, open_trojan_tls_stream, TcpRelayStream, TrojanTlsOptions,
+    TrojanTlsProfile,
 };
 use zero_core::Session;
 use zero_engine::EngineError;
@@ -76,7 +76,7 @@ async fn open_udp_tls_stream(
         .connect_host(endpoint.server, endpoint.port, proxy.resolver.as_ref())
         .await?;
 
-    open_trojan_udp_tls_stream(
+    open_trojan_tls_stream(
         upstream,
         udp_tls_options(
             proxy,
@@ -94,7 +94,7 @@ async fn open_udp_tls_relay_stream(
     endpoint: OutboundEndpoint<'_>,
     resume: &trojan::udp::TrojanUdpFlowResume,
 ) -> Result<TcpRelayStream, EngineError> {
-    open_trojan_udp_tls_relay_stream(
+    open_trojan_tls_relay_stream(
         stream,
         udp_tls_options(
             proxy,
@@ -109,9 +109,9 @@ fn udp_tls_options<'a>(
     proxy: &'a Proxy,
     endpoint: OutboundEndpoint<'a>,
     tls_profile: trojan::udp::TrojanUdpTlsProfile,
-) -> TrojanUdpTlsOptions<'a> {
+) -> TrojanTlsOptions<'a> {
     let (server_name, insecure, client_fingerprint) = tls_profile.into_parts();
-    TrojanUdpTlsOptions {
+    TrojanTlsOptions {
         tls_profile: TrojanTlsProfile::from_parts(
             server_name.as_deref(),
             insecure,

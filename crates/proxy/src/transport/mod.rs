@@ -42,8 +42,7 @@ pub(crate) use zero_transport::tls::InboundTlsStream;
 pub(crate) use zero_transport::tls::TlsAcceptor;
 #[cfg(feature = "trojan")]
 pub(crate) use zero_transport::trojan_transport::{
-    open_trojan_udp_tls_relay_stream, open_trojan_udp_tls_stream, TrojanTlsProfile,
-    TrojanUdpTlsOptions,
+    open_trojan_tls_relay_stream, open_trojan_tls_stream, TrojanTlsOptions, TrojanTlsProfile,
 };
 #[cfg(feature = "vless")]
 pub(crate) use zero_transport::vless_transport::build_vless_split_http_over_relay;

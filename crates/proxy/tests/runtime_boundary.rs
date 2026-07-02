@@ -4414,7 +4414,7 @@ fn trojan_tcp_connect_uses_protocol_config() {
         "Trojan adapter TCP glue should request TLS stream opening through the transport facade; found `{forbidden}`"
     );
     assert!(
-        adapter.contains("open_trojan_udp_tls_stream")
+        adapter.contains("open_trojan_tls_stream")
             && adapter.contains("trojan_tls_options("),
         "Trojan adapter TCP glue should share the Trojan transport TLS opening path with UDP while keeping TLS opening outside runtime"
     );
@@ -5834,7 +5834,7 @@ fn socks5_udp_association_runtime_state_stays_out_of_outbound_module() {
 fn vless_udp_state_model_lives_outside_runtime_root() {
     let managed = read("src/adapters/vless/udp/managed.rs");
     let model_path = manifest_dir().join("src/adapters/vless/udp/managed/model.rs");
-    let establish = read("src/adapters/vless/udp/managed/establish.rs");
+    let establish = read("src/adapters/vless/udp/managed/connector.rs");
     let stream_packet_manager = read("src/runtime/udp_flow/managed/stream_packet_manager.rs");
     let managed_cache = read("src/runtime/udp_flow/managed/cache.rs");
     let old_runtime = manifest_dir().join("src/protocol_runtime/vless_udp.rs");
@@ -5871,7 +5871,7 @@ fn vless_udp_state_model_lives_outside_runtime_root() {
             && establish.contains("mux_pool: &vless::mux_pool::MuxConnectionPool")
             && !managed.contains("struct VlessUdpUpstream {")
             && !managed.contains("VlessUdpUpstream {")
-            && managed.contains("mod establish;")
+            && managed.contains("mod connector;")
             && !managed.contains("fn over_stream")
             && !managed.contains("fn direct")
             && !managed.contains("impl ManagedTupleUdpSender")
@@ -5907,7 +5907,7 @@ fn vless_udp_state_model_lives_outside_runtime_root() {
 #[test]
 fn vless_udp_transport_opening_lives_in_transport_crate() {
     let managed = read("src/adapters/vless/udp/managed.rs");
-    let establish = read("src/adapters/vless/udp/managed/establish.rs");
+    let establish = read("src/adapters/vless/udp/managed/connector.rs");
     let flow = read("src/adapters/vless/udp/flow.rs");
     let transport = fs::read_to_string(repo_root().join("crates/transport/src/vless_transport.rs"))
         .expect("read crates/transport/src/vless_transport.rs");
@@ -5953,7 +5953,7 @@ fn vless_udp_identity_is_protocol_parsed() {
     let model_path = manifest_dir().join("src/adapters/vless/udp/managed/model.rs");
     let adapter = read("src/adapters/vless/udp.rs");
     let flow = read("src/adapters/vless/udp/flow.rs");
-    let establish = read("src/adapters/vless/udp/managed/establish.rs");
+    let establish = read("src/adapters/vless/udp/managed/connector.rs");
     let transport = fs::read_to_string(repo_root().join("crates/transport/src/vless_transport.rs"))
         .expect("read zero-transport vless transport source");
     let protocol = fs::read_to_string(repo_root().join("protocols/vless/src/udp.rs"))
@@ -6019,7 +6019,7 @@ fn vless_udp_adapter_delegates_packet_framing_to_protocol_helpers() {
 #[test]
 fn vless_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
     let runtime = read("src/adapters/vless/udp/managed.rs");
-    let establish = read("src/adapters/vless/udp/managed/establish.rs");
+    let establish = read("src/adapters/vless/udp/managed/connector.rs");
     let model = read("src/runtime/udp_flow/managed/stream_packet_manager.rs");
     let proxy_transport = read("src/transport/mod.rs");
     let transport = fs::read_to_string(repo_root().join("crates/transport/src/vless_transport.rs"))
@@ -6222,7 +6222,7 @@ fn vless_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
 fn vmess_udp_state_model_lives_outside_runtime_root() {
     let managed = read("src/adapters/vmess/udp/managed.rs");
     let model_path = manifest_dir().join("src/adapters/vmess/udp/managed/model.rs");
-    let establish = read("src/adapters/vmess/udp/managed/establish.rs");
+    let establish = read("src/adapters/vmess/udp/managed/connector.rs");
     let stream_packet_manager = read("src/runtime/udp_flow/managed/stream_packet_manager.rs");
     let managed_cache = read("src/runtime/udp_flow/managed/cache.rs");
     let old_runtime = manifest_dir().join("src/protocol_runtime/vmess_udp.rs");
@@ -6257,7 +6257,7 @@ fn vmess_udp_state_model_lives_outside_runtime_root() {
             && establish.contains("pub(super) async fn direct_flow")
             && !establish.contains("struct VmessManagedUdpSender")
             && establish.contains("impl ManagedTupleUdpSender for vmess::udp::VmessUdpFlowConnection")
-            && managed.contains("mod establish;")
+            && managed.contains("mod connector;")
             && managed.contains("ManagedStreamPacketSender")
             && !managed.contains("VmessUdpOutboundManager")
             && !managed.contains("ManagedStreamConnectionCacheKey")
@@ -6290,7 +6290,7 @@ fn vmess_udp_state_model_lives_outside_runtime_root() {
 #[test]
 fn vmess_udp_transport_opening_lives_in_transport_crate() {
     let managed = read("src/adapters/vmess/udp/managed.rs");
-    let establish = read("src/adapters/vmess/udp/managed/establish.rs");
+    let establish = read("src/adapters/vmess/udp/managed/connector.rs");
     let flow = read("src/adapters/vmess/udp/flow.rs");
     let transport = fs::read_to_string(repo_root().join("crates/transport/src/vmess_transport.rs"))
         .expect("read crates/transport/src/vmess_transport.rs");
@@ -6340,7 +6340,7 @@ fn vmess_udp_identity_is_protocol_parsed() {
     let model_path = manifest_dir().join("src/adapters/vmess/udp/managed/model.rs");
     let adapter = read("src/adapters/vmess/udp.rs");
     let flow = read("src/adapters/vmess/udp/flow.rs");
-    let establish = read("src/adapters/vmess/udp/managed/establish.rs");
+    let establish = read("src/adapters/vmess/udp/managed/connector.rs");
     let protocol = fs::read_to_string(repo_root().join("protocols/vmess/src/udp.rs"))
         .expect("read protocols/vmess/src/udp.rs");
 
@@ -6387,7 +6387,7 @@ fn vmess_udp_identity_is_protocol_parsed() {
 #[test]
 fn vmess_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
     let runtime = read("src/adapters/vmess/udp/managed.rs");
-    let establish = read("src/adapters/vmess/udp/managed/establish.rs");
+    let establish = read("src/adapters/vmess/udp/managed/connector.rs");
     let model = read("src/runtime/udp_flow/managed/stream_packet_manager.rs");
     let proxy_transport = read("src/transport/mod.rs");
     let protocol_outbound = fs::read_to_string(repo_root().join("protocols/vmess/src/outbound.rs"))
@@ -12011,8 +12011,8 @@ fn packet_path_traits_are_grouped_by_responsibility() {
 
 #[test]
 fn stream_protocol_udp_packet_io_stays_in_protocol_crates() {
-    let vless_runtime = read("src/adapters/vless/udp/managed/establish.rs");
-    let vmess_runtime = read("src/adapters/vmess/udp/managed/establish.rs");
+    let vless_runtime = read("src/adapters/vless/udp/managed/connector.rs");
+    let vmess_runtime = read("src/adapters/vmess/udp/managed/connector.rs");
     let vless_shared = fs::read_to_string(repo_root().join("protocols/vless/src/udp.rs"))
         .expect("read VLESS protocol udp source");
     let vless_outbound = fs::read_to_string(repo_root().join("protocols/vless/src/outbound.rs"))
@@ -12022,7 +12022,7 @@ fn stream_protocol_udp_packet_io_stays_in_protocol_crates() {
 
     for (source, content, flow_helper) in [
         (
-            "src/adapters/vless/udp/managed/establish.rs",
+            "src/adapters/vless/udp/managed/connector.rs",
             &vless_runtime,
             "establish_flow_with_initial_packet",
         ),
@@ -12517,7 +12517,7 @@ fn trojan_udp_tls_connect_lives_outside_manager() {
         "ClientTlsConfig",
         "connect_tls_upstream",
         "connect_tls_stream",
-        "TrojanUdpTlsOptions",
+        "TrojanTlsOptions",
         "resume.tls_profile(",
         "tls_profile.",
         ".connect_host(",
@@ -12543,13 +12543,13 @@ fn trojan_udp_tls_connect_lives_outside_manager() {
         );
     }
     assert!(
-        !managed.contains("crate::outbound::trojan::open_udp_tls_stream")
-            && !connector.contains("crate::outbound::trojan::open_udp_tls_stream")
-            && !connector.contains("crate::outbound::trojan::open_udp_tls_relay_stream")
+        !managed.contains("crate::outbound::trojan::open_trojan_tls_stream")
+            && !connector.contains("crate::outbound::trojan::open_trojan_tls_stream")
+            && !connector.contains("crate::outbound::trojan::open_trojan_tls_relay_stream")
             && !outbound.exists()
-            && connector.contains("open_trojan_udp_tls_stream")
-            && connector.contains("open_trojan_udp_tls_relay_stream")
-            && connector.contains("TrojanUdpTlsOptions")
+            && connector.contains("open_trojan_tls_stream")
+            && connector.contains("open_trojan_tls_relay_stream")
+            && connector.contains("TrojanTlsOptions")
             && connector.contains("trojan::udp::connector_tls_profile_from_resume")
             && !connector.contains("tls_profile_spec().tls_profile(")
             && !connector.contains("resume.tls_profile(")
@@ -12561,7 +12561,7 @@ fn trojan_udp_tls_connect_lives_outside_manager() {
             && !connector.contains("fn udp_tls_config(")
             && !connector.contains("ClientTlsConfig")
             && !connector.contains("ClientTlsConfig {")
-            && transport.contains("pub struct TrojanUdpTlsOptions")
+            && transport.contains("pub struct TrojanTlsOptions")
             && transport.contains("pub struct TrojanTlsProfile")
             && transport.contains("ClientTlsConfig")
             && transport.contains("fn into_tls_config(self) -> ClientTlsConfig")
@@ -12742,7 +12742,7 @@ fn trojan_udp_flow_resume_is_protocol_owned() {
             && !managed.contains("resume.flow_requires_relay_upstream()")
             && !connector.contains("resume.flow_requires_relay_upstream()")
             && !managed.contains("resume.tls_profile(")
-            && !managed.contains("TrojanUdpTlsOptions")
+            && !managed.contains("TrojanTlsOptions")
             && !managed.contains("crate::outbound::trojan::open_udp_tls_stream")
             && connector.contains("open_udp_tls_stream")
             && !manager_stream.exists()
@@ -13143,7 +13143,7 @@ fn trojan_udp_managed_connector_is_thin_protocol_glue() {
         );
     }
     assert!(
-        !managed.contains("TrojanUdpTlsOptions") && connector.contains("TrojanUdpTlsOptions"),
+        !managed.contains("TrojanTlsOptions") && connector.contains("TrojanTlsOptions"),
         "Trojan UDP TLS transport options should live in the connector glue, not the managed root"
     );
 

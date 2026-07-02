@@ -5,7 +5,7 @@ use zero_engine::EngineError;
 use crate::runtime::udp_flow::managed::{ManagedStreamConnectionSend, ManagedStreamPacketSender};
 use crate::runtime::udp_flow::packet_path::ChainTask;
 
-mod establish;
+mod connector;
 
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn start_flow(
@@ -20,7 +20,7 @@ pub(crate) async fn start_flow(
     transport: crate::transport::VlessUdpTransportOptions<'_>,
     payload: &[u8],
 ) -> Result<(), EngineError> {
-    if establish::start_mux_fast_path(
+    if connector::start_mux_fast_path(
         proxy, mux_pool, session, server, port, config, transport, payload,
     )
     .await?
@@ -39,7 +39,7 @@ pub(crate) async fn start_flow(
                 port: session.port,
                 payload,
             },
-            establish::direct_flow(proxy, session, server, port, config, transport, payload),
+            connector::direct_flow(proxy, session, server, port, config, transport, payload),
         )
         .await
 }
@@ -62,7 +62,7 @@ pub(crate) async fn start_relay_two_stream(
         split_http,
     )
     .await?;
-    let upstream = establish::over_stream(proxy, session, config, payload, stream).await?;
+    let upstream = connector::over_stream(proxy, session, config, payload, stream).await?;
     upstreams.insert_and_bridge_target(session.target.clone(), session.port, chain_tasks, upstream);
     Ok(())
 }
@@ -94,7 +94,7 @@ pub(crate) async fn start_relay_final_hop(
         },
     )
     .await?;
-    let upstream = establish::over_stream(proxy, session, config, payload, stream).await?;
+    let upstream = connector::over_stream(proxy, session, config, payload, stream).await?;
     upstreams.insert_and_bridge_target(session.target.clone(), session.port, chain_tasks, upstream);
     Ok(())
 }

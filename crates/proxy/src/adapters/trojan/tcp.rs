@@ -7,8 +7,8 @@ use crate::adapters::trojan::TrojanAdapter;
 use crate::protocol_registry::ProtocolSupportCapability;
 use crate::runtime::Proxy;
 use crate::transport::{
-    open_trojan_udp_tls_stream, EstablishedTcpOutbound, MeteredStream, TcpOutboundFailure,
-    TcpRelayStream, TrojanTlsProfile, TrojanUdpTlsOptions,
+    open_trojan_tls_stream, EstablishedTcpOutbound, MeteredStream, TcpOutboundFailure,
+    TcpRelayStream, TrojanTlsOptions, TrojanTlsProfile,
 };
 
 impl TrojanAdapter {
@@ -79,7 +79,7 @@ async fn connect_tcp(
         .direct_connector()
         .connect_host(server, port, proxy.resolver.as_ref())
         .await?;
-    let tls_stream = open_trojan_udp_tls_stream(
+    let tls_stream = open_trojan_tls_stream(
         upstream,
         trojan_tls_options(proxy, server, config.tls_profile()),
     )
@@ -103,9 +103,9 @@ fn trojan_tls_options<'a>(
     proxy: &'a Proxy,
     server: &'a str,
     profile: trojan::TrojanTcpTlsProfile,
-) -> TrojanUdpTlsOptions<'a> {
+) -> TrojanTlsOptions<'a> {
     let (server_name, insecure, client_fingerprint) = profile.into_parts();
-    TrojanUdpTlsOptions {
+    TrojanTlsOptions {
         tls_profile: TrojanTlsProfile::from_parts(
             server_name.as_deref(),
             insecure,

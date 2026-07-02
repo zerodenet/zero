@@ -5,7 +5,7 @@ use zero_engine::EngineError;
 use crate::runtime::udp_flow::managed::{ManagedStreamConnectionSend, ManagedStreamPacketSender};
 use crate::runtime::udp_flow::packet_path::ChainTask;
 
-mod establish;
+mod connector;
 
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn start_flow(
@@ -32,7 +32,7 @@ pub(crate) async fn start_flow(
                 port: session.port,
                 payload,
             },
-            establish::direct_flow(
+            connector::direct_flow(
                 proxy,
                 mux_pool,
                 session,
@@ -65,7 +65,7 @@ pub(crate) async fn start_relay_flow(
         },
     )
     .await?;
-    let upstream = establish::over_stream(proxy, session, config, payload, stream).await?;
+    let upstream = connector::over_stream(proxy, session, config, payload, stream).await?;
     upstreams.insert_and_bridge_target(session.target.clone(), session.port, chain_tasks, upstream);
     Ok(())
 }
