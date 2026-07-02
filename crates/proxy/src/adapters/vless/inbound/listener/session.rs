@@ -8,25 +8,6 @@ use super::fallback::relay_fallback;
 use super::mux::handle_vless_mux_session;
 use super::udp_session::handle_vless_udp_session;
 
-#[derive(Clone, Copy)]
-pub(crate) struct VlessStreamTransport<'a> {
-    pub(crate) ws_config: Option<&'a zero_config::WebSocketConfig>,
-    pub(crate) grpc_config: Option<&'a zero_config::GrpcConfig>,
-    pub(crate) h2_config: Option<&'a zero_config::H2Config>,
-    pub(crate) split_http_config: Option<&'a zero_config::SplitHttpConfig>,
-    pub(crate) split_http_registry: Option<&'a crate::transport::SplitHttpRegistry>,
-    pub(crate) http_upgrade_config: Option<&'a zero_config::HttpUpgradeConfig>,
-}
-
-pub(crate) struct VlessStreamRequest<'a, S> {
-    pub(crate) stream: S,
-    pub(crate) inbound_tag: &'a str,
-    pub(crate) profile: vless::VlessInboundProfile,
-    pub(crate) transport: VlessStreamTransport<'a>,
-    pub(crate) fallback: Option<&'a zero_config::FallbackConfig>,
-    pub(crate) sni: Option<String>,
-}
-
 struct VlessAcceptedClientBridge<'a> {
     proxy: &'a Proxy,
     protocol: &'a vless::VlessInbound,
@@ -91,30 +72,24 @@ where
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(super) async fn handle_vless_stream<S>(
     proxy: &Proxy,
-    request: VlessStreamRequest<'_, S>,
+    stream: S,
+    inbound_tag: &str,
+    profile: vless::VlessInboundProfile,
+    ws_config: Option<&zero_config::WebSocketConfig>,
+    grpc_config: Option<&zero_config::GrpcConfig>,
+    h2_config: Option<&zero_config::H2Config>,
+    split_http_config: Option<&zero_config::SplitHttpConfig>,
+    split_http_registry: Option<&crate::transport::SplitHttpRegistry>,
+    http_upgrade_config: Option<&zero_config::HttpUpgradeConfig>,
+    fallback: Option<&zero_config::FallbackConfig>,
+    sni: Option<String>,
 ) -> Result<(), EngineError>
 where
     S: ClientStream + 'static,
 {
-    let VlessStreamRequest {
-        stream,
-        inbound_tag,
-        profile,
-        transport,
-        fallback,
-        sni,
-    } = request;
-    let VlessStreamTransport {
-        ws_config,
-        grpc_config,
-        h2_config,
-        split_http_config,
-        split_http_registry,
-        http_upgrade_config,
-    } = transport;
-
     if let Some(cfg) = split_http_config {
         let Some(reg) = split_http_registry else {
             return Err(EngineError::Io(std::io::Error::new(

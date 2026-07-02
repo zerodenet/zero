@@ -3655,20 +3655,20 @@ fn protocol_inbound_roots_do_not_define_request_models() {
 fn vless_inbound_root_does_not_reexport_session_models() {
     let root = read("src/adapters/vless/inbound/listener.rs");
     let listener = read("src/adapters/vless/inbound/listener/listener.rs");
+    let session = read("src/adapters/vless/inbound/listener/session.rs");
 
     for forbidden in ["VlessStreamRequest", "VlessStreamTransport"] {
         assert!(
-            !root.contains(forbidden),
-            "src/adapters/vless/inbound/listener.rs should expose listener entrypoints, not session model `{forbidden}`"
+            !root.contains(forbidden) && !listener.contains(forbidden) && !session.contains(forbidden),
+            "VLESS inbound listener/session should not keep proxy-side transport request model `{forbidden}`"
         );
     }
     assert!(
         listener.contains("use super::session::{")
-            && listener.contains("VlessStreamRequest")
-            && listener.contains("VlessStreamTransport")
             && listener.contains("handle_vless_client")
-            && listener.contains("handle_vless_stream"),
-        "VLESS listener should keep session-local glue and request models in the session module"
+            && listener.contains("handle_vless_stream")
+            && session.contains("pub(super) async fn handle_vless_stream"),
+        "VLESS listener should call session-local stream handlers directly without proxy-side request wrappers"
     );
     assert!(
         !root.contains("struct VlessInboundHandler")

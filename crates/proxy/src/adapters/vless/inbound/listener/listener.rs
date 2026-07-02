@@ -11,9 +11,7 @@ use zero_platform_tokio::TokioSocket;
 
 use super::fallback::relay_fallback;
 use super::model::VlessInboundRequest;
-use super::session::{
-    handle_vless_client, handle_vless_stream, VlessStreamRequest, VlessStreamTransport,
-};
+use super::session::{handle_vless_client, handle_vless_stream};
 use super::upgrade_vless_reality_server;
 
 pub(crate) async fn run_vless_listener_with_bound(
@@ -110,15 +108,6 @@ pub(crate) async fn run_vless_listener_with_bound(
 
                     async move {
                         let result: Result<(), EngineError> = async {
-                            let transport = VlessStreamTransport {
-                                ws_config: ws_config.as_ref(),
-                                grpc_config: grpc_config.as_ref(),
-                                h2_config: h2_config.as_ref(),
-                                split_http_config: split_http_config.as_ref(),
-                                split_http_registry: split_http_registry.as_ref(),
-                                http_upgrade_config: http_upgrade_config.as_ref(),
-                            };
-
                             match (tls_acceptor, reality) {
                                 (Some(acceptor), None) => {
                                     let mut raw = stream.into_inner();
@@ -163,16 +152,17 @@ pub(crate) async fn run_vless_listener_with_bound(
                                             Ok(tls_stream) => {
                                                 handle_vless_stream(
                                                     &engine,
-                                                    VlessStreamRequest {
-                                                        stream: InboundTlsStream::new_generic(
-                                                            tls_stream,
-                                                        ),
-                                                        inbound_tag: inbound_tag.as_str(),
-                                                        profile: profile.clone(),
-                                                        transport,
-                                                        fallback: fallback_config.as_ref(),
-                                                        sni,
-                                                    },
+                                                    InboundTlsStream::new_generic(tls_stream),
+                                                    inbound_tag.as_str(),
+                                                    profile.clone(),
+                                                    ws_config.as_ref(),
+                                                    grpc_config.as_ref(),
+                                                    h2_config.as_ref(),
+                                                    split_http_config.as_ref(),
+                                                    split_http_registry.as_ref(),
+                                                    http_upgrade_config.as_ref(),
+                                                    fallback_config.as_ref(),
+                                                    sni,
                                                 )
                                                 .await
                                             }
@@ -183,14 +173,17 @@ pub(crate) async fn run_vless_listener_with_bound(
                                             Ok(tls_stream) => {
                                                 handle_vless_stream(
                                                     &engine,
-                                                    VlessStreamRequest {
-                                                        stream: InboundTlsStream::new(tls_stream),
-                                                        inbound_tag: inbound_tag.as_str(),
-                                                        profile: profile.clone(),
-                                                        transport,
-                                                        fallback: fallback_config.as_ref(),
-                                                        sni: None,
-                                                    },
+                                                    InboundTlsStream::new(tls_stream),
+                                                    inbound_tag.as_str(),
+                                                    profile.clone(),
+                                                    ws_config.as_ref(),
+                                                    grpc_config.as_ref(),
+                                                    h2_config.as_ref(),
+                                                    split_http_config.as_ref(),
+                                                    split_http_registry.as_ref(),
+                                                    http_upgrade_config.as_ref(),
+                                                    fallback_config.as_ref(),
+                                                    None,
                                                 )
                                                 .await
                                             }
@@ -203,14 +196,17 @@ pub(crate) async fn run_vless_listener_with_bound(
                                         Ok(reality_stream) => {
                                             handle_vless_stream(
                                                 &engine,
-                                                VlessStreamRequest {
-                                                    stream: reality_stream,
-                                                    inbound_tag: inbound_tag.as_str(),
-                                                    profile: profile.clone(),
-                                                    transport,
-                                                    fallback: fallback_config.as_ref(),
-                                                    sni: None,
-                                                },
+                                                reality_stream,
+                                                inbound_tag.as_str(),
+                                                profile.clone(),
+                                                ws_config.as_ref(),
+                                                grpc_config.as_ref(),
+                                                h2_config.as_ref(),
+                                                split_http_config.as_ref(),
+                                                split_http_registry.as_ref(),
+                                                http_upgrade_config.as_ref(),
+                                                fallback_config.as_ref(),
+                                                None,
                                             )
                                             .await
                                         }
@@ -220,14 +216,17 @@ pub(crate) async fn run_vless_listener_with_bound(
                                 (None, None) => {
                                     handle_vless_stream(
                                         &engine,
-                                        VlessStreamRequest {
-                                            stream,
-                                            inbound_tag: inbound_tag.as_str(),
-                                            profile: profile.clone(),
-                                            transport,
-                                            fallback: fallback_config.as_ref(),
-                                            sni: None,
-                                        },
+                                        stream,
+                                        inbound_tag.as_str(),
+                                        profile.clone(),
+                                        ws_config.as_ref(),
+                                        grpc_config.as_ref(),
+                                        h2_config.as_ref(),
+                                        split_http_config.as_ref(),
+                                        split_http_registry.as_ref(),
+                                        http_upgrade_config.as_ref(),
+                                        fallback_config.as_ref(),
+                                        None,
                                     )
                                     .await
                                 }
