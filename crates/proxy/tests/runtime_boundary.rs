@@ -503,8 +503,10 @@ fn ordinary_udp_inbounds_submit_packets_through_udp_pipe() {
     ] {
         let content = read(source);
         assert!(
-            content.contains("run_stream_udp_relay")
-                && content.contains("StreamUdpRelayRequest")
+            (content.contains("run_stream_udp_relay")
+                || content.contains("run_protocol_stream_udp_relay"))
+                && (content.contains("StreamUdpRelayRequest")
+                    || content.contains("run_protocol_stream_udp_relay"))
                 && !content.contains("dispatch_inbound_udp_packet")
                 && !content.contains("UdpPipe::new")
                 && !content.contains("UdpPipeInput"),
@@ -755,7 +757,8 @@ fn inbound_udp_response_accounting_uses_runtime_helpers() {
     ] {
         let content = read(source);
         assert!(
-            content.contains("run_stream_udp_relay")
+            (content.contains("run_stream_udp_relay")
+                || content.contains("run_protocol_stream_udp_relay"))
                 && !content.contains("write_direct_response")
                 && !content.contains("write_upstream_response")
                 && !content.contains("write_chain_response")
@@ -2650,6 +2653,8 @@ fn inbound_auth_identity_stays_in_protocol_crates() {
 
 #[test]
 fn stream_udp_inbound_direct_responses_use_client_response_models() {
+    let core_udp = fs::read_to_string(repo_root().join("crates/core/src/udp.rs"))
+        .expect("read zero_core udp source");
     let stream_udp = read("src/runtime/stream_udp.rs");
     let mux_udp = read("src/runtime/mux_udp.rs");
     let packet_session_udp = read("src/runtime/packet_session_udp.rs");
@@ -2675,9 +2680,15 @@ fn stream_udp_inbound_direct_responses_use_client_response_models() {
             .expect("read vless protocol inbound source");
     let vmess_protocol = fs::read_to_string(repo_root().join("protocols/vmess/src/udp.rs"))
         .expect("read vmess protocol udp source");
+    let vmess_protocol_mux = fs::read_to_string(repo_root().join("protocols/vmess/src/mux.rs"))
+        .expect("read vmess protocol mux source");
 
     assert!(
-        stream_udp.contains("run_packet_session_udp_relay")
+        core_udp.contains("pub trait InboundStreamUdpRelay")
+            && core_udp.contains("fn into_stream_udp_parts(self)")
+            && stream_udp.contains("run_protocol_stream_udp_relay")
+            && stream_udp.contains("relay.into_stream_udp_parts()")
+            && stream_udp.contains("run_packet_session_udp_relay")
             && packet_session_udp.contains("record_direct_udp_response_parts")
             && packet_session_udp.contains("write_direct_response")
             && packet_session_udp.contains("write_upstream_response")
@@ -2685,11 +2696,12 @@ fn stream_udp_inbound_direct_responses_use_client_response_models() {
             && !trojan_udp_inbound.contains("record_direct_udp_response_parts")
             && !trojan_udp_inbound.contains("udp_response_target_from_socket_addr(sender)")
             && !trojan_udp_inbound.contains("TrojanInboundUdpClientResponse::new")
-            && trojan_udp_inbound.contains("run_stream_udp_relay")
-            && trojan_udp_inbound.contains("StreamUdpRelayRequest")
+            && trojan_udp_inbound.contains("run_protocol_stream_udp_relay")
+            && trojan_udp_inbound.contains("run_protocol_stream_udp_relay")
             && !trojan_udp_inbound.contains("trojan::TrojanInbound.accept_udp_session()")
             && trojan_udp_inbound.contains("trojan::TrojanInboundUdpRelay<TcpRelayStream>")
-            && trojan_udp_inbound.contains("let (client, responder, auth) = relay.into_parts()")
+            && !trojan_udp_inbound.contains("let (client, responder, auth) = relay.into_parts()")
+            && !trojan_udp_inbound.contains("StreamUdpRelayRequest")
             && !trojan_udp_inbound.contains("trojan::TrojanInbound.udp_responder()")
             && !trojan_udp_inbound.contains("TrojanStreamUdpResponder")
             && !trojan_udp_inbound.contains("impl StreamUdpResponder<TcpRelayStream>")
@@ -2708,6 +2720,8 @@ fn stream_udp_inbound_direct_responses_use_client_response_models() {
             && trojan_protocol_inbound.contains("pub struct TrojanInboundUdpRelay")
             && trojan_protocol_inbound.contains("relay: TrojanInboundUdpRelay<S>")
             && trojan_protocol_inbound.contains("TrojanInbound.accept_udp_session()")
+            && trojan_protocol_inbound.contains("impl<S> InboundStreamUdpRelay for TrojanInboundUdpRelay<S>")
+            && trojan_protocol_inbound.contains("fn into_stream_udp_parts(self)")
             && trojan_protocol_udp.contains("impl TrojanInboundUdpResponder")
             && trojan_protocol_udp.contains("impl<S> StreamUdpResponder<S> for TrojanInboundUdpResponder")
             && !trojan_protocol_udp.contains("pub async fn write_response_to_socket_addr_tokio")
@@ -2774,11 +2788,13 @@ fn stream_udp_inbound_direct_responses_use_client_response_models() {
             && !vless_mux_inbound.contains("udp_response_target_from_socket_addr(sender)")
             && !vless_udp_inbound.contains("VlessInboundUdpClientResponse::new")
             && !vless_mux_inbound.contains("VlessInboundUdpClientResponse::new")
-            && vless_udp_inbound.contains("run_stream_udp_relay")
-            && vless_udp_inbound.contains("StreamUdpRelayRequest")
+            && vless_udp_inbound.contains("run_protocol_stream_udp_relay")
+            && vless_udp_inbound.contains("run_protocol_stream_udp_relay")
             && !vless_udp_inbound.contains(".accept_udp_session(&mut client)")
             && vless_udp_inbound.contains("vless::VlessInboundUdpRelay<MeteredStream<RecordingStream<S>>>")
-            && vless_udp_inbound.contains("let (mut client, responder, auth) = relay.into_parts()")
+            && vless_udp_inbound.contains("let relay = relay.map_stream(|mut client| {")
+            && !vless_udp_inbound.contains("let (mut client, responder, auth) = relay.into_parts()")
+            && !vless_udp_inbound.contains("StreamUdpRelayRequest")
             && vless_protocol_inbound.contains(".accept_udp_session(&mut stream)")
             && !vless_udp_inbound.contains("vless::VlessInbound.udp_responder()")
             && !vless_udp_inbound.contains("VlessStreamUdpResponder")
@@ -2790,7 +2806,7 @@ fn stream_udp_inbound_direct_responses_use_client_response_models() {
             && !vless_udp_inbound.contains("write_direct_response")
             && !vless_udp_inbound.contains("write_upstream_response")
             && !vless_udp_inbound.contains("write_chain_response")
-            && vless_udp_inbound.contains("record_client_io")
+            && vless_udp_inbound.contains("Some(record_metered_client_io::<S>)")
             && vless_udp_inbound.contains("record_session_inbound_traffic(session_id")
             && !vless_mux_inbound.contains("record_direct_udp_response_parts")
             && !vless_mux_inbound.contains("vless::VlessInbound.mux_udp_responder")
@@ -2821,6 +2837,9 @@ fn stream_udp_inbound_direct_responses_use_client_response_models() {
             && vless_protocol.contains("impl MuxUdpResponder for VlessInboundMuxUdpResponder")
             && vless_protocol.contains("pub fn send_mux_client_response")
             && vless_protocol.contains("pub fn send_mux_client_response_for_target")
+            && vless_protocol_inbound.contains("pub fn map_stream<T, F>(self, map: F) -> VlessInboundUdpRelay<T>")
+            && vless_protocol_inbound.contains("impl<S> InboundStreamUdpRelay for VlessInboundUdpRelay<S>")
+            && vless_protocol_inbound.contains("fn into_stream_udp_parts(self)")
             && !vless_protocol.contains("pub async fn write_response_to_socket_addr_tokio")
             && !vless_protocol.contains("pub fn send_mux_response_to_socket_addr")
             && !vless_protocol.contains("fn address_from_socket_addr"),
@@ -2832,9 +2851,10 @@ fn stream_udp_inbound_direct_responses_use_client_response_models() {
             && !vmess_mux_inbound.contains("udp_response_target_from_socket_addr(sender)")
             && !vmess_udp_inbound.contains("VmessInboundUdpClientResponse::new")
             && !vmess_mux_inbound.contains("VmessInboundUdpClientResponse::new")
-            && vmess_udp_inbound.contains("run_stream_udp_relay")
-            && vmess_udp_inbound.contains("StreamUdpRelayRequest")
-            && vmess_udp_inbound.contains("responder,")
+            && vmess_udp_inbound.contains("run_protocol_stream_udp_relay")
+            && vmess_udp_inbound.contains("run_protocol_stream_udp_relay")
+            && vmess_udp_inbound.contains("relay: vmess::mux::VmessInboundUdpRelay<TcpRelayStream>")
+            && !vmess_udp_inbound.contains("StreamUdpRelayRequest")
             && !vmess_udp_inbound.contains("vmess::VmessInbound.udp_responder_for(&session)")
             && !vmess_udp_inbound.contains("VmessStreamUdpResponder")
             && !vmess_udp_inbound.contains("impl StreamUdpResponder<TcpRelayStream>")
@@ -2873,6 +2893,8 @@ fn stream_udp_inbound_direct_responses_use_client_response_models() {
             && vmess_protocol.contains("impl<S> StreamUdpResponder<S> for VmessInboundUdpResponder")
             && vmess_protocol.contains("impl MuxUdpResponder for VmessInboundMuxUdpResponder")
             && vmess_protocol.contains("pub fn write_mux_client_response")
+            && vmess_protocol_mux.contains("impl<S> InboundStreamUdpRelay for VmessInboundUdpRelay<S>")
+            && vmess_protocol_mux.contains("fn into_stream_udp_parts(self)")
             && vmess_protocol.contains("pub fn write_mux_client_response_for_target")
             && !vmess_protocol.contains("pub async fn write_response_to_socket_addr_tokio")
             && !vmess_protocol.contains("pub fn write_mux_response_to_socket_addr")
@@ -3277,6 +3299,7 @@ fn vless_inbound_users_are_protocol_parsed() {
             && protocol_inbound.contains("pub async fn dispatch_with")
             && protocol_inbound.contains("session.sni = sni")
             && protocol_inbound.contains("relay: VlessInboundUdpRelay<S>")
+            && protocol_inbound.contains("pub fn map_stream<T, F>(self, map: F) -> VlessInboundUdpRelay<T>")
             && protocol_inbound.contains("mux_server: crate::mux::VlessInboundMuxServer")
             && protocol_inbound.contains("let auth = session.auth.clone();")
             && protocol_inbound.contains("let responder = VlessInbound.accept_udp_session(&mut stream).await?")
@@ -7590,8 +7613,8 @@ fn vmess_inbound_udp_response_encoding_stays_in_protocol_crate() {
     assert!(
         !mux.contains("VmessInboundUdpPayload")
             && !mux.contains("vmess::VmessInboundUdpCodec")
-            && udp_session.contains("run_stream_udp_relay")
-            && udp_session.contains("responder,")
+            && udp_session.contains("run_protocol_stream_udp_relay")
+            && udp_session.contains("relay: vmess::mux::VmessInboundUdpRelay<TcpRelayStream>")
             && mux_udp.contains("run_mux_udp_relay")
             && mux_udp.contains("responder,")
             && stream_udp.contains("run_packet_session_udp_relay")
@@ -7886,9 +7909,10 @@ fn vless_inbound_udp_packet_framing_stays_in_protocol_crate() {
             && !helper.contains("vless::VlessInboundUdpCodec")
             && !udp_session.contains("vless::VlessInboundUdpCodec")
             && !mux.contains("vless::VlessInboundUdpCodec")
-            && udp_session.contains("run_stream_udp_relay")
+            && udp_session.contains("run_protocol_stream_udp_relay")
             && udp_session.contains("vless::VlessInboundUdpRelay<MeteredStream<RecordingStream<S>>>")
-            && udp_session.contains("let (mut client, responder, auth) = relay.into_parts()")
+            && udp_session.contains("let relay = relay.map_stream(|mut client| {")
+            && !udp_session.contains("let (mut client, responder, auth) = relay.into_parts()")
             && mux.contains("run_mux_udp_relay")
             && mux.contains("responder,")
             && stream_udp.contains("run_packet_session_udp_relay")
@@ -8088,10 +8112,11 @@ fn trojan_inbound_udp_packet_framing_stays_in_protocol_crate() {
             && packet_session_udp.contains("write_direct_response")
             && packet_session_udp.contains("write_upstream_response")
             && packet_session_udp.contains("write_chain_response")
-            && inbound.contains("run_stream_udp_relay")
+            && inbound.contains("run_protocol_stream_udp_relay")
             && !inbound.contains("trojan::TrojanInbound.accept_udp_session()")
             && inbound.contains("trojan::TrojanInboundUdpRelay<TcpRelayStream>")
-            && inbound.contains("let (client, responder, auth) = relay.into_parts()")
+            && !inbound.contains("let (client, responder, auth) = relay.into_parts()")
+            && !inbound.contains("StreamUdpRelayRequest")
             && !inbound.contains("trojan::TrojanInbound.udp_responder()")
             && !inbound.contains("impl StreamUdpResponder<TcpRelayStream>")
             && !inbound.contains("TrojanStreamUdpResponder")

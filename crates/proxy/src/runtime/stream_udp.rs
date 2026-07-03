@@ -1,5 +1,5 @@
 use tracing::info;
-use zero_core::{Session, SessionAuth, StreamUdpResponder};
+use zero_core::{InboundStreamUdpRelay, Session, SessionAuth, StreamUdpResponder};
 use zero_engine::EngineError;
 
 use crate::runtime::packet_session_udp::{
@@ -17,6 +17,33 @@ pub(crate) struct StreamUdpRelayRequest<'a, S, R> {
     pub(crate) protocol: &'static str,
     pub(crate) auth: Option<SessionAuth>,
     pub(crate) record_client_io: Option<fn(&Proxy, u64, &mut S)>,
+}
+
+pub(crate) async fn run_protocol_stream_udp_relay<R>(
+    proxy: &Proxy,
+    session: &Session,
+    relay: R,
+    inbound_tag: &str,
+    protocol: &'static str,
+    record_client_io: Option<fn(&Proxy, u64, &mut R::Stream)>,
+) -> Result<(), EngineError>
+where
+    R: InboundStreamUdpRelay,
+{
+    let (client, responder, auth) = relay.into_stream_udp_parts();
+    run_stream_udp_relay(
+        proxy,
+        StreamUdpRelayRequest {
+            client,
+            responder,
+            session,
+            inbound_tag,
+            protocol,
+            auth,
+            record_client_io,
+        },
+    )
+    .await
 }
 
 struct StreamPacketSessionUdpHandler<'a, S, R> {

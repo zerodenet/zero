@@ -1,7 +1,7 @@
 use zero_core::Session;
 use zero_engine::EngineError;
 
-use crate::runtime::stream_udp::{run_stream_udp_relay, StreamUdpRelayRequest};
+use crate::runtime::stream_udp::run_protocol_stream_udp_relay;
 use crate::runtime::Proxy;
 use crate::transport::{ClientStream, MeteredStream, RecordingStream};
 
@@ -21,20 +21,17 @@ pub(super) async fn handle_vless_udp_session<S>(
 where
     S: ClientStream,
 {
-    let (mut client, responder, auth) = relay.into_parts();
-    proxy.record_session_inbound_traffic(session.id, client.drain_traffic());
-    let client = MeteredStream::new(client.into_unrecorded_inner());
-    run_stream_udp_relay(
+    let relay = relay.map_stream(|mut client| {
+        proxy.record_session_inbound_traffic(session.id, client.drain_traffic());
+        MeteredStream::new(client.into_unrecorded_inner())
+    });
+    run_protocol_stream_udp_relay(
         proxy,
-        StreamUdpRelayRequest {
-            client,
-            responder,
-            session: &session,
-            inbound_tag,
-            protocol: "vless_udp",
-            auth,
-            record_client_io: Some(record_metered_client_io::<S>),
-        },
+        &session,
+        relay,
+        inbound_tag,
+        "vless_udp",
+        Some(record_metered_client_io::<S>),
     )
     .await
 }

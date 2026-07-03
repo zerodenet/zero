@@ -14,6 +14,6 @@ pub use error::Error;
 
 pub use session::{Network, ProtocolType, Session, SessionAuth};
 pub use udp::{
-    DatagramUdpResponder, InboundUdpDispatch, MuxUdpDecodeFailure, MuxUdpResponder,
-    StreamUdpResponder, UdpFlowPacket,
+    DatagramUdpResponder, InboundStreamUdpRelay, InboundUdpDispatch, MuxUdpDecodeFailure,
+    MuxUdpResponder, StreamUdpResponder, UdpFlowPacket,
 };

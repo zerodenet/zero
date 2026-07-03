@@ -7,7 +7,9 @@ use std::task::{Context, Poll};
 
 use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt, ReadBuf};
 use tokio::sync::mpsc;
-use zero_core::{Address, Error, Network, ProtocolType, Session, SessionAuth};
+use zero_core::{
+    Address, Error, InboundStreamUdpRelay, Network, ProtocolType, Session, SessionAuth,
+};
 use zero_traits::AsyncSocket;
 
 use crate::outbound::VmessOutbound;
@@ -653,6 +655,18 @@ impl<S> VmessInboundUdpRelay<S> {
     {
         let (stream, responder, auth) = self.into_parts();
         VmessInboundUdpRelay::new(map(stream), responder, auth)
+    }
+}
+
+impl<S> InboundStreamUdpRelay for VmessInboundUdpRelay<S>
+where
+    S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Send + Unpin,
+{
+    type Stream = S;
+    type Responder = crate::udp::VmessInboundUdpResponder;
+
+    fn into_stream_udp_parts(self) -> (Self::Stream, Self::Responder, Option<SessionAuth>) {
+        self.into_parts()
     }
 }
 

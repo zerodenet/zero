@@ -1,6 +1,6 @@
 //! Trojan inbound protocol handler.
 
-use zero_core::{Error, Network, ProtocolType, Session, SessionAuth};
+use zero_core::{Error, InboundStreamUdpRelay, Network, ProtocolType, Session, SessionAuth};
 use zero_traits::AsyncSocket;
 
 use super::shared::{read_password, read_request, CMD_TCP, CMD_UDP};
@@ -142,6 +142,18 @@ impl<S> TrojanInboundUdpRelay<S> {
     {
         let (stream, responder, auth) = self.into_parts();
         TrojanInboundUdpRelay::new(map(stream), responder, auth)
+    }
+}
+
+impl<S> InboundStreamUdpRelay for TrojanInboundUdpRelay<S>
+where
+    S: AsyncSocket,
+{
+    type Stream = S;
+    type Responder = TrojanInboundUdpResponder;
+
+    fn into_stream_udp_parts(self) -> (Self::Stream, Self::Responder, Option<SessionAuth>) {
+        self.into_parts()
     }
 }
 

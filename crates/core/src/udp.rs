@@ -69,6 +69,13 @@ where
     ) -> Result<usize, Error>;
 }
 
+pub trait InboundStreamUdpRelay: Send {
+    type Stream: Send;
+    type Responder: StreamUdpResponder<Self::Stream>;
+
+    fn into_stream_udp_parts(self) -> (Self::Stream, Self::Responder, Option<SessionAuth>);
+}
+
 pub trait DatagramUdpResponder<S>: Send
 where
     S: Send,

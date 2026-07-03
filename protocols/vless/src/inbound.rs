@@ -3,7 +3,9 @@ use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 
-use zero_core::{Address, Error, Network, ProtocolType, Session, SessionAuth};
+use zero_core::{
+    Address, Error, InboundStreamUdpRelay, Network, ProtocolType, Session, SessionAuth,
+};
 use zero_traits::AsyncSocket;
 
 #[cfg(feature = "reality")]
@@ -363,6 +365,27 @@ impl<S> VlessInboundUdpRelay<S> {
 
     pub fn into_parts(self) -> (S, crate::udp::VlessInboundUdpResponder, Option<SessionAuth>) {
         (self.stream, self.responder, self.auth)
+    }
+
+    pub fn map_stream<T, F>(self, map: F) -> VlessInboundUdpRelay<T>
+    where
+        F: FnOnce(S) -> T,
+    {
+        let (stream, responder, auth) = self.into_parts();
+        VlessInboundUdpRelay::new(map(stream), responder, auth)
+    }
+}
+
+#[cfg(feature = "reality")]
+impl<S> InboundStreamUdpRelay for VlessInboundUdpRelay<S>
+where
+    S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Send + Unpin,
+{
+    type Stream = S;
+    type Responder = crate::udp::VlessInboundUdpResponder;
+
+    fn into_stream_udp_parts(self) -> (Self::Stream, Self::Responder, Option<SessionAuth>) {
+        self.into_parts()
     }
 }
 
