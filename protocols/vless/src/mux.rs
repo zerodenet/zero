@@ -170,11 +170,7 @@ pub enum VlessInboundMuxOpenedRoute {
         relay: VlessInboundMuxTcpRelay,
     },
     Udp {
-        session_id: u16,
-        port: u16,
-        up_rx: mpsc::UnboundedReceiver<Vec<u8>>,
-        responder: crate::udp::VlessInboundMuxUdpResponder,
-        auth: Option<SessionAuth>,
+        relay: VlessInboundMuxUdpRelay,
     },
 }
 
@@ -190,11 +186,7 @@ pub trait VlessInboundMuxOpenedRouteDispatcher {
 
     async fn dispatch_udp_opened(
         &mut self,
-        session_id: u16,
-        port: u16,
-        up_rx: mpsc::UnboundedReceiver<Vec<u8>>,
-        responder: crate::udp::VlessInboundMuxUdpResponder,
-        auth: Option<SessionAuth>,
+        relay: VlessInboundMuxUdpRelay,
     ) -> Result<bool, Self::Error>;
 }
 
@@ -203,7 +195,7 @@ impl VlessInboundMuxOpenedRoute {
     pub fn session_id(&self) -> u16 {
         match self {
             Self::Tcp { relay, .. } => relay.session_id(),
-            Self::Udp { session_id, .. } => *session_id,
+            Self::Udp { relay } => relay.session_id(),
         }
     }
 
@@ -215,24 +207,12 @@ impl VlessInboundMuxOpenedRoute {
     where
         FTcp: FnOnce(Session, VlessInboundMuxTcpRelay) -> FTcpFut,
         FTcpFut: core::future::Future<Output = Result<bool, E>>,
-        FUdp: FnOnce(
-            u16,
-            u16,
-            mpsc::UnboundedReceiver<Vec<u8>>,
-            crate::udp::VlessInboundMuxUdpResponder,
-            Option<SessionAuth>,
-        ) -> FUdpFut,
+        FUdp: FnOnce(VlessInboundMuxUdpRelay) -> FUdpFut,
         FUdpFut: core::future::Future<Output = Result<bool, E>>,
     {
         match self {
             Self::Tcp { session, relay } => on_tcp_opened(session, relay).await,
-            Self::Udp {
-                session_id,
-                port,
-                up_rx,
-                responder,
-                auth,
-            } => on_udp_opened(session_id, port, up_rx, responder, auth).await,
+            Self::Udp { relay } => on_udp_opened(relay).await,
         }
     }
 
@@ -242,17 +222,7 @@ impl VlessInboundMuxOpenedRoute {
     {
         match self {
             Self::Tcp { session, relay } => dispatcher.dispatch_tcp_opened(session, relay).await,
-            Self::Udp {
-                session_id,
-                port,
-                up_rx,
-                responder,
-                auth,
-            } => {
-                dispatcher
-                    .dispatch_udp_opened(session_id, port, up_rx, responder, auth)
-                    .await
-            }
+            Self::Udp { relay } => dispatcher.dispatch_udp_opened(relay).await,
         }
     }
 }
@@ -343,15 +313,17 @@ impl VlessInboundMuxOpenedStream {
                 relay: VlessInboundMuxTcpRelay::new(session_id, up_rx, writer),
             },
             Network::Udp => VlessInboundMuxOpenedRoute::Udp {
-                session_id,
-                port: session.port,
-                up_rx,
-                responder: crate::udp::VlessInboundMuxUdpResponder::new(
-                    crate::udp::VlessInboundUdpSession::new(),
-                    writer,
+                relay: VlessInboundMuxUdpRelay::new(
                     session_id,
+                    session.port,
+                    up_rx,
+                    crate::udp::VlessInboundMuxUdpResponder::new(
+                        crate::udp::VlessInboundUdpSession::new(),
+                        writer,
+                        session_id,
+                    ),
+                    auth.cloned(),
                 ),
-                auth: auth.cloned(),
             },
         }
     }
@@ -393,6 +365,60 @@ pub struct VlessInboundMuxUdpOpenedStream {
 impl VlessInboundMuxUdpOpenedStream {
     pub fn into_parts(self) -> (u16, Session, mpsc::UnboundedReceiver<Vec<u8>>) {
         (self.session_id, self.session, self.up_rx)
+    }
+}
+
+#[cfg(feature = "reality")]
+pub struct VlessInboundMuxUdpRelay {
+    session_id: u16,
+    port: u16,
+    up_rx: mpsc::UnboundedReceiver<Vec<u8>>,
+    responder: crate::udp::VlessInboundMuxUdpResponder,
+    auth: Option<SessionAuth>,
+}
+
+#[cfg(feature = "reality")]
+impl VlessInboundMuxUdpRelay {
+    pub fn new(
+        session_id: u16,
+        port: u16,
+        up_rx: mpsc::UnboundedReceiver<Vec<u8>>,
+        responder: crate::udp::VlessInboundMuxUdpResponder,
+        auth: Option<SessionAuth>,
+    ) -> Self {
+        Self {
+            session_id,
+            port,
+            up_rx,
+            responder,
+            auth,
+        }
+    }
+
+    pub fn session_id(&self) -> u16 {
+        self.session_id
+    }
+
+    pub fn port(&self) -> u16 {
+        self.port
+    }
+
+    pub fn into_parts(
+        self,
+    ) -> (
+        u16,
+        u16,
+        mpsc::UnboundedReceiver<Vec<u8>>,
+        crate::udp::VlessInboundMuxUdpResponder,
+        Option<SessionAuth>,
+    ) {
+        (
+            self.session_id,
+            self.port,
+            self.up_rx,
+            self.responder,
+            self.auth,
+        )
     }
 }
 
@@ -550,13 +576,7 @@ impl VlessInboundMuxServer {
         E: From<Error>,
         FTcp: FnOnce(Session, VlessInboundMuxTcpRelay) -> FTcpFut,
         FTcpFut: core::future::Future<Output = Result<bool, E>>,
-        FUdp: FnOnce(
-            u16,
-            u16,
-            mpsc::UnboundedReceiver<Vec<u8>>,
-            crate::udp::VlessInboundMuxUdpResponder,
-            Option<SessionAuth>,
-        ) -> FUdpFut,
+        FUdp: FnOnce(VlessInboundMuxUdpRelay) -> FUdpFut,
         FUdpFut: core::future::Future<Output = Result<bool, E>>,
     {
         let Some(route) = self.next_opened_route(stream).await? else {

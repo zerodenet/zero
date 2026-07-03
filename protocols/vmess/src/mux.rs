@@ -355,10 +355,7 @@ pub enum VmessInboundMuxOpenedRoute {
         relay: VmessInboundMuxTcpRelay,
     },
     Udp {
-        session_id: u16,
-        port: u16,
-        up_rx: mpsc::UnboundedReceiver<Vec<u8>>,
-        responder: crate::udp::VmessInboundMuxUdpResponder,
+        relay: VmessInboundMuxUdpRelay,
     },
 }
 
@@ -373,9 +370,7 @@ pub trait VmessInboundMuxOpenedRouteDispatcher {
 
     async fn dispatch_udp_opened(
         &mut self,
-        session_id: u16,
-        up_rx: mpsc::UnboundedReceiver<Vec<u8>>,
-        responder: crate::udp::VmessInboundMuxUdpResponder,
+        relay: VmessInboundMuxUdpRelay,
     ) -> Result<(), Self::Error>;
 }
 
@@ -388,21 +383,12 @@ impl VmessInboundMuxOpenedRoute {
     where
         FTcp: FnOnce(Session, VmessInboundMuxTcpRelay) -> FTcpFut,
         FTcpFut: core::future::Future<Output = Result<(), E>>,
-        FUdp: FnOnce(
-            u16,
-            mpsc::UnboundedReceiver<Vec<u8>>,
-            crate::udp::VmessInboundMuxUdpResponder,
-        ) -> FUdpFut,
+        FUdp: FnOnce(VmessInboundMuxUdpRelay) -> FUdpFut,
         FUdpFut: core::future::Future<Output = Result<(), E>>,
     {
         match self {
             Self::Tcp { session, relay } => on_tcp_opened(session, relay).await,
-            Self::Udp {
-                session_id,
-                up_rx,
-                responder,
-                ..
-            } => on_udp_opened(session_id, up_rx, responder).await,
+            Self::Udp { relay } => on_udp_opened(relay).await,
         }
     }
 
@@ -412,16 +398,7 @@ impl VmessInboundMuxOpenedRoute {
     {
         match self {
             Self::Tcp { session, relay } => dispatcher.dispatch_tcp_opened(session, relay).await,
-            Self::Udp {
-                session_id,
-                up_rx,
-                responder,
-                ..
-            } => {
-                dispatcher
-                    .dispatch_udp_opened(session_id, up_rx, responder)
-                    .await
-            }
+            Self::Udp { relay } => dispatcher.dispatch_udp_opened(relay).await,
         }
     }
 }
@@ -509,13 +486,14 @@ impl VmessInboundMuxOpenedStream {
                 let port = session.port;
                 let target = session.target;
                 VmessInboundMuxOpenedRoute::Udp {
-                    session_id,
-                    port,
-                    up_rx,
-                    responder: crate::udp::VmessInboundMuxUdpResponder::new(
-                        crate::udp::VmessInboundUdpSession::new(target, port),
-                        writer,
+                    relay: VmessInboundMuxUdpRelay::new(
                         session_id,
+                        up_rx,
+                        crate::udp::VmessInboundMuxUdpResponder::new(
+                            crate::udp::VmessInboundUdpSession::new(target, port),
+                            writer,
+                            session_id,
+                        ),
                     ),
                 }
             }
@@ -544,6 +522,40 @@ pub struct VmessInboundMuxUdpOpenedStream {
 impl VmessInboundMuxUdpOpenedStream {
     pub fn into_parts(self) -> (u16, Session, mpsc::UnboundedReceiver<Vec<u8>>) {
         (self.session_id, self.session, self.up_rx)
+    }
+}
+
+pub struct VmessInboundMuxUdpRelay {
+    session_id: u16,
+    up_rx: mpsc::UnboundedReceiver<Vec<u8>>,
+    responder: crate::udp::VmessInboundMuxUdpResponder,
+}
+
+impl VmessInboundMuxUdpRelay {
+    pub fn new(
+        session_id: u16,
+        up_rx: mpsc::UnboundedReceiver<Vec<u8>>,
+        responder: crate::udp::VmessInboundMuxUdpResponder,
+    ) -> Self {
+        Self {
+            session_id,
+            up_rx,
+            responder,
+        }
+    }
+
+    pub fn session_id(&self) -> u16 {
+        self.session_id
+    }
+
+    pub fn into_parts(
+        self,
+    ) -> (
+        u16,
+        mpsc::UnboundedReceiver<Vec<u8>>,
+        crate::udp::VmessInboundMuxUdpResponder,
+    ) {
+        (self.session_id, self.up_rx, self.responder)
     }
 }
 
@@ -1021,11 +1033,7 @@ impl VmessInboundMuxServer {
         E: From<Error>,
         FTcp: FnOnce(Session, VmessInboundMuxTcpRelay) -> FTcpFut,
         FTcpFut: core::future::Future<Output = Result<(), E>>,
-        FUdp: FnOnce(
-            u16,
-            mpsc::UnboundedReceiver<Vec<u8>>,
-            crate::udp::VmessInboundMuxUdpResponder,
-        ) -> FUdpFut,
+        FUdp: FnOnce(VmessInboundMuxUdpRelay) -> FUdpFut,
         FUdpFut: core::future::Future<Output = Result<(), E>>,
     {
         let Some(route) = self.next_opened_route(reader).await? else {

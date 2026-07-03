@@ -49,14 +49,12 @@ impl vless::mux::VlessInboundMuxOpenedRouteDispatcher for VlessMuxOpenedDispatch
 
     async fn dispatch_udp_opened(
         &mut self,
-        session_id: u16,
-        port: u16,
-        up_rx: tokio::sync::mpsc::UnboundedReceiver<Vec<u8>>,
-        responder: vless::udp::VlessInboundMuxUdpResponder,
-        auth: Option<zero_core::SessionAuth>,
+        relay: vless::mux::VlessInboundMuxUdpRelay,
     ) -> Result<bool, Self::Error> {
         let proxy = self.proxy.clone();
         let inbound_tag = self.inbound_tag.to_owned();
+        let session_id = relay.session_id();
+        let port = relay.port();
         info!(
             inbound_tag = %inbound_tag,
             mux_stream_id = session_id,
@@ -65,15 +63,7 @@ impl vless::mux::VlessInboundMuxOpenedRouteDispatcher for VlessMuxOpenedDispatch
             "MUX stream accepted"
         );
         self.tasks.spawn(async move {
-            spawn_vless_mux_udp_stream_task(
-                &proxy,
-                session_id,
-                up_rx,
-                responder,
-                &inbound_tag,
-                auth,
-            )
-            .await;
+            spawn_vless_mux_udp_stream_task(&proxy, relay, &inbound_tag).await;
         });
         Ok(true)
     }

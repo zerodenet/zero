@@ -1110,7 +1110,8 @@ fn vless_inbound_mux_frame_detail_lives_in_protocol_crate() {
             && protocol_mux.contains("pub fn into_route_with_auth")
             && protocol_mux.contains("pub async fn next_opened_route_with_auth")
             && protocol_mux.contains("opened.into_route_with_auth(auth, writer)")
-            && protocol_mux.contains("responder: crate::udp::VlessInboundMuxUdpResponder")
+            && protocol_mux.contains("relay: VlessInboundMuxUdpRelay")
+            && protocol_mux.contains("pub struct VlessInboundMuxUdpRelay")
             && protocol_mux.contains("match session.network")
             && protocol_mux.contains("VlessInboundMuxAction::OpenStream")
             && protocol_mux.contains("VlessInboundMuxOpenedStream::new")
@@ -7237,7 +7238,8 @@ fn inbound_vmess_mux_task_models_do_not_live_in_proxy_model() {
             && protocol_mux.contains("route.dispatch_with(dispatcher).await")
             && protocol_mux.contains("dispatch_with_handlers(on_tcp_opened, on_udp_opened)")
             && protocol_mux.contains("opened.into_route(writer)")
-            && protocol_mux.contains("responder: crate::udp::VmessInboundMuxUdpResponder")
+            && protocol_mux.contains("relay: VmessInboundMuxUdpRelay")
+            && protocol_mux.contains("pub struct VmessInboundMuxUdpRelay")
             && protocol_mux.contains("pub struct VmessInboundMuxTcpOpenedStream")
             && protocol_mux.contains("pub struct VmessInboundMuxUdpOpenedStream"),
         "VMess proxy MUX handler should consume protocol-owned opened-stream route handoff, not protocol kind classification"

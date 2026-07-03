@@ -46,18 +46,9 @@ impl vmess::mux::VmessInboundMuxOpenedRouteDispatcher for VmessMuxOpenedDispatch
 
     async fn dispatch_udp_opened(
         &mut self,
-        session_id: u16,
-        up_rx: tokio::sync::mpsc::UnboundedReceiver<Vec<u8>>,
-        responder: vmess::udp::VmessInboundMuxUdpResponder,
+        relay: vmess::mux::VmessInboundMuxUdpRelay,
     ) -> Result<(), Self::Error> {
-        spawn_vmess_mux_udp_stream_task(
-            self.proxy,
-            self.tasks,
-            session_id,
-            up_rx,
-            responder,
-            self.inbound_tag.to_owned(),
-        );
+        spawn_vmess_mux_udp_stream_task(self.proxy, self.tasks, relay, self.inbound_tag.to_owned());
         Ok(())
     }
 }

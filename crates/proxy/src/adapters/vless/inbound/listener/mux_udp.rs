@@ -3,12 +3,10 @@ use crate::runtime::Proxy;
 
 pub(super) async fn spawn_vless_mux_udp_stream_task(
     proxy: &Proxy,
-    mux_session_id: u16,
-    up_rx: tokio::sync::mpsc::UnboundedReceiver<Vec<u8>>,
-    responder: vless::udp::VlessInboundMuxUdpResponder,
+    relay: vless::mux::VlessInboundMuxUdpRelay,
     inbound_tag: &str,
-    auth: Option<zero_core::SessionAuth>,
 ) {
+    let (mux_session_id, _port, up_rx, responder, auth) = relay.into_parts();
     run_mux_udp_relay(
         proxy,
         MuxUdpRelayRequest {

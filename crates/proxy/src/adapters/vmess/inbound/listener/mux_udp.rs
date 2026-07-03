@@ -6,11 +6,10 @@ use crate::runtime::Proxy;
 pub(super) fn spawn_vmess_mux_udp_stream_task(
     proxy: &Proxy,
     tasks: &mut JoinSet<()>,
-    mux_session_id: u16,
-    up_rx: tokio::sync::mpsc::UnboundedReceiver<Vec<u8>>,
-    responder: vmess::udp::VmessInboundMuxUdpResponder,
+    relay: vmess::mux::VmessInboundMuxUdpRelay,
     inbound_tag: String,
 ) {
+    let (mux_session_id, up_rx, responder) = relay.into_parts();
     let proxy = proxy.clone();
     tasks.spawn(async move {
         run_mux_udp_relay(
