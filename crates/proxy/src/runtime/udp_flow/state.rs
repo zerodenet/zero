@@ -3,9 +3,7 @@ use tokio::time::Instant as TokioInstant;
 use zero_engine::{EngineError, ResolvedLeafOutbound};
 
 use crate::runtime::udp_dispatch::FlowFailure;
-use crate::runtime::udp_flow::managed::{
-    ManagedStreamFlowSender, ManagedUdpFlowRequest, ManagedUdpFlowResume,
-};
+use crate::runtime::udp_flow::managed::{ManagedUdpFlowRequest, ManagedUdpFlowResume};
 use crate::runtime::udp_flow::outbound::ManagedUdpFlowRef;
 use crate::runtime::udp_flow::packet_path::{ChainTask, UdpFlowContext, UdpPacketRef};
 use crate::runtime::udp_flow::packet_path_chain::{PacketPathManager, SendWithSnapshotRequest};
@@ -91,13 +89,6 @@ impl UdpFlowState {
 
     pub(crate) fn close_all_upstreams(self) {
         self.registered.close_all_upstreams();
-    }
-
-    pub(crate) fn register_managed_stream_flow_sender(
-        &mut self,
-        sender: Box<dyn ManagedStreamFlowSender>,
-    ) -> ManagedUdpFlowRef {
-        self.registered.register_managed_stream_flow_sender(sender)
     }
 
     pub(crate) async fn start_managed_flow(

@@ -23,6 +23,8 @@ pub(crate) mod mux_pool;
 mod tcp;
 #[cfg(feature = "vmess")]
 mod udp;
+#[cfg(feature = "vmess")]
+pub(crate) use udp::managed_stream_handler as vmess_udp_stream_handler;
 
 #[cfg(feature = "vmess")]
 #[derive(Debug)]

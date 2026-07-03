@@ -63,6 +63,10 @@ pub(crate) fn registered_udp_handlers() -> RegisteredUdpHandlers {
             stream: vec![
                 #[cfg(feature = "trojan")]
                 crate::adapters::trojan_udp_stream_handler(),
+                #[cfg(feature = "vless")]
+                crate::adapters::vless_udp_stream_handler(),
+                #[cfg(feature = "vmess")]
+                crate::adapters::vmess_udp_stream_handler(),
                 #[cfg(feature = "mieru")]
                 crate::adapters::mieru_udp_stream_handler(),
             ],

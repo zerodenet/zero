@@ -3,7 +3,6 @@ use super::flow::{
     ManagedUdpFlowRequest, ManagedUdpFlowResume,
 };
 use crate::runtime::udp_dispatch::FlowFailure;
-use crate::runtime::udp_flow::managed::ManagedStreamFlowSender;
 use crate::runtime::udp_flow::outbound::ManagedUdpFlowRef;
 use crate::runtime::udp_flow::packet_path::ChainTask;
 use std::collections::HashMap;
@@ -42,15 +41,6 @@ impl ManagedUdpState {
     pub(crate) fn register_flow(&mut self, resume: ManagedUdpFlowResume) -> ManagedUdpFlowRef {
         let flow_ref = self.next_flow_ref();
         self.flows.insert(flow_ref, resume);
-        flow_ref
-    }
-
-    pub(crate) fn register_stream_sender(
-        &mut self,
-        sender: Box<dyn ManagedStreamFlowSender>,
-    ) -> ManagedUdpFlowRef {
-        let flow_ref = self.next_flow_ref();
-        self.stream.register_sender(flow_ref, sender);
         flow_ref
     }
 
@@ -184,19 +174,6 @@ impl ManagedUdpState {
         }
     }
 
-    pub(crate) async fn forward_registered_stream_sender(
-        &mut self,
-        chain_tasks: &mut JoinSet<ChainTask>,
-        proxy: &Proxy,
-        flow_ref: ManagedUdpFlowRef,
-        flow: &UdpFlowSnapshot,
-        payload: &[u8],
-    ) -> Option<Result<usize, FlowFailure>> {
-        self.stream
-            .forward_registered_sender(chain_tasks, proxy, flow_ref, flow, payload)
-            .await
-    }
-
     pub(crate) async fn forward_existing_flow(
         &mut self,
         chain_tasks: &mut JoinSet<ChainTask>,
@@ -211,13 +188,6 @@ impl ManagedUdpState {
                 "direct, relay, and packet-path flows are handled outside managed UDP state",
             ));
         };
-
-        if let Some(result) = self
-            .forward_registered_stream_sender(chain_tasks, proxy, flow_ref, flow, payload)
-            .await
-        {
-            return result.map(Some);
-        }
 
         let Some(resume) = self.flow_resume(flow_ref) else {
             return Err(managed_forward_unavailable(

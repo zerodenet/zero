@@ -6,8 +6,8 @@ use zero_engine::EngineError;
 
 use crate::runtime::udp_dispatch::FlowFailure;
 use crate::runtime::udp_flow::managed::{
-    ManagedStreamFlowSender, ManagedUdpFlowKind, ManagedUdpFlowRequest, ManagedUdpFlowResume,
-    ManagedUdpHandlers, ManagedUdpState,
+    ManagedUdpFlowKind, ManagedUdpFlowRequest, ManagedUdpFlowResume, ManagedUdpHandlers,
+    ManagedUdpState,
 };
 use crate::runtime::udp_flow::outbound::ManagedUdpFlowRef;
 use crate::runtime::udp_flow::response::UpstreamUdpResponse;
@@ -54,13 +54,6 @@ impl RegisteredUdpState {
         resume: ManagedUdpFlowResume,
     ) -> ManagedUdpFlowRef {
         self.managed.register_flow(resume)
-    }
-
-    pub(crate) fn register_managed_stream_flow_sender(
-        &mut self,
-        sender: Box<dyn ManagedStreamFlowSender>,
-    ) -> ManagedUdpFlowRef {
-        self.managed.register_stream_sender(sender)
     }
 
     pub(crate) fn managed_flow_resume(

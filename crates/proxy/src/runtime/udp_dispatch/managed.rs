@@ -1,14 +1,11 @@
 use crate::runtime::udp_dispatch::FlowFailure;
-use crate::runtime::udp_flow::managed::ManagedStreamFlowSender;
 use crate::runtime::udp_flow::managed::{
     ManagedUdpFlowKind, ManagedUdpFlowRequest, ManagedUdpFlowResume,
 };
 use crate::runtime::udp_flow::outbound::ManagedUdpFlowRef;
 use crate::runtime::udp_flow::outbound::UdpFlowOutbound;
-use crate::runtime::udp_flow::packet_path::ChainTask;
 use crate::runtime::udp_flow::sessions::UdpFlowSnapshot;
 use crate::runtime::Proxy;
-use tokio::task::JoinSet;
 use zero_core::Session;
 use zero_engine::EngineError;
 
@@ -71,36 +68,6 @@ pub(crate) struct ManagedStreamPacketStart<'a, T> {
 }
 
 impl UdpDispatch {
-    pub(crate) fn managed_udp_chain_tasks(&mut self) -> &mut JoinSet<ChainTask> {
-        self.flow_state.chain_tasks()
-    }
-
-    pub(crate) fn register_managed_stream_flow_sender(
-        &mut self,
-        sender: Box<dyn ManagedStreamFlowSender>,
-    ) -> ManagedUdpFlowRef {
-        self.flow_state.register_managed_stream_flow_sender(sender)
-    }
-
-    pub(crate) fn register_managed_stream_packet_flow(
-        &mut self,
-        tag: &str,
-        server: &str,
-        port: u16,
-        sender: Box<dyn ManagedStreamFlowSender>,
-    ) -> FlowStartResult {
-        let managed = self.register_managed_stream_flow_sender(sender);
-        FlowStartResult::Flow {
-            outbound: Box::new(UdpFlowOutbound::StreamPacket {
-                tag: tag.to_string(),
-                server: server.to_string(),
-                port,
-                managed,
-            }),
-            tx_bytes: 0,
-        }
-    }
-
     pub(crate) async fn start_managed_flow(
         &mut self,
         request: ManagedUdpFlowRequest<'_>,

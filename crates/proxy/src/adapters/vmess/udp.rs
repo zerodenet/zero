@@ -3,10 +3,15 @@ use zero_engine::ResolvedLeafOutbound;
 
 use crate::adapters::vmess::VmessAdapter;
 use crate::runtime::udp_dispatch::{FlowStartResult, UdpDispatch};
+use crate::runtime::udp_flow::managed::ManagedStreamFlowHandler;
 use crate::runtime::Proxy;
 
 mod flow;
 mod managed;
+
+pub(crate) fn managed_stream_handler() -> Box<dyn ManagedStreamFlowHandler> {
+    managed::handler()
+}
 
 impl VmessAdapter {
     pub(super) async fn start_udp_flow_impl(

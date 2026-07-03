@@ -1,71 +1,30 @@
-use tokio::task::JoinSet;
-use zero_core::Session;
-use zero_engine::EngineError;
-
-use crate::runtime::udp_flow::managed::{ManagedStreamConnectionSend, ManagedStreamPacketSender};
-use crate::runtime::udp_flow::packet_path::ChainTask;
+use crate::runtime::udp_flow::managed::{ManagedStreamFlowHandler, ManagedStreamFlowManager};
 
 mod connector;
 
-#[allow(clippy::too_many_arguments)]
-pub(crate) async fn start_flow(
-    upstreams: &mut ManagedStreamPacketSender,
-    chain_tasks: &mut JoinSet<ChainTask>,
-    proxy: &crate::runtime::Proxy,
-    mux_pool: &vmess::mux::VmessMuxConnectionPool,
-    session: &Session,
-    server: &str,
-    port: u16,
-    config: vmess::udp::VmessUdpFlowConfig<'_>,
-    mux_concurrency: Option<u32>,
-    transport: crate::transport::VmessTransportOptions<'_>,
-    payload: &[u8],
-) -> Result<(), EngineError> {
-    upstreams
-        .send_or_insert_target(
-            &session.target,
-            session.port,
-            ManagedStreamConnectionSend {
-                chain_tasks,
-                proxy,
-                target: &session.target,
-                port: session.port,
-                payload,
-            },
-            connector::direct_flow(
-                proxy,
-                mux_pool,
-                session,
-                server,
-                port,
-                config,
-                mux_concurrency,
-                transport,
-                payload,
-            ),
-        )
-        .await
+pub(super) fn handler() -> Box<dyn ManagedStreamFlowHandler> {
+    Box::new(ManagedStreamFlowManager::<
+        connector::VmessManagedUdpFlowResume,
+    >::new(
+        "vmess_establish",
+        "vmess_relay_upstream",
+        "vmess_relay_establish",
+        "vmess_relay_send",
+        "udp_vmess_resume",
+        "expected VMess UDP flow resume",
+    ))
 }
 
-#[allow(clippy::too_many_arguments)]
-pub(crate) async fn start_relay_flow(
-    upstreams: &mut ManagedStreamPacketSender,
-    chain_tasks: &mut JoinSet<ChainTask>,
-    proxy: &crate::runtime::Proxy,
-    session: &Session,
-    carrier: crate::transport::RelayCarrier,
-    config: vmess::udp::VmessUdpFlowConfig<'_>,
+pub(super) fn resume(
+    adapter: &crate::adapters::vmess::VmessAdapter,
+    protocol: vmess::udp::VmessUdpFlowResume,
+    mux_concurrency: Option<u32>,
     transport: crate::transport::VmessTransportOptions<'_>,
-    payload: &[u8],
-) -> Result<(), EngineError> {
-    let stream = crate::transport::build_vmess_outbound_transport_over_stream(
-        crate::transport::VmessFinalHopTransportRequest {
-            carrier,
-            options: transport,
-        },
+) -> connector::VmessManagedUdpFlowResume {
+    connector::VmessManagedUdpFlowResume::new(
+        adapter.mux_pool.clone(),
+        protocol,
+        mux_concurrency,
+        transport,
     )
-    .await?;
-    let upstream = connector::over_stream(proxy, session, config, payload, stream).await?;
-    upstreams.insert_and_bridge_target(session.target.clone(), session.port, chain_tasks, upstream);
-    Ok(())
 }

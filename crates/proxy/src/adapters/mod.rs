@@ -47,6 +47,10 @@ pub(crate) use trojan::udp::managed_stream_handler as trojan_udp_stream_handler;
 #[cfg(feature = "trojan")]
 pub(crate) use trojan::TrojanAdapter;
 #[cfg(feature = "vless")]
+pub(crate) use vless::vless_udp_stream_handler;
+#[cfg(feature = "vless")]
 pub(crate) use vless::VlessAdapter;
+#[cfg(feature = "vmess")]
+pub(crate) use vmess::vmess_udp_stream_handler;
 #[cfg(feature = "vmess")]
 pub(crate) use vmess::VmessAdapter;

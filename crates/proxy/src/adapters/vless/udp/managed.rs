@@ -1,100 +1,48 @@
-use tokio::task::JoinSet;
-use zero_core::Session;
-use zero_engine::EngineError;
-
-use crate::runtime::udp_flow::managed::{ManagedStreamConnectionSend, ManagedStreamPacketSender};
-use crate::runtime::udp_flow::packet_path::ChainTask;
+use crate::runtime::udp_flow::managed::{ManagedStreamFlowHandler, ManagedStreamFlowManager};
 
 mod connector;
 
-#[allow(clippy::too_many_arguments)]
-pub(crate) async fn start_flow(
-    upstreams: &mut ManagedStreamPacketSender,
-    chain_tasks: &mut JoinSet<ChainTask>,
-    proxy: &crate::runtime::Proxy,
-    mux_pool: &vless::mux_pool::MuxConnectionPool,
-    session: &Session,
-    server: &str,
-    port: u16,
-    config: vless::udp::VlessUdpFlowConfig<'_>,
-    transport: crate::transport::VlessUdpTransportOptions<'_>,
-    payload: &[u8],
-) -> Result<(), EngineError> {
-    if connector::start_mux_fast_path(
-        proxy, mux_pool, session, server, port, config, transport, payload,
-    )
-    .await?
-    {
-        return Ok(());
-    }
-
-    upstreams
-        .send_or_insert_target(
-            &session.target,
-            session.port,
-            ManagedStreamConnectionSend {
-                chain_tasks,
-                proxy,
-                target: &session.target,
-                port: session.port,
-                payload,
-            },
-            connector::direct_flow(proxy, session, server, port, config, transport, payload),
-        )
-        .await
+pub(super) fn handler() -> Box<dyn ManagedStreamFlowHandler> {
+    Box::new(ManagedStreamFlowManager::<
+        connector::VlessManagedUdpFlowResume,
+    >::new(
+        "vless_establish",
+        "vless_relay_upstream",
+        "vless_relay_establish",
+        "vless_relay_send",
+        "udp_vless_resume",
+        "expected VLESS UDP flow resume",
+    ))
 }
 
-#[allow(clippy::too_many_arguments)]
-pub(crate) async fn start_relay_two_stream(
-    upstreams: &mut ManagedStreamPacketSender,
-    chain_tasks: &mut JoinSet<ChainTask>,
-    proxy: &crate::runtime::Proxy,
-    session: &Session,
-    post_carrier: crate::transport::RelayCarrier,
-    get_carrier: crate::transport::RelayCarrier,
-    config: vless::udp::VlessUdpFlowConfig<'_>,
-    split_http: &zero_config::SplitHttpConfig,
-    payload: &[u8],
-) -> Result<(), EngineError> {
-    let stream = crate::transport::build_vless_split_http_over_relay(
-        post_carrier.stream,
-        get_carrier.stream,
-        split_http,
-    )
-    .await?;
-    let upstream = connector::over_stream(proxy, session, config, payload, stream).await?;
-    upstreams.insert_and_bridge_target(session.target.clone(), session.port, chain_tasks, upstream);
-    Ok(())
+pub(super) fn direct_resume(
+    adapter: &crate::adapters::vless::VlessAdapter,
+    protocol: vless::udp::VlessUdpFlowResume,
+    transport: crate::transport::VlessUdpTransportOptions<'_>,
+) -> connector::VlessManagedUdpFlowResume {
+    connector::VlessManagedUdpFlowResume::direct(adapter.mux_pool.clone(), protocol, transport)
 }
 
-#[allow(clippy::too_many_arguments)]
-pub(crate) async fn start_relay_final_hop(
-    upstreams: &mut ManagedStreamPacketSender,
-    chain_tasks: &mut JoinSet<ChainTask>,
-    proxy: &crate::runtime::Proxy,
-    session: &Session,
-    carrier: crate::transport::RelayCarrier,
-    config: vless::udp::VlessUdpFlowConfig<'_>,
+pub(super) fn relay_final_hop_resume(
+    adapter: &crate::adapters::vless::VlessAdapter,
+    protocol: vless::udp::VlessUdpFlowResume,
     transport: crate::transport::VlessUdpTransportOptions<'_>,
-    payload: &[u8],
-) -> Result<(), EngineError> {
-    let stream = crate::transport::build_vless_outbound_transport_over_stream(
-        crate::transport::VlessFinalHopTransportRequest {
-            carrier,
-            options: crate::transport::VlessTransportOptions {
-                tls: transport.tls,
-                reality: transport.reality,
-                ws: transport.ws,
-                grpc: transport.grpc,
-                h2: transport.h2,
-                http_upgrade: transport.http_upgrade,
-                split_http: transport.split_http,
-                source_dir: transport.source_dir,
-            },
-        },
+) -> connector::VlessManagedUdpFlowResume {
+    connector::VlessManagedUdpFlowResume::relay_final_hop(
+        adapter.mux_pool.clone(),
+        protocol,
+        transport,
     )
-    .await?;
-    let upstream = connector::over_stream(proxy, session, config, payload, stream).await?;
-    upstreams.insert_and_bridge_target(session.target.clone(), session.port, chain_tasks, upstream);
-    Ok(())
+}
+
+pub(super) fn relay_paired_transport_resume(
+    adapter: &crate::adapters::vless::VlessAdapter,
+    protocol: vless::udp::VlessUdpFlowResume,
+    transport: crate::transport::VlessUdpTransportOptions<'_>,
+) -> connector::VlessManagedUdpFlowResume {
+    connector::VlessManagedUdpFlowResume::relay_paired_transport(
+        adapter.mux_pool.clone(),
+        protocol,
+        transport,
+    )
 }

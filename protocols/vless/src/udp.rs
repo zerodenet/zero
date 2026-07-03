@@ -38,6 +38,62 @@ pub struct VlessUdpFlowConfig<'a> {
     flow: Option<&'a str>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VlessUdpFlowResume {
+    identity: VlessUdpIdentity,
+    flow: Option<String>,
+    relay_chain: bool,
+}
+
+impl VlessUdpFlowResume {
+    pub fn identity(&self) -> VlessUdpIdentity {
+        self.identity
+    }
+
+    pub fn mux_flow_enabled(&self) -> bool {
+        matches!(
+            self.flow.as_deref(),
+            Some("xtls-rprx-vision") | Some("xtls-rprx-vision-udp443")
+        )
+    }
+
+    #[cfg(feature = "reality")]
+    pub fn mux_pool_identity(&self) -> crate::mux_pool::MuxIdentity {
+        crate::mux_pool::MuxIdentity::from_uuid(self.identity.uuid)
+    }
+
+    pub fn flow_requires_relay_upstream(&self) -> bool {
+        self.relay_chain
+    }
+
+    pub fn connector_flow(
+        &self,
+        server: &str,
+        port: u16,
+        session_id: u64,
+    ) -> VlessUdpConnectorFlow {
+        VlessUdpConnectorFlow {
+            cache_key: format!(
+                "vless:{server}:{port}:{session_id}:relay={}",
+                self.relay_chain
+            ),
+            requires_relay_upstream: self.flow_requires_relay_upstream(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VlessUdpConnectorFlow {
+    cache_key: String,
+    requires_relay_upstream: bool,
+}
+
+impl VlessUdpConnectorFlow {
+    pub fn into_parts(self) -> (String, bool) {
+        (self.cache_key, self.requires_relay_upstream)
+    }
+}
+
 impl<'a> VlessUdpFlowConfig<'a> {
     pub fn new(id: &str, flow: Option<&'a str>) -> Result<Self, Error> {
         Ok(Self {
@@ -61,6 +117,14 @@ impl<'a> VlessUdpFlowConfig<'a> {
     pub fn mux_open_identity(&self) -> VlessUdpMuxOpenIdentity {
         VlessUdpMuxOpenIdentity {
             id: self.identity.uuid,
+        }
+    }
+
+    pub fn flow_resume(&self, relay_chain: bool) -> VlessUdpFlowResume {
+        VlessUdpFlowResume {
+            identity: self.identity,
+            flow: self.flow.map(Into::into),
+            relay_chain,
         }
     }
 
@@ -111,6 +175,23 @@ pub fn udp_flow_config_from_config<'a>(
     flow: Option<&'a str>,
 ) -> Result<VlessUdpFlowConfig<'a>, Error> {
     VlessUdpFlowConfig::new(id, flow)
+}
+
+pub fn udp_flow_resume_from_config(
+    id: &str,
+    flow: Option<&str>,
+    relay_chain: bool,
+) -> Result<VlessUdpFlowResume, Error> {
+    VlessUdpFlowConfig::new(id, flow).map(|config| config.flow_resume(relay_chain))
+}
+
+pub fn connector_flow_from_resume(
+    resume: &VlessUdpFlowResume,
+    server: &str,
+    port: u16,
+    session_id: u64,
+) -> VlessUdpConnectorFlow {
+    resume.connector_flow(server, port, session_id)
 }
 
 pub fn parse_udp_identity(id: &str) -> Result<VlessUdpIdentity, Error> {
@@ -355,6 +436,20 @@ where
 }
 
 #[cfg(feature = "reality")]
+pub fn start_mux_udp_flow(
+    up_tx: mpsc::UnboundedSender<Vec<u8>>,
+    down_rx: mpsc::UnboundedReceiver<Vec<u8>>,
+) -> VlessUdpFlowConnection {
+    let (send_tx, send_rx) = mpsc::channel::<VlessUdpFlowSend>(32);
+    let (responses, _) = broadcast::channel::<VlessUdpFlowResponse>(32);
+    spawn_mux_udp_flow_task(send_rx, up_tx, down_rx, responses.clone());
+    VlessUdpFlowConnection::new(VlessUdpFlowHandle {
+        sender: VlessUdpFlowSender { send_tx },
+        responses,
+    })
+}
+
+#[cfg(feature = "reality")]
 pub async fn establish_udp_flow_with_initial_packet<S>(
     mut stream: S,
     session: &Session,
@@ -374,6 +469,21 @@ where
         handle,
         initial_packet_len,
     })
+}
+
+#[cfg(feature = "reality")]
+pub async fn establish_udp_flow_with_resume<S>(
+    mut stream: S,
+    session: &Session,
+    resume: &VlessUdpFlowResume,
+) -> Result<VlessUdpFlowConnection, Error>
+where
+    S: AsyncSocket + tokio::io::AsyncRead + tokio::io::AsyncWrite + Send + Sync + 'static,
+{
+    let flow_io = establish_udp_flow(&mut stream, session, resume.identity()).await?;
+    Ok(VlessUdpFlowConnection::new(spawn_udp_flow(
+        stream, None, flow_io,
+    )))
 }
 
 #[cfg(feature = "reality")]
@@ -424,6 +534,55 @@ fn spawn_udp_flow_task<S>(
                         }
                         Ok(None) => break,
                         Err(_) => break,
+                    }
+                }
+            }
+        }
+    });
+}
+
+#[cfg(feature = "reality")]
+fn spawn_mux_udp_flow_task(
+    mut send_rx: mpsc::Receiver<VlessUdpFlowSend>,
+    up_tx: mpsc::UnboundedSender<Vec<u8>>,
+    mut down_rx: mpsc::UnboundedReceiver<Vec<u8>>,
+    responses: VlessUdpFlowResponses,
+) {
+    tokio::spawn(async move {
+        let io = VlessUdpFlowIo;
+        loop {
+            tokio::select! {
+                to_send = send_rx.recv() => {
+                    match to_send {
+                        Some(request) => {
+                            let (target, port, payload) = request.packet.into_parts();
+                            let result = io
+                                .encode_packet(&target, port, &payload)
+                                .and_then(|packet| {
+                                    let len = packet.len();
+                                    up_tx
+                                        .send(packet)
+                                        .map(|_| len)
+                                        .map_err(|_| Error::Io("vless mux udp flow closed"))
+                                });
+                            let should_break = result.is_err();
+                            let _ = request.result_tx.send(result);
+                            if should_break {
+                                break;
+                            }
+                        }
+                        None => break,
+                    }
+                }
+                read = down_rx.recv() => {
+                    match read {
+                        Some(packet) => match io.decode_packet(&packet) {
+                            Ok(packet) => {
+                                let _ = responses.send(packet.into_parts());
+                            }
+                            Err(_) => break,
+                        },
+                        None => break,
                     }
                 }
             }

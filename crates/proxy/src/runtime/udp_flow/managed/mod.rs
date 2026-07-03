@@ -7,12 +7,6 @@ pub(crate) mod model;
 pub(crate) mod state;
 mod stream;
 mod stream_manager;
-mod stream_packet_manager;
-mod stream_sender;
-
-pub(crate) use cache::{
-    ManagedStreamConnection, ManagedStreamConnectionCache, ManagedStreamConnectionSend,
-};
 pub(crate) use connection::{
     managed_packet_udp_connection, managed_tuple_udp_connection, ManagedPacketUdpSender,
     ManagedTupleUdpSender, SharedManagedDatagramUdpConnection, SharedManagedUdpConnection,
@@ -32,5 +26,3 @@ pub(crate) use stream_manager::{
     managed_stream_connector_flow_from_build, ManagedStreamConnectorFlow,
     ManagedStreamConnectorFlowBuild, ManagedStreamFlowConnector, ManagedStreamFlowManager,
 };
-pub(crate) use stream_packet_manager::ManagedStreamPacketSender;
-pub(crate) use stream_sender::ManagedStreamFlowSender;

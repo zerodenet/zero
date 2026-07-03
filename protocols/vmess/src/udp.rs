@@ -51,6 +51,62 @@ pub struct VmessUdpFlowConfig<'a> {
     cipher_name: &'a str,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VmessUdpFlowResume {
+    identity: VmessUdpIdentity,
+    cipher_name: String,
+    relay_chain: bool,
+}
+
+impl VmessUdpFlowResume {
+    pub fn identity(&self) -> VmessUdpIdentity {
+        self.identity
+    }
+
+    pub fn cipher_name(&self) -> &str {
+        &self.cipher_name
+    }
+
+    pub fn mux_pool_identity(&self) -> crate::mux::VmessMuxIdentity {
+        crate::mux::VmessMuxIdentity::from_parts(
+            self.identity.uuid,
+            self.cipher_name.clone(),
+            self.identity.cipher,
+        )
+    }
+
+    pub fn flow_requires_relay_upstream(&self) -> bool {
+        self.relay_chain
+    }
+
+    pub fn connector_flow(
+        &self,
+        server: &str,
+        port: u16,
+        session_id: u64,
+    ) -> VmessUdpConnectorFlow {
+        VmessUdpConnectorFlow {
+            cache_key: format!(
+                "vmess:{server}:{port}:{session_id}:relay={}",
+                self.relay_chain
+            ),
+            requires_relay_upstream: self.flow_requires_relay_upstream(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VmessUdpConnectorFlow {
+    cache_key: String,
+    requires_relay_upstream: bool,
+}
+
+impl VmessUdpConnectorFlow {
+    pub fn into_parts(self) -> (String, bool) {
+        (self.cache_key, self.requires_relay_upstream)
+    }
+}
+
 impl<'a> VmessUdpFlowConfig<'a> {
     pub fn new(id: &str, cipher: &'a str) -> Result<Self, Error> {
         Ok(Self {
@@ -80,6 +136,14 @@ impl<'a> VmessUdpFlowConfig<'a> {
             id: self.identity.uuid,
             cipher_name: self.cipher_name,
             cipher: self.identity.cipher,
+        }
+    }
+
+    pub fn flow_resume(&self, relay_chain: bool) -> VmessUdpFlowResume {
+        VmessUdpFlowResume {
+            identity: self.identity,
+            cipher_name: self.cipher_name.into(),
+            relay_chain,
         }
     }
 
@@ -123,6 +187,23 @@ pub fn udp_flow_config_from_config<'a>(
     cipher: &'a str,
 ) -> Result<VmessUdpFlowConfig<'a>, Error> {
     VmessUdpFlowConfig::new(id, cipher)
+}
+
+pub fn udp_flow_resume_from_config(
+    id: &str,
+    cipher: &str,
+    relay_chain: bool,
+) -> Result<VmessUdpFlowResume, Error> {
+    VmessUdpFlowConfig::new(id, cipher).map(|config| config.flow_resume(relay_chain))
+}
+
+pub fn connector_flow_from_resume(
+    resume: &VmessUdpFlowResume,
+    server: &str,
+    port: u16,
+    session_id: u64,
+) -> VmessUdpConnectorFlow {
+    resume.connector_flow(server, port, session_id)
 }
 
 pub fn parse_udp_identity(id: &str, cipher: &str) -> Result<VmessUdpIdentity, Error> {
@@ -1063,6 +1144,17 @@ where
     }
 }
 
+pub fn start_udp_flow<S>(stream: S) -> VmessUdpFlowConnection
+where
+    S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Send + Sync + Unpin + 'static,
+{
+    VmessUdpFlowConnection::new(spawn_udp_flow(
+        stream,
+        None,
+        VmessEstablishedUdpFlow::default(),
+    ))
+}
+
 pub fn start_udp_flow_with_initial_packet<S>(
     stream: S,
     target: &Address,
@@ -1168,6 +1260,20 @@ where
         handle,
         initial_packet_len,
     })
+}
+
+pub async fn establish_udp_flow_with_resume<S>(
+    stream: S,
+    session: &Session,
+    resume: &VmessUdpFlowResume,
+) -> Result<VmessUdpFlowConnection, Error>
+where
+    S: AsyncSocket + tokio::io::AsyncRead + tokio::io::AsyncWrite + Send + Sync + 'static,
+{
+    let (stream, flow_io) = establish_udp_flow(stream, session, resume.identity()).await?;
+    Ok(VmessUdpFlowConnection::new(spawn_udp_flow(
+        stream, None, flow_io,
+    )))
 }
 
 pub(crate) fn build_udp_packet(

@@ -23,6 +23,8 @@ pub(crate) mod mux_pool;
 mod tcp;
 #[cfg(feature = "vless")]
 mod udp;
+#[cfg(feature = "vless")]
+pub(crate) use udp::managed_stream_handler as vless_udp_stream_handler;
 
 #[cfg(feature = "vless")]
 #[derive(Debug)]
