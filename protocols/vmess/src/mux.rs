@@ -645,6 +645,14 @@ impl<S> VmessInboundUdpRelay<S> {
     pub fn into_parts(self) -> (S, crate::udp::VmessInboundUdpResponder, Option<SessionAuth>) {
         (self.stream, self.responder, self.auth)
     }
+
+    pub fn map_stream<T, F>(self, map: F) -> VmessInboundUdpRelay<T>
+    where
+        F: FnOnce(S) -> T,
+    {
+        let (stream, responder, auth) = self.into_parts();
+        VmessInboundUdpRelay::new(map(stream), responder, auth)
+    }
 }
 
 impl<S> VmessInboundAcceptedStream<S> {

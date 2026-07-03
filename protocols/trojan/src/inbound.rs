@@ -135,6 +135,14 @@ impl<S> TrojanInboundUdpRelay<S> {
     pub fn into_parts(self) -> (S, TrojanInboundUdpResponder, Option<SessionAuth>) {
         (self.stream, self.responder, self.auth)
     }
+
+    pub fn map_stream<T, F>(self, map: F) -> TrojanInboundUdpRelay<T>
+    where
+        F: FnOnce(S) -> T,
+    {
+        let (stream, responder, auth) = self.into_parts();
+        TrojanInboundUdpRelay::new(map(stream), responder, auth)
+    }
 }
 
 impl<S> TrojanInboundAcceptedSession<S> {

@@ -47,11 +47,10 @@ where
         session: Session,
         relay: vmess::mux::VmessInboundUdpRelay<S>,
     ) -> Result<(), Self::Error> {
-        let (stream, responder, auth) = relay.into_parts();
         run_vmess_udp_relay(
             self.proxy,
             session,
-            vmess::mux::VmessInboundUdpRelay::new(TcpRelayStream::new(stream), responder, auth),
+            relay.map_stream(TcpRelayStream::new),
             self.inbound_tag,
         )
         .await
