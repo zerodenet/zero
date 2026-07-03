@@ -150,14 +150,14 @@ pub enum VlessAcceptedClientRoute<S> {
         session: Session,
         stream: S,
     },
+    #[cfg(feature = "reality")]
     Udp {
         session: Session,
-        auth: Option<SessionAuth>,
-        stream: S,
+        relay: VlessInboundUdpRelay<S>,
     },
+    #[cfg(feature = "reality")]
     Mux {
-        mux_context: VlessInboundMuxContext,
-        auth: Option<SessionAuth>,
+        mux_server: crate::mux::VlessInboundMuxServer,
         stream: S,
     },
 }
@@ -289,31 +289,61 @@ impl<S> VlessAcceptedClient<S> {
         (session, mux_context, self.stream)
     }
 
-    pub fn into_route(self) -> VlessAcceptedClientRoute<S> {
-        self.into_route_with_sni(None)
+    pub async fn into_route(self) -> Result<VlessAcceptedClientRoute<S>, Error>
+    where
+        S: AsyncSocket,
+    {
+        self.into_route_with_sni(None).await
     }
 
-    pub fn into_route_with_sni(self, sni: Option<String>) -> VlessAcceptedClientRoute<S> {
-        let (mut session, mux_context, stream) = self.into_parts();
+    pub async fn into_route_with_sni(
+        self,
+        sni: Option<String>,
+    ) -> Result<VlessAcceptedClientRoute<S>, Error>
+    where
+        S: AsyncSocket,
+    {
+        let (mut session, mux_context, mut stream) = self.into_parts();
         match classify_inbound_session(&session) {
             VlessInboundSessionKind::Tcp => {
                 session.sni = sni;
-                VlessAcceptedClientRoute::Tcp { session, stream }
+                Ok(VlessAcceptedClientRoute::Tcp { session, stream })
             }
             VlessInboundSessionKind::Udp => {
                 session.sni = sni;
-                let auth = session.auth.clone();
-                VlessAcceptedClientRoute::Udp {
-                    auth,
-                    session,
-                    stream,
+                #[cfg(feature = "reality")]
+                {
+                    let auth = session.auth.clone();
+                    let responder = VlessInbound.accept_udp_session(&mut stream).await?;
+                    Ok(VlessAcceptedClientRoute::Udp {
+                        session,
+                        relay: VlessInboundUdpRelay::new(stream, responder, auth),
+                    })
+                }
+                #[cfg(not(feature = "reality"))]
+                {
+                    Err(Error::Unsupported(
+                        "VLESS UDP requires the `reality` feature",
+                    ))
                 }
             }
-            VlessInboundSessionKind::Mux => VlessAcceptedClientRoute::Mux {
-                mux_context,
-                auth: session.auth.clone(),
-                stream,
-            },
+            VlessInboundSessionKind::Mux => {
+                #[cfg(feature = "reality")]
+                {
+                    let auth = session.auth.clone();
+                    let mux_server = VlessInbound
+                        .accept_mux_session_with_auth(&mut stream, mux_context, auth)
+                        .await?;
+                    Ok(VlessAcceptedClientRoute::Mux { mux_server, stream })
+                }
+                #[cfg(not(feature = "reality"))]
+                {
+                    let _ = mux_context;
+                    Err(Error::Unsupported(
+                        "VLESS MUX requires the `reality` feature",
+                    ))
+                }
+            }
         }
     }
 }
@@ -345,79 +375,47 @@ impl<S> VlessAcceptedClientRoute<S> {
         mux: Mux,
     ) -> Result<(), E>
     where
-        S: AsyncSocket,
         Tcp: FnOnce(Session, S) -> TcpFut,
         TcpFut: core::future::Future<Output = Result<(), E>>,
         Udp: FnOnce(Session, VlessInboundUdpRelay<S>) -> UdpFut,
         UdpFut: core::future::Future<Output = Result<(), E>>,
         Mux: FnOnce(crate::mux::VlessInboundMuxServer, S) -> MuxFut,
         MuxFut: core::future::Future<Output = Result<(), E>>,
-        E: From<Error>,
     {
         match self {
             Self::Tcp { session, stream } => tcp(session, stream).await,
-            Self::Udp {
-                session,
-                auth,
-                mut stream,
-            } => {
-                let responder = VlessInbound.accept_udp_session(&mut stream).await?;
-                let relay = VlessInboundUdpRelay::new(stream, responder, auth);
-                udp(session, relay).await
-            }
-            Self::Mux {
-                mux_context,
-                auth,
-                mut stream,
-            } => {
-                let mux_server = VlessInbound
-                    .accept_mux_session_with_auth(&mut stream, mux_context, auth)
-                    .await?;
-                mux(mux_server, stream).await
-            }
+            Self::Udp { session, relay } => udp(session, relay).await,
+            Self::Mux { mux_server, stream } => mux(mux_server, stream).await,
+        }
+    }
+
+    #[cfg(not(feature = "reality"))]
+    pub async fn dispatch<Tcp, TcpFut, Udp, UdpFut, Mux, MuxFut, E>(
+        self,
+        tcp: Tcp,
+        _udp: Udp,
+        _mux: Mux,
+    ) -> Result<(), E>
+    where
+        Tcp: FnOnce(Session, S) -> TcpFut,
+        TcpFut: core::future::Future<Output = Result<(), E>>,
+    {
+        match self {
+            Self::Tcp { session, stream } => tcp(session, stream).await,
         }
     }
 
     pub async fn dispatch_with<D>(self, dispatcher: &mut D) -> Result<(), D::Error>
     where
-        S: AsyncSocket,
         D: VlessAcceptedClientRouteDispatcher<S>,
-        D::Error: From<Error>,
     {
         match self {
             Self::Tcp { session, stream } => dispatcher.dispatch_tcp_session(session, stream).await,
             #[cfg(feature = "reality")]
-            Self::Udp {
-                session,
-                auth,
-                mut stream,
-            } => {
-                let responder = VlessInbound.accept_udp_session(&mut stream).await?;
-                dispatcher
-                    .dispatch_udp_session(
-                        session,
-                        VlessInboundUdpRelay::new(stream, responder, auth),
-                    )
-                    .await
-            }
-            #[cfg(not(feature = "reality"))]
-            Self::Udp { .. } => {
-                Err(Error::Unsupported("VLESS UDP requires the `reality` feature").into())
-            }
+            Self::Udp { session, relay } => dispatcher.dispatch_udp_session(session, relay).await,
             #[cfg(feature = "reality")]
-            Self::Mux {
-                mux_context,
-                auth,
-                mut stream,
-            } => {
-                let mux_server = VlessInbound
-                    .accept_mux_session_with_auth(&mut stream, mux_context, auth)
-                    .await?;
+            Self::Mux { mux_server, stream } => {
                 dispatcher.dispatch_mux_session(mux_server, stream).await
-            }
-            #[cfg(not(feature = "reality"))]
-            Self::Mux { .. } => {
-                Err(Error::Unsupported("VLESS MUX requires the `reality` feature").into())
             }
         }
     }

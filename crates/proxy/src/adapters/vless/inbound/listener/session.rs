@@ -152,7 +152,7 @@ where
 {
     let metered = MeteredStream::new(RecordingStream::new(client));
     let route = match profile.accept_client(vless::VlessInbound, metered).await {
-        Ok(accepted) => accepted.into_route_with_sni(sni),
+        Ok(accepted) => accepted.into_route_with_sni(sni).await?,
         Err(rejected) => {
             let (auth_error, fallback_replay) = rejected.into_fallback_replay();
             if let Some(fb) = fallback {
