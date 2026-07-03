@@ -7256,13 +7256,16 @@ fn inbound_vmess_mux_task_models_do_not_live_in_proxy_model() {
         root.contains("spawn_mux_tcp_stream_task")
             && !root.contains("TcpPipe")
             && !root.contains("TcpPipeInput")
+            && root.contains("MuxTcpStreamBridge")
             && root.contains("MuxTcpStreamTask")
+            && root.contains("vmess::mux::VmessInboundMuxTcpRelay")
             && mux_tcp.contains("pub(crate) fn spawn_mux_tcp_stream_task")
+            && mux_tcp.contains("pub(crate) trait MuxTcpStreamBridge")
             && mux_tcp.contains("pub(crate) struct MuxTcpStreamTask")
             && mux_tcp.contains("open_mux_tcp_upstream(&proxy")
             && mux_tcp.contains("TcpPipe::new(proxy)")
-            && mux_tcp.contains("close_stream().await")
-            && mux_tcp.contains("relay_stream(mux_session_id, uplink, upstream).await"),
+            && mux_tcp.contains("bridge.close_stream().await")
+            && mux_tcp.contains("bridge.relay_stream(upstream).await"),
         "VMess inbound MUX root should delegate TCP sub-stream route/dispatch glue to inbound/mux_tcp.rs"
     );
     assert!(
@@ -7357,7 +7360,9 @@ fn inbound_vmess_mux_task_models_do_not_live_in_proxy_model() {
         "VMess inbound MUX new-stream Session conversion should be protocol-owned and exposed as an action"
     );
     assert!(
-        root.contains("writer.end_inbound_stream(mux_session_id)")
+        root.contains("VmessInboundMuxTcpRelay::close_stream(self)")
+            && root.contains("VmessInboundMuxTcpRelay::relay_stream(self, upstream)")
+            && !root.contains("writer.end_inbound_stream(mux_session_id)")
             && !root.contains(".write_inbound_stream_data(&writer, mux_session_id")
             && !root.contains(".write_inbound_stream_payload(&writer, mux_session_id")
             && !root.contains("VmessInboundMuxWriter::from_tokio_writer")
@@ -7386,6 +7391,7 @@ fn inbound_vmess_mux_task_models_do_not_live_in_proxy_model() {
             && !root.contains("vmess::mux::queue_keep_stream")
             && !root.contains("vmess::mux::encode_end_stream")
             && !root.contains("vmess::mux::encode_keep_stream")
+            && !root.contains("vmess::mux::relay_inbound_mux_stream")
             && !root.contains("streams.open_stream(")
             && !root.contains("streams.push_stream_data(")
             && !root.contains("streams.close_inbound_stream("),
@@ -7409,10 +7415,13 @@ fn inbound_vmess_mux_task_models_do_not_live_in_proxy_model() {
             && protocol_mux.contains("pub async fn read_opened_stream")
             && protocol_mux.contains("pub async fn next_opened_stream")
             && protocol_mux.contains("self.streams.apply_inbound_action(action)")
+            && protocol_mux.contains("pub struct VmessInboundMuxTcpRelay")
+            && protocol_mux.contains("pub fn close_stream(&self)")
             && protocol_mux.contains("pub async fn relay_inbound_mux_stream")
+            && protocol_mux.contains("pub async fn relay_stream<S>(self, upstream: S)")
             && protocol_mux.contains("write_inbound_stream_payload(&writer, session_id")
             && protocol_mux.contains("pub fn accept_mux_session_from_tokio_writer")
-            && root.contains("vmess::mux::relay_inbound_mux_stream"),
+            && !root.contains("vmess::mux::relay_inbound_mux_stream"),
         "VMess inbound MUX downstream payload selection, relay pump, and stream table should live in protocols/vmess"
     );
     for required in ["queue_keep_stream", "queue_end_stream"] {
@@ -7710,8 +7719,11 @@ fn inbound_vless_mux_task_model_does_not_live_in_proxy_model() {
             && !protocol_mux.contains("dispatch_next_opened_stream")
             && !protocol_mux.contains("VlessInboundMuxOpenedHandler")
             && !root.contains("let writer = mux_server.writer()")
-            && root.contains("writer,")
-            && root.contains("vless::mux::relay_inbound_mux_stream")
+            && root.contains("MuxTcpStreamBridge")
+            && root.contains("vless::mux::VlessInboundMuxTcpRelay")
+            && root.contains("VlessInboundMuxTcpRelay::close_stream(self)")
+            && root.contains("VlessInboundMuxTcpRelay::relay_stream(self, upstream)")
+            && !root.contains("vless::mux::relay_inbound_mux_stream")
             && !root.contains("VlessInboundMuxWriter::channel")
             && !root.contains("let writer = mux_writer.clone()")
             && !root.contains("VlessInboundMuxStreams::new")
@@ -7741,9 +7753,12 @@ fn inbound_vless_mux_task_model_does_not_live_in_proxy_model() {
             && protocol_mux.contains("pub async fn send_inbound_downlink")
             && protocol_mux.contains("pub struct VlessInboundMuxServer")
             && protocol_mux.contains("pub enum VlessInboundMuxEvent")
+            && protocol_mux.contains("pub struct VlessInboundMuxTcpRelay")
             && protocol_mux.contains("pub async fn next_opened_stream")
             && protocol_mux.contains("pub async fn next_opened_route_with_auth")
+            && protocol_mux.contains("pub fn close_stream(&self)")
             && protocol_mux.contains("pub async fn relay_inbound_mux_stream")
+            && protocol_mux.contains("pub async fn relay_stream<S>(self, upstream: S)")
             && protocol_mux.contains("pub fn channel()")
             && protocol_mux.contains("pub fn write_inbound_stream_payload")
             && protocol_mux.contains("mpsc::unbounded_channel::<VlessInboundMuxDownlink>()"),

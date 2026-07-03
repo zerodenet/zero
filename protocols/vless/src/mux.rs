@@ -166,9 +166,8 @@ pub enum VlessInboundMuxOpenedKind {
 #[cfg(feature = "reality")]
 pub enum VlessInboundMuxOpenedRoute {
     Tcp {
-        session_id: u16,
         session: Session,
-        up_rx: mpsc::UnboundedReceiver<Vec<u8>>,
+        relay: VlessInboundMuxTcpRelay,
     },
     Udp {
         session_id: u16,
@@ -185,9 +184,8 @@ pub trait VlessInboundMuxOpenedRouteDispatcher {
 
     async fn dispatch_tcp_opened(
         &mut self,
-        session_id: u16,
         session: Session,
-        up_rx: mpsc::UnboundedReceiver<Vec<u8>>,
+        relay: VlessInboundMuxTcpRelay,
     ) -> Result<bool, Self::Error>;
 
     async fn dispatch_udp_opened(
@@ -204,7 +202,8 @@ pub trait VlessInboundMuxOpenedRouteDispatcher {
 impl VlessInboundMuxOpenedRoute {
     pub fn session_id(&self) -> u16 {
         match self {
-            Self::Tcp { session_id, .. } | Self::Udp { session_id, .. } => *session_id,
+            Self::Tcp { relay, .. } => relay.session_id(),
+            Self::Udp { session_id, .. } => *session_id,
         }
     }
 
@@ -214,7 +213,7 @@ impl VlessInboundMuxOpenedRoute {
         on_udp_opened: FUdp,
     ) -> Result<bool, E>
     where
-        FTcp: FnOnce(u16, Session, mpsc::UnboundedReceiver<Vec<u8>>) -> FTcpFut,
+        FTcp: FnOnce(Session, VlessInboundMuxTcpRelay) -> FTcpFut,
         FTcpFut: core::future::Future<Output = Result<bool, E>>,
         FUdp: FnOnce(
             u16,
@@ -226,11 +225,7 @@ impl VlessInboundMuxOpenedRoute {
         FUdpFut: core::future::Future<Output = Result<bool, E>>,
     {
         match self {
-            Self::Tcp {
-                session_id,
-                session,
-                up_rx,
-            } => on_tcp_opened(session_id, session, up_rx).await,
+            Self::Tcp { session, relay } => on_tcp_opened(session, relay).await,
             Self::Udp {
                 session_id,
                 port,
@@ -246,15 +241,7 @@ impl VlessInboundMuxOpenedRoute {
         D: VlessInboundMuxOpenedRouteDispatcher,
     {
         match self {
-            Self::Tcp {
-                session_id,
-                session,
-                up_rx,
-            } => {
-                dispatcher
-                    .dispatch_tcp_opened(session_id, session, up_rx)
-                    .await
-            }
+            Self::Tcp { session, relay } => dispatcher.dispatch_tcp_opened(session, relay).await,
             Self::Udp {
                 session_id,
                 port,
@@ -267,6 +254,43 @@ impl VlessInboundMuxOpenedRoute {
                     .await
             }
         }
+    }
+}
+
+#[cfg(feature = "reality")]
+pub struct VlessInboundMuxTcpRelay {
+    session_id: u16,
+    up_rx: mpsc::UnboundedReceiver<Vec<u8>>,
+    writer: VlessInboundMuxWriter,
+}
+
+#[cfg(feature = "reality")]
+impl VlessInboundMuxTcpRelay {
+    pub fn new(
+        session_id: u16,
+        up_rx: mpsc::UnboundedReceiver<Vec<u8>>,
+        writer: VlessInboundMuxWriter,
+    ) -> Self {
+        Self {
+            session_id,
+            up_rx,
+            writer,
+        }
+    }
+
+    pub fn session_id(&self) -> u16 {
+        self.session_id
+    }
+
+    pub fn close_stream(&self) -> Result<usize, Error> {
+        self.writer.end_inbound_stream(self.session_id)
+    }
+
+    pub async fn relay_stream<S>(self, upstream: S)
+    where
+        S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send + 'static,
+    {
+        relay_inbound_mux_stream(self.session_id, self.up_rx, self.writer, upstream).await;
     }
 }
 
@@ -315,9 +339,8 @@ impl VlessInboundMuxOpenedStream {
         }
         match session.network {
             Network::Tcp => VlessInboundMuxOpenedRoute::Tcp {
-                session_id,
                 session,
-                up_rx,
+                relay: VlessInboundMuxTcpRelay::new(session_id, up_rx, writer),
             },
             Network::Udp => VlessInboundMuxOpenedRoute::Udp {
                 session_id,
@@ -525,7 +548,7 @@ impl VlessInboundMuxServer {
     where
         S: AsyncSocket,
         E: From<Error>,
-        FTcp: FnOnce(u16, Session, mpsc::UnboundedReceiver<Vec<u8>>) -> FTcpFut,
+        FTcp: FnOnce(Session, VlessInboundMuxTcpRelay) -> FTcpFut,
         FTcpFut: core::future::Future<Output = Result<bool, E>>,
         FUdp: FnOnce(
             u16,

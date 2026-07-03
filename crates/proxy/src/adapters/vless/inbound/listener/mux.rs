@@ -2,17 +2,26 @@ use tokio::task::JoinSet;
 use tracing::info;
 
 use crate::runtime::mux_session::{run_mux_session_loop, MuxOpenedDispatcher, MuxSessionLoop};
-use crate::runtime::mux_tcp::{spawn_mux_tcp_stream_task, MuxTcpStreamTask};
+use crate::runtime::mux_tcp::{spawn_mux_tcp_stream_task, MuxTcpStreamBridge, MuxTcpStreamTask};
 use crate::runtime::Proxy;
 use crate::transport::{ClientStream, MeteredStream};
 use zero_engine::EngineError;
 
 use super::mux_udp::spawn_vless_mux_udp_stream_task;
 
+impl MuxTcpStreamBridge for vless::mux::VlessInboundMuxTcpRelay {
+    async fn close_stream(&self) {
+        let _ = vless::mux::VlessInboundMuxTcpRelay::close_stream(self);
+    }
+
+    async fn relay_stream(self, upstream: crate::transport::TcpRelayStream) {
+        vless::mux::VlessInboundMuxTcpRelay::relay_stream(self, upstream).await;
+    }
+}
+
 struct VlessMuxOpenedDispatcherBridge<'a> {
     proxy: &'a Proxy,
     tasks: &'a mut JoinSet<()>,
-    writer: vless::mux::VlessInboundMuxWriter,
     inbound_tag: &'a str,
 }
 
@@ -21,25 +30,16 @@ impl vless::mux::VlessInboundMuxOpenedRouteDispatcher for VlessMuxOpenedDispatch
 
     async fn dispatch_tcp_opened(
         &mut self,
-        session_id: u16,
         session: zero_core::Session,
-        up_rx: tokio::sync::mpsc::UnboundedReceiver<Vec<u8>>,
+        relay: vless::mux::VlessInboundMuxTcpRelay,
     ) -> Result<bool, Self::Error> {
-        let writer = self.writer.clone();
-        let close_writer = writer.clone();
         spawn_mux_tcp_stream_task(
             self.proxy,
             self.tasks,
             MuxTcpStreamTask {
-                mux_session_id: session_id,
+                mux_session_id: relay.session_id(),
                 session,
-                uplink: up_rx,
-                close_stream: move || async move {
-                    let _ = close_writer.end_inbound_stream(session_id);
-                },
-                relay_stream: move |session_id, up_rx, upstream| async move {
-                    vless::mux::relay_inbound_mux_stream(session_id, up_rx, writer, upstream).await;
-                },
+                bridge: relay,
                 inbound_tag: self.inbound_tag.to_owned(),
                 protocol: "vless_mux",
             },
@@ -105,7 +105,6 @@ where
             let mut bridge = VlessMuxOpenedDispatcherBridge {
                 proxy: self.proxy,
                 tasks,
-                writer: self.mux_server.writer(),
                 inbound_tag: self.inbound_tag,
             };
             self.mux_server

@@ -351,9 +351,8 @@ pub enum VmessInboundMuxOpenedKind {
 
 pub enum VmessInboundMuxOpenedRoute {
     Tcp {
-        session_id: u16,
         session: Session,
-        up_rx: mpsc::UnboundedReceiver<Vec<u8>>,
+        relay: VmessInboundMuxTcpRelay,
     },
     Udp {
         session_id: u16,
@@ -368,9 +367,8 @@ pub trait VmessInboundMuxOpenedRouteDispatcher {
 
     async fn dispatch_tcp_opened(
         &mut self,
-        session_id: u16,
         session: Session,
-        up_rx: mpsc::UnboundedReceiver<Vec<u8>>,
+        relay: VmessInboundMuxTcpRelay,
     ) -> Result<(), Self::Error>;
 
     async fn dispatch_udp_opened(
@@ -388,7 +386,7 @@ impl VmessInboundMuxOpenedRoute {
         on_udp_opened: FUdp,
     ) -> Result<(), E>
     where
-        FTcp: FnOnce(u16, Session, mpsc::UnboundedReceiver<Vec<u8>>) -> FTcpFut,
+        FTcp: FnOnce(Session, VmessInboundMuxTcpRelay) -> FTcpFut,
         FTcpFut: core::future::Future<Output = Result<(), E>>,
         FUdp: FnOnce(
             u16,
@@ -398,11 +396,7 @@ impl VmessInboundMuxOpenedRoute {
         FUdpFut: core::future::Future<Output = Result<(), E>>,
     {
         match self {
-            Self::Tcp {
-                session_id,
-                session,
-                up_rx,
-            } => on_tcp_opened(session_id, session, up_rx).await,
+            Self::Tcp { session, relay } => on_tcp_opened(session, relay).await,
             Self::Udp {
                 session_id,
                 up_rx,
@@ -417,15 +411,7 @@ impl VmessInboundMuxOpenedRoute {
         D: VmessInboundMuxOpenedRouteDispatcher,
     {
         match self {
-            Self::Tcp {
-                session_id,
-                session,
-                up_rx,
-            } => {
-                dispatcher
-                    .dispatch_tcp_opened(session_id, session, up_rx)
-                    .await
-            }
+            Self::Tcp { session, relay } => dispatcher.dispatch_tcp_opened(session, relay).await,
             Self::Udp {
                 session_id,
                 up_rx,
@@ -442,6 +428,41 @@ impl VmessInboundMuxOpenedRoute {
 
 pub enum VmessInboundMuxEvent {
     Opened(VmessInboundMuxOpenedStream),
+}
+
+pub struct VmessInboundMuxTcpRelay {
+    session_id: u16,
+    up_rx: mpsc::UnboundedReceiver<Vec<u8>>,
+    writer: VmessInboundMuxWriter,
+}
+
+impl VmessInboundMuxTcpRelay {
+    pub fn new(
+        session_id: u16,
+        up_rx: mpsc::UnboundedReceiver<Vec<u8>>,
+        writer: VmessInboundMuxWriter,
+    ) -> Self {
+        Self {
+            session_id,
+            up_rx,
+            writer,
+        }
+    }
+
+    pub fn session_id(&self) -> u16 {
+        self.session_id
+    }
+
+    pub fn close_stream(&self) -> Result<usize, Error> {
+        self.writer.end_inbound_stream(self.session_id)
+    }
+
+    pub async fn relay_stream<S>(self, upstream: S)
+    where
+        S: AsyncRead + AsyncWrite + Unpin,
+    {
+        relay_inbound_mux_stream(self.session_id, self.up_rx, self.writer, upstream).await;
+    }
 }
 
 impl VmessInboundMuxOpenedStream {
@@ -481,9 +502,8 @@ impl VmessInboundMuxOpenedStream {
         let (session_id, session, up_rx) = self.into_parts();
         match session.network {
             Network::Tcp => VmessInboundMuxOpenedRoute::Tcp {
-                session_id,
                 session,
-                up_rx,
+                relay: VmessInboundMuxTcpRelay::new(session_id, up_rx, writer),
             },
             Network::Udp => {
                 let port = session.port;
@@ -995,7 +1015,7 @@ impl VmessInboundMuxServer {
     where
         R: tokio::io::AsyncRead + Unpin,
         E: From<Error>,
-        FTcp: FnOnce(u16, Session, mpsc::UnboundedReceiver<Vec<u8>>) -> FTcpFut,
+        FTcp: FnOnce(Session, VmessInboundMuxTcpRelay) -> FTcpFut,
         FTcpFut: core::future::Future<Output = Result<(), E>>,
         FUdp: FnOnce(
             u16,
