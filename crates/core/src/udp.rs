@@ -34,6 +34,44 @@ pub enum MuxUdpDecodeFailure {
     End,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum InboundMuxUdpReadFailureAction {
+    Continue,
+    End,
+}
+
+#[derive(Debug)]
+pub struct InboundMuxUdpReadFailure {
+    pub error: Error,
+    pub action: InboundMuxUdpReadFailureAction,
+}
+
+/// Protocol-owned inbound MUX UDP relay consumed by shared runtime glue.
+///
+/// Protocol crates keep MUX payload sources, framing, and response encoding
+/// private behind this trait so proxy/runtime code does not unpack
+/// protocol-specific relay state just to rebuild a generic request model.
+pub trait InboundMuxUdpRelay: Send {
+    async fn read_inbound_dispatch(
+        &mut self,
+    ) -> Result<Option<InboundUdpDispatch>, InboundMuxUdpReadFailure>;
+
+    fn write_response_for_target(
+        &mut self,
+        target: &Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<usize, Error>;
+
+    fn end_inbound_stream(&mut self) -> Result<usize, Error>;
+
+    fn mux_session_id(&self) -> u16;
+
+    fn auth(&self) -> Option<&SessionAuth> {
+        None
+    }
+}
+
 pub trait MuxUdpResponder: Send {
     fn decode_inbound_dispatch(&mut self, payload: &[u8]) -> Result<InboundUdpDispatch, Error>;
 

@@ -37,9 +37,12 @@ use alloc::vec::Vec;
 
 #[cfg(feature = "reality")]
 use tokio::sync::mpsc;
-#[cfg(feature = "reality")]
-use zero_core::SessionAuth;
 use zero_core::{Address, Error, Network, ProtocolType, Session};
+#[cfg(feature = "reality")]
+use zero_core::{
+    InboundMuxUdpReadFailure, InboundMuxUdpReadFailureAction, InboundMuxUdpRelay,
+    MuxUdpDecodeFailure, MuxUdpResponder, SessionAuth,
+};
 use zero_traits::AsyncSocket;
 
 use crate::shared::{read_exact, write_address, ATYP_DOMAIN, ATYP_IPV4, ATYP_IPV6};
@@ -402,23 +405,52 @@ impl VlessInboundMuxUdpRelay {
     pub fn port(&self) -> u16 {
         self.port
     }
+}
 
-    pub fn into_parts(
-        self,
-    ) -> (
-        u16,
-        u16,
-        mpsc::UnboundedReceiver<Vec<u8>>,
-        crate::udp::VlessInboundMuxUdpResponder,
-        Option<SessionAuth>,
-    ) {
-        (
-            self.session_id,
-            self.port,
-            self.up_rx,
-            self.responder,
-            self.auth,
-        )
+#[cfg(feature = "reality")]
+impl InboundMuxUdpRelay for VlessInboundMuxUdpRelay {
+    async fn read_inbound_dispatch(
+        &mut self,
+    ) -> Result<Option<zero_core::InboundUdpDispatch>, InboundMuxUdpReadFailure> {
+        let Some(payload) = self.up_rx.recv().await else {
+            return Ok(None);
+        };
+        if payload.is_empty() {
+            return Ok(None);
+        }
+
+        match self.responder.decode_inbound_dispatch(&payload) {
+            Ok(inbound_dispatch) => Ok(Some(inbound_dispatch)),
+            Err(error) => Err(InboundMuxUdpReadFailure {
+                error,
+                action: match self.responder.decode_failure() {
+                    MuxUdpDecodeFailure::Continue => InboundMuxUdpReadFailureAction::Continue,
+                    MuxUdpDecodeFailure::End => InboundMuxUdpReadFailureAction::End,
+                },
+            }),
+        }
+    }
+
+    fn write_response_for_target(
+        &mut self,
+        target: &Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<usize, Error> {
+        self.responder
+            .write_response_for_target(target, port, payload)
+    }
+
+    fn end_inbound_stream(&mut self) -> Result<usize, Error> {
+        self.responder.end_inbound_stream()
+    }
+
+    fn mux_session_id(&self) -> u16 {
+        self.session_id
+    }
+
+    fn auth(&self) -> Option<&SessionAuth> {
+        self.auth.as_ref()
     }
 }
 

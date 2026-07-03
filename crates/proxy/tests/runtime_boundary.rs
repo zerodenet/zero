@@ -524,8 +524,10 @@ fn ordinary_udp_inbounds_submit_packets_through_udp_pipe() {
     ] {
         let content = read(source);
         assert!(
-            content.contains("run_mux_udp_relay")
-                && content.contains("MuxUdpRelayRequest")
+            content.contains("run_protocol_mux_udp_relay")
+                && !content.contains("run_mux_udp_relay")
+                && !content.contains("MuxUdpRelayRequest")
+                && !content.contains("relay.into_parts()")
                 && !content.contains("dispatch_inbound_udp_packet")
                 && !content.contains("UdpPipe::new")
                 && !content.contains("UdpPipeInput"),
@@ -776,7 +778,7 @@ fn inbound_udp_response_accounting_uses_runtime_helpers() {
     ] {
         let content = read(source);
         assert!(
-            content.contains("run_mux_udp_relay")
+            content.contains("run_protocol_mux_udp_relay")
                 && !content.contains("write_direct_response")
                 && !content.contains("write_upstream_response")
                 && !content.contains("write_chain_response")
@@ -2678,6 +2680,8 @@ fn stream_udp_inbound_direct_responses_use_client_response_models() {
     let vless_protocol_inbound =
         fs::read_to_string(repo_root().join("protocols/vless/src/inbound.rs"))
             .expect("read vless protocol inbound source");
+    let vless_protocol_mux = fs::read_to_string(repo_root().join("protocols/vless/src/mux.rs"))
+        .expect("read vless protocol mux source");
     let vmess_protocol = fs::read_to_string(repo_root().join("protocols/vmess/src/udp.rs"))
         .expect("read vmess protocol udp source");
     let vmess_protocol_mux = fs::read_to_string(repo_root().join("protocols/vmess/src/mux.rs"))
@@ -2686,8 +2690,16 @@ fn stream_udp_inbound_direct_responses_use_client_response_models() {
     assert!(
         core_udp.contains("pub trait InboundStreamUdpRelay")
             && core_udp.contains("fn into_stream_udp_parts(self)")
+            && core_udp.contains("pub trait InboundMuxUdpRelay")
+            && core_udp.contains("pub struct InboundMuxUdpReadFailure")
             && stream_udp.contains("run_protocol_stream_udp_relay")
             && stream_udp.contains("relay.into_stream_udp_parts()")
+            && mux_udp.contains("run_protocol_mux_udp_relay")
+            && mux_udp.contains("relay.read_inbound_dispatch().await")
+            && mux_udp.contains("relay.write_response_for_target(target, port, payload)")
+            && mux_udp.contains("relay.end_inbound_stream().map(|_| ())")
+            && mux_udp.contains("let mux_session_id = relay.mux_session_id();")
+            && mux_udp.contains("let auth = relay.auth().cloned();")
             && stream_udp.contains("run_packet_session_udp_relay")
             && packet_session_udp.contains("record_direct_udp_response_parts")
             && packet_session_udp.contains("write_direct_response")
@@ -2810,7 +2822,9 @@ fn stream_udp_inbound_direct_responses_use_client_response_models() {
             && vless_udp_inbound.contains("record_session_inbound_traffic(session_id")
             && !vless_mux_inbound.contains("record_direct_udp_response_parts")
             && !vless_mux_inbound.contains("vless::VlessInbound.mux_udp_responder")
-            && vless_mux_inbound.contains("responder,")
+            && vless_mux_inbound.contains("run_protocol_mux_udp_relay")
+            && !vless_mux_inbound.contains("relay.into_parts()")
+            && !vless_mux_inbound.contains("responder,")
             && !vless_mux_inbound.contains("VlessMuxUdpResponder")
             && !vless_mux_inbound.contains("impl MuxUdpResponder")
             && !vless_mux_inbound.contains("write_response_for_target")
@@ -2840,6 +2854,7 @@ fn stream_udp_inbound_direct_responses_use_client_response_models() {
             && vless_protocol_inbound.contains("pub fn map_stream<T, F>(self, map: F) -> VlessInboundUdpRelay<T>")
             && vless_protocol_inbound.contains("impl<S> InboundStreamUdpRelay for VlessInboundUdpRelay<S>")
             && vless_protocol_inbound.contains("fn into_stream_udp_parts(self)")
+            && vless_protocol_mux.contains("impl InboundMuxUdpRelay for VlessInboundMuxUdpRelay")
             && !vless_protocol.contains("pub async fn write_response_to_socket_addr_tokio")
             && !vless_protocol.contains("pub fn send_mux_response_to_socket_addr")
             && !vless_protocol.contains("fn address_from_socket_addr"),
@@ -2867,7 +2882,9 @@ fn stream_udp_inbound_direct_responses_use_client_response_models() {
             && !vmess_udp_inbound.contains("write_chain_response")
             && !vmess_mux_inbound.contains("record_direct_udp_response_parts")
             && !vmess_mux_inbound.contains("vmess::VmessInbound.mux_udp_responder_for")
-            && vmess_mux_inbound.contains("responder,")
+            && vmess_mux_inbound.contains("run_protocol_mux_udp_relay")
+            && !vmess_mux_inbound.contains("relay.into_parts()")
+            && !vmess_mux_inbound.contains("responder,")
             && !vmess_mux_inbound.contains("VmessMuxUdpResponder")
             && !vmess_mux_inbound.contains("impl MuxUdpResponder")
             && !vmess_mux_inbound.contains("write_response_for_target")
@@ -2895,6 +2912,7 @@ fn stream_udp_inbound_direct_responses_use_client_response_models() {
             && vmess_protocol.contains("pub fn write_mux_client_response")
             && vmess_protocol_mux.contains("impl<S> InboundStreamUdpRelay for VmessInboundUdpRelay<S>")
             && vmess_protocol_mux.contains("fn into_stream_udp_parts(self)")
+            && vmess_protocol_mux.contains("impl InboundMuxUdpRelay for VmessInboundMuxUdpRelay")
             && vmess_protocol.contains("pub fn write_mux_client_response_for_target")
             && !vmess_protocol.contains("pub async fn write_response_to_socket_addr_tokio")
             && !vmess_protocol.contains("pub fn write_mux_response_to_socket_addr")
@@ -7283,8 +7301,9 @@ fn inbound_vmess_mux_task_models_do_not_live_in_proxy_model() {
             && !root.contains("run_vmess_udp_relay")
             && !root.contains("vmess mux udp dispatch init failed")
             && !root.contains("udp_session.write_mux_response_to_socket_addr")
-            && mux_udp.contains("run_mux_udp_relay")
-            && mux_udp.contains("responder,")
+            && mux_udp.contains("run_protocol_mux_udp_relay")
+            && !mux_udp.contains("relay.into_parts()")
+            && !mux_udp.contains("responder,")
             && !mux_udp.contains("vmess::VmessInbound.mux_udp_responder_for")
             && !mux_udp.contains("VmessMuxUdpResponder")
             && !mux_udp.contains("record_direct_udp_response_parts"),
@@ -7615,8 +7634,9 @@ fn vmess_inbound_udp_response_encoding_stays_in_protocol_crate() {
             && !mux.contains("vmess::VmessInboundUdpCodec")
             && udp_session.contains("run_protocol_stream_udp_relay")
             && udp_session.contains("relay: vmess::mux::VmessInboundUdpRelay<TcpRelayStream>")
-            && mux_udp.contains("run_mux_udp_relay")
-            && mux_udp.contains("responder,")
+            && mux_udp.contains("run_protocol_mux_udp_relay")
+            && !mux_udp.contains("relay.into_parts()")
+            && !mux_udp.contains("responder,")
             && stream_udp.contains("run_packet_session_udp_relay")
             && shared_mux_udp.contains("run_packet_session_udp_relay")
             && packet_session_udp.contains("dispatch_inbound_udp_packet")
@@ -7656,7 +7676,8 @@ fn vmess_inbound_udp_response_encoding_stays_in_protocol_crate() {
             && !mux.contains("vmess mux udp direct response send failed")
             && !mux.contains("udp_session.write_mux_response_to_socket_addr")
             && packet_session_udp.contains("packet session udp direct response encode failed")
-            && mux_udp.contains("responder,")
+            && mux_udp.contains("run_protocol_mux_udp_relay")
+            && !mux_udp.contains("responder,")
             && !mux_udp.contains("vmess::VmessInbound.mux_udp_responder_for")
             && !mux_udp.contains("self.inner.write_response_for_target")
             && !mux_udp.contains("udp_session.write_mux_client_response")
@@ -7820,7 +7841,7 @@ fn inbound_vless_mux_task_model_does_not_live_in_proxy_model() {
             && !root.contains("record_direct_udp_response_received")
             && packet_session_udp.contains("packet session udp dispatch init failed")
             && packet_session_udp.contains("record_direct_udp_response_parts")
-            && mux_udp.contains("run_mux_udp_relay")
+            && mux_udp.contains("run_protocol_mux_udp_relay")
             && !mux_udp.contains("record_direct_udp_response_parts"),
         "VLESS inbound MUX root should delegate UDP sub-stream dispatch to src/adapters/vless/inbound/listener/mux_udp.rs"
     );
@@ -7913,8 +7934,9 @@ fn vless_inbound_udp_packet_framing_stays_in_protocol_crate() {
             && udp_session.contains("vless::VlessInboundUdpRelay<MeteredStream<RecordingStream<S>>>")
             && udp_session.contains("let relay = relay.map_stream(|mut client| {")
             && !udp_session.contains("let (mut client, responder, auth) = relay.into_parts()")
-            && mux.contains("run_mux_udp_relay")
-            && mux.contains("responder,")
+            && mux.contains("run_protocol_mux_udp_relay")
+            && !mux.contains("relay.into_parts()")
+            && !mux.contains("responder,")
             && stream_udp.contains("run_packet_session_udp_relay")
             && shared_mux_udp.contains("run_packet_session_udp_relay")
             && packet_session_udp.contains("dispatch_inbound_udp_packet")
@@ -7959,8 +7981,8 @@ fn vless_inbound_udp_packet_framing_stays_in_protocol_crate() {
             && !mux_root.contains("record_direct_udp_response_received")
             && packet_session_udp.contains("dispatch_inbound_udp_packet")
             && !mux.contains("dispatch_inbound_udp_packet")
-            && mux.contains("run_mux_udp_relay")
-            && mux.contains("responder,")
+            && mux.contains("run_protocol_mux_udp_relay")
+            && !mux.contains("responder,")
             && !mux.contains("vless::VlessInbound.mux_udp_responder")
             && !mux.contains("vless::VlessInbound.udp_session()"),
         "VLESS MUX root should only spawn UDP sub-stream glue while shared MUX UDP glue owns UDP dispatch"

@@ -8,7 +8,9 @@ use std::task::{Context, Poll};
 use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt, ReadBuf};
 use tokio::sync::mpsc;
 use zero_core::{
-    Address, Error, InboundStreamUdpRelay, Network, ProtocolType, Session, SessionAuth,
+    Address, Error, InboundMuxUdpReadFailure, InboundMuxUdpReadFailureAction, InboundMuxUdpRelay,
+    InboundStreamUdpRelay, MuxUdpDecodeFailure, MuxUdpResponder, Network, ProtocolType, Session,
+    SessionAuth,
 };
 use zero_traits::AsyncSocket;
 
@@ -549,15 +551,47 @@ impl VmessInboundMuxUdpRelay {
     pub fn session_id(&self) -> u16 {
         self.session_id
     }
+}
 
-    pub fn into_parts(
-        self,
-    ) -> (
-        u16,
-        mpsc::UnboundedReceiver<Vec<u8>>,
-        crate::udp::VmessInboundMuxUdpResponder,
-    ) {
-        (self.session_id, self.up_rx, self.responder)
+impl InboundMuxUdpRelay for VmessInboundMuxUdpRelay {
+    async fn read_inbound_dispatch(
+        &mut self,
+    ) -> Result<Option<zero_core::InboundUdpDispatch>, InboundMuxUdpReadFailure> {
+        let Some(payload) = self.up_rx.recv().await else {
+            return Ok(None);
+        };
+        if payload.is_empty() {
+            return Ok(None);
+        }
+
+        match self.responder.decode_inbound_dispatch(&payload) {
+            Ok(inbound_dispatch) => Ok(Some(inbound_dispatch)),
+            Err(error) => Err(InboundMuxUdpReadFailure {
+                error,
+                action: match self.responder.decode_failure() {
+                    MuxUdpDecodeFailure::Continue => InboundMuxUdpReadFailureAction::Continue,
+                    MuxUdpDecodeFailure::End => InboundMuxUdpReadFailureAction::End,
+                },
+            }),
+        }
+    }
+
+    fn write_response_for_target(
+        &mut self,
+        target: &Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<usize, Error> {
+        self.responder
+            .write_response_for_target(target, port, payload)
+    }
+
+    fn end_inbound_stream(&mut self) -> Result<usize, Error> {
+        self.responder.end_inbound_stream()
+    }
+
+    fn mux_session_id(&self) -> u16 {
+        self.session_id
     }
 }
 

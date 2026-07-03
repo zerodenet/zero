@@ -1,6 +1,5 @@
-use tokio::sync::mpsc::UnboundedReceiver;
 use tracing::info;
-use zero_core::{MuxUdpDecodeFailure, MuxUdpResponder, SessionAuth};
+use zero_core::{InboundMuxUdpReadFailureAction, InboundMuxUdpRelay};
 
 use crate::runtime::packet_session_udp::{
     run_packet_session_udp_relay, PacketSessionUdpFailurePolicy, PacketSessionUdpHandler,
@@ -9,41 +8,29 @@ use crate::runtime::packet_session_udp::{
 };
 use crate::runtime::Proxy;
 
-pub(crate) struct MuxUdpRelayRequest<'a, R> {
-    pub(crate) mux_session_id: u16,
-    pub(crate) up_rx: UnboundedReceiver<Vec<u8>>,
-    pub(crate) responder: R,
-    pub(crate) inbound_tag: &'a str,
-    pub(crate) protocol: &'static str,
-    pub(crate) auth: Option<SessionAuth>,
-}
-
 struct MuxPacketSessionUdpHandler<R> {
-    up_rx: UnboundedReceiver<Vec<u8>>,
-    responder: R,
+    relay: R,
 }
 
 impl<R> PacketSessionUdpHandler for MuxPacketSessionUdpHandler<R>
 where
-    R: MuxUdpResponder,
+    R: InboundMuxUdpRelay,
 {
     async fn read_inbound_dispatch(
         &mut self,
     ) -> Result<PacketSessionUdpReadResult, PacketSessionUdpReadFailure> {
-        let Some(payload) = self.up_rx.recv().await else {
-            return Ok(PacketSessionUdpReadResult::End);
-        };
-        if payload.is_empty() {
-            return Ok(PacketSessionUdpReadResult::End);
-        }
-
-        match self.responder.decode_inbound_dispatch(&payload) {
-            Ok(inbound_dispatch) => Ok(PacketSessionUdpReadResult::Dispatch(inbound_dispatch)),
-            Err(error) => Err(PacketSessionUdpReadFailure {
-                error,
-                action: match self.responder.decode_failure() {
-                    MuxUdpDecodeFailure::Continue => PacketSessionUdpReadFailureAction::Continue,
-                    MuxUdpDecodeFailure::End => PacketSessionUdpReadFailureAction::End,
+        match self.relay.read_inbound_dispatch().await {
+            Ok(Some(inbound_dispatch)) => {
+                Ok(PacketSessionUdpReadResult::Dispatch(inbound_dispatch))
+            }
+            Ok(None) => Ok(PacketSessionUdpReadResult::End),
+            Err(failure) => Err(PacketSessionUdpReadFailure {
+                error: failure.error,
+                action: match failure.action {
+                    InboundMuxUdpReadFailureAction::Continue => {
+                        PacketSessionUdpReadFailureAction::Continue
+                    }
+                    InboundMuxUdpReadFailureAction::End => PacketSessionUdpReadFailureAction::End,
                 },
             }),
         }
@@ -55,27 +42,24 @@ where
         port: u16,
         payload: &[u8],
     ) -> Result<usize, zero_core::Error> {
-        self.responder
-            .write_response_for_target(target, port, payload)
+        self.relay.write_response_for_target(target, port, payload)
     }
 
     async fn finish(&mut self) -> Result<(), zero_core::Error> {
-        self.responder.end_inbound_stream().map(|_| ())
+        self.relay.end_inbound_stream().map(|_| ())
     }
 }
 
-pub(crate) async fn run_mux_udp_relay<R>(proxy: &Proxy, request: MuxUdpRelayRequest<'_, R>)
-where
-    R: MuxUdpResponder,
+pub(crate) async fn run_protocol_mux_udp_relay<R>(
+    proxy: &Proxy,
+    relay: R,
+    inbound_tag: &str,
+    protocol: &'static str,
+) where
+    R: InboundMuxUdpRelay,
 {
-    let MuxUdpRelayRequest {
-        mux_session_id,
-        up_rx,
-        responder,
-        inbound_tag,
-        protocol,
-        auth,
-    } = request;
+    let mux_session_id = relay.mux_session_id();
+    let auth = relay.auth().cloned();
 
     info!(
         inbound_tag = inbound_tag,
@@ -84,8 +68,7 @@ where
         "mux udp sub-stream started"
     );
 
-    let _ = mux_session_id;
-    let handler = MuxPacketSessionUdpHandler { up_rx, responder };
+    let handler = MuxPacketSessionUdpHandler { relay };
 
     let _ = run_packet_session_udp_relay(
         proxy,
