@@ -15,7 +15,7 @@ use zero_traits::{AsyncSocket, UdpPacketStreamFraming, UdpPacketTunnelProtocol};
 use crate::outbound::TrojanOutbound;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct TrojanInboundUdpRequest {
+struct TrojanInboundUdpRequest {
     target: Address,
     port: u16,
     payload: Vec<u8>,
@@ -30,23 +30,19 @@ pub struct TrojanInboundUdpDispatchParts {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub struct TrojanInboundUdpClientResponse<'a> {
+struct TrojanInboundUdpClientResponse<'a> {
     target: &'a Address,
     port: u16,
     payload: &'a [u8],
 }
 
 impl<'a> TrojanInboundUdpClientResponse<'a> {
-    pub fn new(target: &'a Address, port: u16, payload: &'a [u8]) -> Self {
+    fn new(target: &'a Address, port: u16, payload: &'a [u8]) -> Self {
         Self {
             target,
             port,
             payload,
         }
-    }
-
-    pub fn payload_len(&self) -> usize {
-        self.payload.len()
     }
 
     fn target(&self) -> &'a Address {
@@ -67,20 +63,7 @@ impl TrojanInboundUdpDispatchParts {
         ProtocolType::Trojan
     }
 
-    pub fn pipe_parts(&self) -> (&Address, u16, &[u8], Option<u64>) {
-        (
-            &self.target,
-            self.port,
-            &self.payload,
-            self.client_session_id,
-        )
-    }
-
-    pub fn into_pipe_parts(self) -> (Address, u16, Vec<u8>, Option<u64>) {
-        (self.target, self.port, self.payload, self.client_session_id)
-    }
-
-    pub fn into_inbound_dispatch(self) -> InboundUdpDispatch {
+    fn into_inbound_dispatch(self) -> InboundUdpDispatch {
         InboundUdpDispatch::new(
             ProtocolType::Trojan,
             self.target,
@@ -101,23 +84,11 @@ impl TrojanInboundUdpRequest {
         }
     }
 
-    pub fn target(&self) -> &Address {
-        &self.target
-    }
-
-    pub fn port(&self) -> u16 {
-        self.port
-    }
-
-    pub fn payload(&self) -> &[u8] {
-        &self.payload
-    }
-
-    pub fn into_parts(self) -> (Address, u16, Vec<u8>) {
+    fn into_parts(self) -> (Address, u16, Vec<u8>) {
         (self.target, self.port, self.payload)
     }
 
-    pub fn into_dispatch_parts(self) -> TrojanInboundUdpDispatchParts {
+    fn into_dispatch_parts(self) -> TrojanInboundUdpDispatchParts {
         let (target, port, payload) = self.into_parts();
         TrojanInboundUdpDispatchParts {
             target,
@@ -143,7 +114,7 @@ impl TrojanInboundUdpSession {
         Self::default()
     }
 
-    pub async fn read_request<S>(&self, stream: &mut S) -> Result<TrojanInboundUdpRequest, Error>
+    async fn read_request<S>(&self, stream: &mut S) -> Result<TrojanInboundUdpRequest, Error>
     where
         S: AsyncSocket,
     {
@@ -153,7 +124,7 @@ impl TrojanInboundUdpSession {
             .map(TrojanInboundUdpRequest::from_packet)
     }
 
-    pub async fn read_dispatch_parts<S>(
+    async fn read_dispatch_parts<S>(
         &self,
         stream: &mut S,
     ) -> Result<TrojanInboundUdpDispatchParts, Error>
@@ -192,7 +163,7 @@ impl TrojanInboundUdpSession {
             .await
     }
 
-    pub async fn write_client_response<S>(
+    async fn write_client_response<S>(
         &self,
         stream: &mut S,
         response: TrojanInboundUdpClientResponse<'_>,
@@ -284,10 +255,10 @@ where
 }
 
 #[derive(Debug, Default, Clone, Copy)]
-pub struct TrojanInboundUdpCodec;
+struct TrojanInboundUdpCodec;
 
 impl TrojanInboundUdpCodec {
-    pub async fn read_packet<S>(&self, stream: &mut S) -> Result<TrojanUdpPacket, Error>
+    async fn read_packet<S>(&self, stream: &mut S) -> Result<TrojanUdpPacket, Error>
     where
         S: AsyncSocket,
     {
@@ -295,7 +266,7 @@ impl TrojanInboundUdpCodec {
         Ok(TrojanUdpPacket::new(target, port, payload))
     }
 
-    pub async fn write_response<S>(
+    async fn write_response<S>(
         &self,
         stream: &mut S,
         target: &Address,
@@ -350,7 +321,7 @@ impl<'a> UdpPacketTunnelProtocol<TrojanUdpPacketTunnelTarget<'a>> for TrojanOutb
     }
 }
 
-pub fn build_udp_request(password: &str, addr: &Address, port: u16) -> Result<Vec<u8>, Error> {
+fn build_udp_request(password: &str, addr: &Address, port: u16) -> Result<Vec<u8>, Error> {
     crate::shared::build_request(password, addr, port, crate::shared::CMD_UDP)
 }
 
@@ -371,15 +342,6 @@ impl TrojanUdpPacket {
         }
     }
 
-    pub async fn write_to<S>(&self, stream: &mut S, flow_io: &TrojanUdpFlowIo) -> Result<(), Error>
-    where
-        S: AsyncSocket,
-    {
-        flow_io
-            .write_packet(stream, &self.target, self.port, &self.payload)
-            .await
-    }
-
     pub fn target(&self) -> &Address {
         &self.target
     }
@@ -398,7 +360,7 @@ impl TrojanUdpPacket {
 }
 
 #[derive(Debug, Default, Clone, Copy)]
-pub struct TrojanUdpFlowIo;
+struct TrojanUdpFlowIo;
 
 #[cfg(feature = "tokio")]
 type TrojanUdpFlowResponses = broadcast::Sender<UdpFlowPacket>;
@@ -413,32 +375,32 @@ struct TrojanUdpFlowSender {
 }
 
 #[cfg(feature = "tokio")]
-pub struct TrojanUdpFlowHandle {
+struct TrojanUdpFlowHandle {
     sender: TrojanUdpFlowSender,
     responses: TrojanUdpFlowResponses,
 }
 
 #[cfg(feature = "tokio")]
 #[derive(Clone)]
-pub struct TrojanUdpFlowSession {
+struct TrojanUdpFlowSession {
     sender: TrojanUdpFlowSender,
     responses: TrojanUdpFlowResponses,
 }
 
 #[cfg(feature = "tokio")]
 impl TrojanUdpFlowSession {
-    pub fn new(handle: TrojanUdpFlowHandle) -> Self {
+    fn new(handle: TrojanUdpFlowHandle) -> Self {
         Self {
             sender: handle.sender,
             responses: handle.responses,
         }
     }
 
-    pub async fn send(&self, target: &Address, port: u16, payload: &[u8]) -> Result<usize, Error> {
+    async fn send(&self, target: &Address, port: u16, payload: &[u8]) -> Result<usize, Error> {
         self.sender.send(target, port, payload).await
     }
 
-    pub fn subscribe_responses(&self) -> TrojanUdpFlowResponseReceiver {
+    fn subscribe_responses(&self) -> TrojanUdpFlowResponseReceiver {
         self.responses.subscribe()
     }
 }
@@ -451,7 +413,7 @@ pub struct TrojanUdpFlowConnection {
 
 #[cfg(feature = "tokio")]
 impl TrojanUdpFlowConnection {
-    pub fn new(session: TrojanUdpFlowSession) -> Self {
+    fn new(session: TrojanUdpFlowSession) -> Self {
         Self { session }
     }
 
@@ -466,7 +428,7 @@ impl TrojanUdpFlowConnection {
 
 #[cfg(feature = "tokio")]
 impl TrojanUdpFlowSender {
-    pub async fn send(&self, target: &Address, port: u16, payload: &[u8]) -> Result<usize, Error> {
+    async fn send(&self, target: &Address, port: u16, payload: &[u8]) -> Result<usize, Error> {
         let packet = UdpFlowPacket::from_parts(target, port, payload);
         let packet_len = packet.payload.len();
         self.send_tx
@@ -478,7 +440,7 @@ impl TrojanUdpFlowSender {
 }
 
 impl TrojanUdpFlowIo {
-    pub async fn establish<S>(
+    async fn establish<S>(
         &self,
         stream: &mut S,
         session: &Session,
@@ -490,7 +452,7 @@ impl TrojanUdpFlowIo {
         establish_udp_packet_tunnel(stream, session, password).await
     }
 
-    pub async fn establish_with_resume<S>(
+    async fn establish_with_resume<S>(
         &self,
         stream: &mut S,
         session: &Session,
@@ -502,7 +464,7 @@ impl TrojanUdpFlowIo {
         resume.establish_udp_tunnel(self, stream, session).await
     }
 
-    pub async fn write_packet<S>(
+    async fn write_packet<S>(
         &self,
         stream: &mut S,
         target: &Address,
@@ -515,14 +477,14 @@ impl TrojanUdpFlowIo {
         write_udp_flow_packet(stream, target, port, payload).await
     }
 
-    pub async fn read_packet<S>(&self, stream: &mut S) -> Result<TrojanUdpPacket, Error>
+    async fn read_packet<S>(&self, stream: &mut S) -> Result<TrojanUdpPacket, Error>
     where
         S: AsyncSocket,
     {
         read_udp_flow_packet(stream).await
     }
 
-    pub async fn read_flow_packet<S>(&self, stream: &mut S) -> Result<UdpFlowPacket, Error>
+    async fn read_flow_packet<S>(&self, stream: &mut S) -> Result<UdpFlowPacket, Error>
     where
         S: AsyncSocket,
     {
@@ -531,7 +493,7 @@ impl TrojanUdpFlowIo {
         Ok(UdpFlowPacket::new(target, port, payload))
     }
 
-    pub async fn write_flow_packet<S>(
+    async fn write_flow_packet<S>(
         &self,
         stream: &mut S,
         packet: &UdpFlowPacket,
@@ -542,28 +504,10 @@ impl TrojanUdpFlowIo {
         self.write_packet(stream, &packet.target, packet.port, &packet.payload)
             .await
     }
-
-    pub async fn write_stream_packet<S>(
-        &self,
-        stream: &mut S,
-        packet: &TrojanUdpPacket,
-    ) -> Result<(), Error>
-    where
-        S: AsyncSocket,
-    {
-        packet.write_to(stream, self).await
-    }
-
-    pub async fn read_stream_packet<S>(&self, stream: &mut S) -> Result<TrojanUdpPacket, Error>
-    where
-        S: AsyncSocket,
-    {
-        self.read_packet(stream).await
-    }
 }
 
 #[cfg(feature = "tokio")]
-pub fn spawn_udp_flow<S>(stream: S) -> TrojanUdpFlowHandle
+fn spawn_udp_flow<S>(stream: S) -> TrojanUdpFlowHandle
 where
     S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Send + Sync + Unpin + 'static,
 {
@@ -697,7 +641,7 @@ pub struct TrojanUdpFlowResume {
 }
 
 impl TrojanUdpFlowResume {
-    pub fn new(
+    fn new(
         password: &str,
         sni: Option<&str>,
         insecure: bool,
@@ -713,48 +657,18 @@ impl TrojanUdpFlowResume {
         }
     }
 
-    pub fn flow_requires_relay_upstream(&self) -> bool {
+    fn flow_requires_relay_upstream(&self) -> bool {
         self.relay_chain
     }
 
-    fn peer_config(&self) -> TrojanUdpPeerConfig<'_> {
-        TrojanUdpPeerConfig {
-            password: &self.password,
-        }
-    }
-
-    fn leaf_cache_key(&self, server: &str, port: u16) -> TrojanUdpLeafKey {
-        self.peer_config().leaf_cache_key(server, port)
-    }
-
-    fn flow_key(&self, server: &str, port: u16) -> TrojanUdpFlowKey {
-        if self.relay_chain {
-            TrojanUdpFlowKey::Relay
-        } else {
-            TrojanUdpFlowKey::Leaf(self.leaf_cache_key(server, port))
-        }
-    }
-
-    fn cache_key(&self, server: &str, port: u16, session_id: u64) -> TrojanUdpCacheKey {
-        TrojanUdpCacheKey::from_flow_key(self.flow_key(server, port), session_id)
-    }
-
-    pub fn flow_cache_key(&self, server: &str, port: u16, session_id: u64) -> String {
+    fn flow_cache_key(&self, server: &str, port: u16, session_id: u64) -> String {
         if self.relay_chain {
             return format!("relay|session:{session_id}");
         }
-        format!(
-            "leaf|{server}:{port}|password:{}",
-            self.peer_config().password
-        )
+        format!("leaf|{server}:{port}|password:{}", self.password)
     }
 
-    pub fn connector_flow(
-        &self,
-        server: &str,
-        port: u16,
-        session_id: u64,
-    ) -> TrojanUdpConnectorFlow {
+    fn connector_flow(&self, server: &str, port: u16, session_id: u64) -> TrojanUdpConnectorFlow {
         TrojanUdpConnectorFlow {
             cache_key: self.flow_cache_key(server, port, session_id),
             requires_relay_upstream: self.flow_requires_relay_upstream(),
@@ -773,7 +687,7 @@ impl TrojanUdpFlowResume {
         }
     }
 
-    pub async fn establish_udp_tunnel<S>(
+    async fn establish_udp_tunnel<S>(
         &self,
         flow_io: &TrojanUdpFlowIo,
         stream: &mut S,
@@ -799,7 +713,7 @@ impl TrojanUdpConnectorFlow {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub struct TrojanUdpFlowConfig<'a> {
+struct TrojanUdpFlowConfig<'a> {
     password: &'a str,
     sni: Option<&'a str>,
     insecure: bool,
@@ -807,7 +721,7 @@ pub struct TrojanUdpFlowConfig<'a> {
 }
 
 impl<'a> TrojanUdpFlowConfig<'a> {
-    pub fn new(
+    fn new(
         password: &'a str,
         sni: Option<&'a str>,
         insecure: bool,
@@ -821,7 +735,7 @@ impl<'a> TrojanUdpFlowConfig<'a> {
         }
     }
 
-    pub fn flow_resume(&self, relay_chain: bool) -> TrojanUdpFlowResume {
+    fn flow_resume(&self, relay_chain: bool) -> TrojanUdpFlowResume {
         TrojanUdpFlowResume::new(
             self.password,
             self.sni,
@@ -858,105 +772,6 @@ pub fn connector_tls_profile_from_resume(
     resume.tls_profile(fallback_server_name)
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-enum TrojanUdpFlowKey {
-    Leaf(TrojanUdpLeafKey),
-    Relay,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-enum TrojanUdpCacheKey {
-    Leaf(TrojanUdpLeafKey),
-    Relay { session_id: u64 },
-}
-
-impl TrojanUdpCacheKey {
-    fn from_flow_key(flow_key: TrojanUdpFlowKey, session_id: u64) -> Self {
-        match flow_key {
-            TrojanUdpFlowKey::Leaf(leaf_key) => Self::Leaf(leaf_key),
-            TrojanUdpFlowKey::Relay => Self::Relay { session_id },
-        }
-    }
-}
-
-pub struct TrojanUdpFlowStore<T> {
-    entries: std::collections::BTreeMap<TrojanUdpCacheKey, T>,
-}
-
-impl<T> Default for TrojanUdpFlowStore<T> {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl<T> TrojanUdpFlowStore<T> {
-    pub fn new() -> Self {
-        Self {
-            entries: std::collections::BTreeMap::new(),
-        }
-    }
-
-    pub fn get(
-        &self,
-        resume: &TrojanUdpFlowResume,
-        server: &str,
-        port: u16,
-        session_id: u64,
-    ) -> Option<&T> {
-        let key = resume.cache_key(server, port, session_id);
-        self.entries.get(&key)
-    }
-
-    pub fn insert(
-        &mut self,
-        resume: &TrojanUdpFlowResume,
-        server: &str,
-        port: u16,
-        session_id: u64,
-        value: T,
-    ) -> Option<T> {
-        let key = resume.cache_key(server, port, session_id);
-        self.entries.insert(key, value)
-    }
-}
-
-#[cfg(feature = "tokio")]
-#[derive(Default)]
-pub struct TrojanUdpFlowSessions {
-    entries: TrojanUdpFlowStore<TrojanUdpFlowConnection>,
-}
-
-#[cfg(feature = "tokio")]
-impl TrojanUdpFlowSessions {
-    pub fn new() -> Self {
-        Self {
-            entries: TrojanUdpFlowStore::new(),
-        }
-    }
-
-    pub fn get(
-        &self,
-        resume: &TrojanUdpFlowResume,
-        server: &str,
-        port: u16,
-        session_id: u64,
-    ) -> Option<&TrojanUdpFlowConnection> {
-        self.entries.get(resume, server, port, session_id)
-    }
-
-    pub fn insert(
-        &mut self,
-        resume: &TrojanUdpFlowResume,
-        server: &str,
-        port: u16,
-        session_id: u64,
-        connection: TrojanUdpFlowConnection,
-    ) -> Option<TrojanUdpFlowConnection> {
-        self.entries
-            .insert(resume, server, port, session_id, connection)
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TrojanUdpTlsProfile {
     server_name: Option<String>,
@@ -980,28 +795,6 @@ impl TrojanUdpTlsProfile {
     pub fn client_fingerprint(&self) -> Option<&str> {
         self.client_fingerprint.as_deref()
     }
-}
-
-#[derive(Debug, Clone, Copy)]
-struct TrojanUdpPeerConfig<'a> {
-    password: &'a str,
-}
-
-impl<'a> TrojanUdpPeerConfig<'a> {
-    fn leaf_cache_key(&self, server: &str, port: u16) -> TrojanUdpLeafKey {
-        TrojanUdpLeafKey {
-            server: server.to_owned(),
-            port,
-            password: self.password.to_owned(),
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-struct TrojanUdpLeafKey {
-    server: String,
-    port: u16,
-    password: String,
 }
 
 impl UdpPacketStreamFraming<TrojanUdpPacket> for TrojanOutbound {

@@ -178,7 +178,7 @@ async fn inbound_udp_helpers_roundtrip_response_packet() {
         ..RecordingSocket::default()
     };
     let decoded = udp_session
-        .read_request(&mut reader)
+        .read_inbound_dispatch(&mut reader)
         .await
         .expect("read trojan udp packet");
 
