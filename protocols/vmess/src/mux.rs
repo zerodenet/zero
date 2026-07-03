@@ -592,7 +592,8 @@ pub enum VmessInboundAcceptedStream<S> {
         relay: VmessInboundUdpRelay<S>,
     },
     Mux {
-        stream: S,
+        reader: tokio::io::ReadHalf<S>,
+        mux_server: VmessInboundMuxServer,
     },
 }
 
@@ -656,7 +657,10 @@ impl<S> VmessInboundUdpRelay<S> {
 }
 
 impl<S> VmessInboundAcceptedStream<S> {
-    pub fn from_session_stream(session: Session, stream: S) -> Self {
+    pub fn from_session_stream(session: Session, stream: S) -> Self
+    where
+        S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+    {
         match classify_inbound_session(&session) {
             VmessInboundSessionKind::Tcp => Self::Tcp { session, stream },
             VmessInboundSessionKind::Udp => {
@@ -669,7 +673,14 @@ impl<S> VmessInboundAcceptedStream<S> {
                     relay: VmessInboundUdpRelay::new(stream, responder, auth),
                 }
             }
-            VmessInboundSessionKind::Mux => Self::Mux { stream },
+            VmessInboundSessionKind::Mux => {
+                let (reader, writer) = tokio::io::split(stream);
+                Self::Mux {
+                    reader,
+                    mux_server: crate::inbound::VmessInbound
+                        .accept_mux_session_from_tokio_writer(writer),
+                }
+            }
         }
     }
 
@@ -684,40 +695,25 @@ impl<S> VmessInboundAcceptedStream<S> {
         TcpFut: core::future::Future<Output = Result<(), E>>,
         Udp: FnOnce(Session, VmessInboundUdpRelay<S>) -> UdpFut,
         UdpFut: core::future::Future<Output = Result<(), E>>,
-        S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
         Mux: FnOnce(tokio::io::ReadHalf<S>, VmessInboundMuxServer) -> MuxFut,
         MuxFut: core::future::Future<Output = Result<(), E>>,
     {
         match self {
             Self::Tcp { session, stream } => tcp(session, stream).await,
             Self::Udp { session, relay } => udp(session, relay).await,
-            Self::Mux { stream } => {
-                let (reader, writer) = tokio::io::split(stream);
-                mux(
-                    reader,
-                    crate::inbound::VmessInbound.accept_mux_session_from_tokio_writer(writer),
-                )
-                .await
-            }
+            Self::Mux { reader, mux_server } => mux(reader, mux_server).await,
         }
     }
 
     pub async fn dispatch_with<D>(self, dispatcher: &mut D) -> Result<(), D::Error>
     where
-        S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
         D: VmessInboundAcceptedStreamDispatcher<S>,
     {
         match self {
             Self::Tcp { session, stream } => dispatcher.dispatch_tcp_stream(session, stream).await,
             Self::Udp { session, relay } => dispatcher.dispatch_udp_stream(session, relay).await,
-            Self::Mux { stream } => {
-                let (reader, writer) = tokio::io::split(stream);
-                dispatcher
-                    .dispatch_mux_stream(
-                        reader,
-                        crate::inbound::VmessInbound.accept_mux_session_from_tokio_writer(writer),
-                    )
-                    .await
+            Self::Mux { reader, mux_server } => {
+                dispatcher.dispatch_mux_stream(reader, mux_server).await
             }
         }
     }

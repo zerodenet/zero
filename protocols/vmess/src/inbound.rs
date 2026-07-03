@@ -128,11 +128,13 @@ impl VmessInboundProfile {
         Ok((session, client))
     }
 
-    pub async fn accept_client<S: AsyncSocket>(
+    pub async fn accept_client<S>(
         &self,
         inbound: VmessInbound,
         stream: S,
     ) -> Result<crate::mux::VmessInboundAcceptedStream<crate::stream::VmessAeadStream<S>>, Error>
+    where
+        S: AsyncSocket + tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send + 'static,
     {
         let (session, client) = self.accept_tcp_stream(inbound, stream).await?;
         Ok(crate::mux::VmessInboundAcceptedStream::from_session_stream(
