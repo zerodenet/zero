@@ -89,11 +89,15 @@ pub enum TrojanInboundAcceptedSession<S> {
         stream: S,
     },
     Udp {
-        auth: Option<SessionAuth>,
-        responder: TrojanInboundUdpResponder,
         session: Session,
-        stream: S,
+        relay: TrojanInboundUdpRelay<S>,
     },
+}
+
+pub struct TrojanInboundUdpRelay<S> {
+    auth: Option<SessionAuth>,
+    responder: TrojanInboundUdpResponder,
+    stream: S,
 }
 
 pub trait TrojanInboundAcceptedSessionDispatcher<S> {
@@ -108,9 +112,7 @@ pub trait TrojanInboundAcceptedSessionDispatcher<S> {
     async fn dispatch_udp_session(
         &mut self,
         session: Session,
-        stream: S,
-        responder: TrojanInboundUdpResponder,
-        auth: Option<SessionAuth>,
+        relay: TrojanInboundUdpRelay<S>,
     ) -> Result<(), Self::Error>;
 }
 
@@ -121,16 +123,35 @@ pub fn classify_inbound_session(session: &Session) -> TrojanInboundSessionKind {
     }
 }
 
+impl<S> TrojanInboundUdpRelay<S> {
+    pub fn new(stream: S, responder: TrojanInboundUdpResponder, auth: Option<SessionAuth>) -> Self {
+        Self {
+            auth,
+            responder,
+            stream,
+        }
+    }
+
+    pub fn into_parts(self) -> (S, TrojanInboundUdpResponder, Option<SessionAuth>) {
+        (self.stream, self.responder, self.auth)
+    }
+}
+
 impl<S> TrojanInboundAcceptedSession<S> {
     pub fn from_session_stream(session: Session, stream: S) -> Self {
         match classify_inbound_session(&session) {
             TrojanInboundSessionKind::Tcp => Self::Tcp { session, stream },
-            TrojanInboundSessionKind::Udp => Self::Udp {
-                auth: session.auth.clone(),
-                responder: TrojanInbound.accept_udp_session(),
-                session,
-                stream,
-            },
+            TrojanInboundSessionKind::Udp => {
+                let auth = session.auth.clone();
+                Self::Udp {
+                    session,
+                    relay: TrojanInboundUdpRelay::new(
+                        stream,
+                        TrojanInbound.accept_udp_session(),
+                        auth,
+                    ),
+                }
+            }
         }
     }
 
@@ -138,17 +159,12 @@ impl<S> TrojanInboundAcceptedSession<S> {
     where
         Tcp: FnOnce(Session, S) -> TcpFut,
         TcpFut: core::future::Future<Output = Result<(), E>>,
-        Udp: FnOnce(Session, S, TrojanInboundUdpResponder, Option<SessionAuth>) -> UdpFut,
+        Udp: FnOnce(Session, TrojanInboundUdpRelay<S>) -> UdpFut,
         UdpFut: core::future::Future<Output = Result<(), E>>,
     {
         match self {
             Self::Tcp { session, stream } => tcp(session, stream).await,
-            Self::Udp {
-                auth,
-                responder,
-                session,
-                stream,
-            } => udp(session, stream, responder, auth).await,
+            Self::Udp { session, relay } => udp(session, relay).await,
         }
     }
 
@@ -158,16 +174,7 @@ impl<S> TrojanInboundAcceptedSession<S> {
     {
         match self {
             Self::Tcp { session, stream } => dispatcher.dispatch_tcp_session(session, stream).await,
-            Self::Udp {
-                auth,
-                responder,
-                session,
-                stream,
-            } => {
-                dispatcher
-                    .dispatch_udp_session(session, stream, responder, auth)
-                    .await
-            }
+            Self::Udp { session, relay } => dispatcher.dispatch_udp_session(session, relay).await,
         }
     }
 }

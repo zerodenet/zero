@@ -5,7 +5,7 @@ use std::io;
 use tokio::io::{AsyncRead, AsyncWrite};
 use tracing::warn;
 use zero_config::{GrpcConfig, WebSocketConfig};
-use zero_core::{Session, SessionAuth};
+use zero_core::Session;
 use zero_engine::EngineError;
 
 use super::mux::run_vmess_mux_session;
@@ -45,16 +45,13 @@ where
     async fn dispatch_udp_stream(
         &mut self,
         session: Session,
-        stream: S,
-        responder: vmess::udp::VmessInboundUdpResponder,
-        auth: Option<SessionAuth>,
+        relay: vmess::mux::VmessInboundUdpRelay<S>,
     ) -> Result<(), Self::Error> {
+        let (stream, responder, auth) = relay.into_parts();
         run_vmess_udp_relay(
             self.proxy,
-            TcpRelayStream::new(stream),
             session,
-            responder,
-            auth,
+            vmess::mux::VmessInboundUdpRelay::new(TcpRelayStream::new(stream), responder, auth),
             self.inbound_tag,
         )
         .await

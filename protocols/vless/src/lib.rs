@@ -33,7 +33,7 @@ pub use inbound::{
     VlessAcceptedClientRouteDispatcher, VlessClientAcceptError, VlessConfiguredUser,
     VlessConfiguredUsers, VlessFallbackAlpnDecision, VlessFallbackAlpnPolicy, VlessFallbackCapture,
     VlessFallbackReplay, VlessInbound, VlessInboundProfile, VlessInboundSessionKind,
-    VlessInboundUserConfigParts, VlessUser, VlessUserStore,
+    VlessInboundUdpRelay, VlessInboundUserConfigParts, VlessUser, VlessUserStore,
 };
 pub use metadata::VlessProtocol;
 #[cfg(feature = "reality")]

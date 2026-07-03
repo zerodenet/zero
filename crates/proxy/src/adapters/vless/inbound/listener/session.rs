@@ -1,7 +1,7 @@
 use crate::runtime::inbound_protocol::serve_inbound;
 use crate::runtime::Proxy;
 use crate::transport::{accept_ws, ClientStream, MeteredStream, RecordingStream, TcpRelayStream};
-use zero_core::{Session, SessionAuth};
+use zero_core::Session;
 use zero_engine::EngineError;
 
 use super::fallback::relay_fallback;
@@ -41,22 +41,9 @@ where
     async fn dispatch_udp_session(
         &mut self,
         session: Session,
-        auth: Option<SessionAuth>,
-        responder: vless::udp::VlessInboundUdpResponder,
-        mut metered: MeteredStream<RecordingStream<S>>,
+        relay: vless::VlessInboundUdpRelay<MeteredStream<RecordingStream<S>>>,
     ) -> Result<(), Self::Error> {
-        self.proxy
-            .record_session_inbound_traffic(session.id, metered.drain_traffic());
-        let client = MeteredStream::new(metered.into_unrecorded_inner());
-        handle_vless_udp_session(
-            self.proxy,
-            client,
-            self.inbound_tag,
-            session,
-            responder,
-            auth,
-        )
-        .await
+        handle_vless_udp_session(self.proxy, self.inbound_tag, session, relay).await
     }
 
     async fn dispatch_mux_session(

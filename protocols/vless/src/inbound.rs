@@ -162,6 +162,12 @@ pub enum VlessAcceptedClientRoute<S> {
     },
 }
 
+pub struct VlessInboundUdpRelay<S> {
+    auth: Option<SessionAuth>,
+    responder: crate::udp::VlessInboundUdpResponder,
+    stream: S,
+}
+
 pub trait VlessAcceptedClientRouteDispatcher<S> {
     type Error;
 
@@ -175,9 +181,7 @@ pub trait VlessAcceptedClientRouteDispatcher<S> {
     async fn dispatch_udp_session(
         &mut self,
         session: Session,
-        auth: Option<SessionAuth>,
-        responder: crate::udp::VlessInboundUdpResponder,
-        stream: S,
+        relay: VlessInboundUdpRelay<S>,
     ) -> Result<(), Self::Error>;
 
     #[cfg(feature = "reality")]
@@ -298,8 +302,9 @@ impl<S> VlessAcceptedClient<S> {
             }
             VlessInboundSessionKind::Udp => {
                 session.sni = sni;
+                let auth = session.auth.clone();
                 VlessAcceptedClientRoute::Udp {
-                    auth: session.auth.clone(),
+                    auth,
                     session,
                     stream,
                 }
@@ -310,6 +315,24 @@ impl<S> VlessAcceptedClient<S> {
                 stream,
             },
         }
+    }
+}
+
+impl<S> VlessInboundUdpRelay<S> {
+    fn new(
+        stream: S,
+        responder: crate::udp::VlessInboundUdpResponder,
+        auth: Option<SessionAuth>,
+    ) -> Self {
+        Self {
+            auth,
+            responder,
+            stream,
+        }
+    }
+
+    pub fn into_parts(self) -> (S, crate::udp::VlessInboundUdpResponder, Option<SessionAuth>) {
+        (self.stream, self.responder, self.auth)
     }
 }
 
@@ -325,8 +348,7 @@ impl<S> VlessAcceptedClientRoute<S> {
         S: AsyncSocket,
         Tcp: FnOnce(Session, S) -> TcpFut,
         TcpFut: core::future::Future<Output = Result<(), E>>,
-        Udp:
-            FnOnce(Session, Option<SessionAuth>, crate::udp::VlessInboundUdpResponder, S) -> UdpFut,
+        Udp: FnOnce(Session, VlessInboundUdpRelay<S>) -> UdpFut,
         UdpFut: core::future::Future<Output = Result<(), E>>,
         Mux: FnOnce(crate::mux::VlessInboundMuxServer, S) -> MuxFut,
         MuxFut: core::future::Future<Output = Result<(), E>>,
@@ -340,7 +362,8 @@ impl<S> VlessAcceptedClientRoute<S> {
                 mut stream,
             } => {
                 let responder = VlessInbound.accept_udp_session(&mut stream).await?;
-                udp(session, auth, responder, stream).await
+                let relay = VlessInboundUdpRelay::new(stream, responder, auth);
+                udp(session, relay).await
             }
             Self::Mux {
                 mux_context,
@@ -371,7 +394,10 @@ impl<S> VlessAcceptedClientRoute<S> {
             } => {
                 let responder = VlessInbound.accept_udp_session(&mut stream).await?;
                 dispatcher
-                    .dispatch_udp_session(session, auth, responder, stream)
+                    .dispatch_udp_session(
+                        session,
+                        VlessInboundUdpRelay::new(stream, responder, auth),
+                    )
                     .await
             }
             #[cfg(not(feature = "reality"))]

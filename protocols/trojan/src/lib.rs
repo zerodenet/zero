@@ -15,7 +15,7 @@ pub mod udp;
 pub use inbound::{
     classify_inbound_session, inbound_profile_from_config_password, TrojanAccept, TrojanInbound,
     TrojanInboundAcceptedSession, TrojanInboundAcceptedSessionDispatcher, TrojanInboundProfile,
-    TrojanInboundSessionKind,
+    TrojanInboundSessionKind, TrojanInboundUdpRelay,
 };
 pub use metadata::TrojanProtocol;
 pub use outbound::{

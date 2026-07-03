@@ -7,12 +7,11 @@ use crate::transport::TcpRelayStream;
 
 pub(super) async fn run_vmess_udp_relay(
     proxy: &Proxy,
-    client: TcpRelayStream,
     session: Session,
-    responder: vmess::udp::VmessInboundUdpResponder,
-    auth: Option<zero_core::SessionAuth>,
+    relay: vmess::mux::VmessInboundUdpRelay<TcpRelayStream>,
     inbound_tag: &str,
 ) -> Result<(), EngineError> {
+    let (client, responder, auth) = relay.into_parts();
     run_stream_udp_relay(
         proxy,
         StreamUdpRelayRequest {

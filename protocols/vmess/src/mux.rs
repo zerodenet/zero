@@ -577,13 +577,17 @@ pub enum VmessInboundAcceptedStream<S> {
     },
     Udp {
         session: Session,
-        stream: S,
-        responder: crate::udp::VmessInboundUdpResponder,
-        auth: Option<SessionAuth>,
+        relay: VmessInboundUdpRelay<S>,
     },
     Mux {
         stream: S,
     },
+}
+
+pub struct VmessInboundUdpRelay<S> {
+    stream: S,
+    responder: crate::udp::VmessInboundUdpResponder,
+    auth: Option<SessionAuth>,
 }
 
 pub trait VmessInboundAcceptedStreamDispatcher<S> {
@@ -595,9 +599,7 @@ pub trait VmessInboundAcceptedStreamDispatcher<S> {
     async fn dispatch_udp_stream(
         &mut self,
         session: Session,
-        stream: S,
-        responder: crate::udp::VmessInboundUdpResponder,
-        auth: Option<SessionAuth>,
+        relay: VmessInboundUdpRelay<S>,
     ) -> Result<(), Self::Error>;
 
     async fn dispatch_mux_stream(
@@ -615,6 +617,24 @@ pub fn classify_inbound_session(session: &Session) -> VmessInboundSessionKind {
     }
 }
 
+impl<S> VmessInboundUdpRelay<S> {
+    pub fn new(
+        stream: S,
+        responder: crate::udp::VmessInboundUdpResponder,
+        auth: Option<SessionAuth>,
+    ) -> Self {
+        Self {
+            stream,
+            responder,
+            auth,
+        }
+    }
+
+    pub fn into_parts(self) -> (S, crate::udp::VmessInboundUdpResponder, Option<SessionAuth>) {
+        (self.stream, self.responder, self.auth)
+    }
+}
+
 impl<S> VmessInboundAcceptedStream<S> {
     pub fn from_session_stream(session: Session, stream: S) -> Self {
         match classify_inbound_session(&session) {
@@ -623,11 +643,10 @@ impl<S> VmessInboundAcceptedStream<S> {
                 let responder = crate::udp::VmessInboundUdpResponder::new(
                     crate::udp::VmessInboundUdpSession::new(session.target.clone(), session.port),
                 );
+                let auth = session.auth.clone();
                 Self::Udp {
-                    auth: session.auth.clone(),
                     session,
-                    stream,
-                    responder,
+                    relay: VmessInboundUdpRelay::new(stream, responder, auth),
                 }
             }
             VmessInboundSessionKind::Mux => Self::Mux { stream },
@@ -643,8 +662,7 @@ impl<S> VmessInboundAcceptedStream<S> {
     where
         Tcp: FnOnce(Session, S) -> TcpFut,
         TcpFut: core::future::Future<Output = Result<(), E>>,
-        Udp:
-            FnOnce(Session, S, crate::udp::VmessInboundUdpResponder, Option<SessionAuth>) -> UdpFut,
+        Udp: FnOnce(Session, VmessInboundUdpRelay<S>) -> UdpFut,
         UdpFut: core::future::Future<Output = Result<(), E>>,
         S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
         Mux: FnOnce(tokio::io::ReadHalf<S>, VmessInboundMuxServer) -> MuxFut,
@@ -652,12 +670,7 @@ impl<S> VmessInboundAcceptedStream<S> {
     {
         match self {
             Self::Tcp { session, stream } => tcp(session, stream).await,
-            Self::Udp {
-                session,
-                stream,
-                responder,
-                auth,
-            } => udp(session, stream, responder, auth).await,
+            Self::Udp { session, relay } => udp(session, relay).await,
             Self::Mux { stream } => {
                 let (reader, writer) = tokio::io::split(stream);
                 mux(
@@ -676,16 +689,7 @@ impl<S> VmessInboundAcceptedStream<S> {
     {
         match self {
             Self::Tcp { session, stream } => dispatcher.dispatch_tcp_stream(session, stream).await,
-            Self::Udp {
-                session,
-                stream,
-                responder,
-                auth,
-            } => {
-                dispatcher
-                    .dispatch_udp_stream(session, stream, responder, auth)
-                    .await
-            }
+            Self::Udp { session, relay } => dispatcher.dispatch_udp_stream(session, relay).await,
             Self::Mux { stream } => {
                 let (reader, writer) = tokio::io::split(stream);
                 dispatcher

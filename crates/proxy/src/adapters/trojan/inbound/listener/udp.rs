@@ -7,12 +7,11 @@ use crate::transport::TcpRelayStream;
 
 pub(super) async fn run_trojan_udp_relay(
     proxy: &Proxy,
-    client: TcpRelayStream,
     session: Session,
-    responder: trojan::udp::TrojanInboundUdpResponder,
-    auth: Option<zero_core::SessionAuth>,
+    relay: trojan::TrojanInboundUdpRelay<TcpRelayStream>,
     inbound_tag: &str,
 ) -> Result<(), EngineError> {
+    let (client, responder, auth) = relay.into_parts();
     run_stream_udp_relay(
         proxy,
         StreamUdpRelayRequest {

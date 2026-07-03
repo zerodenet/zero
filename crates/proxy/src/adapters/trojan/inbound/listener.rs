@@ -51,16 +51,17 @@ impl trojan::TrojanInboundAcceptedSessionDispatcher<TrojanAcceptedStream>
     async fn dispatch_udp_session(
         &mut self,
         session: Session,
-        stream: TrojanAcceptedStream,
-        responder: trojan::udp::TrojanInboundUdpResponder,
-        auth: Option<zero_core::SessionAuth>,
+        relay: trojan::TrojanInboundUdpRelay<TrojanAcceptedStream>,
     ) -> Result<(), Self::Error> {
+        let (stream, responder, auth) = relay.into_parts();
         run_trojan_udp_relay(
             self.proxy,
-            TcpRelayStream::new(stream.into_inner()),
             session,
-            responder,
-            auth,
+            trojan::TrojanInboundUdpRelay::new(
+                TcpRelayStream::new(stream.into_inner()),
+                responder,
+                auth,
+            ),
             self.inbound_tag,
         )
         .await
