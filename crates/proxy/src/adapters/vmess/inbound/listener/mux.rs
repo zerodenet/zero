@@ -1,7 +1,5 @@
 //! VMess inbound: TLS accept, transport dispatch (WS/gRPC), protocol auth, route, TCP relay.
 
-use std::sync::Mutex;
-
 use tokio::task::JoinSet;
 use tracing::warn;
 use zero_engine::EngineError;
@@ -11,6 +9,52 @@ use crate::runtime::mux_tcp::{spawn_mux_tcp_stream_task, MuxTcpStreamTask};
 use crate::runtime::Proxy;
 
 use super::mux_udp::spawn_vmess_mux_udp_stream_task;
+
+struct VmessMuxOpenedDispatcherBridge<'a> {
+    proxy: &'a Proxy,
+    tasks: &'a mut JoinSet<()>,
+    writer: vmess::mux::VmessInboundMuxWriter,
+    inbound_tag: &'a str,
+}
+
+impl vmess::mux::VmessInboundMuxOpenedRouteDispatcher for VmessMuxOpenedDispatcherBridge<'_> {
+    type Error = EngineError;
+
+    async fn dispatch_tcp_opened(
+        &mut self,
+        session_id: u16,
+        session: zero_core::Session,
+        up_rx: tokio::sync::mpsc::UnboundedReceiver<Vec<u8>>,
+    ) -> Result<(), Self::Error> {
+        spawn_vmess_mux_tcp_stream_task(
+            self.proxy,
+            self.tasks,
+            session_id,
+            session,
+            up_rx,
+            self.writer.clone(),
+            self.inbound_tag.to_owned(),
+        );
+        Ok(())
+    }
+
+    async fn dispatch_udp_opened(
+        &mut self,
+        session_id: u16,
+        up_rx: tokio::sync::mpsc::UnboundedReceiver<Vec<u8>>,
+        responder: vmess::udp::VmessInboundMuxUdpResponder,
+    ) -> Result<(), Self::Error> {
+        spawn_vmess_mux_udp_stream_task(
+            self.proxy,
+            self.tasks,
+            session_id,
+            up_rx,
+            responder,
+            self.inbound_tag.to_owned(),
+        );
+        Ok(())
+    }
+}
 
 pub(super) async fn run_vmess_mux_session<R>(
     proxy: &Proxy,
@@ -35,55 +79,15 @@ where
         type Error = EngineError;
 
         async fn dispatch_next(&mut self, tasks: &mut JoinSet<()>) -> Result<bool, Self::Error> {
-            let tasks = Mutex::new(Some(tasks));
-            let writer = self.mux_server.writer();
-            let proxy = self.proxy;
-            let inbound_tag = self.inbound_tag;
+            let mut bridge = VmessMuxOpenedDispatcherBridge {
+                proxy: self.proxy,
+                tasks,
+                writer: self.mux_server.writer(),
+                inbound_tag: self.inbound_tag,
+            };
             match self
                 .mux_server
-                .dispatch_next_opened_route_with_handlers(
-                    self.reader,
-                    |session_id, session, up_rx| {
-                        let tasks = tasks
-                            .lock()
-                            .expect("lock vmess mux tcp tasks")
-                            .take()
-                            .expect("single vmess mux tcp dispatch");
-                        let writer = writer.clone();
-                        let inbound_tag = inbound_tag.to_owned();
-                        async move {
-                            spawn_vmess_mux_tcp_stream_task(
-                                proxy,
-                                tasks,
-                                session_id,
-                                session,
-                                up_rx,
-                                writer,
-                                inbound_tag,
-                            );
-                            Ok::<(), EngineError>(())
-                        }
-                    },
-                    |session_id, up_rx, responder| {
-                        let tasks = tasks
-                            .lock()
-                            .expect("lock vmess mux udp tasks")
-                            .take()
-                            .expect("single vmess mux udp dispatch");
-                        let inbound_tag = inbound_tag.to_owned();
-                        async move {
-                            spawn_vmess_mux_udp_stream_task(
-                                proxy,
-                                tasks,
-                                session_id,
-                                up_rx,
-                                responder,
-                                inbound_tag,
-                            );
-                            Ok::<(), EngineError>(())
-                        }
-                    },
-                )
+                .dispatch_next_opened_route(self.reader, &mut bridge)
                 .await
             {
                 Ok(keep_running) => Ok(keep_running),

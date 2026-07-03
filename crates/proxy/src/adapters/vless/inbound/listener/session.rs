@@ -8,6 +8,69 @@ use super::fallback::relay_fallback;
 use super::mux::handle_vless_mux_session;
 use super::udp_session::handle_vless_udp_session;
 
+struct VlessRouteDispatcher<'a> {
+    proxy: &'a Proxy,
+    inbound_tag: &'a str,
+}
+
+impl<S> vless::VlessAcceptedClientRouteDispatcher<MeteredStream<RecordingStream<S>>>
+    for VlessRouteDispatcher<'_>
+where
+    S: ClientStream + 'static,
+{
+    type Error = EngineError;
+
+    async fn dispatch_tcp_session(
+        &mut self,
+        session: Session,
+        metered: MeteredStream<RecordingStream<S>>,
+    ) -> Result<(), Self::Error> {
+        let client = metered.into_unrecorded_inner();
+        let source_addr = client.peer_addr().ok();
+        serve_inbound(
+            self.proxy,
+            session,
+            TcpRelayStream::new(client),
+            &vless::VlessInbound,
+            self.inbound_tag,
+            source_addr,
+        )
+        .await
+    }
+
+    async fn dispatch_udp_session(
+        &mut self,
+        session: Session,
+        auth: Option<SessionAuth>,
+        responder: vless::udp::VlessInboundUdpResponder,
+        mut metered: MeteredStream<RecordingStream<S>>,
+    ) -> Result<(), Self::Error> {
+        self.proxy
+            .record_session_inbound_traffic(session.id, metered.drain_traffic());
+        let client = MeteredStream::new(metered.into_unrecorded_inner());
+        handle_vless_udp_session(
+            self.proxy,
+            client,
+            self.inbound_tag,
+            session,
+            responder,
+            auth,
+        )
+        .await
+    }
+
+    async fn dispatch_mux_session(
+        &mut self,
+        mux_server: vless::mux::VlessInboundMuxServer,
+        mut metered: MeteredStream<RecordingStream<S>>,
+    ) -> Result<(), Self::Error> {
+        self.proxy
+            .record_session_inbound_traffic(0, metered.drain_traffic());
+        let client = MeteredStream::new(metered.into_unrecorded_inner());
+        handle_vless_mux_session(self.proxy, client, self.inbound_tag, mux_server).await
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(super) async fn handle_vless_stream<S>(
     proxy: &Proxy,
@@ -112,36 +175,6 @@ where
         }
     };
 
-    let protocol = vless::VlessInbound;
-    route
-        .dispatch(
-            |session: Session, metered: MeteredStream<RecordingStream<S>>| async {
-                let client = metered.into_unrecorded_inner();
-                let source_addr = client.peer_addr().ok();
-                serve_inbound(
-                    proxy,
-                    session,
-                    TcpRelayStream::new(client),
-                    &protocol,
-                    inbound_tag,
-                    source_addr,
-                )
-                .await
-            },
-            |session: Session,
-             auth: Option<SessionAuth>,
-             responder: vless::udp::VlessInboundUdpResponder,
-             mut metered: MeteredStream<RecordingStream<S>>| async move {
-                proxy.record_session_inbound_traffic(session.id, metered.drain_traffic());
-                let client = MeteredStream::new(metered.into_unrecorded_inner());
-                handle_vless_udp_session(proxy, client, inbound_tag, session, responder, auth).await
-            },
-            |mux_server: vless::mux::VlessInboundMuxServer,
-             mut metered: MeteredStream<RecordingStream<S>>| async move {
-                proxy.record_session_inbound_traffic(0, metered.drain_traffic());
-                let client = MeteredStream::new(metered.into_unrecorded_inner());
-                handle_vless_mux_session(proxy, client, inbound_tag, mux_server).await
-            },
-        )
-        .await
+    let mut bridge = VlessRouteDispatcher { proxy, inbound_tag };
+    route.dispatch_with(&mut bridge).await
 }

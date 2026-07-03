@@ -1,5 +1,3 @@
-use std::sync::Mutex;
-
 use tokio::task::JoinSet;
 use tracing::info;
 
@@ -10,6 +8,76 @@ use crate::transport::{ClientStream, MeteredStream};
 use zero_engine::EngineError;
 
 use super::mux_udp::spawn_vless_mux_udp_stream_task;
+
+struct VlessMuxOpenedDispatcherBridge<'a> {
+    proxy: &'a Proxy,
+    tasks: &'a mut JoinSet<()>,
+    writer: vless::mux::VlessInboundMuxWriter,
+    inbound_tag: &'a str,
+}
+
+impl vless::mux::VlessInboundMuxOpenedRouteDispatcher for VlessMuxOpenedDispatcherBridge<'_> {
+    type Error = EngineError;
+
+    async fn dispatch_tcp_opened(
+        &mut self,
+        session_id: u16,
+        session: zero_core::Session,
+        up_rx: tokio::sync::mpsc::UnboundedReceiver<Vec<u8>>,
+    ) -> Result<bool, Self::Error> {
+        let writer = self.writer.clone();
+        let close_writer = writer.clone();
+        spawn_mux_tcp_stream_task(
+            self.proxy,
+            self.tasks,
+            MuxTcpStreamTask {
+                mux_session_id: session_id,
+                session,
+                uplink: up_rx,
+                close_stream: move || async move {
+                    let _ = close_writer.end_inbound_stream(session_id);
+                },
+                relay_stream: move |session_id, up_rx, upstream| async move {
+                    vless::mux::relay_inbound_mux_stream(session_id, up_rx, writer, upstream).await;
+                },
+                inbound_tag: self.inbound_tag.to_owned(),
+                protocol: "vless_mux",
+            },
+        );
+        Ok(true)
+    }
+
+    async fn dispatch_udp_opened(
+        &mut self,
+        session_id: u16,
+        port: u16,
+        up_rx: tokio::sync::mpsc::UnboundedReceiver<Vec<u8>>,
+        responder: vless::udp::VlessInboundMuxUdpResponder,
+        auth: Option<zero_core::SessionAuth>,
+    ) -> Result<bool, Self::Error> {
+        let proxy = self.proxy.clone();
+        let inbound_tag = self.inbound_tag.to_owned();
+        info!(
+            inbound_tag = %inbound_tag,
+            mux_stream_id = session_id,
+            port,
+            network = "udp",
+            "MUX stream accepted"
+        );
+        self.tasks.spawn(async move {
+            spawn_vless_mux_udp_stream_task(
+                &proxy,
+                session_id,
+                up_rx,
+                responder,
+                &inbound_tag,
+                auth,
+            )
+            .await;
+        });
+        Ok(true)
+    }
+}
 
 pub(super) async fn handle_vless_mux_session<S>(
     proxy: &Proxy,
@@ -34,77 +102,14 @@ where
         type Error = EngineError;
 
         async fn dispatch_next(&mut self, tasks: &mut JoinSet<()>) -> Result<bool, Self::Error> {
-            let tasks = Mutex::new(Some(tasks));
-            let writer = self.mux_server.writer();
-            let proxy = self.proxy;
-            let inbound_tag = self.inbound_tag;
+            let mut bridge = VlessMuxOpenedDispatcherBridge {
+                proxy: self.proxy,
+                tasks,
+                writer: self.mux_server.writer(),
+                inbound_tag: self.inbound_tag,
+            };
             self.mux_server
-                .dispatch_next_opened_route_with_handlers(
-                    self.client,
-                    |session_id, session, up_rx| {
-                        let tasks = tasks
-                            .lock()
-                            .expect("lock vless mux tcp tasks")
-                            .take()
-                            .expect("single vless mux tcp dispatch");
-                        let writer = writer.clone();
-                        let close_writer = writer.clone();
-                        let inbound_tag = inbound_tag.to_owned();
-                        async move {
-                            spawn_mux_tcp_stream_task(
-                                proxy,
-                                tasks,
-                                MuxTcpStreamTask {
-                                    mux_session_id: session_id,
-                                    session,
-                                    uplink: up_rx,
-                                    close_stream: move || async move {
-                                        let _ = close_writer.end_inbound_stream(session_id);
-                                    },
-                                    relay_stream: move |session_id, up_rx, upstream| async move {
-                                        vless::mux::relay_inbound_mux_stream(
-                                            session_id, up_rx, writer, upstream,
-                                        )
-                                        .await;
-                                    },
-                                    inbound_tag,
-                                    protocol: "vless_mux",
-                                },
-                            );
-                            Ok::<bool, EngineError>(true)
-                        }
-                    },
-                    |session_id, port, up_rx, responder, auth| {
-                        let tasks = tasks
-                            .lock()
-                            .expect("lock vless mux udp tasks")
-                            .take()
-                            .expect("single vless mux udp dispatch");
-                        let proxy = proxy.clone();
-                        let inbound_tag = inbound_tag.to_owned();
-                        async move {
-                            info!(
-                                inbound_tag = %inbound_tag,
-                                mux_stream_id = session_id,
-                                port,
-                                network = "udp",
-                                "MUX stream accepted"
-                            );
-                            tasks.spawn(async move {
-                                spawn_vless_mux_udp_stream_task(
-                                    &proxy,
-                                    session_id,
-                                    up_rx,
-                                    responder,
-                                    &inbound_tag,
-                                    auth,
-                                )
-                                .await;
-                            });
-                            Ok::<bool, EngineError>(true)
-                        }
-                    },
-                )
+                .dispatch_next_opened_route(self.client, &mut bridge)
                 .await
         }
     }
