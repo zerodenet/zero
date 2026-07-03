@@ -5983,7 +5983,8 @@ fn vless_udp_identity_is_protocol_parsed() {
         protocol.contains("struct VlessUdpFlowResume")
             && protocol.contains("pub fn udp_flow_resume_from_config")
             && protocol.contains("struct VlessUdpFlowConfig")
-            && protocol.contains("pub fn udp_flow_config_from_config"),
+            && !protocol.contains("pub struct VlessUdpFlowConfig")
+            && !protocol.contains("pub fn udp_flow_config_from_config"),
         "protocols/vless should own VLESS UDP flow identity and resume construction"
     );
 }
@@ -6079,10 +6080,13 @@ fn vless_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
             && !stream_manager.contains("vless::VlessUdpFlowConnection")
             && !stream_manager.contains("vless::VlessUdpFlowSession")
             && !stream_manager.contains("vless::VlessUdpFlowSender")
-            && protocol.contains("pub async fn establish_flow_with_initial_packet")
-            && protocol.contains("pub async fn write_packet_tokio")
-            && protocol.contains("pub async fn read_packet_tokio")
-            && protocol.contains("pub fn spawn_udp_flow")
+            && !protocol.contains("establish_flow_with_initial_packet")
+            && protocol.contains("async fn write_packet_tokio")
+            && !protocol.contains("pub async fn write_packet_tokio")
+            && protocol.contains("async fn read_packet_tokio")
+            && !protocol.contains("pub async fn read_packet_tokio")
+            && protocol.contains("fn spawn_udp_flow")
+            && !protocol.contains("pub fn spawn_udp_flow")
             && protocol.contains("pub fn start_mux_udp_flow")
             && protocol.contains("pub async fn establish_udp_flow_with_resume"),
         "VLESS UDP runtime should keep protocol flow I/O inside protocols/vless and leave proxy manager as cache/bridge glue"
@@ -6250,7 +6254,8 @@ fn vmess_udp_identity_is_protocol_parsed() {
         protocol.contains("struct VmessUdpFlowResume")
             && protocol.contains("pub fn udp_flow_resume_from_config")
             && protocol.contains("struct VmessUdpFlowConfig")
-            && protocol.contains("pub fn udp_flow_config_from_config"),
+            && !protocol.contains("pub struct VmessUdpFlowConfig")
+            && !protocol.contains("pub fn udp_flow_config_from_config"),
         "protocols/vmess should own VMess UDP flow identity and resume construction"
     );
 
@@ -6333,11 +6338,14 @@ fn vmess_udp_runtime_delegates_packet_framing_to_protocol_helpers() {
             && !stream_manager.contains("vmess::VmessUdpFlowConnection")
             && !stream_manager.contains("vmess::VmessUdpFlowSession")
             && !stream_manager.contains("vmess::VmessUdpFlowSender")
-            && protocol.contains("pub async fn establish_flow_with_initial_packet")
-            && protocol.contains("pub fn start_flow_with_initial_packet")
-            && protocol.contains("pub async fn write_packet_tokio")
-            && protocol.contains("pub async fn read_packet_tokio")
-            && protocol.contains("pub fn spawn_udp_flow")
+            && !protocol.contains("establish_flow_with_initial_packet")
+            && !protocol.contains("start_flow_with_initial_packet")
+            && protocol.contains("async fn write_packet_tokio")
+            && !protocol.contains("pub async fn write_packet_tokio")
+            && protocol.contains("async fn read_packet_tokio")
+            && !protocol.contains("pub async fn read_packet_tokio")
+            && protocol.contains("fn spawn_udp_flow")
+            && !protocol.contains("pub fn spawn_udp_flow")
             && protocol.contains("pub fn start_udp_flow")
             && protocol.contains("pub async fn establish_udp_flow_with_resume"),
         "VMess UDP runtime should keep protocol flow I/O inside protocols/vmess and leave proxy manager as cache/bridge glue"
@@ -11854,14 +11862,17 @@ fn stream_protocol_udp_packet_io_stays_in_protocol_crates() {
     }
 
     assert!(
-        vless_protocol.contains("pub async fn write_packet_tokio")
-            && vless_protocol.contains("pub async fn read_packet_tokio")
+        vless_protocol.contains("async fn write_packet_tokio")
+            && !vless_protocol.contains("pub async fn write_packet_tokio")
+            && vless_protocol.contains("async fn read_packet_tokio")
+            && !vless_protocol.contains("pub async fn read_packet_tokio")
             && vless_protocol.contains("failed to flush VLESS UDP response")
             && !vless_outbound.contains("pub fn spawn_udp_flow")
             && !vless_outbound.contains("fn spawn_udp_flow_task")
             && !vless_outbound.contains(".write_packet_tokio(")
             && !vless_outbound.contains(".read_packet_tokio(")
-            && vless_protocol.contains("pub fn spawn_udp_flow")
+            && vless_protocol.contains("fn spawn_udp_flow")
+            && !vless_protocol.contains("pub fn spawn_udp_flow")
             && vless_protocol.contains("pub fn start_mux_udp_flow")
             && vless_protocol.contains("fn spawn_udp_flow_task")
             && vless_protocol.contains(".write_packet_tokio(")
@@ -11870,10 +11881,13 @@ fn stream_protocol_udp_packet_io_stays_in_protocol_crates() {
         "protocols/vless should own async stream packet IO helpers and UDP flow pumping"
     );
     assert!(
-        vmess_protocol.contains("pub async fn write_packet_tokio")
-            && vmess_protocol.contains("pub async fn read_packet_tokio")
+        vmess_protocol.contains("async fn write_packet_tokio")
+            && !vmess_protocol.contains("pub async fn write_packet_tokio")
+            && vmess_protocol.contains("async fn read_packet_tokio")
+            && !vmess_protocol.contains("pub async fn read_packet_tokio")
             && vmess_protocol.contains("failed to flush VMess UDP response")
-            && vmess_protocol.contains("pub fn spawn_udp_flow")
+            && vmess_protocol.contains("fn spawn_udp_flow")
+            && !vmess_protocol.contains("pub fn spawn_udp_flow")
             && vmess_protocol.contains("pub fn start_udp_flow")
             && vmess_protocol.contains("pub async fn establish_udp_flow_with_resume")
             && vmess_protocol.contains("fn spawn_udp_flow_task")

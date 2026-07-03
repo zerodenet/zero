@@ -39,14 +39,7 @@ pub struct VmessUdpIdentity {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct VmessUdpMuxOpenIdentity<'a> {
-    pub id: [u8; 16],
-    pub cipher_name: &'a str,
-    pub cipher: VmessCipher,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct VmessUdpFlowConfig<'a> {
+struct VmessUdpFlowConfig<'a> {
     identity: VmessUdpIdentity,
     cipher_name: &'a str,
 }
@@ -63,10 +56,6 @@ impl VmessUdpFlowResume {
         self.identity
     }
 
-    pub fn cipher_name(&self) -> &str {
-        &self.cipher_name
-    }
-
     pub fn mux_pool_identity(&self) -> crate::mux::VmessMuxIdentity {
         crate::mux::VmessMuxIdentity::from_parts(
             self.identity.uuid,
@@ -75,16 +64,11 @@ impl VmessUdpFlowResume {
         )
     }
 
-    pub fn flow_requires_relay_upstream(&self) -> bool {
+    fn flow_requires_relay_upstream(&self) -> bool {
         self.relay_chain
     }
 
-    pub fn connector_flow(
-        &self,
-        server: &str,
-        port: u16,
-        session_id: u64,
-    ) -> VmessUdpConnectorFlow {
+    fn connector_flow(&self, server: &str, port: u16, session_id: u64) -> VmessUdpConnectorFlow {
         VmessUdpConnectorFlow {
             cache_key: format!(
                 "vmess:{server}:{port}:{session_id}:relay={}",
@@ -108,85 +92,20 @@ impl VmessUdpConnectorFlow {
 }
 
 impl<'a> VmessUdpFlowConfig<'a> {
-    pub fn new(id: &str, cipher: &'a str) -> Result<Self, Error> {
+    fn new(id: &str, cipher: &'a str) -> Result<Self, Error> {
         Ok(Self {
             identity: parse_udp_identity(id, cipher)?,
             cipher_name: cipher,
         })
     }
 
-    pub fn identity(&self) -> VmessUdpIdentity {
-        self.identity
-    }
-
-    pub fn cipher_name(&self) -> &'a str {
-        self.cipher_name
-    }
-
-    pub fn uuid(&self) -> [u8; 16] {
-        self.identity.uuid
-    }
-
-    pub fn cipher(&self) -> VmessCipher {
-        self.identity.cipher
-    }
-
-    pub fn mux_open_identity(&self) -> VmessUdpMuxOpenIdentity<'a> {
-        VmessUdpMuxOpenIdentity {
-            id: self.identity.uuid,
-            cipher_name: self.cipher_name,
-            cipher: self.identity.cipher,
-        }
-    }
-
-    pub fn flow_resume(&self, relay_chain: bool) -> VmessUdpFlowResume {
+    fn flow_resume(&self, relay_chain: bool) -> VmessUdpFlowResume {
         VmessUdpFlowResume {
             identity: self.identity,
             cipher_name: self.cipher_name.into(),
             relay_chain,
         }
     }
-
-    pub fn mux_pool_identity(&self) -> crate::mux::VmessMuxIdentity {
-        crate::mux::VmessMuxIdentity::from_parts(
-            self.identity.uuid,
-            self.cipher_name.to_owned(),
-            self.identity.cipher,
-        )
-    }
-
-    pub async fn establish_flow_with_initial_packet<S>(
-        &self,
-        stream: S,
-        session: &Session,
-        initial_payload: &[u8],
-    ) -> Result<VmessEstablishedUdpFlowHandle, Error>
-    where
-        S: AsyncSocket + tokio::io::AsyncRead + tokio::io::AsyncWrite + Send + Sync + 'static,
-    {
-        establish_udp_flow_with_initial_packet(stream, session, self.identity, initial_payload)
-            .await
-    }
-
-    pub fn start_flow_with_initial_packet<S>(
-        &self,
-        stream: S,
-        target: &Address,
-        port: u16,
-        initial_payload: &[u8],
-    ) -> Result<VmessEstablishedUdpFlowHandle, Error>
-    where
-        S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Send + Sync + Unpin + 'static,
-    {
-        start_udp_flow_with_initial_packet(stream, target, port, initial_payload)
-    }
-}
-
-pub fn udp_flow_config_from_config<'a>(
-    id: &str,
-    cipher: &'a str,
-) -> Result<VmessUdpFlowConfig<'a>, Error> {
-    VmessUdpFlowConfig::new(id, cipher)
 }
 
 pub fn udp_flow_resume_from_config(
@@ -291,54 +210,20 @@ impl VmessUdpFlowPacket {
 }
 
 #[derive(Debug, Clone, Copy, Default)]
-pub struct VmessUdpFlowIo;
+struct VmessUdpFlowIo;
 
 impl VmessUdpFlowIo {
-    pub fn encode_packet(
-        &self,
-        target: &Address,
-        port: u16,
-        payload: &[u8],
-    ) -> Result<Vec<u8>, Error> {
+    fn encode_packet(&self, target: &Address, port: u16, payload: &[u8]) -> Result<Vec<u8>, Error> {
         encode_udp_flow_packet(target, port, payload)
     }
 
-    pub fn decode_packet(&self, packet: &[u8]) -> Result<VmessUdpFlowPacket, Error> {
+    fn decode_packet(&self, packet: &[u8]) -> Result<VmessUdpFlowPacket, Error> {
         let packet = decode_udp_flow_packet(packet)?;
         let (target, port, payload) = packet.into_parts();
         Ok(VmessUdpFlowPacket::new(target, port, payload))
     }
 
-    pub fn encoded_packet_len(
-        &self,
-        target: &Address,
-        port: u16,
-        payload: &[u8],
-    ) -> Result<usize, Error> {
-        self.encode_packet(target, port, payload)
-            .map(|packet| packet.len())
-    }
-
-    pub async fn write_packet<S>(
-        &self,
-        stream: &mut S,
-        target: &Address,
-        port: u16,
-        payload: &[u8],
-    ) -> Result<usize, Error>
-    where
-        S: AsyncSocket,
-    {
-        let encoded = self.encode_packet(target, port, payload)?;
-        let len = encoded.len();
-        stream
-            .write_all(&encoded)
-            .await
-            .map_err(|_| Error::Io("vmess udp flow write"))?;
-        Ok(len)
-    }
-
-    pub async fn write_packet_tokio<S>(
+    async fn write_packet_tokio<S>(
         &self,
         stream: &mut S,
         target: &Address,
@@ -359,7 +244,7 @@ impl VmessUdpFlowIo {
         Ok(len)
     }
 
-    pub async fn read_packet_tokio<S>(
+    async fn read_packet_tokio<S>(
         &self,
         stream: &mut S,
         buffer: &mut [u8],
@@ -941,7 +826,7 @@ where
     VmessAeadStream::establish_udp_outbound(stream, &VmessOutbound, session, uuid, cipher).await
 }
 
-pub async fn establish_udp_flow_stream<S>(
+async fn establish_udp_flow_stream<S>(
     stream: S,
     session: &Session,
     identity: VmessUdpIdentity,
@@ -953,7 +838,7 @@ where
 }
 
 #[derive(Debug, Clone, Copy, Default)]
-pub struct VmessEstablishedUdpFlow {
+struct VmessEstablishedUdpFlow {
     io: VmessUdpFlowIo,
 }
 
@@ -969,70 +854,34 @@ struct VmessUdpFlowSend {
 }
 
 #[derive(Clone)]
-pub struct VmessInitialUdpFlowPacket {
-    packet: zero_core::UdpFlowPacket,
-}
-
-impl VmessInitialUdpFlowPacket {
-    pub fn from_parts(target: &Address, port: u16, payload: &[u8]) -> Self {
-        Self {
-            packet: zero_core::UdpFlowPacket::from_parts(target, port, payload),
-        }
-    }
-
-    pub fn encoded_len(&self, flow: &VmessEstablishedUdpFlow) -> Result<usize, Error> {
-        flow.encoded_packet_len(&self.packet.target, self.packet.port, &self.packet.payload)
-    }
-
-    pub fn encode(&self, flow: &VmessEstablishedUdpFlow) -> Result<Vec<u8>, Error> {
-        flow.initial_packet(&self.packet.target, self.packet.port, &self.packet.payload)
-    }
-
-    fn write_target(&self) -> (&Address, u16, &[u8]) {
-        (&self.packet.target, self.packet.port, &self.packet.payload)
-    }
-}
-
-#[derive(Clone)]
 struct VmessUdpFlowSender {
     send_tx: mpsc::Sender<VmessUdpFlowSend>,
 }
 
-pub struct VmessUdpFlowHandle {
+struct VmessUdpFlowHandle {
     sender: VmessUdpFlowSender,
     responses: VmessUdpFlowResponses,
 }
 
-pub struct VmessEstablishedUdpFlowHandle {
-    pub handle: VmessUdpFlowHandle,
-    pub initial_packet_len: usize,
-}
-
-impl VmessEstablishedUdpFlowHandle {
-    pub fn into_connection(self) -> VmessUdpFlowConnection {
-        VmessUdpFlowConnection::new(self.handle)
-    }
-}
-
 #[derive(Clone)]
-pub struct VmessUdpFlowSession {
+struct VmessUdpFlowSession {
     sender: VmessUdpFlowSender,
     responses: VmessUdpFlowResponses,
 }
 
 impl VmessUdpFlowSession {
-    pub fn new(handle: VmessUdpFlowHandle) -> Self {
+    fn new(handle: VmessUdpFlowHandle) -> Self {
         Self {
             sender: handle.sender,
             responses: handle.responses,
         }
     }
 
-    pub async fn send(&self, target: &Address, port: u16, payload: &[u8]) -> Result<usize, Error> {
+    async fn send(&self, target: &Address, port: u16, payload: &[u8]) -> Result<usize, Error> {
         self.sender.send(target, port, payload).await
     }
 
-    pub fn subscribe_responses(&self) -> VmessUdpFlowResponseReceiver {
+    fn subscribe_responses(&self) -> VmessUdpFlowResponseReceiver {
         self.responses.subscribe()
     }
 }
@@ -1043,7 +892,7 @@ pub struct VmessUdpFlowConnection {
 }
 
 impl VmessUdpFlowConnection {
-    pub fn new(handle: VmessUdpFlowHandle) -> Self {
+    fn new(handle: VmessUdpFlowHandle) -> Self {
         Self {
             session: VmessUdpFlowSession::new(handle),
         }
@@ -1059,7 +908,7 @@ impl VmessUdpFlowConnection {
 }
 
 impl VmessUdpFlowSender {
-    pub async fn send(&self, target: &Address, port: u16, payload: &[u8]) -> Result<usize, Error> {
+    async fn send(&self, target: &Address, port: u16, payload: &[u8]) -> Result<usize, Error> {
         let packet = zero_core::UdpFlowPacket::from_parts(target, port, payload);
         let (result_tx, result_rx) = oneshot::channel();
         self.send_tx
@@ -1073,34 +922,7 @@ impl VmessUdpFlowSender {
 }
 
 impl VmessEstablishedUdpFlow {
-    pub fn encode_packet(
-        &self,
-        target: &Address,
-        port: u16,
-        payload: &[u8],
-    ) -> Result<Vec<u8>, Error> {
-        self.io.encode_packet(target, port, payload)
-    }
-
-    pub fn encoded_packet_len(
-        &self,
-        target: &Address,
-        port: u16,
-        payload: &[u8],
-    ) -> Result<usize, Error> {
-        self.io.encoded_packet_len(target, port, payload)
-    }
-
-    pub fn initial_packet(
-        &self,
-        target: &Address,
-        port: u16,
-        payload: &[u8],
-    ) -> Result<Vec<u8>, Error> {
-        self.io.encode_packet(target, port, payload)
-    }
-
-    pub async fn write_packet_tokio<S>(
+    async fn write_packet_tokio<S>(
         &self,
         stream: &mut S,
         target: &Address,
@@ -1115,7 +937,7 @@ impl VmessEstablishedUdpFlow {
             .await
     }
 
-    pub async fn read_packet_tokio<S>(
+    async fn read_packet_tokio<S>(
         &self,
         stream: &mut S,
         buffer: &mut [u8],
@@ -1127,17 +949,13 @@ impl VmessEstablishedUdpFlow {
     }
 }
 
-pub fn spawn_udp_flow<S>(
-    stream: S,
-    initial_packet: Option<VmessInitialUdpFlowPacket>,
-    flow_io: VmessEstablishedUdpFlow,
-) -> VmessUdpFlowHandle
+fn spawn_udp_flow<S>(stream: S, flow_io: VmessEstablishedUdpFlow) -> VmessUdpFlowHandle
 where
     S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Send + Sync + Unpin + 'static,
 {
     let (send_tx, send_rx) = mpsc::channel::<VmessUdpFlowSend>(32);
     let (responses, _) = broadcast::channel::<VmessUdpFlowResponse>(32);
-    spawn_udp_flow_task(stream, initial_packet, send_rx, responses.clone(), flow_io);
+    spawn_udp_flow_task(stream, send_rx, responses.clone(), flow_io);
     VmessUdpFlowHandle {
         sender: VmessUdpFlowSender { send_tx },
         responses,
@@ -1148,36 +966,11 @@ pub fn start_udp_flow<S>(stream: S) -> VmessUdpFlowConnection
 where
     S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Send + Sync + Unpin + 'static,
 {
-    VmessUdpFlowConnection::new(spawn_udp_flow(
-        stream,
-        None,
-        VmessEstablishedUdpFlow::default(),
-    ))
-}
-
-pub fn start_udp_flow_with_initial_packet<S>(
-    stream: S,
-    target: &Address,
-    port: u16,
-    initial_payload: &[u8],
-) -> Result<VmessEstablishedUdpFlowHandle, Error>
-where
-    S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Send + Sync + Unpin + 'static,
-{
-    let flow_io = VmessEstablishedUdpFlow::default();
-    let initial_packet = VmessInitialUdpFlowPacket::from_parts(target, port, initial_payload);
-    let initial_packet_len = initial_packet.encoded_len(&flow_io)?;
-    let handle = spawn_udp_flow(stream, Some(initial_packet), flow_io);
-
-    Ok(VmessEstablishedUdpFlowHandle {
-        handle,
-        initial_packet_len,
-    })
+    VmessUdpFlowConnection::new(spawn_udp_flow(stream, VmessEstablishedUdpFlow::default()))
 }
 
 fn spawn_udp_flow_task<S>(
     mut stream: S,
-    initial_packet: Option<VmessInitialUdpFlowPacket>,
     mut send_rx: mpsc::Receiver<VmessUdpFlowSend>,
     responses: VmessUdpFlowResponses,
     flow_io: VmessEstablishedUdpFlow,
@@ -1185,17 +978,6 @@ fn spawn_udp_flow_task<S>(
     S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Send + Sync + Unpin + 'static,
 {
     tokio::spawn(async move {
-        if let Some(packet) = initial_packet {
-            let (target, port, payload) = packet.write_target();
-            if flow_io
-                .write_packet_tokio(&mut stream, target, port, payload)
-                .await
-                .is_err()
-            {
-                return;
-            }
-        }
-
         let mut buffer = vec![0_u8; 64 * 1024];
         loop {
             tokio::select! {
@@ -1229,7 +1011,7 @@ fn spawn_udp_flow_task<S>(
     });
 }
 
-pub async fn establish_udp_flow<S>(
+async fn establish_udp_flow<S>(
     stream: S,
     session: &Session,
     identity: VmessUdpIdentity,
@@ -1241,27 +1023,6 @@ where
     Ok((stream, VmessEstablishedUdpFlow { io: VmessUdpFlowIo }))
 }
 
-pub async fn establish_udp_flow_with_initial_packet<S>(
-    stream: S,
-    session: &Session,
-    identity: VmessUdpIdentity,
-    initial_payload: &[u8],
-) -> Result<VmessEstablishedUdpFlowHandle, Error>
-where
-    S: AsyncSocket + tokio::io::AsyncRead + tokio::io::AsyncWrite + Send + Sync + 'static,
-{
-    let (stream, flow_io) = establish_udp_flow(stream, session, identity).await?;
-    let initial_packet =
-        VmessInitialUdpFlowPacket::from_parts(&session.target, session.port, initial_payload);
-    let initial_packet_len = initial_packet.encoded_len(&flow_io)?;
-    let handle = spawn_udp_flow(stream, Some(initial_packet), flow_io);
-
-    Ok(VmessEstablishedUdpFlowHandle {
-        handle,
-        initial_packet_len,
-    })
-}
-
 pub async fn establish_udp_flow_with_resume<S>(
     stream: S,
     session: &Session,
@@ -1271,9 +1032,7 @@ where
     S: AsyncSocket + tokio::io::AsyncRead + tokio::io::AsyncWrite + Send + Sync + 'static,
 {
     let (stream, flow_io) = establish_udp_flow(stream, session, resume.identity()).await?;
-    Ok(VmessUdpFlowConnection::new(spawn_udp_flow(
-        stream, None, flow_io,
-    )))
+    Ok(VmessUdpFlowConnection::new(spawn_udp_flow(stream, flow_io)))
 }
 
 pub(crate) fn build_udp_packet(
