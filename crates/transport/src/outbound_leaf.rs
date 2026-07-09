@@ -16,6 +16,18 @@ where
     move |server, port| open_socket.clone()(server, port)
 }
 
+pub enum ResolveTransportLeafError<E> {
+    InvalidConfig(E),
+    MissingLeaf,
+}
+
+#[derive(Clone, Copy)]
+pub struct TransportLeafEndpoint<'a> {
+    pub tag: &'a str,
+    pub server: &'a str,
+    pub port: u16,
+}
+
 pub trait ProtocolTransportLeaf {
     fn tag(&self) -> &str;
 
@@ -96,4 +108,82 @@ pub trait ProtocolRelayTwoStreamTransportLeaf: ProtocolTransportLeaf {
     ) -> Result<TcpRelayStream, EngineError>;
 
     fn needs_relay_two_streams(&self) -> bool;
+}
+
+pub fn resolve_transport_leaf<'a, T, E, F>(
+    source_dir: Option<&Path>,
+    leaf: &ResolvedLeafOutbound<'a>,
+    build: F,
+) -> Result<T, ResolveTransportLeafError<E>>
+where
+    F: FnOnce(Option<&Path>, &ResolvedLeafOutbound<'a>) -> Result<Option<T>, E>,
+{
+    build(source_dir, leaf)
+        .map_err(ResolveTransportLeafError::InvalidConfig)?
+        .ok_or(ResolveTransportLeafError::MissingLeaf)
+}
+
+pub fn resolve_last_transport_leaf<'a, 'chain, T, E, F>(
+    chain: &'chain [ResolvedLeafOutbound<'a>],
+    source_dir: Option<&Path>,
+    build: F,
+) -> Result<T, ResolveTransportLeafError<E>>
+where
+    F: FnOnce(Option<&Path>, &ResolvedLeafOutbound<'a>) -> Result<Option<T>, E>,
+{
+    let leaf = chain.last().ok_or(ResolveTransportLeafError::MissingLeaf)?;
+    resolve_transport_leaf(source_dir, leaf, build)
+}
+
+pub fn transport_leaf_endpoint<TLeaf>(leaf: &TLeaf) -> TransportLeafEndpoint<'_>
+where
+    TLeaf: ProtocolTransportLeaf,
+{
+    TransportLeafEndpoint {
+        tag: leaf.tag(),
+        server: leaf.server(),
+        port: leaf.port(),
+    }
+}
+
+pub async fn open_tcp_transport_bridge_stream<TLeaf, TBridge, OpenSocket, OpenSocketFut>(
+    bridge: &TBridge,
+    session: &Session,
+    leaf: &TLeaf,
+    open_socket: OpenSocket,
+) -> Result<TBridge::Opened, EngineError>
+where
+    TBridge: ProtocolTcpTransportBridgeOps<TLeaf>,
+    OpenSocket: Clone + Fn(&str, u16) -> OpenSocketFut + Send + Sync,
+    OpenSocketFut: Future<Output = Result<TokioSocket, EngineError>> + Send,
+{
+    bridge
+        .open_tcp_stream_for_leaf(session, leaf, open_socket)
+        .await
+}
+
+pub async fn open_tcp_transport_bridge_relay_hop<TLeaf, TBridge>(
+    bridge: &TBridge,
+    stream: TcpRelayStream,
+    session: &Session,
+    leaf: &TLeaf,
+) -> Result<TcpRelayStream, EngineError>
+where
+    TBridge: ProtocolTcpTransportBridgeOps<TLeaf>,
+{
+    bridge
+        .open_tcp_relay_hop_for_leaf(stream, session, leaf)
+        .await
+}
+
+pub async fn open_relay_two_stream_udp_transport<TLeaf>(
+    leaf: &TLeaf,
+    post_stream: TcpRelayStream,
+    get_stream: TcpRelayStream,
+) -> Result<TcpRelayStream, EngineError>
+where
+    TLeaf: ProtocolRelayTwoStreamTransportLeaf,
+{
+    leaf.open_relay_two_stream_udp_transport(post_stream, get_stream)
+        .await
 }
