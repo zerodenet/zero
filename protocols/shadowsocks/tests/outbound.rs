@@ -102,13 +102,20 @@ impl AsyncSocket for RecordingSocket {
         Ok(0)
     }
 
-    async fn write_all(&mut self, buf: &[u8]) -> Result<(), Self::Error> {
-        self.writes.push(buf.to_vec());
-        Ok(())
+    fn write_all<'a>(
+        &'a mut self,
+        buf: &'a [u8],
+    ) -> impl core::future::Future<Output = Result<(), Self::Error>> + Send + 'a {
+        async move {
+            self.writes.push(buf.to_vec());
+            Ok(())
+        }
     }
 
-    async fn shutdown(&mut self) -> Result<(), Self::Error> {
-        Ok(())
+    fn shutdown<'a>(
+        &'a mut self,
+    ) -> impl core::future::Future<Output = Result<(), Self::Error>> + Send + 'a {
+        async move { Ok(()) }
     }
 }
 
@@ -651,17 +658,27 @@ struct TestSocket(DuplexStream);
 impl AsyncSocket for TestSocket {
     type Error = io::Error;
 
-    async fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
-        AsyncReadExt::read(&mut self.0, buf).await
+    fn read<'a>(
+        &'a mut self,
+        buf: &'a mut [u8],
+    ) -> impl core::future::Future<Output = Result<usize, Self::Error>> + Send + 'a {
+        async move { AsyncReadExt::read(&mut self.0, buf).await }
     }
 
-    async fn write_all(&mut self, buf: &[u8]) -> Result<(), Self::Error> {
-        AsyncWriteExt::write_all(&mut self.0, buf).await?;
-        AsyncWriteExt::flush(&mut self.0).await
+    fn write_all<'a>(
+        &'a mut self,
+        buf: &'a [u8],
+    ) -> impl core::future::Future<Output = Result<(), Self::Error>> + Send + 'a {
+        async move {
+            AsyncWriteExt::write_all(&mut self.0, buf).await?;
+            AsyncWriteExt::flush(&mut self.0).await
+        }
     }
 
-    async fn shutdown(&mut self) -> Result<(), Self::Error> {
-        AsyncWriteExt::shutdown(&mut self.0).await
+    fn shutdown<'a>(
+        &'a mut self,
+    ) -> impl core::future::Future<Output = Result<(), Self::Error>> + Send + 'a {
+        async move { AsyncWriteExt::shutdown(&mut self.0).await }
     }
 }
 

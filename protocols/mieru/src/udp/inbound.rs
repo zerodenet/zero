@@ -330,6 +330,7 @@ impl MieruInboundUdpResponder {
 }
 
 #[cfg(feature = "crypto")]
+#[async_trait::async_trait]
 impl<S> StreamUdpResponder<S> for MieruInboundUdpResponder
 where
     S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Send + Unpin,

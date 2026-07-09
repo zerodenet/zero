@@ -118,7 +118,7 @@
    - VMess TCP（返回 `VmessOutboundSession`，包含上传/下载 AEAD key/nonce/cipher）
    - Mieru TCP（返回 `MieruOutbound`，包含加密状态）
 8. `DeferredTcpTunnelProtocol` 针对必须立即写入请求并将响应验证推迟到流封装器的协议握手实现：
-   - VLESS flow TCP 请求用于 Reality 单跳路径。代理仍拥有传输设置、计量和用 `DeferredVlessResponseStream` 包装已连接流。
+   - VLESS flow TCP ???? Reality ?????????????????????????? `DeferredVlessResponseStream` ??? `protocols/vless::outbound` ???
 9. `UdpRelayProtocol` 针对 SOCKS5 UDP ASSOCIATE 实现。协议 crate 拥有认证协商和关联响应解析；代理拥有控制流拨号、UDP socket 绑定、中继端点解析、关联缓存、空闲超时、统计、事件和 fallback 行为。
 10. `UdpPacketTunnelProtocol` 和 `UdpPacketFraming` 针对 VLESS UDP over 已建立流实现。VLESS crate 拥有 UDP 隧道请求/响应握手和 VLESS UDP 数据包编码/解码；代理拥有传输设置、中继前缀设置、路由、fallback、会话生命周期、统计、事件和通用响应任务调度。UDP 中继链针对 TCP 中继前缀和能够在已建立 TCP 流上操作的 VLESS 最终跳传输实现。
 11. `UdpPacketTunnelProtocol` 和 `UdpPacketFraming` 针对 VMess UDP over 已建立流实现。VMess crate 拥有 `CMD_UDP` 请求、AEAD 流状态、UDP 数据包编码/解码和 payload 模式选择；代理拥有传输设置、路由、会话生命周期、统计、事件、上游缓存和通用响应任务调度。已实现的 VMess UDP 中继链目标是同协议 `vmess -> vmess` 路径。本地 SOCKS5/Mixed 仅提供客户端入口数据包，不计为跨协议链支持。

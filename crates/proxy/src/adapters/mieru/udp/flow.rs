@@ -4,8 +4,9 @@ use zero_engine::ResolvedLeafOutbound;
 use crate::adapters::common::unreachable_udp_leaf;
 use crate::adapters::mieru::MieruAdapter;
 use crate::protocol_registry::ProtocolSupportCapability;
-use crate::runtime::udp_dispatch::{
-    FlowFailure, FlowStartResult, ManagedStreamPacketStart, UdpDispatch,
+use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
+use crate::runtime::udp_flow::managed::{
+    start_direct_managed_stream_packet, start_relay_managed_stream_packet,
 };
 use crate::runtime::Proxy;
 
@@ -76,19 +77,34 @@ async fn start_with_carrier(
         return Err(unreachable_udp_leaf(request.adapter.name(), request.leaf));
     };
     let resume = mieru::udp::udp_flow_resume_from_config(username, password, request.relay_chain);
-    request
-        .dispatch
-        .start_tracked_managed_stream_packet(ManagedStreamPacketStart {
-            proxy: request.proxy,
+    if let Some(carrier) = request.carrier {
+        return start_relay_managed_stream_packet(
+            request.dispatch,
+            request.proxy,
             tag,
-            session: request.session,
-            carrier: request.carrier,
-            tls_server_name: None,
+            request.session,
+            carrier,
+            None,
             server,
-            port: *port,
+            *port,
             resume,
-            payload: request.payload,
-            relay_chain: request.relay_chain,
-        })
-        .await
+            request.payload,
+        )
+        .await;
+    }
+
+    let proxy = request
+        .proxy
+        .expect("mieru direct UDP flow should carry proxy context");
+    start_direct_managed_stream_packet(
+        request.dispatch,
+        proxy,
+        tag,
+        request.session,
+        server,
+        *port,
+        resume,
+        request.payload,
+    )
+    .await
 }

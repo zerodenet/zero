@@ -3,9 +3,7 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use shadowsocks::{
-    ShadowsocksAeadStream, ShadowsocksInboundProfile, ShadowsocksInboundTcpAcceptor,
-};
+use shadowsocks::{ShadowsocksAeadStream, ShadowsocksInboundTcpAcceptor};
 use tokio::net::UdpSocket;
 use tokio::sync::watch;
 use tracing::warn;
@@ -19,13 +17,10 @@ use crate::runtime::listener_loop::{run_tcp_listener_loop, TcpListenerLoopReques
 use crate::runtime::Proxy;
 use crate::transport::{MeteredStream, TcpRelayStream};
 
-mod udp;
+use super::request::ShadowsocksInboundListenerRequest;
 
-pub(crate) struct ShadowsocksInboundRequest {
-    pub(crate) inbound: InboundConfig,
-    pub(crate) profile: ShadowsocksInboundProfile,
-    pub(crate) udp_session: shadowsocks::udp::ShadowsocksInboundAcceptedUdpSession,
-}
+#[path = "udp.rs"]
+mod udp;
 
 #[derive(Clone)]
 pub(crate) struct ShadowsocksInboundHandler {
@@ -65,12 +60,12 @@ impl InboundProtocol for ShadowsocksInboundHandler {
 
 pub(crate) async fn run_shadowsocks_listener_with_bound(
     proxy: &Proxy,
-    request: ShadowsocksInboundRequest,
+    inbound: InboundConfig,
+    request: ShadowsocksInboundListenerRequest,
     listener: zero_platform_tokio::TokioListener,
     shutdown: watch::Receiver<bool>,
 ) -> Result<(), EngineError> {
-    let ShadowsocksInboundRequest {
-        inbound,
+    let ShadowsocksInboundListenerRequest {
         profile,
         udp_session,
     } = request;
@@ -97,7 +92,7 @@ pub(crate) async fn run_shadowsocks_listener_with_bound(
         let tag = inbound.tag.clone();
         let udp = udp.clone();
         tokio::spawn(async move {
-            if let Err(error) = engine.ss_udp_relay_loop(udp, &tag, udp_session).await {
+            if let Err(error) = udp::ss_udp_relay_loop(&engine, udp, &tag, udp_session).await {
                 warn!(%error, "shadowsocks UDP relay stopped");
             }
         })

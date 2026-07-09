@@ -5,7 +5,10 @@ use zero_core::Session;
 use zero_engine::{EngineError, ResolvedLeafOutbound};
 use zero_traits::{ProtocolCapabilityDescriptor, ProtocolMetadata};
 
-use crate::adapters::common::direct_leaf_runtime;
+use crate::adapters::common::{
+    direct_leaf_runtime, named_protocol_claims_runtime_leaf, named_protocol_supports_inbound,
+    named_protocol_supports_outbound, NamedProtocolAdapter,
+};
 use crate::protocol_capability::protocol_descriptor;
 use crate::protocol_registry::{
     BoundInbound, InboundAdapterContext, InboundListenerCapability, OutboundAdapterContext,
@@ -22,6 +25,12 @@ mod udp;
 // Direct inbound is always available (no feature gate).
 #[derive(Debug)]
 pub(crate) struct DirectAdapter;
+
+impl NamedProtocolAdapter for DirectAdapter {
+    const PROTOCOL_NAME: &'static str = "direct";
+    const FEATURE_NAME: &'static str = "core";
+    const HAS_OUTBOUND: bool = false;
+}
 
 #[async_trait]
 impl UdpFlowCapability for DirectAdapter {
@@ -56,7 +65,7 @@ impl InboundListenerCapability for DirectAdapter {
 #[async_trait]
 impl TcpOutboundCapability for DirectAdapter {
     fn claims_outbound_leaf(&self, leaf: &ResolvedLeafOutbound<'_>) -> bool {
-        matches!(leaf, ResolvedLeafOutbound::Direct { .. })
+        named_protocol_claims_runtime_leaf::<Self>(leaf)
     }
     fn outbound_leaf_runtime<'a>(
         &self,
@@ -76,22 +85,22 @@ impl TcpOutboundCapability for DirectAdapter {
 
 impl ProtocolSupportCapability for DirectAdapter {
     fn name(&self) -> &'static str {
-        "direct"
+        <Self as NamedProtocolAdapter>::PROTOCOL_NAME
     }
     fn feature_name(&self) -> &'static str {
-        "core"
+        <Self as NamedProtocolAdapter>::FEATURE_NAME
     }
     fn supports_inbound(&self, c: &InboundProtocolConfig) -> bool {
-        matches!(c, InboundProtocolConfig::Direct { .. })
+        named_protocol_supports_inbound::<Self>(c)
     }
-    fn supports_outbound(&self, _: &OutboundProtocolConfig) -> bool {
-        false
+    fn supports_outbound(&self, c: &OutboundProtocolConfig) -> bool {
+        named_protocol_supports_outbound::<Self>(c)
     }
     fn has_inbound(&self) -> bool {
-        true
+        <Self as NamedProtocolAdapter>::HAS_INBOUND
     }
     fn has_outbound(&self) -> bool {
-        false
+        <Self as NamedProtocolAdapter>::HAS_OUTBOUND
     }
 }
 

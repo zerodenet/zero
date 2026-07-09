@@ -3,8 +3,8 @@ use tokio::sync::watch;
 use zero_engine::EngineError;
 use zero_traits::AsyncSocket;
 
-use crate::adapters::http_connect::inbound::listener::HttpConnectInboundHandler;
-use crate::adapters::socks5::inbound::listener::handle_socks5_connection;
+use crate::adapters::http_connect::inbound::HttpConnectInboundHandler;
+use crate::adapters::socks5::inbound::handle_socks5_connection;
 use crate::logging::log_listener_connection_error;
 use crate::runtime::inbound_protocol::serve_inbound;
 use crate::runtime::listener_loop::{run_tcp_listener_loop, TcpListenerLoopRequest};
@@ -27,9 +27,7 @@ pub(crate) async fn run_mixed_listener_with_bound(
         socks5_acceptor,
     } = request;
 
-    let http_handler = HttpConnectInboundHandler {
-        http_connect_inbound: http_connect::HttpConnectInbound,
-    };
+    let http_handler = HttpConnectInboundHandler::default();
 
     run_tcp_listener_loop(TcpListenerLoopRequest {
         proxy,

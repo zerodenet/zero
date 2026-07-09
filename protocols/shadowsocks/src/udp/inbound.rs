@@ -646,6 +646,7 @@ impl ShadowsocksInboundUdpResponder {
 }
 
 #[cfg(feature = "crypto")]
+#[async_trait::async_trait]
 impl DatagramUdpResponder<std::sync::Arc<tokio::net::UdpSocket>>
     for ShadowsocksInboundUdpResponder
 {

@@ -1,9 +1,9 @@
 //! Mieru inbound encrypted handshake and AEAD-framed relay.
 
+#[path = "udp.rs"]
 mod udp;
 
 use async_trait::async_trait;
-use mieru::{MieruInbound, MieruInboundAcceptedSessionDispatcher, MieruInboundProfile};
 use tokio::sync::watch;
 use zero_config::InboundConfig;
 use zero_core::Session;
@@ -15,27 +15,16 @@ use crate::runtime::listener_loop::{run_tcp_listener_loop, TcpListenerLoopReques
 use crate::runtime::Proxy;
 use crate::transport::{MeteredStream, TcpRelayStream};
 
-type MieruClientStream = mieru::MieruInboundStream<MeteredStream<TcpRelayStream>>;
+use super::request::MieruInboundListenerRequest;
 
-#[derive(Debug)]
-pub(crate) struct MieruInboundRequest {
-    pub(crate) inbound: InboundConfig,
-    pub(crate) profile: MieruInboundProfile,
-}
+type MieruClientStream = mieru::inbound::MieruInboundStream<MeteredStream<TcpRelayStream>>;
 
 // Handler.
 
 #[derive(Clone)]
 pub(crate) struct MieruInboundHandler {
-    mieru_inbound: MieruInbound,
-    profile: MieruInboundProfile,
-}
-
-struct MieruAcceptedSessionBridge<'a> {
-    proxy: &'a Proxy,
-    handler: &'a MieruInboundHandler,
-    inbound_tag: &'a str,
-    source_addr: Option<std::net::SocketAddr>,
+    mieru_inbound: mieru::inbound::MieruInbound,
+    profile: mieru::inbound::MieruInboundProfile,
 }
 
 #[async_trait]
@@ -72,7 +61,7 @@ impl MieruInboundHandler {
     async fn accept_client(
         &self,
         stream: TcpRelayStream,
-    ) -> Result<mieru::MieruInboundAcceptedSession<MieruClientStream>, EngineError> {
+    ) -> Result<mieru::inbound::MieruInboundAcceptedSession<MieruClientStream>, EngineError> {
         let metered = MeteredStream::new(stream);
         self.profile
             .accept_client(&self.mieru_inbound, metered)
@@ -81,51 +70,18 @@ impl MieruInboundHandler {
     }
 }
 
-impl MieruInboundAcceptedSessionDispatcher<MieruClientStream> for MieruAcceptedSessionBridge<'_> {
-    type Error = EngineError;
-
-    async fn dispatch_tcp_session(
-        &mut self,
-        session: Session,
-        stream: MieruClientStream,
-    ) -> Result<(), Self::Error> {
-        serve_inbound(
-            self.proxy,
-            session,
-            stream,
-            self.handler,
-            self.inbound_tag,
-            self.source_addr,
-        )
-        .await
-    }
-
-    async fn dispatch_udp_session(
-        &mut self,
-        session: Session,
-        stream: MieruClientStream,
-        responder: mieru::udp::MieruInboundUdpResponder,
-        auth: Option<zero_core::SessionAuth>,
-    ) -> Result<(), Self::Error> {
-        self.proxy
-            .run_mieru_udp_relay(stream, &session, responder, auth, self.inbound_tag)
-            .await
-    }
-}
-
 // Listener.
 
 pub(crate) async fn run_mieru_listener_with_bound(
     proxy: &Proxy,
-    request: MieruInboundRequest,
+    inbound: InboundConfig,
+    request: MieruInboundListenerRequest,
     listener: zero_platform_tokio::TokioListener,
     shutdown: watch::Receiver<bool>,
 ) -> Result<(), EngineError> {
-    let MieruInboundRequest { inbound, profile } = request;
-
     let handler = MieruInboundHandler {
-        mieru_inbound: MieruInbound,
-        profile,
+        mieru_inbound: mieru::inbound::MieruInbound,
+        profile: request.profile,
     };
 
     run_tcp_listener_loop(TcpListenerLoopRequest {
@@ -142,13 +98,35 @@ pub(crate) async fn run_mieru_listener_with_bound(
             async move {
                 match handler.accept_client(stream.into()).await {
                     Ok(client) => {
-                        let mut bridge = MieruAcceptedSessionBridge {
-                            proxy: &engine,
-                            handler: &handler,
-                            inbound_tag: &tag,
-                            source_addr,
-                        };
-                        let result = client.dispatch_with(&mut bridge).await;
+                        let engine_ref = &engine;
+                        let handler_ref = &handler;
+                        let inbound_tag = tag.as_str();
+                        let result = client
+                            .dispatch(
+                                |session: Session, stream| async move {
+                                    serve_inbound(
+                                        engine_ref,
+                                        session,
+                                        stream,
+                                        handler_ref,
+                                        inbound_tag,
+                                        source_addr,
+                                    )
+                                    .await
+                                },
+                                |session, stream, responder, auth| async move {
+                                    udp::run_mieru_udp_relay(
+                                        engine_ref,
+                                        stream,
+                                        &session,
+                                        responder,
+                                        auth,
+                                        inbound_tag,
+                                    )
+                                    .await
+                                },
+                            )
+                            .await;
                         if let Err(error) = result {
                             log_listener_connection_error("mieru", &tag, &source_addr, &error);
                         }

@@ -6,15 +6,20 @@ use zero_config::{InboundConfig, InboundProtocolConfig, OutboundProtocolConfig};
 use zero_core::Session;
 use zero_engine::{EngineError, ResolvedLeafOutbound};
 use zero_traits::{ProtocolCapabilityDescriptor, ProtocolMetadata};
+use zero_transport::hysteria2_quic::OwnedHysteria2InboundBindPlan;
 
-use crate::adapters::common::proxy_leaf_runtime;
+use crate::adapters::common::{
+    named_protocol_claims_runtime_leaf, named_protocol_supports_inbound,
+    named_protocol_supports_outbound, proxy_leaf_runtime, NamedProtocolAdapter,
+};
 use crate::protocol_registry::{
-    BoundInbound, InboundAdapterContext, InboundListenerCapability, OutboundAdapterContext,
-    OutboundLeafRuntime, ProtocolSupportCapability, TcpOutboundCapability, UdpAdapterContext,
-    UdpFlowCapability, UdpPacketPathCapability,
+    bind_transport_inbound, BoundInbound, InboundAdapterContext, InboundListenerCapability,
+    OutboundAdapterContext, OutboundLeafRuntime, ProtocolSupportCapability, TcpOutboundCapability,
+    UdpAdapterContext, UdpFlowCapability, UdpPacketPathCapability,
 };
 use crate::runtime::orchestration::TcpPathCategory;
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
+use crate::runtime::udp_flow::managed::ManagedDatagramFlowHandler;
 use crate::transport::{EstablishedTcpOutbound, TcpOutboundFailure};
 
 #[cfg(feature = "hysteria2")]
@@ -29,6 +34,12 @@ pub(crate) mod udp;
 #[cfg(feature = "hysteria2")]
 #[derive(Debug)]
 pub(crate) struct Hysteria2Adapter;
+
+#[cfg(feature = "hysteria2")]
+impl NamedProtocolAdapter for Hysteria2Adapter {
+    const PROTOCOL_NAME: &'static str = "hysteria2";
+    const FEATURE_NAME: &'static str = "hysteria2";
+}
 
 #[cfg(feature = "hysteria2")]
 #[async_trait]
@@ -53,6 +64,10 @@ impl UdpPacketPathCapability for Hysteria2Adapter {
 #[cfg(feature = "hysteria2")]
 #[async_trait]
 impl UdpFlowCapability for Hysteria2Adapter {
+    fn managed_datagram_udp_handler(&self) -> Option<Box<dyn ManagedDatagramFlowHandler>> {
+        Some(udp::managed_datagram_handler())
+    }
+
     async fn start_udp_flow(
         &self,
         dispatch: &mut UdpDispatch,
@@ -74,7 +89,7 @@ impl InboundListenerCapability for Hysteria2Adapter {
         inbound: &InboundConfig,
         source_dir: Option<&std::path::Path>,
     ) -> Result<BoundInbound, EngineError> {
-        self.bind_inbound_impl(inbound, source_dir).await
+        bind_transport_inbound::<OwnedHysteria2InboundBindPlan>(inbound, source_dir).await
     }
 
     fn spawn_inbound(
@@ -93,7 +108,7 @@ impl InboundListenerCapability for Hysteria2Adapter {
 #[async_trait]
 impl TcpOutboundCapability for Hysteria2Adapter {
     fn claims_outbound_leaf(&self, leaf: &ResolvedLeafOutbound<'_>) -> bool {
-        matches!(leaf, ResolvedLeafOutbound::Hysteria2 { .. })
+        named_protocol_claims_runtime_leaf::<Self>(leaf)
     }
 
     fn outbound_leaf_runtime<'a>(
@@ -116,22 +131,22 @@ impl TcpOutboundCapability for Hysteria2Adapter {
 #[cfg(feature = "hysteria2")]
 impl ProtocolSupportCapability for Hysteria2Adapter {
     fn name(&self) -> &'static str {
-        "hysteria2"
+        <Self as NamedProtocolAdapter>::PROTOCOL_NAME
     }
     fn feature_name(&self) -> &'static str {
-        "hysteria2"
+        <Self as NamedProtocolAdapter>::FEATURE_NAME
     }
     fn has_inbound(&self) -> bool {
-        true
+        <Self as NamedProtocolAdapter>::HAS_INBOUND
     }
     fn has_outbound(&self) -> bool {
-        true
+        <Self as NamedProtocolAdapter>::HAS_OUTBOUND
     }
     fn supports_inbound(&self, c: &InboundProtocolConfig) -> bool {
-        matches!(c, InboundProtocolConfig::Hysteria2 { .. })
+        named_protocol_supports_inbound::<Self>(c)
     }
     fn supports_outbound(&self, c: &OutboundProtocolConfig) -> bool {
-        matches!(c, OutboundProtocolConfig::Hysteria2 { .. })
+        named_protocol_supports_outbound::<Self>(c)
     }
 }
 

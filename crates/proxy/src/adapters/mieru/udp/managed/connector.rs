@@ -2,20 +2,13 @@ use std::sync::Arc;
 
 use crate::runtime::orchestration::OutboundEndpoint;
 use crate::runtime::udp_flow::managed::{
-    managed_stream_connector_flow_from_build, managed_tuple_udp_connection,
-    ManagedStreamConnectorFlow, ManagedStreamConnectorFlowBuild, ManagedStreamFlowConnector,
+    managed_tuple_udp_connection, ManagedStreamConnectorFlow, ManagedStreamFlowConnector,
     ManagedTupleUdpSender, SharedManagedUdpConnection,
 };
 use crate::runtime::Proxy;
 use crate::transport::TcpRelayStream;
 use zero_core::Session;
 use zero_engine::EngineError;
-
-impl ManagedStreamConnectorFlowBuild for mieru::udp::MieruUdpConnectorFlow {
-    fn into_parts(self) -> (String, bool) {
-        mieru::udp::MieruUdpConnectorFlow::into_parts(self)
-    }
-}
 
 #[async_trait::async_trait]
 impl ManagedStreamFlowConnector for mieru::udp::MieruUdpFlowResume {
@@ -30,7 +23,9 @@ impl ManagedStreamFlowConnector for mieru::udp::MieruUdpFlowResume {
             endpoint.port,
             session_id,
         );
-        managed_stream_connector_flow_from_build(flow)
+        let (cache_key, requires_relay_upstream) =
+            mieru::udp::MieruUdpConnectorFlow::into_parts(flow);
+        ManagedStreamConnectorFlow::new(cache_key, requires_relay_upstream)
     }
 
     async fn establish_direct(

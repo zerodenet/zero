@@ -1,39 +1,17 @@
-use zero_config::{InboundConfig, InboundProtocolConfig};
+mod request;
+mod transport;
+
+use zero_config::InboundConfig;
 use zero_engine::EngineError;
 
 use crate::adapters::hysteria2::Hysteria2Adapter;
 use crate::protocol_registry::BoundInbound;
 use crate::runtime::Proxy;
-use crate::transport::QuicInbound;
 
-mod listener;
+pub(crate) use request::Hysteria2InboundListenerRequest;
+pub(crate) use transport::run_hysteria2_listener_with_bound;
 
 impl Hysteria2Adapter {
-    pub(super) async fn bind_inbound_impl(
-        &self,
-        inbound: &InboundConfig,
-        source_dir: Option<&std::path::Path>,
-    ) -> Result<BoundInbound, EngineError> {
-        let listen = format!("{}:{}", inbound.listen.address, inbound.listen.port);
-        if let InboundProtocolConfig::Hysteria2 {
-            cert_path,
-            key_path,
-            ..
-        } = &inbound.protocol
-        {
-            let cert = cert_path
-                .clone()
-                .unwrap_or_else(|| "certs/fullchain.pem".to_string());
-            let key = key_path
-                .clone()
-                .unwrap_or_else(|| "certs/privkey.pem".to_string());
-            let endpoint = QuicInbound::bind(&listen, &cert, &key, source_dir).await?;
-            Ok(BoundInbound::Quic(endpoint))
-        } else {
-            unreachable!("hysteria2 adapter only handles Hysteria2 config")
-        }
-    }
-
     pub(super) fn spawn_inbound_impl(
         &self,
         proxy: &Proxy,
@@ -42,26 +20,10 @@ impl Hysteria2Adapter {
         shutdown_rx: tokio::sync::watch::Receiver<bool>,
         listeners: &mut tokio::task::JoinSet<Result<(), EngineError>>,
     ) {
-        let p = proxy.clone();
+        let proxy = proxy.clone();
         listeners.spawn(async move {
-            let profile = match &inbound.protocol {
-                InboundProtocolConfig::Hysteria2 { password, .. } => {
-                    hysteria2::inbound_profile_from_config_password(password.as_str())
-                }
-                _ => {
-                    return Err(EngineError::Io(std::io::Error::new(
-                        std::io::ErrorKind::InvalidInput,
-                        "hysteria2 adapter received non-hysteria2 inbound config",
-                    )));
-                }
-            };
-            listener::run_hysteria2_listener_with_bound(
-                &p,
-                listener::Hysteria2InboundRequest { inbound, profile },
-                bound,
-                shutdown_rx,
-            )
-            .await
+            let request = Hysteria2InboundListenerRequest::from_protocol_config(&inbound.protocol)?;
+            run_hysteria2_listener_with_bound(&proxy, inbound, request, bound, shutdown_rx).await
         });
     }
 }

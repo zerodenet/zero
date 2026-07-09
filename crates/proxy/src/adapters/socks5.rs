@@ -7,7 +7,10 @@ use zero_core::Session;
 use zero_engine::{EngineError, ResolvedLeafOutbound};
 use zero_traits::{ProtocolCapabilityDescriptor, ProtocolMetadata};
 
-use crate::adapters::common::proxy_leaf_runtime;
+use crate::adapters::common::{
+    named_protocol_claims_runtime_leaf, named_protocol_supports_inbound,
+    named_protocol_supports_outbound, proxy_leaf_runtime, NamedProtocolAdapter,
+};
 use crate::protocol_registry::{
     BoundInbound, InboundAdapterContext, InboundListenerCapability, OutboundAdapterContext,
     OutboundLeafRuntime, ProtocolSupportCapability, TcpOutboundCapability, UdpAdapterContext,
@@ -15,6 +18,7 @@ use crate::protocol_registry::{
 };
 use crate::runtime::orchestration::TcpPathCategory;
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
+use crate::runtime::udp_flow::registered::UpstreamAssociationHandler;
 use crate::transport::{EstablishedTcpOutbound, TcpOutboundFailure};
 
 #[cfg(feature = "socks5")]
@@ -27,6 +31,12 @@ pub(crate) mod udp;
 #[cfg(feature = "socks5")]
 #[derive(Debug)]
 pub(crate) struct Socks5Adapter;
+
+#[cfg(feature = "socks5")]
+impl NamedProtocolAdapter for Socks5Adapter {
+    const PROTOCOL_NAME: &'static str = "socks5";
+    const FEATURE_NAME: &'static str = "socks5";
+}
 
 #[cfg(feature = "socks5")]
 #[async_trait]
@@ -51,6 +61,10 @@ impl UdpPacketPathCapability for Socks5Adapter {
 #[cfg(feature = "socks5")]
 #[async_trait]
 impl UdpFlowCapability for Socks5Adapter {
+    fn upstream_association_handler(&self) -> Option<Box<dyn UpstreamAssociationHandler>> {
+        Some(udp::upstream_association_handler())
+    }
+
     async fn start_udp_flow(
         &self,
         dispatch: &mut UdpDispatch,
@@ -82,7 +96,7 @@ impl InboundListenerCapability for Socks5Adapter {
 #[async_trait]
 impl TcpOutboundCapability for Socks5Adapter {
     fn claims_outbound_leaf(&self, leaf: &ResolvedLeafOutbound<'_>) -> bool {
-        matches!(leaf, ResolvedLeafOutbound::Socks5 { .. })
+        named_protocol_claims_runtime_leaf::<Self>(leaf)
     }
 
     fn outbound_leaf_runtime<'a>(
@@ -116,27 +130,27 @@ impl TcpOutboundCapability for Socks5Adapter {
 #[cfg(feature = "socks5")]
 impl ProtocolSupportCapability for Socks5Adapter {
     fn name(&self) -> &'static str {
-        "socks5"
+        <Self as NamedProtocolAdapter>::PROTOCOL_NAME
     }
 
     fn feature_name(&self) -> &'static str {
-        "socks5"
+        <Self as NamedProtocolAdapter>::FEATURE_NAME
     }
 
     fn has_inbound(&self) -> bool {
-        true
+        <Self as NamedProtocolAdapter>::HAS_INBOUND
     }
 
     fn has_outbound(&self) -> bool {
-        true
+        <Self as NamedProtocolAdapter>::HAS_OUTBOUND
     }
 
     fn supports_inbound(&self, c: &InboundProtocolConfig) -> bool {
-        matches!(c, InboundProtocolConfig::Socks5 { .. })
+        named_protocol_supports_inbound::<Self>(c)
     }
 
     fn supports_outbound(&self, c: &OutboundProtocolConfig) -> bool {
-        matches!(c, OutboundProtocolConfig::Socks5 { .. })
+        named_protocol_supports_outbound::<Self>(c)
     }
 }
 

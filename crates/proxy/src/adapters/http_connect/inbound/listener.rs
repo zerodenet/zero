@@ -12,9 +12,17 @@ use crate::runtime::listener_loop::{run_tcp_listener_loop, TcpListenerLoopReques
 use crate::runtime::Proxy;
 use crate::transport::{MeteredStream, TcpRelayStream};
 
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub(crate) struct HttpConnectInboundHandler {
-    pub(crate) http_connect_inbound: HttpConnectInbound,
+    http_connect_inbound: HttpConnectInbound,
+}
+
+impl Default for HttpConnectInboundHandler {
+    fn default() -> Self {
+        Self {
+            http_connect_inbound: HttpConnectInbound,
+        }
+    }
 }
 
 impl HttpConnectInboundHandler {
@@ -34,7 +42,7 @@ impl InboundProtocol for HttpConnectInboundHandler {
         let mut metered = MeteredStream::new(stream);
         match self.http_connect_inbound.accept_request(&mut metered).await {
             Ok(session) => Ok((session, metered.into_inner())),
-            Err(e) => Err(e.into()),
+            Err(error) => Err(error.into()),
         }
     }
 
@@ -70,9 +78,7 @@ pub(crate) async fn run_http_connect_listener_with_bound(
     listener: zero_platform_tokio::TokioListener,
     shutdown: watch::Receiver<bool>,
 ) -> Result<(), EngineError> {
-    let handler = HttpConnectInboundHandler {
-        http_connect_inbound: http_connect::HttpConnectInbound,
-    };
+    let handler = HttpConnectInboundHandler::default();
 
     run_tcp_listener_loop(TcpListenerLoopRequest {
         proxy,
@@ -84,7 +90,7 @@ pub(crate) async fn run_http_connect_listener_with_bound(
                        tag: String,
                        stream: zero_platform_tokio::TokioSocket,
                        source_addr: Option<std::net::SocketAddr>| {
-            let handler = handler.clone();
+            let handler = handler;
             async move {
                 let mut metered = MeteredStream::new(TcpRelayStream::from(stream));
                 match handler
@@ -112,21 +118,21 @@ pub(crate) async fn run_http_connect_listener_with_bound(
                             .await;
                         }
                     }
-                    Err(err) => {
+                    Err(error) => {
                         if handler
                             .http_connect_inbound
-                            .send_accept_error_response(&mut metered, &err)
+                            .send_accept_error_response(&mut metered, &error)
                             .await
                             .unwrap_or(false)
                         {
                             return;
                         }
-                        let engine_err = EngineError::from(err);
+                        let engine_error = EngineError::from(error);
                         log_listener_connection_error(
                             "http_connect",
                             &tag,
                             &source_addr,
-                            &engine_err,
+                            &engine_error,
                         );
                     }
                 }

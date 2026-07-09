@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 use socks5::Socks5InboundTcpAcceptor;
 use tokio::sync::watch;
+use zero_config::InboundConfig;
 use zero_engine::EngineError;
 use zero_traits::AsyncSocket;
 
@@ -12,9 +13,12 @@ use crate::runtime::listener_loop::{run_tcp_listener_loop, TcpListenerLoopReques
 use crate::runtime::Proxy;
 use crate::transport::{MeteredStream, TcpRelayStream};
 
-pub(in crate::adapters) mod udp_associate;
+use super::request::Socks5InboundListenerRequest;
 
-pub(in crate::adapters) async fn handle_socks5_connection(
+#[path = "udp_associate.rs"]
+pub(crate) mod udp_associate;
+
+pub(crate) async fn handle_socks5_connection(
     proxy: &Proxy,
     inbound_tag: &str,
     source_addr: Option<std::net::SocketAddr>,
@@ -82,24 +86,17 @@ impl InboundProtocol for Socks5InboundTcpAcceptor {
     }
 }
 
-pub(crate) struct Socks5InboundRequest {
-    pub(crate) inbound_tag: String,
-    pub(crate) acceptor: Socks5InboundTcpAcceptor,
-}
-
 pub(crate) async fn run_socks5_listener_with_bound(
     proxy: &Proxy,
-    request: Socks5InboundRequest,
+    inbound: InboundConfig,
+    request: Socks5InboundListenerRequest,
     listener: zero_platform_tokio::TokioListener,
     shutdown: watch::Receiver<bool>,
 ) -> Result<(), EngineError> {
-    let Socks5InboundRequest {
-        inbound_tag,
-        acceptor,
-    } = request;
+    let Socks5InboundListenerRequest { acceptor } = request;
     run_tcp_listener_loop(TcpListenerLoopRequest {
         proxy,
-        inbound_tag,
+        inbound_tag: inbound.tag,
         protocol_name: "socks5",
         listener,
         shutdown,

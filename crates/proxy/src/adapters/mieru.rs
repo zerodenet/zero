@@ -5,7 +5,10 @@ use zero_core::Session;
 use zero_engine::{EngineError, ResolvedLeafOutbound};
 use zero_traits::{ProtocolCapabilityDescriptor, ProtocolMetadata};
 
-use crate::adapters::common::proxy_leaf_runtime;
+use crate::adapters::common::{
+    named_protocol_claims_runtime_leaf, named_protocol_supports_inbound,
+    named_protocol_supports_outbound, proxy_leaf_runtime, NamedProtocolAdapter,
+};
 use crate::protocol_registry::{
     BoundInbound, InboundAdapterContext, InboundListenerCapability, OutboundAdapterContext,
     OutboundLeafRuntime, ProtocolSupportCapability, TcpOutboundCapability, UdpAdapterContext,
@@ -13,6 +16,7 @@ use crate::protocol_registry::{
 };
 use crate::runtime::orchestration::TcpPathCategory;
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
+use crate::runtime::udp_flow::managed::ManagedStreamFlowHandler;
 use crate::transport::{EstablishedTcpOutbound, TcpOutboundFailure};
 
 #[cfg(feature = "mieru")]
@@ -27,8 +31,18 @@ pub(crate) mod udp;
 pub(crate) struct MieruAdapter;
 
 #[cfg(feature = "mieru")]
+impl NamedProtocolAdapter for MieruAdapter {
+    const PROTOCOL_NAME: &'static str = "mieru";
+    const FEATURE_NAME: &'static str = "mieru";
+}
+
+#[cfg(feature = "mieru")]
 #[async_trait]
 impl UdpFlowCapability for MieruAdapter {
+    fn managed_stream_udp_handler(&self) -> Option<Box<dyn ManagedStreamFlowHandler>> {
+        Some(udp::managed_stream_handler())
+    }
+
     async fn start_udp_flow(
         &self,
         dispatch: &mut UdpDispatch,
@@ -75,7 +89,7 @@ impl InboundListenerCapability for MieruAdapter {
 #[async_trait]
 impl TcpOutboundCapability for MieruAdapter {
     fn claims_outbound_leaf(&self, leaf: &ResolvedLeafOutbound<'_>) -> bool {
-        matches!(leaf, ResolvedLeafOutbound::Mieru { .. })
+        named_protocol_claims_runtime_leaf::<Self>(leaf)
     }
 
     fn outbound_leaf_runtime<'a>(
@@ -108,22 +122,22 @@ impl TcpOutboundCapability for MieruAdapter {
 #[cfg(feature = "mieru")]
 impl ProtocolSupportCapability for MieruAdapter {
     fn name(&self) -> &'static str {
-        "mieru"
+        <Self as NamedProtocolAdapter>::PROTOCOL_NAME
     }
     fn feature_name(&self) -> &'static str {
-        "mieru"
+        <Self as NamedProtocolAdapter>::FEATURE_NAME
     }
     fn has_inbound(&self) -> bool {
-        true
+        <Self as NamedProtocolAdapter>::HAS_INBOUND
     }
     fn has_outbound(&self) -> bool {
-        true
+        <Self as NamedProtocolAdapter>::HAS_OUTBOUND
     }
     fn supports_inbound(&self, c: &InboundProtocolConfig) -> bool {
-        matches!(c, InboundProtocolConfig::Mieru { .. })
+        named_protocol_supports_inbound::<Self>(c)
     }
     fn supports_outbound(&self, c: &OutboundProtocolConfig) -> bool {
-        matches!(c, OutboundProtocolConfig::Mieru { .. })
+        named_protocol_supports_outbound::<Self>(c)
     }
 }
 

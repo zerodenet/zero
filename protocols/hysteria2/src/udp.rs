@@ -429,6 +429,7 @@ impl Hysteria2InboundUdpResponder {
 }
 
 #[cfg(feature = "tokio")]
+#[async_trait::async_trait]
 impl DatagramUdpResponder<Arc<quinn::Connection>> for Hysteria2InboundUdpResponder {
     async fn read_inbound_dispatch(
         &mut self,

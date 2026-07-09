@@ -1,6 +1,6 @@
 # Trojan Inbound
 
-对应 `protocols/trojan/src/inbound.rs` — `TrojanInbound`、`TrojanAccept`。
+对应 `protocols/trojan/src/inbound.rs` — `TrojanInbound` 以及协议内部 accept/session route glue。
 
 ## TrojanInbound
 
@@ -42,3 +42,8 @@ if sha224(password) != expected_password_hash {
 
 - `password`: 必需
 - `tls`: 必需，Trojan 必须使用 TLS
+## Boundary note
+
+Raw Trojan accept state is module-private.
+Downstream glue should use `accept_session()`, `accept_client()`, or the route helpers
+instead of depending on handshake-local accept models.

@@ -2,6 +2,7 @@
 
 use alloc::string::String;
 use alloc::vec::Vec;
+use core::future::Future;
 #[cfg(all(feature = "tokio", feature = "crypto"))]
 use tokio::task::JoinSet;
 use zero_core::{Error, Network, ProtocolType, Session, SessionAuth};
@@ -136,6 +137,68 @@ impl Hysteria2AcceptedQuicConnection {
                 result = stream_tasks.join_next(), if !stream_tasks.is_empty() => {
                     if let Some(result) = result {
                         dispatcher.dispatch_stream_task_result(result).await?;
+                    }
+                }
+            }
+        }
+
+        stream_tasks.abort_all();
+        Ok(())
+    }
+
+    pub async fn dispatch_session_with_handlers<
+        S,
+        F,
+        Udp,
+        UdpFut,
+        Tcp,
+        TcpFut,
+        TaskResult,
+        TaskResultFut,
+        E,
+    >(
+        &self,
+        stream_factory: F,
+        mut on_udp_session: Udp,
+        mut on_tcp_stream: Tcp,
+        mut on_stream_task_result: TaskResult,
+    ) -> Result<(), E>
+    where
+        S: AsyncSocket + Send + 'static,
+        F: Fn(quinn::SendStream, quinn::RecvStream) -> S + Copy,
+        Udp: FnMut(
+            std::sync::Arc<quinn::Connection>,
+            crate::udp::Hysteria2InboundUdpResponder,
+            &mut JoinSet<Result<(), E>>,
+        ) -> UdpFut,
+        UdpFut: Future<Output = Result<(), E>>,
+        Tcp: FnMut(Session, S, &mut JoinSet<Result<(), E>>) -> TcpFut,
+        TcpFut: Future<Output = Result<(), E>>,
+        TaskResult: FnMut(Result<Result<(), E>, tokio::task::JoinError>) -> TaskResultFut,
+        TaskResultFut: Future<Output = Result<(), E>>,
+        E: From<Error> + Send + 'static,
+    {
+        let mut stream_tasks = JoinSet::new();
+        on_udp_session(
+            self.connection(),
+            self.accept_udp_session(),
+            &mut stream_tasks,
+        )
+        .await?;
+
+        loop {
+            tokio::select! {
+                accepted_stream = self.accept_next_tcp_stream(stream_factory) => {
+                    match accepted_stream? {
+                        Some((session, stream)) => {
+                            on_tcp_stream(session, stream, &mut stream_tasks).await?;
+                        }
+                        None => break,
+                    }
+                }
+                result = stream_tasks.join_next(), if !stream_tasks.is_empty() => {
+                    if let Some(result) = result {
+                        on_stream_task_result(result).await?;
                     }
                 }
             }
