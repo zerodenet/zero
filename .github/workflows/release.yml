@@ -36,11 +36,13 @@ jobs:
             target: x86_64-unknown-linux-gnu
             name: linux-x86_64
             ext: tar.gz
-          - os: macos-latest
+          # Build the Intel macOS artifact on the native Intel runner instead
+          # of cross-targeting from the arm64 `macos-latest` image.
+          - os: macos-15-intel
             target: x86_64-apple-darwin
             name: darwin-x86_64
             ext: tar.gz
-          - os: macos-latest
+          - os: macos-15
             target: aarch64-apple-darwin
             name: darwin-aarch64
             ext: tar.gz
@@ -66,6 +68,18 @@ jobs:
           targets: ${{ matrix.target }}
 
       - uses: Swatinem/rust-cache@v2
+
+      - name: Configure LLVM linker (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          LLVM_PREFIX="$(brew --prefix llvm@18 2>/dev/null || brew --prefix llvm 2>/dev/null || true)"
+          if [ -z "$LLVM_PREFIX" ]; then
+            brew install llvm
+            LLVM_PREFIX="$(brew --prefix llvm)"
+          fi
+          echo "$LLVM_PREFIX/bin" >> "$GITHUB_PATH"
+          echo "RUSTFLAGS=-C link-arg=-fuse-ld=lld" >> "$GITHUB_ENV"
 
       - name: Build release
         run: cargo build --features full,status_api,panel_connector --release --target ${{ matrix.target }}
