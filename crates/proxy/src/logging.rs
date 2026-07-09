@@ -187,7 +187,6 @@ pub(crate) fn log_urltest_group_target_changed(
     }
 }
 
-#[cfg(feature = "socks5")]
 pub(crate) fn log_udp_upstream_association_created(
     inbound_tag: &str,
     outbound_tag: &str,
@@ -198,7 +197,7 @@ pub(crate) fn log_udp_upstream_association_created(
     info!(
         inbound_tag = inbound_tag,
         outbound_tag = outbound_tag,
-        protocol = "socks5_udp",
+        protocol = "udp_upstream",
         upstream_server = server,
         upstream_port = port,
         idle_timeout_seconds = idle_timeout.as_secs(),
@@ -206,7 +205,6 @@ pub(crate) fn log_udp_upstream_association_created(
     );
 }
 
-#[cfg(feature = "socks5")]
 pub(crate) fn log_udp_upstream_association_reused(
     inbound_tag: &str,
     outbound_tag: &str,
@@ -216,14 +214,13 @@ pub(crate) fn log_udp_upstream_association_reused(
     debug!(
         inbound_tag = inbound_tag,
         outbound_tag = outbound_tag,
-        protocol = "socks5_udp",
+        protocol = "udp_upstream",
         upstream_server = server,
         upstream_port = port,
         "reused upstream UDP association"
     );
 }
 
-#[cfg(feature = "socks5")]
 pub(crate) fn log_udp_upstream_association_idle_timeout(
     inbound_tag: &str,
     outbound_tag: &str,
@@ -234,7 +231,7 @@ pub(crate) fn log_udp_upstream_association_idle_timeout(
     info!(
         inbound_tag = inbound_tag,
         outbound_tag = outbound_tag,
-        protocol = "socks5_udp",
+        protocol = "udp_upstream",
         upstream_server = server,
         upstream_port = port,
         idle_timeout_seconds = idle_timeout.as_secs(),
@@ -242,7 +239,6 @@ pub(crate) fn log_udp_upstream_association_idle_timeout(
     );
 }
 
-#[cfg(feature = "socks5")]
 pub(crate) fn log_udp_upstream_association_dropped(
     inbound_tag: &str,
     outbound_tag: &str,
@@ -253,7 +249,7 @@ pub(crate) fn log_udp_upstream_association_dropped(
     warn!(
         inbound_tag = inbound_tag,
         outbound_tag = outbound_tag,
-        protocol = "socks5_udp",
+        protocol = "udp_upstream",
         upstream_server = server,
         upstream_port = port,
         error = %error,

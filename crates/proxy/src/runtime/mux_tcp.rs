@@ -1,56 +1,61 @@
-use std::future::Future;
-
-use tokio::task::JoinSet;
 use tracing::warn;
-use zero_core::Session;
+use zero_core::{InboundMuxTcpRelay, Session};
 use zero_engine::EngineError;
 
 use crate::runtime::pipe::{KernelPipe, TcpPipe, TcpPipeInput};
 use crate::runtime::Proxy;
-use crate::transport::{TcpRelayStream, TcpRouteResult};
-
-pub(crate) trait MuxTcpStreamBridge: Send + 'static {
-    fn close_stream(&self) -> impl Future<Output = ()> + Send;
-
-    fn relay_stream(self, upstream: TcpRelayStream) -> impl Future<Output = ()> + Send;
-}
+use crate::transport::TcpRouteResult;
 
 pub(crate) struct MuxTcpStreamTask<B> {
-    pub(crate) mux_session_id: u16,
     pub(crate) session: Session,
     pub(crate) bridge: B,
     pub(crate) inbound_tag: String,
     pub(crate) protocol: &'static str,
 }
 
-pub(crate) fn spawn_mux_tcp_stream_task<B>(
-    proxy: &Proxy,
-    tasks: &mut JoinSet<()>,
-    request: MuxTcpStreamTask<B>,
-) where
-    B: MuxTcpStreamBridge,
+pub(crate) async fn run_mux_tcp_stream_task<B>(proxy: &Proxy, request: MuxTcpStreamTask<B>)
+where
+    B: InboundMuxTcpRelay,
 {
-    let proxy = proxy.clone();
-    tasks.spawn(async move {
-        let MuxTcpStreamTask {
-            mux_session_id,
-            mut session,
+    let MuxTcpStreamTask {
+        mut session,
+        bridge,
+        inbound_tag,
+        protocol,
+    } = request;
+    let mux_session_id = bridge.mux_session_id();
+
+    let upstream = match open_mux_tcp_upstream(proxy, &mut session, &inbound_tag).await {
+        Ok(result) => result.upstream,
+        Err(error) => {
+            warn!(%error, mux_session_id, protocol, "mux tcp dispatch failed");
+            bridge.close_stream().await;
+            return;
+        }
+    };
+
+    bridge.relay_stream(upstream).await;
+}
+
+pub(crate) async fn run_protocol_mux_tcp_task<B>(
+    proxy: Proxy,
+    session: Session,
+    bridge: B,
+    inbound_tag: String,
+    protocol: &'static str,
+) where
+    B: InboundMuxTcpRelay,
+{
+    run_mux_tcp_stream_task(
+        &proxy,
+        MuxTcpStreamTask {
+            session,
             bridge,
             inbound_tag,
             protocol,
-        } = request;
-
-        let upstream = match open_mux_tcp_upstream(&proxy, &mut session, &inbound_tag).await {
-            Ok(result) => result.upstream,
-            Err(error) => {
-                warn!(%error, mux_session_id, protocol, "mux tcp dispatch failed");
-                bridge.close_stream().await;
-                return;
-            }
-        };
-
-        bridge.relay_stream(upstream).await;
-    });
+        },
+    )
+    .await;
 }
 
 pub(crate) async fn open_mux_tcp_upstream(

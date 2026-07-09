@@ -119,6 +119,20 @@ pub enum OutboundProtocolConfig {
 }
 
 impl OutboundProtocolConfig {
+    pub fn protocol_name(&self) -> &'static str {
+        match self {
+            Self::Direct => "direct",
+            Self::Block => "block",
+            Self::Socks5 { .. } => "socks5",
+            Self::Vless { .. } => "vless",
+            Self::Hysteria2 { .. } => "hysteria2",
+            Self::Shadowsocks { .. } => "shadowsocks",
+            Self::Trojan { .. } => "trojan",
+            Self::Vmess { .. } => "vmess",
+            Self::Mieru { .. } => "mieru",
+        }
+    }
+
     /// Authentication contract declared by this outbound protocol.
     pub fn auth_requirement(&self) -> crate::auth::AuthRequirement {
         use crate::auth::AuthRequirement::*;

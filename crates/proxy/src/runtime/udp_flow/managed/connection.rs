@@ -3,6 +3,7 @@ use std::sync::Arc;
 use tokio::task::JoinSet;
 use zero_core::{Address, UdpFlowPacket};
 use zero_engine::EngineError;
+use zero_transport::managed_udp::{ManagedPacketUdpConnectionOps, ManagedTupleUdpConnectionOps};
 
 use crate::runtime::udp_flow::packet_path::ChainTask;
 
@@ -58,6 +59,75 @@ pub(crate) fn managed_tuple_udp_connection(
 }
 
 #[async_trait::async_trait]
+pub(crate) trait ManagedTupleUdpFlowConnection: Send + Sync + 'static {
+    async fn send(&self, target: &Address, port: u16, payload: &[u8])
+        -> Result<usize, EngineError>;
+
+    fn subscribe_responses(&self) -> tokio::sync::broadcast::Receiver<(Address, u16, Vec<u8>)>;
+
+    fn closed_message(&self) -> &'static str;
+}
+
+#[async_trait::async_trait]
+impl<T> ManagedTupleUdpFlowConnection for T
+where
+    T: ManagedTupleUdpConnectionOps,
+{
+    async fn send(
+        &self,
+        target: &Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<usize, EngineError> {
+        self.send_protocol_packet(target, port, payload)
+            .await
+            .map_err(|error| EngineError::Io(std::io::Error::other(error.to_string())))
+    }
+
+    fn subscribe_responses(&self) -> tokio::sync::broadcast::Receiver<(Address, u16, Vec<u8>)> {
+        self.subscribe_protocol_packets()
+    }
+
+    fn closed_message(&self) -> &'static str {
+        self.closed_message_for_connection()
+    }
+}
+
+struct ManagedTupleUdpFlowSender<T> {
+    connection: T,
+}
+
+#[async_trait::async_trait]
+impl<T> ManagedTupleUdpSender for ManagedTupleUdpFlowSender<T>
+where
+    T: ManagedTupleUdpFlowConnection,
+{
+    async fn send(
+        &self,
+        target: &Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<usize, EngineError> {
+        self.connection.send(target, port, payload).await
+    }
+
+    fn subscribe_responses(&self) -> tokio::sync::broadcast::Receiver<(Address, u16, Vec<u8>)> {
+        self.connection.subscribe_responses()
+    }
+
+    fn closed_message(&self) -> &'static str {
+        self.connection.closed_message()
+    }
+}
+
+pub(crate) fn managed_tuple_udp_connection_from_flow<T>(connection: T) -> SharedManagedUdpConnection
+where
+    T: ManagedTupleUdpFlowConnection,
+{
+    managed_tuple_udp_connection(Arc::new(ManagedTupleUdpFlowSender { connection }))
+}
+
+#[async_trait::async_trait]
 pub(crate) trait ManagedPacketUdpSender: Send + Sync {
     async fn send(&self, target: &Address, port: u16, payload: &[u8])
         -> Result<usize, EngineError>;
@@ -97,6 +167,77 @@ pub(crate) fn managed_packet_udp_connection(
     sender: Arc<dyn ManagedPacketUdpSender>,
 ) -> SharedManagedUdpConnection {
     Arc::new(ManagedPacketUdpConnection { sender })
+}
+
+#[async_trait::async_trait]
+pub(crate) trait ManagedPacketUdpFlowConnection: Send + Sync + 'static {
+    async fn send(&self, target: &Address, port: u16, payload: &[u8])
+        -> Result<usize, EngineError>;
+
+    fn subscribe_responses(&self) -> tokio::sync::broadcast::Receiver<UdpFlowPacket>;
+
+    fn closed_message(&self) -> &'static str;
+}
+
+#[async_trait::async_trait]
+impl<T> ManagedPacketUdpFlowConnection for T
+where
+    T: ManagedPacketUdpConnectionOps,
+{
+    async fn send(
+        &self,
+        target: &Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<usize, EngineError> {
+        self.send_protocol_packet(target, port, payload)
+            .await
+            .map_err(|error| EngineError::Io(std::io::Error::other(error.to_string())))
+    }
+
+    fn subscribe_responses(&self) -> tokio::sync::broadcast::Receiver<UdpFlowPacket> {
+        self.subscribe_protocol_packets()
+    }
+
+    fn closed_message(&self) -> &'static str {
+        self.closed_message_for_connection()
+    }
+}
+
+struct ManagedPacketUdpFlowSender<T> {
+    connection: T,
+}
+
+#[async_trait::async_trait]
+impl<T> ManagedPacketUdpSender for ManagedPacketUdpFlowSender<T>
+where
+    T: ManagedPacketUdpFlowConnection,
+{
+    async fn send(
+        &self,
+        target: &Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<usize, EngineError> {
+        self.connection.send(target, port, payload).await
+    }
+
+    fn subscribe_responses(&self) -> tokio::sync::broadcast::Receiver<UdpFlowPacket> {
+        self.connection.subscribe_responses()
+    }
+
+    fn closed_message(&self) -> &'static str {
+        self.connection.closed_message()
+    }
+}
+
+pub(crate) fn managed_packet_udp_connection_from_flow<T>(
+    connection: T,
+) -> SharedManagedUdpConnection
+where
+    T: ManagedPacketUdpFlowConnection,
+{
+    managed_packet_udp_connection(Arc::new(ManagedPacketUdpFlowSender { connection }))
 }
 
 #[async_trait::async_trait]

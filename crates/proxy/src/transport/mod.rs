@@ -1,62 +1,25 @@
 mod direct;
-mod metered;
-mod stream;
 mod tcp_flow;
 mod tcp_outbound;
 mod tcp_relay;
-pub(crate) mod tls_hello;
 
 pub(crate) use direct::DirectConnector;
-pub(crate) use metered::{MeteredStream, StreamTraffic};
-pub(crate) use stream::{
-    AsyncSocketStream, ClientStream, PrefixedSocket, RecordingStream, RelayCarrier, TcpRelayStream,
-};
 pub(crate) use tcp_flow::is_block_error;
 pub(crate) use tcp_outbound::{
     extract_tcp_stream, EstablishedTcpOutbound, TcpOutboundFailure, TcpRouteResult,
 };
 pub(crate) use tcp_relay::{relay_bidirectional_metered, relay_bidirectional_metered_throttled};
+pub(crate) use zero_transport::{
+    ClientStream, MeteredStream, PrefixedSocket, RecordingStream, RelayCarrier, StreamTraffic,
+    TcpRelayStream,
+};
 
 // Re-export transport implementations from zero-transport.
 // Only items used directly by proxy code are listed.
-#[cfg(feature = "vless")]
-pub(crate) use zero_transport::grpc::serve_grpc;
-#[cfg(feature = "vless")]
-pub(crate) use zero_transport::h2::accept_h2;
-#[cfg(feature = "vless")]
-pub(crate) use zero_transport::http_upgrade::accept_http_upgrade;
 #[cfg(feature = "hysteria2")]
 pub(crate) use zero_transport::hysteria2_quic::{
     open_quic_connection as open_hysteria2_quic_connection, Hysteria2QuicProfile, Hysteria2Stream,
     QuicConnectionOptions,
 };
-#[cfg(feature = "vless")]
-pub(crate) use zero_transport::quic::{connect_quic, QuicInbound, QuicStream};
-#[cfg(feature = "vless")]
-pub(crate) use zero_transport::split_http::{accept_xhttp_inbound, SplitHttpRegistry};
-#[cfg(any(feature = "vless", feature = "trojan", feature = "vmess"))]
-pub(crate) use zero_transport::tls::build_tls_acceptor;
-#[cfg(feature = "vless")]
-pub(crate) use zero_transport::tls::InboundTlsStream;
-#[cfg(any(feature = "trojan", feature = "vmess"))]
-pub(crate) use zero_transport::tls::TlsAcceptor;
-#[cfg(feature = "trojan")]
-pub(crate) use zero_transport::trojan_transport::{
-    open_trojan_tls_relay_stream, open_trojan_tls_stream, TrojanTlsOptions, TrojanTlsProfile,
-};
-#[cfg(feature = "vless")]
-pub(crate) use zero_transport::vless_transport::build_vless_split_http_over_relay;
-#[cfg(feature = "vless")]
-pub(crate) use zero_transport::vless_transport::{
-    build_vless_outbound_transport_over_stream, vless_udp_relay_needs_two_streams,
-    VlessFinalHopTransportRequest, VlessTransportConnector, VlessTransportOptions,
-    VlessUdpTransportConnector, VlessUdpTransportOptions,
-};
-#[cfg(feature = "vmess")]
-pub(crate) use zero_transport::vmess_transport::{
-    build_vmess_outbound_transport, build_vmess_outbound_transport_over_stream,
-    VmessFinalHopTransportRequest, VmessOutboundTransportRequest, VmessTransportConnector,
-    VmessTransportOptions,
-};
-#[cfg(feature = "vless")]
-pub(crate) use zero_transport::ws::accept_ws;
+#[cfg(feature = "transport_quic")]
+pub(crate) use zero_transport::quic::{QuicInbound, QuicStream};

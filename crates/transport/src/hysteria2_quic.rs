@@ -1,9 +1,11 @@
 use std::io;
+use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf};
+use zero_config::InboundProtocolConfig;
 use zero_engine::EngineError;
 use zero_traits::AsyncSocket;
 
@@ -59,17 +61,98 @@ impl AsyncWrite for Hysteria2Stream {
 impl AsyncSocket for Hysteria2Stream {
     type Error = io::Error;
 
-    async fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
-        AsyncReadExt::read(self, buf).await
+    fn read<'a>(
+        &'a mut self,
+        buf: &'a mut [u8],
+    ) -> impl core::future::Future<Output = Result<usize, Self::Error>> + Send + 'a {
+        async move { AsyncReadExt::read(self, buf).await }
     }
 
-    async fn write_all(&mut self, buf: &[u8]) -> Result<(), Self::Error> {
-        AsyncWriteExt::write_all(self, buf).await?;
-        AsyncWriteExt::flush(self).await
+    fn write_all<'a>(
+        &'a mut self,
+        buf: &'a [u8],
+    ) -> impl core::future::Future<Output = Result<(), Self::Error>> + Send + 'a {
+        async move {
+            AsyncWriteExt::write_all(self, buf).await?;
+            AsyncWriteExt::flush(self).await
+        }
     }
 
-    async fn shutdown(&mut self) -> Result<(), Self::Error> {
-        AsyncWriteExt::shutdown(self).await
+    fn shutdown<'a>(
+        &'a mut self,
+    ) -> impl core::future::Future<Output = Result<(), Self::Error>> + Send + 'a {
+        async move { AsyncWriteExt::shutdown(self).await }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct OwnedHysteria2InboundBindPlan {
+    cert_path: String,
+    key_path: String,
+    source_dir: Option<PathBuf>,
+}
+
+impl OwnedHysteria2InboundBindPlan {
+    pub fn from_config_ref(
+        source_dir: Option<&Path>,
+        cert_path: Option<&str>,
+        key_path: Option<&str>,
+    ) -> Self {
+        Self {
+            cert_path: cert_path.unwrap_or("certs/fullchain.pem").to_owned(),
+            key_path: key_path.unwrap_or("certs/privkey.pem").to_owned(),
+            source_dir: source_dir.map(PathBuf::from),
+        }
+    }
+
+    pub fn from_protocol_config(
+        protocol: &InboundProtocolConfig,
+        source_dir: Option<&Path>,
+    ) -> Result<Self, EngineError> {
+        match protocol {
+            InboundProtocolConfig::Hysteria2 {
+                cert_path,
+                key_path,
+                ..
+            } => Ok(Self::from_config_ref(
+                source_dir,
+                cert_path.as_deref(),
+                key_path.as_deref(),
+            )),
+            _ => Err(EngineError::Io(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "hysteria2 inbound bind plan received non-hysteria2 inbound config",
+            ))),
+        }
+    }
+
+    pub async fn bind(&self, listen_addr: &str) -> Result<crate::quic::QuicInbound, EngineError> {
+        crate::quic::QuicInbound::bind(
+            listen_addr,
+            &self.cert_path,
+            &self.key_path,
+            self.source_dir.as_deref(),
+        )
+        .await
+    }
+}
+
+#[async_trait::async_trait]
+impl crate::inbound_route::ProtocolInboundBindPlan for OwnedHysteria2InboundBindPlan {
+    fn from_protocol_config(
+        protocol: &InboundProtocolConfig,
+        source_dir: Option<&Path>,
+    ) -> Result<Self, EngineError> {
+        Self::from_protocol_config(protocol, source_dir)
+    }
+
+    async fn bind(
+        &self,
+        listen_addr: &str,
+    ) -> Result<crate::inbound_route::TransportInboundBindTarget, EngineError> {
+        Ok(crate::inbound_route::TransportInboundBindTarget::Quic(
+            OwnedHysteria2InboundBindPlan::bind(self, listen_addr).await?,
+        ))
     }
 }
 

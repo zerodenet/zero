@@ -86,6 +86,101 @@ impl AsyncWrite for TokioSocket {
 }
 
 #[derive(Debug)]
+pub struct PrefixedSocket {
+    prefix: Vec<u8>,
+    offset: usize,
+    inner: TokioSocket,
+}
+
+impl PrefixedSocket {
+    pub fn from_prefix(inner: TokioSocket, prefix: Vec<u8>) -> Self {
+        Self {
+            prefix,
+            offset: 0,
+            inner,
+        }
+    }
+
+    pub fn from_byte(inner: TokioSocket, first: u8) -> Self {
+        Self::from_prefix(inner, vec![first])
+    }
+}
+
+impl ClientStream for PrefixedSocket {
+    fn local_addr(&self) -> io::Result<SocketAddr> {
+        self.inner.local_addr()
+    }
+
+    fn peer_addr(&self) -> io::Result<SocketAddr> {
+        self.inner.peer_addr()
+    }
+}
+
+impl AsyncSocket for PrefixedSocket {
+    type Error = io::Error;
+
+    async fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
+        if self.offset < self.prefix.len() {
+            let available = self.prefix.len() - self.offset;
+            let to_copy = available.min(buf.len());
+            buf[..to_copy].copy_from_slice(&self.prefix[self.offset..self.offset + to_copy]);
+            self.offset += to_copy;
+            return Ok(to_copy);
+        }
+
+        AsyncSocket::read(&mut self.inner, buf).await
+    }
+
+    async fn write_all(&mut self, buf: &[u8]) -> Result<(), Self::Error> {
+        AsyncSocket::write_all(&mut self.inner, buf).await
+    }
+
+    async fn shutdown(&mut self) -> Result<(), Self::Error> {
+        AsyncSocket::shutdown(&mut self.inner).await
+    }
+}
+
+impl AsyncRead for PrefixedSocket {
+    fn poll_read(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut ReadBuf<'_>,
+    ) -> Poll<io::Result<()>> {
+        if self.offset < self.prefix.len() {
+            let available = self.prefix.len() - self.offset;
+            let to_copy = available.min(buf.remaining());
+            if to_copy > 0 {
+                let start = self.offset;
+                let end = start + to_copy;
+                buf.put_slice(&self.prefix[start..end]);
+                self.offset = end;
+            }
+            return Poll::Ready(Ok(()));
+        }
+
+        Pin::new(&mut self.inner).poll_read(cx, buf)
+    }
+}
+
+impl AsyncWrite for PrefixedSocket {
+    fn poll_write(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+    ) -> Poll<io::Result<usize>> {
+        Pin::new(&mut self.inner).poll_write(cx, buf)
+    }
+
+    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        Pin::new(&mut self.inner).poll_flush(cx)
+    }
+
+    fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        Pin::new(&mut self.inner).poll_shutdown(cx)
+    }
+}
+
+#[derive(Debug)]
 pub struct TokioListener {
     inner: TokioTcpListener,
 }
@@ -396,7 +491,7 @@ pub trait TcpConnector: Send + Sync {
 // ── Cross-crate trait impls ──
 
 #[cfg(feature = "vless-reality")]
-impl<IO> ClientStream for vless::RealityTlsStream<IO> where
+impl<IO> ClientStream for vless::reality::RealityTlsStream<IO> where
     IO: AsyncRead + AsyncWrite + Send + Sync + Unpin
 {
 }

@@ -1,16 +1,18 @@
 use alloc::borrow::ToOwned;
+use alloc::boxed::Box;
 use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 
+#[cfg(feature = "reality")]
+use zero_core::InboundStreamUdpRelay;
 use zero_core::{
-    Address, Error, InboundStreamUdpRelay, Network, ProtocolType, Session, SessionAuth,
+    Address, Error, InboundFallbackCapture, Network, ProtocolType, Session, SessionAuth,
 };
 use zero_traits::AsyncSocket;
 
 #[cfg(feature = "reality")]
 use crate::flow::{flow_from_byte, flow_read_request, is_aead_flow};
-use crate::mux::{MuxServer, VlessInboundMuxContext};
 #[cfg(not(feature = "reality"))]
 use crate::shared::read_addon;
 use crate::shared::{
@@ -137,17 +139,17 @@ impl VlessUserStore for VlessConfiguredUsers<'_> {
     }
 }
 
-pub struct VlessAcceptedSession {
+struct VlessAcceptedSession {
     session: Session,
-    mux_context: VlessInboundMuxContext,
+    mux_master_uuid: [u8; 16],
 }
 
-pub struct VlessAcceptedClient<S> {
+struct VlessAcceptedClient<S> {
     accepted: VlessAcceptedSession,
     stream: S,
 }
 
-pub enum VlessAcceptedClientRoute<S> {
+enum VlessAcceptedClientRouteState<S> {
     Tcp {
         session: Session,
         stream: S,
@@ -164,45 +166,25 @@ pub enum VlessAcceptedClientRoute<S> {
     },
 }
 
+pub struct VlessAcceptedClientRoute<S> {
+    state: VlessAcceptedClientRouteState<S>,
+}
+
+#[cfg(feature = "reality")]
 pub struct VlessInboundUdpRelay<S> {
     auth: Option<SessionAuth>,
     responder: crate::udp::VlessInboundUdpResponder,
     stream: S,
 }
 
-pub trait VlessAcceptedClientRouteDispatcher<S> {
-    type Error;
-
-    async fn dispatch_tcp_session(
-        &mut self,
-        session: Session,
-        stream: S,
-    ) -> Result<(), Self::Error>;
-
-    #[cfg(feature = "reality")]
-    async fn dispatch_udp_session(
-        &mut self,
-        session: Session,
-        relay: VlessInboundUdpRelay<S>,
-    ) -> Result<(), Self::Error>;
-
-    #[cfg(feature = "reality")]
-    async fn dispatch_mux_session(
-        &mut self,
-        mux_server: crate::mux::VlessInboundMuxServer,
-        stream: S,
-    ) -> Result<(), Self::Error>;
-}
-
-pub struct VlessClientAcceptError<S> {
+struct VlessClientAcceptError<S> {
     error: Error,
     stream: S,
 }
 
-pub trait VlessFallbackCapture {
-    type Stream;
-
-    fn into_vless_fallback_replay(self) -> VlessFallbackReplay<Self::Stream>;
+enum VlessAcceptedRouteError<S> {
+    Accept(VlessClientAcceptError<S>),
+    Route(Error),
 }
 
 pub struct VlessFallbackReplay<S> {
@@ -210,9 +192,13 @@ pub struct VlessFallbackReplay<S> {
     replay_head: Vec<u8>,
 }
 
-pub enum VlessFallbackAlpnDecision<S> {
+enum VlessFallbackAlpnDecisionState<S> {
     Replay(VlessFallbackReplay<S>),
     Continue { stream: S, replay_head: Vec<u8> },
+}
+
+pub struct VlessFallbackAlpnDecision<S> {
+    state: VlessFallbackAlpnDecisionState<S>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -255,12 +241,9 @@ where
     I: IntoIterator<Item = &'a str>,
 {
     if fallback_alpn_matches(expected, client_alpns) {
-        VlessFallbackAlpnDecision::Replay(VlessFallbackReplay::new(stream, replay_head))
+        VlessFallbackAlpnDecision::replay(VlessFallbackReplay::new(stream, replay_head))
     } else {
-        VlessFallbackAlpnDecision::Continue {
-            stream,
-            replay_head,
-        }
+        VlessFallbackAlpnDecision::continue_with(stream, replay_head)
     }
 }
 
@@ -268,16 +251,12 @@ impl VlessAcceptedSession {
     fn new(session: Session, user_id: [u8; 16]) -> Self {
         Self {
             session,
-            mux_context: VlessInboundMuxContext::from_uuid(user_id),
+            mux_master_uuid: user_id,
         }
     }
 
-    pub fn into_session(self) -> Session {
-        self.session
-    }
-
-    pub fn into_parts(self) -> (Session, VlessInboundMuxContext) {
-        (self.session, self.mux_context)
+    fn into_parts(self) -> (Session, [u8; 16]) {
+        (self.session, self.mux_master_uuid)
     }
 }
 
@@ -286,30 +265,23 @@ impl<S> VlessAcceptedClient<S> {
         Self { accepted, stream }
     }
 
-    pub fn into_parts(self) -> (Session, VlessInboundMuxContext, S) {
-        let (session, mux_context) = self.accepted.into_parts();
-        (session, mux_context, self.stream)
+    fn into_parts(self) -> (Session, [u8; 16], S) {
+        let (session, mux_master_uuid) = self.accepted.into_parts();
+        (session, mux_master_uuid, self.stream)
     }
 
-    pub async fn into_route(self) -> Result<VlessAcceptedClientRoute<S>, Error>
-    where
-        S: AsyncSocket,
-    {
-        self.into_route_with_sni(None).await
-    }
-
-    pub async fn into_route_with_sni(
+    async fn into_route_with_sni(
         self,
         sni: Option<String>,
     ) -> Result<VlessAcceptedClientRoute<S>, Error>
     where
         S: AsyncSocket,
     {
-        let (mut session, mux_context, mut stream) = self.into_parts();
+        let (mut session, mux_master_uuid, mut stream) = self.into_parts();
         match classify_inbound_session(&session) {
             VlessInboundSessionKind::Tcp => {
                 session.sni = sni;
-                Ok(VlessAcceptedClientRoute::Tcp { session, stream })
+                Ok(VlessAcceptedClientRoute::tcp(session, stream))
             }
             VlessInboundSessionKind::Udp => {
                 session.sni = sni;
@@ -317,10 +289,10 @@ impl<S> VlessAcceptedClient<S> {
                 {
                     let auth = session.auth.clone();
                     let responder = VlessInbound.accept_udp_session(&mut stream).await?;
-                    Ok(VlessAcceptedClientRoute::Udp {
+                    Ok(VlessAcceptedClientRoute::udp(
                         session,
-                        relay: VlessInboundUdpRelay::new(stream, responder, auth),
-                    })
+                        VlessInboundUdpRelay::new(stream, responder, auth),
+                    ))
                 }
                 #[cfg(not(feature = "reality"))]
                 {
@@ -334,13 +306,13 @@ impl<S> VlessAcceptedClient<S> {
                 {
                     let auth = session.auth.clone();
                     let mux_server = VlessInbound
-                        .accept_mux_session_with_auth(&mut stream, mux_context, auth)
+                        .accept_mux_session_with_auth(&mut stream, mux_master_uuid, auth)
                         .await?;
-                    Ok(VlessAcceptedClientRoute::Mux { mux_server, stream })
+                    Ok(VlessAcceptedClientRoute::mux(mux_server, stream))
                 }
                 #[cfg(not(feature = "reality"))]
                 {
-                    let _ = mux_context;
+                    let _ = mux_master_uuid;
                     Err(Error::Unsupported(
                         "VLESS MUX requires the `reality` feature",
                     ))
@@ -350,6 +322,7 @@ impl<S> VlessAcceptedClient<S> {
     }
 }
 
+#[cfg(feature = "reality")]
 impl<S> VlessInboundUdpRelay<S> {
     fn new(
         stream: S,
@@ -363,16 +336,8 @@ impl<S> VlessInboundUdpRelay<S> {
         }
     }
 
-    pub fn into_parts(self) -> (S, crate::udp::VlessInboundUdpResponder, Option<SessionAuth>) {
+    fn into_parts(self) -> (S, crate::udp::VlessInboundUdpResponder, Option<SessionAuth>) {
         (self.stream, self.responder, self.auth)
-    }
-
-    pub fn map_stream<T, F>(self, map: F) -> VlessInboundUdpRelay<T>
-    where
-        F: FnOnce(S) -> T,
-    {
-        let (stream, responder, auth) = self.into_parts();
-        VlessInboundUdpRelay::new(map(stream), responder, auth)
     }
 }
 
@@ -390,8 +355,28 @@ where
 }
 
 impl<S> VlessAcceptedClientRoute<S> {
+    fn tcp(session: Session, stream: S) -> Self {
+        Self {
+            state: VlessAcceptedClientRouteState::Tcp { session, stream },
+        }
+    }
+
     #[cfg(feature = "reality")]
-    pub async fn dispatch<Tcp, TcpFut, Udp, UdpFut, Mux, MuxFut, E>(
+    fn udp(session: Session, relay: VlessInboundUdpRelay<S>) -> Self {
+        Self {
+            state: VlessAcceptedClientRouteState::Udp { session, relay },
+        }
+    }
+
+    #[cfg(feature = "reality")]
+    fn mux(mux_server: crate::mux::VlessInboundMuxServer, stream: S) -> Self {
+        Self {
+            state: VlessAcceptedClientRouteState::Mux { mux_server, stream },
+        }
+    }
+
+    #[cfg(feature = "reality")]
+    async fn dispatch<Tcp, TcpFut, Udp, UdpFut, Mux, MuxFut, E>(
         self,
         tcp: Tcp,
         udp: Udp,
@@ -405,15 +390,17 @@ impl<S> VlessAcceptedClientRoute<S> {
         Mux: FnOnce(crate::mux::VlessInboundMuxServer, S) -> MuxFut,
         MuxFut: core::future::Future<Output = Result<(), E>>,
     {
-        match self {
-            Self::Tcp { session, stream } => tcp(session, stream).await,
-            Self::Udp { session, relay } => udp(session, relay).await,
-            Self::Mux { mux_server, stream } => mux(mux_server, stream).await,
+        match self.state {
+            VlessAcceptedClientRouteState::Tcp { session, stream } => tcp(session, stream).await,
+            VlessAcceptedClientRouteState::Udp { session, relay } => udp(session, relay).await,
+            VlessAcceptedClientRouteState::Mux { mux_server, stream } => {
+                mux(mux_server, stream).await
+            }
         }
     }
 
     #[cfg(not(feature = "reality"))]
-    pub async fn dispatch<Tcp, TcpFut, Udp, UdpFut, Mux, MuxFut, E>(
+    async fn dispatch<Tcp, TcpFut, Udp, UdpFut, Mux, MuxFut, E>(
         self,
         tcp: Tcp,
         _udp: Udp,
@@ -423,24 +410,41 @@ impl<S> VlessAcceptedClientRoute<S> {
         Tcp: FnOnce(Session, S) -> TcpFut,
         TcpFut: core::future::Future<Output = Result<(), E>>,
     {
-        match self {
-            Self::Tcp { session, stream } => tcp(session, stream).await,
+        match self.state {
+            VlessAcceptedClientRouteState::Tcp { session, stream } => tcp(session, stream).await,
         }
     }
+}
 
-    pub async fn dispatch_with<D>(self, dispatcher: &mut D) -> Result<(), D::Error>
+#[cfg(feature = "reality")]
+#[async_trait::async_trait]
+impl<S> zero_core::InboundMuxStreamRoute for VlessAcceptedClientRoute<S>
+where
+    S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Send + Unpin,
+{
+    type TcpStream = S;
+    type UdpRelay = VlessInboundUdpRelay<S>;
+    type MuxReader = S;
+    type MuxServer = crate::mux::VlessInboundMuxServer;
+
+    async fn dispatch_inbound_route<E, FTcp, FTcpFut, FUdp, FUdpFut, FMux, FMuxFut>(
+        self,
+        on_tcp: FTcp,
+        on_udp: FUdp,
+        on_mux: FMux,
+    ) -> Result<(), E>
     where
-        D: VlessAcceptedClientRouteDispatcher<S>,
+        FTcp: FnOnce(Session, Self::TcpStream) -> FTcpFut + Send,
+        FTcpFut: core::future::Future<Output = Result<(), E>> + Send,
+        FUdp: FnOnce(Session, Self::UdpRelay) -> FUdpFut + Send,
+        FUdpFut: core::future::Future<Output = Result<(), E>> + Send,
+        FMux: FnOnce(Self::MuxReader, Self::MuxServer) -> FMuxFut + Send,
+        FMuxFut: core::future::Future<Output = Result<(), E>> + Send,
     {
-        match self {
-            Self::Tcp { session, stream } => dispatcher.dispatch_tcp_session(session, stream).await,
-            #[cfg(feature = "reality")]
-            Self::Udp { session, relay } => dispatcher.dispatch_udp_session(session, relay).await,
-            #[cfg(feature = "reality")]
-            Self::Mux { mux_server, stream } => {
-                dispatcher.dispatch_mux_session(mux_server, stream).await
-            }
-        }
+        self.dispatch(on_tcp, on_udp, |mux_server, stream| {
+            on_mux(stream, mux_server)
+        })
+        .await
     }
 }
 
@@ -449,20 +453,17 @@ impl<S> VlessClientAcceptError<S> {
         Self { error, stream }
     }
 
-    pub fn into_parts(self) -> (Error, S) {
-        (self.error, self.stream)
-    }
-
-    pub fn into_fallback_replay(self) -> (Error, VlessFallbackReplay<S::Stream>)
+    fn into_fallback_replay(self) -> (Error, VlessFallbackReplay<S::Stream>)
     where
-        S: VlessFallbackCapture,
+        S: InboundFallbackCapture,
     {
-        (self.error, self.stream.into_vless_fallback_replay())
+        let (stream, replay_head) = self.stream.into_fallback_replay_parts();
+        (self.error, VlessFallbackReplay::new(stream, replay_head))
     }
 }
 
 impl<S> VlessFallbackReplay<S> {
-    pub fn new(stream: S, replay_head: Vec<u8>) -> Self {
+    fn new(stream: S, replay_head: Vec<u8>) -> Self {
         Self {
             stream,
             replay_head,
@@ -502,14 +503,41 @@ impl<S> VlessFallbackReplay<S> {
     }
 }
 
+impl<S> VlessFallbackAlpnDecision<S> {
+    fn replay(replay: VlessFallbackReplay<S>) -> Self {
+        Self {
+            state: VlessFallbackAlpnDecisionState::Replay(replay),
+        }
+    }
+
+    fn continue_with(stream: S, replay_head: Vec<u8>) -> Self {
+        Self {
+            state: VlessFallbackAlpnDecisionState::Continue {
+                stream,
+                replay_head,
+            },
+        }
+    }
+
+    pub fn into_transport_parts(self) -> Result<VlessFallbackReplay<S>, (S, Vec<u8>)> {
+        match self.state {
+            VlessFallbackAlpnDecisionState::Replay(replay) => Ok(replay),
+            VlessFallbackAlpnDecisionState::Continue {
+                stream,
+                replay_head,
+            } => Err((stream, replay_head)),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum VlessInboundSessionKind {
+enum VlessInboundSessionKind {
     Tcp,
     Udp,
     Mux,
 }
 
-pub fn classify_inbound_session(session: &Session) -> VlessInboundSessionKind {
+fn classify_inbound_session(session: &Session) -> VlessInboundSessionKind {
     if VlessInbound::is_mux_session(session) {
         VlessInboundSessionKind::Mux
     } else {
@@ -574,32 +602,78 @@ impl VlessInboundProfile {
         inbound.accept_tcp_with_auth_and_id(stream, &auth).await
     }
 
-    pub async fn accept_tcp_with_auth_context<S>(
-        &self,
-        inbound: VlessInbound,
-        stream: &mut S,
-    ) -> Result<VlessAcceptedSession, Error>
-    where
-        S: AsyncSocket,
-    {
-        let (session, user_id) = self.accept_tcp_with_auth_and_id(inbound, stream).await?;
-        Ok(VlessAcceptedSession::new(session, user_id))
-    }
-
-    pub async fn accept_client<S>(
-        &self,
+    async fn accept_client_owned<S>(
+        self,
         inbound: VlessInbound,
         mut stream: S,
     ) -> Result<VlessAcceptedClient<S>, VlessClientAcceptError<S>>
     where
         S: AsyncSocket,
     {
-        match self
-            .accept_tcp_with_auth_context(inbound, &mut stream)
+        let users = self.users;
+        let auth = VlessConfiguredUsers::new(users.as_ref());
+        match inbound
+            .accept_tcp_with_auth_and_id(&mut stream, &auth)
             .await
         {
-            Ok(accepted) => Ok(VlessAcceptedClient::new(accepted, stream)),
+            Ok((session, user_id)) => Ok(VlessAcceptedClient::new(
+                VlessAcceptedSession::new(session, user_id),
+                stream,
+            )),
             Err(error) => Err(VlessClientAcceptError::new(error, stream)),
+        }
+    }
+
+    async fn accept_route_owned_with_sni<S>(
+        self,
+        inbound: VlessInbound,
+        stream: S,
+        sni: Option<String>,
+    ) -> Result<VlessAcceptedClientRoute<S>, VlessAcceptedRouteError<S>>
+    where
+        S: AsyncSocket,
+    {
+        let accepted = self
+            .accept_client_owned(inbound, stream)
+            .await
+            .map_err(VlessAcceptedRouteError::Accept)?;
+        accepted
+            .into_route_with_sni(sni)
+            .await
+            .map_err(VlessAcceptedRouteError::Route)
+    }
+
+    pub async fn accept_route_owned_with_sni_or_else<
+        S,
+        T,
+        E,
+        FRoute,
+        FRouteFut,
+        FReject,
+        FRejectFut,
+    >(
+        self,
+        inbound: VlessInbound,
+        stream: S,
+        sni: Option<String>,
+        on_route: FRoute,
+        on_rejected: FReject,
+    ) -> Result<T, E>
+    where
+        S: AsyncSocket + InboundFallbackCapture,
+        FRoute: FnOnce(VlessAcceptedClientRoute<S>) -> FRouteFut,
+        FRouteFut: core::future::Future<Output = Result<T, E>>,
+        FReject: FnOnce(Error, VlessFallbackReplay<S::Stream>) -> FRejectFut,
+        FRejectFut: core::future::Future<Output = Result<T, E>>,
+        E: From<Error>,
+    {
+        match self.accept_route_owned_with_sni(inbound, stream, sni).await {
+            Ok(route) => on_route(route).await,
+            Err(VlessAcceptedRouteError::Route(error)) => Err(E::from(error)),
+            Err(VlessAcceptedRouteError::Accept(rejected)) => {
+                let (error, replay) = rejected.into_fallback_replay();
+                on_rejected(error, replay).await
+            }
         }
     }
 
@@ -614,14 +688,6 @@ impl VlessInboundProfile {
         let auth = VlessConfiguredUsers::new(&self.users);
         inbound.accept_tcp_with_auth(stream, &auth).await
     }
-}
-
-pub fn inbound_profile_from_config_users<I, U>(users: I) -> Result<VlessInboundProfile, Error>
-where
-    I: IntoIterator<Item = U>,
-    U: IntoVlessInboundUserConfig,
-{
-    VlessInboundProfile::from_config_users(users)
 }
 
 pub trait IntoVlessInboundUserConfig {
@@ -654,33 +720,17 @@ impl VlessInbound {
     }
 
     #[cfg(feature = "reality")]
-    pub async fn accept_mux_session<S>(
+    async fn accept_mux_session_with_auth<S>(
         &self,
         stream: &mut S,
-        mux_context: crate::mux::VlessInboundMuxContext,
-    ) -> Result<crate::mux::VlessInboundMuxServer, Error>
-    where
-        S: AsyncSocket,
-    {
-        self.send_response(stream).await?;
-        Ok(crate::mux::VlessInboundMuxServer::from_context(mux_context))
-    }
-
-    #[cfg(feature = "reality")]
-    pub async fn accept_mux_session_with_auth<S>(
-        &self,
-        stream: &mut S,
-        mux_context: crate::mux::VlessInboundMuxContext,
+        mux_master_uuid: [u8; 16],
         auth: Option<SessionAuth>,
     ) -> Result<crate::mux::VlessInboundMuxServer, Error>
     where
         S: AsyncSocket,
     {
         self.send_response(stream).await?;
-        Ok(crate::mux::VlessInboundMuxServer::from_context_with_auth(
-            mux_context,
-            auth,
-        ))
+        Ok(crate::mux::VlessInboundMuxServer::from_master_uuid_with_auth(mux_master_uuid, auth))
     }
 
     /// Accept a VLESS connection, authenticate the user, and return both
@@ -806,26 +856,43 @@ impl VlessInbound {
         Ok(session)
     }
 
-    pub async fn accept_mux_header<S, A>(
+    pub async fn handshake_mux_with_auth<S, A>(
         &self,
         stream: &mut S,
         auth: &A,
-    ) -> Result<MuxServer, Error>
+    ) -> Result<Session, Error>
     where
         S: AsyncSocket,
         A: VlessUserStore,
     {
-        let (_session, id) = read_request_mux(stream).await?;
+        let (session, id) = read_request_mux(stream).await?;
         let Some(_user) = auth.find_user(&id) else {
             return Err(Error::Unsupported("VLESS user is not authorized"));
         };
         self.send_response(stream).await?;
-        Ok(MuxServer::new())
+        Ok(session)
     }
 
     /// Check if a Session returned by accept_tcp_with_auth is a MUX session.
     pub fn is_mux_session(session: &Session) -> bool {
         session.port == 0 && matches!(&session.target, Address::Domain(d) if d.is_empty())
+    }
+}
+
+impl<S> zero_core::InboundClientResponse<S> for VlessInbound
+where
+    S: AsyncSocket,
+{
+    async fn send_ok(&self, client: &mut S) -> Result<(), Error> {
+        VlessInbound::send_ok(self, client).await
+    }
+
+    async fn send_blocked(&self, client: &mut S) -> Result<(), Error> {
+        VlessInbound::send_blocked(self, client).await
+    }
+
+    async fn send_upstream_failure(&self, client: &mut S) -> Result<(), Error> {
+        VlessInbound::send_upstream_failure(self, client).await
     }
 }
 

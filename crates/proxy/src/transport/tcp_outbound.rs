@@ -6,7 +6,7 @@
 
 use std::io;
 
-use crate::transport::stream::TcpRelayStream;
+use crate::transport::TcpRelayStream;
 use zero_engine::{EngineError, RouteDecision};
 
 /// Unified result from the routing and outbound establishment pipeline.

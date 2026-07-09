@@ -204,23 +204,24 @@ impl<S> VmessAeadStream<S> {
         })
     }
 
-    pub fn inbound(inner: S, accept: VmessAccept) -> Result<Self, zero_core::Error> {
-        let read_length_key_source = accept.upload_key.clone();
-        let read_length_nonce_source = accept.upload_nonce.clone();
+    pub(crate) fn inbound(inner: S, accept: VmessAccept) -> Result<Self, zero_core::Error> {
+        let stream_state = accept.into_stream_state();
+        let read_length_key_source = stream_state.upload_key.clone();
+        let read_length_nonce_source = stream_state.upload_nonce.clone();
         Self::new(VmessAeadStreamConfig {
             inner,
-            read_key: accept.upload_key,
-            read_nonce: accept.upload_nonce,
+            read_key: stream_state.upload_key,
+            read_nonce: stream_state.upload_nonce,
             read_length_key_source,
             read_length_nonce_source,
-            write_key: accept.download_key,
-            write_nonce: accept.download_nonce,
-            write_length_key_source: accept.length_key_source,
-            write_length_nonce_source: accept.length_nonce_source,
-            cipher: accept.cipher,
-            authenticated_length: accept.authenticated_length,
-            chunk_masking: accept.chunk_masking,
-            global_padding: accept.global_padding,
+            write_key: stream_state.download_key,
+            write_nonce: stream_state.download_nonce,
+            write_length_key_source: stream_state.length_key_source,
+            write_length_nonce_source: stream_state.length_nonce_source,
+            cipher: stream_state.cipher,
+            authenticated_length: stream_state.authenticated_length,
+            chunk_masking: stream_state.chunk_masking,
+            global_padding: stream_state.global_padding,
             response_header: None,
         })
     }
@@ -318,7 +319,7 @@ impl<S> VmessAeadStream<S> {
     }
 }
 
-pub fn wrap_tcp_inbound_stream<S>(
+pub(crate) fn wrap_tcp_inbound_stream<S>(
     stream: S,
     accept: VmessAccept,
 ) -> Result<VmessAeadStream<S>, zero_core::Error> {

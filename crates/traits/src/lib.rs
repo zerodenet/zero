@@ -7,10 +7,11 @@ pub mod protocol;
 
 use alloc::vec::Vec;
 pub use protocol::{
-    DatagramCodec, DeferredTcpTunnelProtocol, ProtocolCapabilityDescriptor,
+    ClientTlsProfile, DatagramCodec, DeferredTcpTunnelProtocol, ProtocolCapabilityDescriptor,
     ProtocolCapabilityLevel, ProtocolCapabilityState, ProtocolMetadata, ProtocolNetworkCapability,
-    TcpSessionProtocol, TcpTunnelProtocol, UdpDatagramFraming, UdpPacketFraming, UdpPacketPath,
-    UdpPacketStreamFraming, UdpPacketTunnelProtocol, UdpRelayProtocol,
+    StreamMuxTransportHints, TcpSessionProtocol, TcpTunnelProtocol, UdpDatagramFraming,
+    UdpPacketFraming, UdpPacketPath, UdpPacketStreamFraming, UdpPacketTunnelProtocol,
+    UdpRelayProtocol,
 };
 pub use protocol::{InboundTransport, TransportKind};
 
@@ -50,9 +51,17 @@ impl SocketAddress {
 pub trait AsyncSocket: Send + Sync + Unpin {
     type Error;
 
-    async fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error>;
-    async fn write_all(&mut self, buf: &[u8]) -> Result<(), Self::Error>;
-    async fn shutdown(&mut self) -> Result<(), Self::Error>;
+    fn read<'a>(
+        &'a mut self,
+        buf: &'a mut [u8],
+    ) -> impl core::future::Future<Output = Result<usize, Self::Error>> + Send + 'a;
+    fn write_all<'a>(
+        &'a mut self,
+        buf: &'a [u8],
+    ) -> impl core::future::Future<Output = Result<(), Self::Error>> + Send + 'a;
+    fn shutdown<'a>(
+        &'a mut self,
+    ) -> impl core::future::Future<Output = Result<(), Self::Error>> + Send + 'a;
 }
 
 pub trait TcpListener: Send + Sync {

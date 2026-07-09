@@ -82,3 +82,28 @@ pub(crate) async fn run_protocol_mux_udp_relay<R>(
     )
     .await;
 }
+
+pub(crate) async fn run_protocol_mux_udp_task<R>(
+    proxy: Proxy,
+    relay: R,
+    inbound_tag: String,
+    protocol: &'static str,
+) where
+    R: InboundMuxUdpRelay,
+{
+    run_protocol_mux_udp_relay(&proxy, relay, &inbound_tag, protocol).await;
+}
+
+pub(crate) async fn run_logged_protocol_mux_udp_relay<R, FLog>(
+    proxy: Proxy,
+    relay: R,
+    inbound_tag: String,
+    protocol: &'static str,
+    log_opened: FLog,
+) where
+    R: InboundMuxUdpRelay,
+    FLog: Fn(&str, &R),
+{
+    log_opened(&inbound_tag, &relay);
+    run_protocol_mux_udp_relay(&proxy, relay, &inbound_tag, protocol).await;
+}

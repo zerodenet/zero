@@ -9,6 +9,8 @@ use super::{
     BoundInbound, InboundAdapterContext, OutboundAdapterContext, OutboundLeafRuntime,
     UdpAdapterContext,
 };
+use crate::runtime::udp_flow::managed::{ManagedDatagramFlowHandler, ManagedStreamFlowHandler};
+use crate::runtime::udp_flow::registered::UpstreamAssociationHandler;
 use crate::transport::{EstablishedTcpOutbound, TcpOutboundFailure, TcpRelayStream};
 
 pub(crate) trait RegisteredProtocolCapability:
@@ -106,6 +108,18 @@ pub(crate) trait TcpOutboundCapability {
 
 #[async_trait]
 pub(crate) trait UdpFlowCapability {
+    fn managed_datagram_udp_handler(&self) -> Option<Box<dyn ManagedDatagramFlowHandler>> {
+        None
+    }
+
+    fn managed_stream_udp_handler(&self) -> Option<Box<dyn ManagedStreamFlowHandler>> {
+        None
+    }
+
+    fn upstream_association_handler(&self) -> Option<Box<dyn UpstreamAssociationHandler>> {
+        None
+    }
+
     async fn start_udp_flow(
         &self,
         _dispatch: &mut crate::runtime::udp_dispatch::UdpDispatch,

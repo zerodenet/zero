@@ -19,22 +19,26 @@ pub(crate) struct StreamUdpRelayRequest<'a, S, R> {
     pub(crate) record_client_io: Option<fn(&Proxy, u64, &mut S)>,
 }
 
-pub(crate) async fn run_protocol_stream_udp_relay<R>(
+pub(crate) async fn run_mapped_protocol_stream_udp_relay<R, S, F>(
     proxy: &Proxy,
     session: &Session,
     relay: R,
     inbound_tag: &str,
     protocol: &'static str,
-    record_client_io: Option<fn(&Proxy, u64, &mut R::Stream)>,
+    map_client: F,
+    record_client_io: Option<fn(&Proxy, u64, &mut S)>,
 ) -> Result<(), EngineError>
 where
     R: InboundStreamUdpRelay,
+    R::Responder: StreamUdpResponder<S>,
+    S: Send,
+    F: FnOnce(R::Stream) -> S,
 {
     let (client, responder, auth) = relay.into_stream_udp_parts();
     run_stream_udp_relay(
         proxy,
         StreamUdpRelayRequest {
-            client,
+            client: map_client(client),
             responder,
             session,
             inbound_tag,

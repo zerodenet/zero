@@ -11,7 +11,10 @@ use zero_config::RuntimeConfig;
 use zero_proxy::Proxy as Engine;
 
 use support::{free_port, spawn_engine, wait_for_listener};
-use trojan::shared::{ATYP_IPV4, CMD_TCP, PASSWORD_HASH_LEN};
+
+const CMD_TCP: u8 = 0x01;
+const ATYP_IPV4: u8 = 0x01;
+const PASSWORD_HASH_LEN: usize = 56;
 
 const PASSWORD: &str = "test-password";
 

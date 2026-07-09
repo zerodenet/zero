@@ -81,6 +81,48 @@ pub enum ResolvedLeafOutbound<'a> {
     },
 }
 
+impl<'a> ResolvedLeafOutbound<'a> {
+    pub fn protocol_name(&self) -> &'static str {
+        match self {
+            Self::Direct { .. } => "direct",
+            Self::Block { .. } => "block",
+            Self::Socks5 { .. } => "socks5",
+            Self::Vless { .. } => "vless",
+            Self::Hysteria2 { .. } => "hysteria2",
+            Self::Shadowsocks { .. } => "shadowsocks",
+            Self::Trojan { .. } => "trojan",
+            Self::Vmess { .. } => "vmess",
+            Self::Mieru { .. } => "mieru",
+        }
+    }
+
+    pub fn tag(&self) -> Option<&'a str> {
+        match self {
+            Self::Direct { tag } | Self::Block { tag } => *tag,
+            Self::Socks5 { tag, .. }
+            | Self::Vless { tag, .. }
+            | Self::Hysteria2 { tag, .. }
+            | Self::Shadowsocks { tag, .. }
+            | Self::Trojan { tag, .. }
+            | Self::Vmess { tag, .. }
+            | Self::Mieru { tag, .. } => Some(*tag),
+        }
+    }
+
+    pub fn proxy_endpoint(&self) -> Option<(&'a str, u16)> {
+        match self {
+            Self::Socks5 { server, port, .. }
+            | Self::Vless { server, port, .. }
+            | Self::Hysteria2 { server, port, .. }
+            | Self::Shadowsocks { server, port, .. }
+            | Self::Trojan { server, port, .. }
+            | Self::Vmess { server, port, .. }
+            | Self::Mieru { server, port, .. } => Some((*server, *port)),
+            Self::Direct { .. } | Self::Block { .. } => None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ResolvedOutbound<'a> {
     Single(ResolvedLeafOutbound<'a>),

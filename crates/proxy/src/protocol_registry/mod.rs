@@ -16,5 +16,7 @@ pub(crate) use capability::{
     TcpOutboundCapability, UdpFlowCapability, UdpPacketPathCapability,
 };
 pub(crate) use context::{InboundAdapterContext, OutboundAdapterContext, UdpAdapterContext};
+#[cfg(feature = "transport_quic")]
+pub(crate) use defaults::bind_transport_inbound;
 pub(crate) use model::{BoundInbound, OutboundLeafRuntime};
 pub(crate) use registry::ProtocolRegistry;

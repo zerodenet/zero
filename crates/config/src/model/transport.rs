@@ -1,4 +1,5 @@
 ﻿use serde::{Deserialize, Serialize};
+use zero_traits::ClientTlsProfile;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -31,6 +32,32 @@ pub struct ClientTlsConfig {
     /// "ios", "edge", "randomized", or empty/"none" for rustls defaults.
     #[serde(default)]
     pub client_fingerprint: Option<String>,
+}
+
+impl ClientTlsProfile for ClientTlsConfig {
+    fn server_name(&self) -> Option<&str> {
+        self.server_name.as_deref()
+    }
+
+    fn disable_sni(&self) -> bool {
+        self.disable_sni
+    }
+
+    fn ca_cert_path(&self) -> Option<&str> {
+        self.ca_cert_path.as_deref()
+    }
+
+    fn insecure(&self) -> bool {
+        self.insecure
+    }
+
+    fn alpn(&self) -> &[String] {
+        self.alpn.as_slice()
+    }
+
+    fn client_fingerprint(&self) -> Option<&str> {
+        self.client_fingerprint.as_deref()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

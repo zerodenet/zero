@@ -17,7 +17,6 @@ const ATYP_DOMAIN: u8 = 0x02;
 const ATYP_IPV6: u8 = 0x03;
 
 pub const AUTH_ID_LEN: usize = 16;
-pub const GCM_TAG_LEN: usize = 16;
 
 pub struct VmessOutboundSession {
     pub upload_key: Vec<u8>,
@@ -34,6 +33,7 @@ pub struct VmessOutboundSession {
 }
 
 struct PendingVmessSession {
+    request_len: usize,
     response_header: u8,
     request_key: Vec<u8>,
     request_nonce: Vec<u8>,
@@ -234,8 +234,21 @@ pub(crate) async fn establish_outbound_session<S: AsyncSocket>(
     cipher: VmessCipher,
     command: u8,
 ) -> Result<VmessOutboundSession, Error> {
+    establish_outbound_session_with_request_len(stream, session, uuid, cipher, command)
+        .await
+        .map(|(outbound_session, _request_len)| outbound_session)
+}
+
+pub(crate) async fn establish_outbound_session_with_request_len<S: AsyncSocket>(
+    stream: &mut S,
+    session: &Session,
+    uuid: &[u8; 16],
+    cipher: VmessCipher,
+    command: u8,
+) -> Result<(VmessOutboundSession, usize), Error> {
     let pending = send_request(stream, session, uuid, cipher, command).await?;
-    Ok(pending.into_session())
+    let request_len = pending.request_len;
+    Ok((pending.into_session(), request_len))
 }
 
 async fn send_request<S: AsyncSocket>(
@@ -282,6 +295,7 @@ async fn send_request<S: AsyncSocket>(
     let response_nonce = sha256_16(&request_body_nonce);
 
     Ok(PendingVmessSession {
+        request_len: packet.len(),
         response_header,
         request_key: request_body_key.to_vec(),
         request_nonce: request_body_nonce.to_vec(),

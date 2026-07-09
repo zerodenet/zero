@@ -12,6 +12,7 @@ homepage.workspace = true
 default = []
 
 [dependencies]
+async-trait = "0.1"
 rand = "0.9"
 ring = "0.17"
 md5 = "0.7"

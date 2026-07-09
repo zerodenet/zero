@@ -114,6 +114,21 @@ pub enum InboundProtocolConfig {
 }
 
 impl InboundProtocolConfig {
+    pub fn protocol_name(&self) -> &'static str {
+        match self {
+            Self::Socks5 { .. } => "socks5",
+            Self::HttpConnect => "http_connect",
+            Self::Mixed { .. } => "mixed",
+            Self::Vless { .. } => "vless",
+            Self::Hysteria2 { .. } => "hysteria2",
+            Self::Shadowsocks { .. } => "shadowsocks",
+            Self::Trojan { .. } => "trojan",
+            Self::Vmess { .. } => "vmess",
+            Self::Direct { .. } => "direct",
+            Self::Mieru { .. } => "mieru",
+        }
+    }
+
     pub fn tls_config(&self) -> Option<&TlsConfig> {
         match self {
             Self::Vless { tls, .. } | Self::Vmess { tls, .. } => tls.as_deref(),

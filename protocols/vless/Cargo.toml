@@ -9,8 +9,10 @@ repository.workspace = true
 homepage.workspace = true
 
 [features]
-default = []
+default = ["tokio"]
+tokio = ["dep:tokio"]
 reality = [
+    "tokio",
     "dep:base64",
     "dep:hex",
     "dep:log",
@@ -18,12 +20,12 @@ reality = [
     "dep:rcgen",
     "dep:ring",
     "dep:subtle",
-    "dep:tokio",
     "dep:x25519-dalek",
     "dep:x509-parser",
 ]
 
 [dependencies]
+async-trait = "0.1"
 base64 = { version = "0.22", optional = true }
 hex = { version = "0.4", optional = true }
 log = { version = "0.4", optional = true }

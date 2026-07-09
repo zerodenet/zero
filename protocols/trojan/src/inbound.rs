@@ -34,7 +34,7 @@ impl TrojanInboundProfile {
         TrojanInbound.inbound_auth(self.password.clone())
     }
 
-    pub async fn accept<S: AsyncSocket>(
+    async fn accept<S: AsyncSocket>(
         &self,
         inbound: TrojanInbound,
         stream: &mut S,
@@ -65,25 +65,63 @@ impl TrojanInboundProfile {
             session, stream,
         ))
     }
-}
 
-pub fn inbound_profile_from_config_password(password: impl Into<String>) -> TrojanInboundProfile {
-    TrojanInboundProfile::from_config_password(password)
+    pub async fn accept_client_owned<S: AsyncSocket>(
+        self,
+        inbound: TrojanInbound,
+        mut stream: S,
+    ) -> Result<TrojanInboundAcceptedSession<S>, Error> {
+        let password = self.password;
+        let accept = inbound
+            .accept(&mut stream, core::slice::from_ref(&password))
+            .await?;
+        let mut session = accept.session;
+        session.apply_auth(TrojanInbound.inbound_auth(password));
+        Ok(TrojanInboundAcceptedSession::from_session_stream(
+            session, stream,
+        ))
+    }
+
+    pub async fn accept_route_owned<S: AsyncSocket>(
+        self,
+        inbound: TrojanInbound,
+        stream: S,
+    ) -> Result<TrojanInboundAcceptedSession<S>, Error> {
+        self.accept_client_owned(inbound, stream).await
+    }
+
+    pub async fn accept_route_owned_with<S, T, E, FRoute, FRouteFut>(
+        self,
+        inbound: TrojanInbound,
+        stream: S,
+        on_route: FRoute,
+    ) -> Result<T, E>
+    where
+        S: AsyncSocket,
+        FRoute: FnOnce(TrojanInboundAcceptedSession<S>) -> FRouteFut,
+        FRouteFut: core::future::Future<Output = Result<T, E>>,
+        E: From<Error>,
+    {
+        let route = self
+            .accept_route_owned(inbound, stream)
+            .await
+            .map_err(E::from)?;
+        on_route(route).await
+    }
 }
 
 /// Result of accepting a Trojan connection.
-pub struct TrojanAccept {
-    pub session: Session,
-    pub command: u8,
+struct TrojanAccept {
+    session: Session,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum TrojanInboundSessionKind {
+enum TrojanInboundSessionKind {
     Tcp,
     Udp,
 }
 
-pub enum TrojanInboundAcceptedSession<S> {
+enum TrojanInboundAcceptedSessionState<S> {
     Tcp {
         session: Session,
         stream: S,
@@ -94,29 +132,17 @@ pub enum TrojanInboundAcceptedSession<S> {
     },
 }
 
+pub struct TrojanInboundAcceptedSession<S> {
+    state: TrojanInboundAcceptedSessionState<S>,
+}
+
 pub struct TrojanInboundUdpRelay<S> {
     auth: Option<SessionAuth>,
     responder: TrojanInboundUdpResponder,
     stream: S,
 }
 
-pub trait TrojanInboundAcceptedSessionDispatcher<S> {
-    type Error;
-
-    async fn dispatch_tcp_session(
-        &mut self,
-        session: Session,
-        stream: S,
-    ) -> Result<(), Self::Error>;
-
-    async fn dispatch_udp_session(
-        &mut self,
-        session: Session,
-        relay: TrojanInboundUdpRelay<S>,
-    ) -> Result<(), Self::Error>;
-}
-
-pub fn classify_inbound_session(session: &Session) -> TrojanInboundSessionKind {
+fn classify_inbound_session(session: &Session) -> TrojanInboundSessionKind {
     match session.network {
         Network::Udp => TrojanInboundSessionKind::Udp,
         Network::Tcp => TrojanInboundSessionKind::Tcp,
@@ -124,7 +150,7 @@ pub fn classify_inbound_session(session: &Session) -> TrojanInboundSessionKind {
 }
 
 impl<S> TrojanInboundUdpRelay<S> {
-    pub fn new(stream: S, responder: TrojanInboundUdpResponder, auth: Option<SessionAuth>) -> Self {
+    fn new(stream: S, responder: TrojanInboundUdpResponder, auth: Option<SessionAuth>) -> Self {
         Self {
             auth,
             responder,
@@ -132,16 +158,8 @@ impl<S> TrojanInboundUdpRelay<S> {
         }
     }
 
-    pub fn into_parts(self) -> (S, TrojanInboundUdpResponder, Option<SessionAuth>) {
+    fn into_parts(self) -> (S, TrojanInboundUdpResponder, Option<SessionAuth>) {
         (self.stream, self.responder, self.auth)
-    }
-
-    pub fn map_stream<T, F>(self, map: F) -> TrojanInboundUdpRelay<T>
-    where
-        F: FnOnce(S) -> T,
-    {
-        let (stream, responder, auth) = self.into_parts();
-        TrojanInboundUdpRelay::new(map(stream), responder, auth)
     }
 }
 
@@ -158,44 +176,67 @@ where
 }
 
 impl<S> TrojanInboundAcceptedSession<S> {
-    pub fn from_session_stream(session: Session, stream: S) -> Self {
+    fn tcp(session: Session, stream: S) -> Self {
+        Self {
+            state: TrojanInboundAcceptedSessionState::Tcp { session, stream },
+        }
+    }
+
+    fn udp(session: Session, relay: TrojanInboundUdpRelay<S>) -> Self {
+        Self {
+            state: TrojanInboundAcceptedSessionState::Udp { session, relay },
+        }
+    }
+
+    fn from_session_stream(session: Session, stream: S) -> Self {
         match classify_inbound_session(&session) {
-            TrojanInboundSessionKind::Tcp => Self::Tcp { session, stream },
+            TrojanInboundSessionKind::Tcp => Self::tcp(session, stream),
             TrojanInboundSessionKind::Udp => {
                 let auth = session.auth.clone();
-                Self::Udp {
+                Self::udp(
                     session,
-                    relay: TrojanInboundUdpRelay::new(
-                        stream,
-                        TrojanInbound.accept_udp_session(),
-                        auth,
-                    ),
-                }
+                    TrojanInboundUdpRelay::new(stream, TrojanInbound.accept_udp_session(), auth),
+                )
             }
         }
     }
 
-    pub async fn dispatch<Tcp, TcpFut, Udp, UdpFut, E>(self, tcp: Tcp, udp: Udp) -> Result<(), E>
+    async fn dispatch<Tcp, TcpFut, Udp, UdpFut, E>(self, tcp: Tcp, udp: Udp) -> Result<(), E>
     where
         Tcp: FnOnce(Session, S) -> TcpFut,
         TcpFut: core::future::Future<Output = Result<(), E>>,
         Udp: FnOnce(Session, TrojanInboundUdpRelay<S>) -> UdpFut,
         UdpFut: core::future::Future<Output = Result<(), E>>,
     {
-        match self {
-            Self::Tcp { session, stream } => tcp(session, stream).await,
-            Self::Udp { session, relay } => udp(session, relay).await,
+        match self.state {
+            TrojanInboundAcceptedSessionState::Tcp { session, stream } => {
+                tcp(session, stream).await
+            }
+            TrojanInboundAcceptedSessionState::Udp { session, relay } => udp(session, relay).await,
         }
     }
+}
 
-    pub async fn dispatch_with<D>(self, dispatcher: &mut D) -> Result<(), D::Error>
+#[async_trait::async_trait]
+impl<S> zero_core::InboundStreamRoute for TrojanInboundAcceptedSession<S>
+where
+    S: AsyncSocket,
+{
+    type TcpStream = S;
+    type UdpRelay = TrojanInboundUdpRelay<S>;
+
+    async fn dispatch_inbound_route<E, FTcp, FTcpFut, FUdp, FUdpFut>(
+        self,
+        on_tcp: FTcp,
+        on_udp: FUdp,
+    ) -> Result<(), E>
     where
-        D: TrojanInboundAcceptedSessionDispatcher<S>,
+        FTcp: FnOnce(Session, Self::TcpStream) -> FTcpFut + Send,
+        FTcpFut: core::future::Future<Output = Result<(), E>> + Send,
+        FUdp: FnOnce(Session, Self::UdpRelay) -> FUdpFut + Send,
+        FUdpFut: core::future::Future<Output = Result<(), E>> + Send,
     {
-        match self {
-            Self::Tcp { session, stream } => dispatcher.dispatch_tcp_session(session, stream).await,
-            Self::Udp { session, relay } => dispatcher.dispatch_udp_session(session, relay).await,
-        }
+        self.dispatch(on_tcp, on_udp).await
     }
 }
 
@@ -214,23 +255,23 @@ impl TrojanInbound {
     ///
     /// Reads password hash + command + target address from the stream.
     /// The password is validated against `passwords` (hex SHA224 hashes).
-    pub async fn accept<S: AsyncSocket>(
+    async fn accept<S: AsyncSocket>(
         &self,
         stream: &mut S,
         passwords: &[String],
     ) -> Result<TrojanAccept, Error> {
-        let hex = read_password(stream).await?;
+        let password_hash = read_password(stream).await?;
 
         // Validate password.
         if !passwords.iter().any(|p| {
             #[cfg(feature = "crypto")]
             {
                 use sha2::{Digest, Sha224};
-                hex == super::shared::hex::encode(&Sha224::digest(p.as_bytes()))
+                password_hash == super::shared::hex::encode(&Sha224::digest(p.as_bytes()))
             }
             #[cfg(not(feature = "crypto"))]
             {
-                let _ = p;
+                let _ = (p, &password_hash);
                 false
             }
         }) {
@@ -247,7 +288,6 @@ impl TrojanInbound {
 
         Ok(TrojanAccept {
             session: Session::new(0, addr, port, network, ProtocolType::Trojan),
-            command: cmd,
         })
     }
 }

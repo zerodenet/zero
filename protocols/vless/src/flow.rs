@@ -47,7 +47,7 @@ pub fn flow_from_byte(byte: u8) -> Option<&'static str> {
     }
 }
 
-pub fn is_aead_flow(flow: Option<&str>) -> bool {
+pub(crate) fn is_aead_flow(flow: Option<&str>) -> bool {
     flow == Some(FLOW_XTLS_RPRX_VISION) || flow == Some(FLOW_XTLS_RPRX_VISION_UDP)
 }
 
@@ -148,7 +148,7 @@ pub fn flow_build_request(
 /// Decrypt the command block for AEAD flows.
 ///
 /// Returns (command, port, address).
-pub async fn flow_read_request<S>(
+pub(crate) async fn flow_read_request<S>(
     stream: &mut S,
     flow: Option<&str>,
     uuid: &[u8; 16],

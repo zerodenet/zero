@@ -1,7 +1,7 @@
 #![cfg(feature = "reality")]
 
+use vless::mux_crypto::MuxCrypto;
 use vless::parse_uuid;
-use vless::MuxCrypto;
 
 #[test]
 fn test_key_derivation_determinism() {

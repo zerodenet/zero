@@ -1,12 +1,15 @@
 use std::collections::VecDeque;
+use std::pin::Pin;
+use std::task::{Context, Poll};
 
-use vless::udp::VlessUdpPacketV2Codec;
-use vless::{format_uuid, parse_uuid, VlessInbound, VlessOutbound, VlessUser, VlessUserStore};
+use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
+use vless::inbound::{VlessInbound, VlessUser, VlessUserStore};
+use vless::outbound::VlessOutbound;
+use vless::udp::{decode_inbound_dispatch, encode_response_packet, VlessUdpPacketV2Codec};
+use vless::{format_uuid, parse_uuid};
 use zero_core::{Address, Error, Network, ProtocolType, Session};
 use zero_traits::AsyncSocket;
-#[cfg(feature = "reality")]
-use zero_traits::DeferredTcpTunnelProtocol;
-use zero_traits::{UdpPacketFraming, UdpPacketTunnelProtocol};
+use zero_traits::UdpPacketFraming;
 
 const USER_ID: &str = "11111111-2222-3333-4444-555555555555";
 
@@ -30,28 +33,78 @@ impl MockSocket {
 impl AsyncSocket for MockSocket {
     type Error = ();
 
-    async fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
-        let mut read = 0;
+    fn read<'a>(
+        &'a mut self,
+        buf: &'a mut [u8],
+    ) -> impl core::future::Future<Output = Result<usize, Self::Error>> + Send + 'a {
+        async move {
+            let mut read = 0;
 
-        while read < buf.len() {
+            while read < buf.len() {
+                let Some(byte) = self.reads.pop_front() else {
+                    break;
+                };
+                buf[read] = byte;
+                read += 1;
+            }
+
+            Ok(read)
+        }
+    }
+
+    fn write_all<'a>(
+        &'a mut self,
+        buf: &'a [u8],
+    ) -> impl core::future::Future<Output = Result<(), Self::Error>> + Send + 'a {
+        async move {
+            self.writes.extend_from_slice(buf);
+            Ok(())
+        }
+    }
+
+    fn shutdown<'a>(
+        &'a mut self,
+    ) -> impl core::future::Future<Output = Result<(), Self::Error>> + Send + 'a {
+        async move {
+            self.shutdown_called = true;
+            Ok(())
+        }
+    }
+}
+
+impl AsyncRead for MockSocket {
+    fn poll_read(
+        mut self: Pin<&mut Self>,
+        _cx: &mut Context<'_>,
+        buf: &mut ReadBuf<'_>,
+    ) -> Poll<std::io::Result<()>> {
+        while buf.remaining() > 0 {
             let Some(byte) = self.reads.pop_front() else {
                 break;
             };
-            buf[read] = byte;
-            read += 1;
+            buf.put_slice(&[byte]);
         }
-
-        Ok(read)
+        Poll::Ready(Ok(()))
     }
+}
 
-    async fn write_all(&mut self, buf: &[u8]) -> Result<(), Self::Error> {
+impl AsyncWrite for MockSocket {
+    fn poll_write(
+        mut self: Pin<&mut Self>,
+        _cx: &mut Context<'_>,
+        buf: &[u8],
+    ) -> Poll<std::io::Result<usize>> {
         self.writes.extend_from_slice(buf);
-        Ok(())
+        Poll::Ready(Ok(buf.len()))
     }
 
-    async fn shutdown(&mut self) -> Result<(), Self::Error> {
+    fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+        Poll::Ready(Ok(()))
+    }
+
+    fn poll_shutdown(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
         self.shutdown_called = true;
-        Ok(())
+        Poll::Ready(Ok(()))
     }
 }
 
@@ -156,8 +209,9 @@ async fn outbound_establishes_tcp_tunnel_for_ipv4_target() {
         ProtocolType::Vless,
     );
 
-    VlessOutbound
-        .establish_tcp_tunnel(&mut socket, &session, &id)
+    vless::outbound::PreparedVlessOutboundRequestBundle::from_config(USER_ID, None, None)
+        .expect("request bundle")
+        .establish_tcp_outbound_tunnel(&mut socket, &session, false)
         .await
         .expect("tunnel");
 
@@ -176,8 +230,10 @@ async fn outbound_establishes_tcp_tunnel_for_ipv4_target() {
 #[cfg(feature = "reality")]
 #[tokio::test]
 async fn outbound_deferred_tcp_tunnel_request_does_not_read_response() {
-    let id = parse_uuid(USER_ID).expect("uuid");
     let mut socket = MockSocket::new(&[]);
+    let request =
+        vless::outbound::PreparedVlessOutboundRequestBundle::from_config(USER_ID, None, None)
+            .expect("request bundle");
     let session = Session::new(
         0,
         Address::Ipv4([127, 0, 0, 1]),
@@ -186,20 +242,13 @@ async fn outbound_deferred_tcp_tunnel_request_does_not_read_response() {
         ProtocolType::Vless,
     );
 
-    VlessOutbound
-        .send_deferred_tcp_tunnel_request(
-            &mut socket,
-            &vless::VlessFlowTcpTunnelTarget {
-                session: &session,
-                id: &id,
-                flow: None,
-            },
-        )
+    request
+        .establish_tcp_outbound_tunnel(&mut socket, &session, true)
         .await
         .expect("deferred tunnel request");
 
     let mut expected = vec![0x00];
-    expected.extend_from_slice(&id);
+    expected.extend_from_slice(&parse_uuid(USER_ID).expect("uuid"));
     expected.extend_from_slice(&[
         0x00, // addon length
         0x01, // tcp command
@@ -208,6 +257,31 @@ async fn outbound_deferred_tcp_tunnel_request_does_not_read_response() {
         127, 0, 0, 1,
     ]);
     assert_eq!(socket.writes, expected);
+}
+
+#[tokio::test]
+async fn outbound_stream_reports_handshake_traffic() {
+    let socket = MockSocket::new(&[
+        0x00, 0x00, // response version + addon length
+    ]);
+    let request =
+        vless::outbound::PreparedVlessOutboundRequestBundle::from_config(USER_ID, None, None)
+            .expect("request bundle");
+    let session = Session::new(
+        0,
+        Address::Ipv4([127, 0, 0, 1]),
+        8080,
+        Network::Tcp,
+        ProtocolType::Vless,
+    );
+
+    let (_stream, written_bytes, read_bytes) = request
+        .establish_tcp_outbound_stream(socket, &session, false)
+        .await
+        .expect("outbound stream");
+
+    assert_eq!(written_bytes, 26);
+    assert_eq!(read_bytes, 2);
 }
 
 #[tokio::test]
@@ -224,16 +298,9 @@ async fn outbound_establishes_udp_packet_tunnel_and_consumes_response() {
         ProtocolType::Vless,
     );
 
-    <VlessOutbound as UdpPacketTunnelProtocol<vless::udp::VlessUdpPacketTunnelTarget>>::establish_udp_packet_tunnel(
-        &VlessOutbound,
-        &mut socket,
-        &vless::udp::VlessUdpPacketTunnelTarget {
-            session: &session,
-            id: &id,
-        },
-    )
-    .await
-    .expect("udp packet tunnel");
+    vless::udp::establish_udp_packet_tunnel(&mut socket, &session, &id)
+        .await
+        .expect("udp packet tunnel");
 
     let mut expected = vec![0x00];
     expected.extend_from_slice(&id);
@@ -467,9 +534,7 @@ fn inbound_udp_decoder_parses_client_packet() {
         )
         .expect("build packet");
 
-    let parsed = vless::udp::VlessInboundUdpSession::new()
-        .decode_request(&packet)
-        .expect("decode inbound packet");
+    let parsed = decode_inbound_dispatch(&packet).expect("decode inbound packet");
 
     assert_eq!(parsed.target(), &Address::Domain("dns.example".into()));
     assert_eq!(parsed.port(), 5353);
@@ -478,8 +543,7 @@ fn inbound_udp_decoder_parses_client_packet() {
 
 #[test]
 fn udp_response_encoder_builds_response_packet() {
-    let packet = vless::udp::VlessInboundUdpCodec
-        .encode_response(&Address::Ipv4([1, 1, 1, 1]), 53, b"answer")
+    let packet = encode_response_packet(&Address::Ipv4([1, 1, 1, 1]), 53, b"answer")
         .expect("encode response");
 
     let parsed =
@@ -496,12 +560,8 @@ fn udp_response_encoder_builds_response_packet() {
 #[test]
 #[cfg(feature = "reality")]
 fn mux_udp_response_encoder_wraps_vless_packet() {
-    let (writer, mut down_rx) = vless::mux::VlessInboundMuxWriter::channel();
-    vless::udp::VlessInboundUdpCodec
-        .send_mux_response(&writer, 7, &Address::Ipv4([8, 8, 8, 8]), 53, b"dns")
+    let frame = vless::udp::encode_mux_response_packet(7, &Address::Ipv4([8, 8, 8, 8]), 53, b"dns")
         .expect("encode mux response");
-    let (sid, frame) = down_rx.try_recv().expect("mux response frame").into_parts();
-    assert_eq!(sid, 7);
 
     assert_eq!(u16::from_be_bytes([frame[0], frame[1]]), 4 + 7 + 3);
     assert_eq!(u16::from_be_bytes([frame[2], frame[3]]), 7);

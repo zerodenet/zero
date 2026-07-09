@@ -1,3 +1,4 @@
+use alloc::string::String;
 use alloc::vec::Vec;
 
 use crate::AsyncSocket;
@@ -26,6 +27,70 @@ pub enum TransportKind {
 pub trait InboundTransport {
     /// The transport kind this adapter's inbound listener uses.
     fn inbound_transport_kind(&self) -> TransportKind;
+}
+
+/// Neutral client TLS profile consumed by transport openers.
+pub trait ClientTlsProfile {
+    fn server_name(&self) -> Option<&str>;
+
+    fn disable_sni(&self) -> bool;
+
+    fn ca_cert_path(&self) -> Option<&str>;
+
+    fn insecure(&self) -> bool;
+
+    fn alpn(&self) -> &[String];
+
+    fn client_fingerprint(&self) -> Option<&str>;
+}
+
+/// Neutral transport identity hints for stream-based protocol MUX profile
+/// selection.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct StreamMuxTransportHints {
+    tls_server_name: Option<String>,
+    ws_path: Option<String>,
+    grpc_service_names: Option<Vec<String>>,
+    reality_public_key: Option<String>,
+    reality_server_name: Option<String>,
+}
+
+impl StreamMuxTransportHints {
+    pub fn new(
+        tls_server_name: Option<String>,
+        ws_path: Option<String>,
+        grpc_service_names: Option<Vec<String>>,
+        reality_public_key: Option<String>,
+        reality_server_name: Option<String>,
+    ) -> Self {
+        Self {
+            tls_server_name,
+            ws_path,
+            grpc_service_names,
+            reality_public_key,
+            reality_server_name,
+        }
+    }
+
+    pub fn tls_server_name(&self) -> Option<&str> {
+        self.tls_server_name.as_deref()
+    }
+
+    pub fn ws_path(&self) -> Option<&str> {
+        self.ws_path.as_deref()
+    }
+
+    pub fn grpc_service_names(&self) -> Option<&[String]> {
+        self.grpc_service_names.as_deref()
+    }
+
+    pub fn reality_public_key(&self) -> Option<&str> {
+        self.reality_public_key.as_deref()
+    }
+
+    pub fn reality_server_name(&self) -> Option<&str> {
+        self.reality_server_name.as_deref()
+    }
 }
 
 // ── Protocol capability descriptors ──────────────────────────────────

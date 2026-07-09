@@ -1,3 +1,4 @@
+use core::future::Future;
 use std::string::String;
 
 #[cfg(feature = "tokio")]
@@ -7,12 +8,15 @@ use std::io;
 use tokio::io::{AsyncReadExt, AsyncWriteExt, ReadHalf, WriteHalf};
 #[cfg(feature = "tokio")]
 use tokio::sync::{broadcast, mpsc};
-use zero_core::{
-    Address, Error, InboundUdpDispatch, ProtocolType, Session, StreamUdpResponder, UdpFlowPacket,
-};
+#[cfg(feature = "tokio")]
+use zero_core::UdpFlowPacket;
+use zero_core::{Address, Error, InboundUdpDispatch, ProtocolType, Session, StreamUdpResponder};
 use zero_traits::{AsyncSocket, UdpPacketStreamFraming, UdpPacketTunnelProtocol};
 
-use crate::outbound::TrojanOutbound;
+use crate::outbound::{
+    resolved_tls_profile_from_parts, OwnedTrojanResolvedTlsProfile, TrojanOutbound,
+    TrojanResolvedTlsProfile,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct TrojanInboundUdpRequest {
@@ -22,7 +26,7 @@ struct TrojanInboundUdpRequest {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct TrojanInboundUdpDispatchParts {
+struct TrojanInboundUdpDispatchParts {
     target: Address,
     port: u16,
     payload: Vec<u8>,
@@ -59,10 +63,6 @@ impl<'a> TrojanInboundUdpClientResponse<'a> {
 }
 
 impl TrojanInboundUdpDispatchParts {
-    pub fn protocol(&self) -> ProtocolType {
-        ProtocolType::Trojan
-    }
-
     fn into_inbound_dispatch(self) -> InboundUdpDispatch {
         InboundUdpDispatch::new(
             ProtocolType::Trojan,
@@ -100,7 +100,7 @@ impl TrojanInboundUdpRequest {
 }
 
 #[derive(Debug, Default, Clone, Copy)]
-pub struct TrojanInboundUdpSession {
+struct TrojanInboundUdpSession {
     codec: TrojanInboundUdpCodec,
 }
 
@@ -110,7 +110,7 @@ pub struct TrojanInboundUdpResponder {
 }
 
 impl TrojanInboundUdpSession {
-    pub fn new() -> Self {
+    fn new() -> Self {
         Self::default()
     }
 
@@ -136,10 +136,7 @@ impl TrojanInboundUdpSession {
             .map(TrojanInboundUdpRequest::into_dispatch_parts)
     }
 
-    pub async fn read_inbound_dispatch<S>(
-        &self,
-        stream: &mut S,
-    ) -> Result<InboundUdpDispatch, Error>
+    async fn read_inbound_dispatch<S>(&self, stream: &mut S) -> Result<InboundUdpDispatch, Error>
     where
         S: AsyncSocket,
     {
@@ -148,7 +145,7 @@ impl TrojanInboundUdpSession {
             .map(TrojanInboundUdpDispatchParts::into_inbound_dispatch)
     }
 
-    pub async fn write_response<S>(
+    async fn write_response<S>(
         &self,
         stream: &mut S,
         target: &Address,
@@ -180,7 +177,7 @@ impl TrojanInboundUdpSession {
         .await
     }
 
-    pub async fn write_client_response_for_target<S>(
+    async fn write_client_response_for_target<S>(
         &self,
         stream: &mut S,
         target: &Address,
@@ -199,11 +196,11 @@ impl TrojanInboundUdpSession {
 }
 
 impl TrojanInboundUdpResponder {
-    pub fn new(session: TrojanInboundUdpSession) -> Self {
+    fn new(session: TrojanInboundUdpSession) -> Self {
         Self { session }
     }
 
-    pub async fn read_inbound_dispatch<S>(
+    pub(crate) async fn read_inbound_dispatch<S>(
         &self,
         stream: &mut S,
     ) -> Result<InboundUdpDispatch, Error>
@@ -213,7 +210,7 @@ impl TrojanInboundUdpResponder {
         self.session.read_inbound_dispatch(stream).await
     }
 
-    pub async fn write_response_for_target<S>(
+    pub(crate) async fn write_response_for_target<S>(
         &self,
         stream: &mut S,
         target: &Address,
@@ -229,6 +226,7 @@ impl TrojanInboundUdpResponder {
     }
 }
 
+#[async_trait::async_trait]
 impl<S> StreamUdpResponder<S> for TrojanInboundUdpResponder
 where
     S: AsyncSocket,
@@ -281,22 +279,22 @@ impl TrojanInboundUdpCodec {
 }
 
 impl crate::inbound::TrojanInbound {
-    pub fn udp_session(&self) -> TrojanInboundUdpSession {
+    fn udp_session(&self) -> TrojanInboundUdpSession {
         TrojanInboundUdpSession::new()
     }
 
-    pub fn udp_responder(&self) -> TrojanInboundUdpResponder {
+    fn udp_responder(&self) -> TrojanInboundUdpResponder {
         TrojanInboundUdpResponder::new(self.udp_session())
     }
 
-    pub fn accept_udp_session(&self) -> TrojanInboundUdpResponder {
+    pub(crate) fn accept_udp_session(&self) -> TrojanInboundUdpResponder {
         self.udp_responder()
     }
 }
 
 /// Target parameters for Trojan UDP packet tunnel over a connected stream.
 #[derive(Debug, Clone, Copy)]
-pub struct TrojanUdpPacketTunnelTarget<'a> {
+struct TrojanUdpPacketTunnelTarget<'a> {
     pub session: &'a Session,
     pub password: &'a str,
 }
@@ -359,6 +357,7 @@ impl TrojanUdpPacket {
     }
 }
 
+#[cfg(feature = "tokio")]
 #[derive(Debug, Default, Clone, Copy)]
 struct TrojanUdpFlowIo;
 
@@ -439,6 +438,7 @@ impl TrojanUdpFlowSender {
     }
 }
 
+#[cfg(feature = "tokio")]
 impl TrojanUdpFlowIo {
     async fn establish<S>(
         &self,
@@ -525,7 +525,7 @@ where
 }
 
 #[cfg(feature = "tokio")]
-pub async fn establish_udp_flow_with_resume<S>(
+async fn establish_udp_flow_with_resume<S>(
     mut stream: S,
     session: &Session,
     resume: &TrojanUdpFlowResume,
@@ -632,12 +632,163 @@ where
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct TrojanUdpFlowResume {
+struct TrojanUdpFlowResume {
     password: String,
     sni: Option<String>,
     insecure: bool,
     client_fingerprint: Option<String>,
-    relay_chain: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum TrojanUdpFlowMode {
+    Direct,
+    Relay,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct TrojanUdpFlowPlan {
+    resume: TrojanUdpFlowResume,
+    mode: TrojanUdpFlowMode,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PreparedTrojanUdpFlowPlan {
+    plan: TrojanUdpFlowPlan,
+}
+
+impl TrojanUdpFlowPlan {
+    fn new(resume: TrojanUdpFlowResume, mode: TrojanUdpFlowMode) -> Self {
+        Self { resume, mode }
+    }
+
+    pub(crate) fn direct_from_config(
+        password: &str,
+        sni: Option<&str>,
+        insecure: bool,
+        client_fingerprint: Option<&str>,
+    ) -> Self {
+        TrojanUdpFlowPlan::new(
+            udp_flow_resume_from_config(password, sni, insecure, client_fingerprint),
+            TrojanUdpFlowMode::Direct,
+        )
+    }
+
+    pub(crate) fn relay_from_config(
+        password: &str,
+        sni: Option<&str>,
+        insecure: bool,
+        client_fingerprint: Option<&str>,
+    ) -> Self {
+        TrojanUdpFlowPlan::new(
+            udp_flow_resume_from_config(password, sni, insecure, client_fingerprint),
+            TrojanUdpFlowMode::Relay,
+        )
+    }
+
+    pub fn connector_flow(
+        &self,
+        server: &str,
+        port: u16,
+        session_id: u64,
+    ) -> TrojanUdpConnectorFlow {
+        TrojanUdpConnectorFlow {
+            cache_key: self.flow_cache_key(server, port, session_id),
+            requires_relay_upstream: self.flow_requires_relay_upstream(),
+        }
+    }
+
+    pub(crate) fn tls_profile<'a>(
+        &'a self,
+        fallback_server_name: Option<&'a str>,
+    ) -> TrojanResolvedTlsProfile<'a> {
+        self.resume().tls_profile(fallback_server_name)
+    }
+
+    pub fn owned_tls_profile(
+        &self,
+        fallback_server_name: Option<&str>,
+    ) -> OwnedTrojanResolvedTlsProfile {
+        self.tls_profile(fallback_server_name).into_owned()
+    }
+
+    fn resume(&self) -> &TrojanUdpFlowResume {
+        &self.resume
+    }
+
+    fn mode(&self) -> TrojanUdpFlowMode {
+        self.mode
+    }
+
+    fn flow_requires_relay_upstream(&self) -> bool {
+        matches!(self.mode(), TrojanUdpFlowMode::Relay)
+    }
+
+    fn flow_cache_key(&self, server: &str, port: u16, session_id: u64) -> String {
+        if self.flow_requires_relay_upstream() {
+            return format!("relay|session:{session_id}");
+        }
+        format!("leaf|{server}:{port}|password:{}", self.resume.password)
+    }
+
+    #[cfg(feature = "tokio")]
+    pub(crate) async fn open_udp_flow_with_transport<S, OpenStream, OpenStreamFut, E>(
+        &self,
+        session: &Session,
+        open_stream: OpenStream,
+    ) -> Result<TrojanUdpFlowConnection, E>
+    where
+        S: AsyncSocket + tokio::io::AsyncRead + tokio::io::AsyncWrite + Send + Sync + 'static,
+        OpenStream: FnOnce() -> OpenStreamFut,
+        OpenStreamFut: Future<Output = Result<S, E>>,
+        E: From<Error>,
+    {
+        let stream = open_stream().await?;
+        establish_udp_flow_with_resume(stream, session, self.resume())
+            .await
+            .map_err(E::from)
+    }
+}
+
+impl PreparedTrojanUdpFlowPlan {
+    pub(crate) fn new(plan: TrojanUdpFlowPlan) -> Self {
+        Self { plan }
+    }
+
+    pub fn connector_flow(
+        &self,
+        server: &str,
+        port: u16,
+        session_id: u64,
+    ) -> TrojanUdpConnectorFlow {
+        self.plan.connector_flow(server, port, session_id)
+    }
+
+    pub fn owned_tls_profile(
+        &self,
+        fallback_server_name: Option<&str>,
+    ) -> OwnedTrojanResolvedTlsProfile {
+        self.plan.owned_tls_profile(fallback_server_name)
+    }
+
+    #[cfg(feature = "tokio")]
+    pub async fn open_udp_flow_with_transport<S, OpenStream, OpenStreamFut, E>(
+        &self,
+        session: &Session,
+        fallback_server_name: Option<&str>,
+        open_stream: OpenStream,
+    ) -> Result<TrojanUdpFlowConnection, E>
+    where
+        S: AsyncSocket + tokio::io::AsyncRead + tokio::io::AsyncWrite + Send + Sync + 'static,
+        OpenStream: FnOnce(OwnedTrojanResolvedTlsProfile) -> OpenStreamFut,
+        OpenStreamFut: Future<Output = Result<S, E>>,
+        E: From<Error>,
+    {
+        let tls_profile = self.plan.owned_tls_profile(fallback_server_name);
+        let stream = open_stream(tls_profile).await?;
+        self.plan
+            .open_udp_flow_with_transport(session, move || async move { Ok(stream) })
+            .await
+    }
 }
 
 impl TrojanUdpFlowResume {
@@ -646,47 +797,28 @@ impl TrojanUdpFlowResume {
         sni: Option<&str>,
         insecure: bool,
         client_fingerprint: Option<&str>,
-        relay_chain: bool,
     ) -> Self {
         Self {
             password: password.to_owned(),
             sni: sni.map(ToOwned::to_owned),
             insecure,
             client_fingerprint: client_fingerprint.map(ToOwned::to_owned),
-            relay_chain,
         }
     }
 
-    fn flow_requires_relay_upstream(&self) -> bool {
-        self.relay_chain
+    fn tls_profile<'a>(
+        &'a self,
+        fallback_server_name: Option<&'a str>,
+    ) -> TrojanResolvedTlsProfile<'a> {
+        resolved_tls_profile_from_parts(
+            self.sni.as_deref(),
+            self.insecure,
+            self.client_fingerprint.as_deref(),
+            fallback_server_name,
+        )
     }
 
-    fn flow_cache_key(&self, server: &str, port: u16, session_id: u64) -> String {
-        if self.relay_chain {
-            return format!("relay|session:{session_id}");
-        }
-        format!("leaf|{server}:{port}|password:{}", self.password)
-    }
-
-    fn connector_flow(&self, server: &str, port: u16, session_id: u64) -> TrojanUdpConnectorFlow {
-        TrojanUdpConnectorFlow {
-            cache_key: self.flow_cache_key(server, port, session_id),
-            requires_relay_upstream: self.flow_requires_relay_upstream(),
-        }
-    }
-
-    fn tls_profile(&self, fallback_server_name: Option<&str>) -> TrojanUdpTlsProfile {
-        TrojanUdpTlsProfile {
-            server_name: self
-                .sni
-                .as_deref()
-                .or(fallback_server_name)
-                .map(ToOwned::to_owned),
-            insecure: self.insecure,
-            client_fingerprint: self.client_fingerprint.clone(),
-        }
-    }
-
+    #[cfg(feature = "tokio")]
     async fn establish_udp_tunnel<S>(
         &self,
         flow_io: &TrojanUdpFlowIo,
@@ -735,66 +867,23 @@ impl<'a> TrojanUdpFlowConfig<'a> {
         }
     }
 
-    fn flow_resume(&self, relay_chain: bool) -> TrojanUdpFlowResume {
+    fn flow_resume(&self) -> TrojanUdpFlowResume {
         TrojanUdpFlowResume::new(
             self.password,
             self.sni,
             self.insecure,
             self.client_fingerprint,
-            relay_chain,
         )
     }
 }
 
-pub fn udp_flow_resume_from_config(
+fn udp_flow_resume_from_config(
     password: &str,
     sni: Option<&str>,
     insecure: bool,
     client_fingerprint: Option<&str>,
-    relay_chain: bool,
 ) -> TrojanUdpFlowResume {
-    TrojanUdpFlowConfig::new(password, sni, insecure, client_fingerprint).flow_resume(relay_chain)
-}
-
-pub fn connector_flow_from_resume(
-    resume: &TrojanUdpFlowResume,
-    server: &str,
-    port: u16,
-    session_id: u64,
-) -> TrojanUdpConnectorFlow {
-    resume.connector_flow(server, port, session_id)
-}
-
-pub fn connector_tls_profile_from_resume(
-    resume: &TrojanUdpFlowResume,
-    fallback_server_name: Option<&str>,
-) -> TrojanUdpTlsProfile {
-    resume.tls_profile(fallback_server_name)
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct TrojanUdpTlsProfile {
-    server_name: Option<String>,
-    insecure: bool,
-    client_fingerprint: Option<String>,
-}
-
-impl TrojanUdpTlsProfile {
-    pub fn into_parts(self) -> (Option<String>, bool, Option<String>) {
-        (self.server_name, self.insecure, self.client_fingerprint)
-    }
-
-    pub fn server_name(&self) -> Option<&str> {
-        self.server_name.as_deref()
-    }
-
-    pub fn insecure(&self) -> bool {
-        self.insecure
-    }
-
-    pub fn client_fingerprint(&self) -> Option<&str> {
-        self.client_fingerprint.as_deref()
-    }
+    TrojanUdpFlowConfig::new(password, sni, insecure, client_fingerprint).flow_resume()
 }
 
 impl UdpPacketStreamFraming<TrojanUdpPacket> for TrojanOutbound {
@@ -823,6 +912,7 @@ impl UdpPacketStreamFraming<TrojanUdpPacket> for TrojanOutbound {
     }
 }
 
+#[cfg(feature = "tokio")]
 async fn read_inbound_udp_packet<S>(stream: &mut S) -> Result<TrojanUdpPacket, Error>
 where
     S: AsyncSocket,
@@ -834,6 +924,7 @@ where
     .await
 }
 
+#[cfg(feature = "tokio")]
 async fn read_udp_flow_packet<S>(stream: &mut S) -> Result<TrojanUdpPacket, Error>
 where
     S: AsyncSocket,
@@ -857,6 +948,7 @@ where
     .await
 }
 
+#[cfg(feature = "tokio")]
 async fn write_udp_response<S>(
     stream: &mut S,
     target: &Address,
@@ -875,6 +967,7 @@ where
     .await
 }
 
+#[cfg(feature = "tokio")]
 async fn write_udp_flow_packet<S>(
     stream: &mut S,
     target: &Address,

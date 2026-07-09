@@ -37,7 +37,15 @@ where
     Ok(())
 }
 
+#[cfg(not(feature = "reality"))]
 pub(crate) async fn read_addon<S>(stream: &mut S) -> Result<(), Error>
+where
+    S: AsyncSocket,
+{
+    read_addon_len(stream).await.map(|_| ())
+}
+
+pub(crate) async fn read_addon_len<S>(stream: &mut S) -> Result<usize, Error>
 where
     S: AsyncSocket,
 {
@@ -45,11 +53,12 @@ where
     read_exact(stream, &mut length).await?;
     let length = length[0] as usize;
     if length == 0 {
-        return Ok(());
+        return Ok(1);
     }
 
     let mut addon = vec![0_u8; length];
-    read_exact(stream, &mut addon).await
+    read_exact(stream, &mut addon).await?;
+    Ok(1 + length)
 }
 
 pub(crate) async fn read_address<S>(stream: &mut S, atyp: u8) -> Result<Address, Error>
@@ -134,13 +143,20 @@ pub(crate) async fn read_response<S>(stream: &mut S) -> Result<(), Error>
 where
     S: AsyncSocket,
 {
+    read_response_len(stream).await.map(|_| ())
+}
+
+pub(crate) async fn read_response_len<S>(stream: &mut S) -> Result<usize, Error>
+where
+    S: AsyncSocket,
+{
     let mut version = [0_u8; 1];
     read_exact(stream, &mut version).await?;
     if version[0] != VLESS_VERSION {
         return Err(Error::Protocol("unsupported VLESS response version"));
     }
 
-    read_addon(stream).await
+    Ok(1 + read_addon_len(stream).await?)
 }
 
 pub fn parse_uuid(input: &str) -> Result<[u8; 16], Error> {

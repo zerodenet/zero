@@ -1,4 +1,4 @@
-﻿// gRPC transport.
+// gRPC transport.
 //
 // Bidirectional streaming over HTTP/2 with gRPC wire format.
 // Data framing: [compressed flag][length][protobuf hunk].
@@ -41,14 +41,14 @@ fn parse_grpc_frame_header(header: &[u8; GRPC_HEADER_LEN]) -> (bool, usize) {
 /// Bidirectional gRPC stream wrapping h2 send/recv halves via internal channels.
 pub struct GrpcStream {
     read_rx: mpsc::Receiver<Vec<u8>>,
-    write_tx: mpsc::Sender<Vec<u8>>,
+    write_tx: mpsc::UnboundedSender<Vec<u8>>,
     read_buffer: Vec<u8>,
     read_offset: usize,
     write_closed: bool,
 }
 
 impl GrpcStream {
-    fn new(read_rx: mpsc::Receiver<Vec<u8>>, write_tx: mpsc::Sender<Vec<u8>>) -> Self {
+    fn new(read_rx: mpsc::Receiver<Vec<u8>>, write_tx: mpsc::UnboundedSender<Vec<u8>>) -> Self {
         Self {
             read_rx,
             write_tx,
@@ -244,7 +244,7 @@ fn build_grpc_stream(
     send_stream: h2::SendStream<Bytes>,
     recv_stream: h2::RecvStream,
 ) -> Result<GrpcStream, EngineError> {
-    let (write_tx, write_rx) = mpsc::channel::<Vec<u8>>(64);
+    let (write_tx, write_rx) = mpsc::unbounded_channel::<Vec<u8>>();
     let (read_tx, read_rx) = mpsc::channel::<Vec<u8>>(64);
 
     spawn_grpc_write_relay(send_stream, write_rx);
@@ -257,7 +257,7 @@ fn build_grpc_client_stream(
     send_stream: h2::SendStream<Bytes>,
     resp_future: h2::client::ResponseFuture,
 ) -> GrpcStream {
-    let (write_tx, write_rx) = mpsc::channel::<Vec<u8>>(64);
+    let (write_tx, write_rx) = mpsc::unbounded_channel::<Vec<u8>>();
     let (read_tx, read_rx) = mpsc::channel::<Vec<u8>>(64);
 
     spawn_grpc_write_relay(send_stream, write_rx);
@@ -282,7 +282,7 @@ fn build_grpc_client_stream(
 
 fn spawn_grpc_write_relay(
     mut send_stream: h2::SendStream<Bytes>,
-    mut write_rx: mpsc::Receiver<Vec<u8>>,
+    mut write_rx: mpsc::UnboundedReceiver<Vec<u8>>,
 ) {
     tokio::spawn(async move {
         while let Some(data) = write_rx.recv().await {
@@ -513,19 +513,9 @@ impl AsyncWrite for GrpcStream {
                 "grpc write side closed",
             )));
         }
-        // try_send for backpressure: if channel is full, the h2 connection
-        // is congested and data will naturally be retried by the caller.
-        // Buffer is generously sized (64) to absorb bursts.
-        match self.write_tx.try_send(buf.to_vec()) {
+        match self.write_tx.send(buf.to_vec()) {
             Ok(()) => Poll::Ready(Ok(buf.len())),
-            Err(mpsc::error::TrySendError::Full(v)) => {
-                tracing::warn!(
-                    len = v.len(),
-                    "grpc write channel congested, dropping frame"
-                );
-                Poll::Ready(Ok(v.len()))
-            }
-            Err(mpsc::error::TrySendError::Closed(_)) => Poll::Ready(Err(io::Error::new(
+            Err(_) => Poll::Ready(Err(io::Error::new(
                 io::ErrorKind::BrokenPipe,
                 "grpc write side closed",
             ))),
@@ -546,7 +536,7 @@ impl AsyncWrite for GrpcStream {
         self.write_closed = true;
         // Send empty frame to signal end of stream (best-effort)
         let empty: Vec<u8> = Vec::new();
-        let _ = self.write_tx.try_send(empty);
+        let _ = self.write_tx.send(empty);
         Poll::Ready(Ok(()))
     }
 }
@@ -554,17 +544,27 @@ impl AsyncWrite for GrpcStream {
 impl AsyncSocket for GrpcStream {
     type Error = io::Error;
 
-    async fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
-        AsyncReadExt::read(self, buf).await
+    fn read<'a>(
+        &'a mut self,
+        buf: &'a mut [u8],
+    ) -> impl core::future::Future<Output = Result<usize, Self::Error>> + Send + 'a {
+        async move { AsyncReadExt::read(self, buf).await }
     }
 
-    async fn write_all(&mut self, buf: &[u8]) -> Result<(), Self::Error> {
-        AsyncWriteExt::write_all(self, buf).await?;
-        AsyncWriteExt::flush(self).await
+    fn write_all<'a>(
+        &'a mut self,
+        buf: &'a [u8],
+    ) -> impl core::future::Future<Output = Result<(), Self::Error>> + Send + 'a {
+        async move {
+            AsyncWriteExt::write_all(self, buf).await?;
+            AsyncWriteExt::flush(self).await
+        }
     }
 
-    async fn shutdown(&mut self) -> Result<(), Self::Error> {
-        AsyncWriteExt::shutdown(self).await
+    fn shutdown<'a>(
+        &'a mut self,
+    ) -> impl core::future::Future<Output = Result<(), Self::Error>> + Send + 'a {
+        async move { AsyncWriteExt::shutdown(self).await }
     }
 }
 

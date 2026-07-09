@@ -19,11 +19,12 @@ ws = []
 hysteria2 = []
 mieru = []
 shadowsocks = []
-trojan = ["tls"]
+trojan = ["tls", "dep:trojan", "trojan/crypto", "trojan/tokio"]
 vless = ["grpc", "h2", "http_upgrade", "split_http", "quic", "tls", "ws"]
-vmess = ["grpc", "tls", "ws"]
+vmess = ["grpc", "tls", "ws", "dep:vmess"]
 
 [dependencies]
+async-trait = "0.1"
 bytes = "1"
 futures-util = "0.3"
 h2 = "0.4"
@@ -46,6 +47,8 @@ zero-engine = { path = "../engine" }
 ztls = { path = "../ztls" }
 zero-platform-tokio = { path = "../platform/tokio" }
 vless = { path = "../../protocols/vless", default-features = false, features = ["reality"] }
+trojan = { path = "../../protocols/trojan", optional = true, default-features = false }
+vmess = { path = "../../protocols/vmess", optional = true }
 zero-traits = { path = "../traits" }
 
 [dev-dependencies]

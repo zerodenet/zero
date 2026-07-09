@@ -26,6 +26,9 @@ static NEXT_TLS_DIR: AtomicU64 = AtomicU64::new(0);
 mod relays_tcp_through_vless_chained_outbound;
 #[path = "vless/relays_tcp_through_vless_direct_outbound_and_records_principal.rs"]
 mod relays_tcp_through_vless_direct_outbound_and_records_principal;
+#[cfg(all(feature = "socks5", feature = "vless"))]
+#[path = "vless/relays_tcp_through_vless_grpc_chained_outbound.rs"]
+mod relays_tcp_through_vless_grpc_chained_outbound;
 #[cfg(feature = "vless")]
 #[path = "vless/relays_tcp_through_vless_reality_xray.rs"]
 mod relays_tcp_through_vless_reality_xray;

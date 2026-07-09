@@ -7,7 +7,7 @@ async fn relays_tcp_through_vless_reality_zero_inbound() {
     let upstream_port = free_port();
     let outer_port = free_port();
     let _echo = spawn_echo_server(echo_port).await;
-    let (private_key, public_key) = vless::generate_reality_key_pair();
+    let (private_key, public_key) = vless::reality::generate_reality_key_pair();
 
     let upstream_config = format!(
         r#"{{

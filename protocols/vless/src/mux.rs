@@ -40,8 +40,8 @@ use tokio::sync::mpsc;
 use zero_core::{Address, Error, Network, ProtocolType, Session};
 #[cfg(feature = "reality")]
 use zero_core::{
-    InboundMuxUdpReadFailure, InboundMuxUdpReadFailureAction, InboundMuxUdpRelay,
-    MuxUdpDecodeFailure, MuxUdpResponder, SessionAuth,
+    InboundMuxTcpRelay, InboundMuxUdpReadFailure, InboundMuxUdpReadFailureAction,
+    InboundMuxUdpRelay, MuxUdpDecodeFailure, MuxUdpResponder, SessionAuth,
 };
 use zero_traits::AsyncSocket;
 
@@ -80,7 +80,7 @@ pub const MUX_STATUS_FAIL: u8 = 0x01;
 
 /// Parsed MUX frame.
 #[derive(Debug, Clone)]
-pub struct MuxFrame {
+pub(crate) struct MuxFrame {
     pub session_id: u16,
     pub status: u8,
     pub options: u8,
@@ -89,20 +89,20 @@ pub struct MuxFrame {
 
 /// Target info for a new MUX stream.
 #[derive(Debug, Clone)]
-pub struct MuxTarget {
+struct MuxTarget {
     pub network: u8,
     pub port: u16,
     pub address: Address,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum MuxNetwork {
+enum MuxNetwork {
     Tcp,
     Udp,
 }
 
 impl MuxTarget {
-    pub fn network_kind(&self) -> Result<MuxNetwork, Error> {
+    fn network_kind(&self) -> Result<MuxNetwork, Error> {
         match self.network {
             NETWORK_TCP => Ok(MuxNetwork::Tcp),
             NETWORK_UDP => Ok(MuxNetwork::Udp),
@@ -110,7 +110,7 @@ impl MuxTarget {
         }
     }
 
-    pub fn into_session(self) -> Result<Session, Error> {
+    fn into_session(self) -> Result<Session, Error> {
         let network = match self.network_kind()? {
             MuxNetwork::Tcp => Network::Tcp,
             MuxNetwork::Udp => Network::Udp,
@@ -126,16 +126,16 @@ impl MuxTarget {
 }
 
 #[derive(Debug, Clone)]
-pub enum MuxServerEvent {
+enum MuxServerEvent {
     KeepAlive,
     NewStream { session_id: u16, target: MuxTarget },
     Data { session_id: u16, payload: Vec<u8> },
     End { session_id: u16 },
-    Unknown { session_id: u16, status: u8 },
+    Unknown { session_id: u16 },
 }
 
 #[derive(Debug, Clone)]
-pub enum VlessInboundMuxAction {
+enum VlessInboundMuxAction {
     KeepAlive,
     OpenStream {
         session_id: u16,
@@ -154,20 +154,14 @@ pub enum VlessInboundMuxAction {
 }
 
 #[cfg(feature = "reality")]
-pub struct VlessInboundMuxOpenedStream {
+struct VlessInboundMuxOpenedStream {
     session_id: u16,
     session: Box<Session>,
     up_rx: mpsc::UnboundedReceiver<Vec<u8>>,
 }
 
 #[cfg(feature = "reality")]
-pub enum VlessInboundMuxOpenedKind {
-    Tcp(VlessInboundMuxTcpOpenedStream),
-    Udp(VlessInboundMuxUdpOpenedStream),
-}
-
-#[cfg(feature = "reality")]
-pub enum VlessInboundMuxOpenedRoute {
+enum VlessInboundMuxOpenedRouteState {
     Tcp {
         session: Session,
         relay: VlessInboundMuxTcpRelay,
@@ -178,31 +172,32 @@ pub enum VlessInboundMuxOpenedRoute {
 }
 
 #[cfg(feature = "reality")]
-pub trait VlessInboundMuxOpenedRouteDispatcher {
-    type Error;
-
-    async fn dispatch_tcp_opened(
-        &mut self,
-        session: Session,
-        relay: VlessInboundMuxTcpRelay,
-    ) -> Result<bool, Self::Error>;
-
-    async fn dispatch_udp_opened(
-        &mut self,
-        relay: VlessInboundMuxUdpRelay,
-    ) -> Result<bool, Self::Error>;
+struct VlessInboundMuxOpenedRoute {
+    state: VlessInboundMuxOpenedRouteState,
 }
 
 #[cfg(feature = "reality")]
 impl VlessInboundMuxOpenedRoute {
-    pub fn session_id(&self) -> u16 {
-        match self {
-            Self::Tcp { relay, .. } => relay.session_id(),
-            Self::Udp { relay } => relay.session_id(),
+    fn tcp(session: Session, relay: VlessInboundMuxTcpRelay) -> Self {
+        Self {
+            state: VlessInboundMuxOpenedRouteState::Tcp { session, relay },
         }
     }
 
-    pub async fn dispatch_with_handlers<E, FTcp, FTcpFut, FUdp, FUdpFut>(
+    fn udp(relay: VlessInboundMuxUdpRelay) -> Self {
+        Self {
+            state: VlessInboundMuxOpenedRouteState::Udp { relay },
+        }
+    }
+
+    fn session_id(&self) -> u16 {
+        match &self.state {
+            VlessInboundMuxOpenedRouteState::Tcp { relay, .. } => relay.session_id(),
+            VlessInboundMuxOpenedRouteState::Udp { relay } => relay.session_id(),
+        }
+    }
+
+    async fn dispatch_with_handlers<E, FTcp, FTcpFut, FUdp, FUdpFut>(
         self,
         on_tcp_opened: FTcp,
         on_udp_opened: FUdp,
@@ -213,19 +208,11 @@ impl VlessInboundMuxOpenedRoute {
         FUdp: FnOnce(VlessInboundMuxUdpRelay) -> FUdpFut,
         FUdpFut: core::future::Future<Output = Result<bool, E>>,
     {
-        match self {
-            Self::Tcp { session, relay } => on_tcp_opened(session, relay).await,
-            Self::Udp { relay } => on_udp_opened(relay).await,
-        }
-    }
-
-    pub async fn dispatch_with<D>(self, dispatcher: &mut D) -> Result<bool, D::Error>
-    where
-        D: VlessInboundMuxOpenedRouteDispatcher,
-    {
-        match self {
-            Self::Tcp { session, relay } => dispatcher.dispatch_tcp_opened(session, relay).await,
-            Self::Udp { relay } => dispatcher.dispatch_udp_opened(relay).await,
+        match self.state {
+            VlessInboundMuxOpenedRouteState::Tcp { session, relay } => {
+                on_tcp_opened(session, relay).await
+            }
+            VlessInboundMuxOpenedRouteState::Udp { relay } => on_udp_opened(relay).await,
         }
     }
 }
@@ -239,7 +226,7 @@ pub struct VlessInboundMuxTcpRelay {
 
 #[cfg(feature = "reality")]
 impl VlessInboundMuxTcpRelay {
-    pub fn new(
+    fn new(
         session_id: u16,
         up_rx: mpsc::UnboundedReceiver<Vec<u8>>,
         writer: VlessInboundMuxWriter,
@@ -251,25 +238,45 @@ impl VlessInboundMuxTcpRelay {
         }
     }
 
-    pub fn session_id(&self) -> u16 {
+    fn session_id(&self) -> u16 {
         self.session_id
     }
 
-    pub fn close_stream(&self) -> Result<usize, Error> {
-        self.writer.end_inbound_stream(self.session_id)
-    }
-
-    pub async fn relay_stream<S>(self, upstream: S)
+    async fn relay_stream<S>(self, upstream: S)
     where
-        S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send + 'static,
+        S: AsyncSocket + 'static,
+        S::Error: Send,
     {
         relay_inbound_mux_stream(self.session_id, self.up_rx, self.writer, upstream).await;
     }
 }
 
 #[cfg(feature = "reality")]
+impl InboundMuxTcpRelay for VlessInboundMuxTcpRelay {
+    fn mux_session_id(&self) -> u16 {
+        self.session_id
+    }
+
+    fn close_stream(&self) -> impl core::future::Future<Output = ()> + Send {
+        let session_id = self.session_id;
+        let writer = self.writer.clone();
+        async move {
+            let _ = writer.end_inbound_stream(session_id);
+        }
+    }
+
+    async fn relay_stream<S>(self, upstream: S)
+    where
+        S: AsyncSocket + 'static,
+        S::Error: Send,
+    {
+        VlessInboundMuxTcpRelay::relay_stream(self, upstream).await;
+    }
+}
+
+#[cfg(feature = "reality")]
 impl VlessInboundMuxOpenedStream {
-    pub fn new(
+    fn new(
         session_id: u16,
         session: Box<Session>,
         up_rx: mpsc::UnboundedReceiver<Vec<u8>>,
@@ -281,27 +288,11 @@ impl VlessInboundMuxOpenedStream {
         }
     }
 
-    pub fn into_parts(self) -> (u16, Session, mpsc::UnboundedReceiver<Vec<u8>>) {
+    fn into_parts(self) -> (u16, Session, mpsc::UnboundedReceiver<Vec<u8>>) {
         (self.session_id, *self.session, self.up_rx)
     }
 
-    pub fn into_kind(self) -> VlessInboundMuxOpenedKind {
-        let (session_id, session, up_rx) = self.into_parts();
-        match session.network {
-            Network::Tcp => VlessInboundMuxOpenedKind::Tcp(VlessInboundMuxTcpOpenedStream {
-                session_id,
-                session,
-                up_rx,
-            }),
-            Network::Udp => VlessInboundMuxOpenedKind::Udp(VlessInboundMuxUdpOpenedStream {
-                session_id,
-                session,
-                up_rx,
-            }),
-        }
-    }
-
-    pub fn into_route_with_auth(
+    fn into_route_with_auth(
         self,
         auth: Option<&SessionAuth>,
         writer: VlessInboundMuxWriter,
@@ -311,70 +302,27 @@ impl VlessInboundMuxOpenedStream {
             session.apply_auth(auth.clone());
         }
         match session.network {
-            Network::Tcp => VlessInboundMuxOpenedRoute::Tcp {
+            Network::Tcp => VlessInboundMuxOpenedRoute::tcp(
                 session,
-                relay: VlessInboundMuxTcpRelay::new(session_id, up_rx, writer),
-            },
-            Network::Udp => VlessInboundMuxOpenedRoute::Udp {
-                relay: VlessInboundMuxUdpRelay::new(
+                VlessInboundMuxTcpRelay::new(session_id, up_rx, writer),
+            ),
+            Network::Udp => VlessInboundMuxOpenedRoute::udp(VlessInboundMuxUdpRelay::new(
+                session_id,
+                up_rx,
+                crate::udp::VlessInboundMuxUdpResponder::new(
+                    crate::udp::VlessInboundUdpSession::new(),
+                    writer,
                     session_id,
-                    session.port,
-                    up_rx,
-                    crate::udp::VlessInboundMuxUdpResponder::new(
-                        crate::udp::VlessInboundUdpSession::new(),
-                        writer,
-                        session_id,
-                    ),
-                    auth.cloned(),
                 ),
-            },
+                auth.cloned(),
+            )),
         }
-    }
-}
-
-#[cfg(feature = "reality")]
-pub struct VlessInboundMuxTcpOpenedStream {
-    session_id: u16,
-    session: Session,
-    up_rx: mpsc::UnboundedReceiver<Vec<u8>>,
-}
-
-#[cfg(feature = "reality")]
-impl VlessInboundMuxTcpOpenedStream {
-    pub fn into_parts(self) -> (u16, Session, mpsc::UnboundedReceiver<Vec<u8>>) {
-        (self.session_id, self.session, self.up_rx)
-    }
-
-    pub fn into_parts_with_auth(
-        self,
-        auth: Option<&SessionAuth>,
-    ) -> (u16, Session, mpsc::UnboundedReceiver<Vec<u8>>) {
-        let (session_id, mut session, up_rx) = self.into_parts();
-        if let Some(auth) = auth {
-            session.apply_auth(auth.clone());
-        }
-        (session_id, session, up_rx)
-    }
-}
-
-#[cfg(feature = "reality")]
-pub struct VlessInboundMuxUdpOpenedStream {
-    session_id: u16,
-    session: Session,
-    up_rx: mpsc::UnboundedReceiver<Vec<u8>>,
-}
-
-#[cfg(feature = "reality")]
-impl VlessInboundMuxUdpOpenedStream {
-    pub fn into_parts(self) -> (u16, Session, mpsc::UnboundedReceiver<Vec<u8>>) {
-        (self.session_id, self.session, self.up_rx)
     }
 }
 
 #[cfg(feature = "reality")]
 pub struct VlessInboundMuxUdpRelay {
     session_id: u16,
-    port: u16,
     up_rx: mpsc::UnboundedReceiver<Vec<u8>>,
     responder: crate::udp::VlessInboundMuxUdpResponder,
     auth: Option<SessionAuth>,
@@ -382,32 +330,27 @@ pub struct VlessInboundMuxUdpRelay {
 
 #[cfg(feature = "reality")]
 impl VlessInboundMuxUdpRelay {
-    pub fn new(
+    fn new(
         session_id: u16,
-        port: u16,
         up_rx: mpsc::UnboundedReceiver<Vec<u8>>,
         responder: crate::udp::VlessInboundMuxUdpResponder,
         auth: Option<SessionAuth>,
     ) -> Self {
         Self {
             session_id,
-            port,
             up_rx,
             responder,
             auth,
         }
     }
 
-    pub fn session_id(&self) -> u16 {
+    fn session_id(&self) -> u16 {
         self.session_id
-    }
-
-    pub fn port(&self) -> u16 {
-        self.port
     }
 }
 
 #[cfg(feature = "reality")]
+#[async_trait::async_trait]
 impl InboundMuxUdpRelay for VlessInboundMuxUdpRelay {
     async fn read_inbound_dispatch(
         &mut self,
@@ -456,25 +399,20 @@ impl InboundMuxUdpRelay for VlessInboundMuxUdpRelay {
 
 #[cfg(feature = "reality")]
 #[derive(Clone)]
-pub struct VlessInboundMuxWriter {
+pub(crate) struct VlessInboundMuxWriter {
     down_tx: mpsc::UnboundedSender<VlessInboundMuxDownlink>,
 }
 
 #[cfg(feature = "reality")]
 #[derive(Default)]
-pub struct VlessInboundMuxStreams {
+struct VlessInboundMuxStreams {
     streams: alloc::collections::BTreeMap<u16, mpsc::UnboundedSender<Vec<u8>>>,
 }
 
 #[cfg(feature = "reality")]
-pub struct VlessInboundMuxDownlink {
+struct VlessInboundMuxDownlink {
     session_id: u16,
     payload: Vec<u8>,
-}
-
-#[cfg(feature = "reality")]
-pub enum VlessInboundMuxEvent {
-    Opened(VlessInboundMuxOpenedStream),
 }
 
 #[cfg(feature = "reality")]
@@ -488,7 +426,7 @@ pub struct VlessInboundMuxServer {
 
 #[cfg(feature = "reality")]
 impl VlessInboundMuxServer {
-    pub fn new(mux: VlessInboundMuxSession) -> Self {
+    fn new(mux: VlessInboundMuxSession) -> Self {
         let (writer, down_rx) = VlessInboundMuxWriter::channel();
         Self {
             mux,
@@ -499,41 +437,38 @@ impl VlessInboundMuxServer {
         }
     }
 
-    pub fn from_context(context: VlessInboundMuxContext) -> Self {
-        Self::new(context.inbound_session())
-    }
-
-    pub fn from_context_with_auth(
-        context: VlessInboundMuxContext,
+    pub(crate) fn from_master_uuid_with_auth(
+        master_uuid: [u8; 16],
         auth: Option<SessionAuth>,
     ) -> Self {
-        Self::new(context.inbound_session()).with_auth(auth)
+        Self::new(VlessInboundMuxSession::with_encryption(&master_uuid)).with_auth(auth)
     }
 
-    pub fn with_auth(mut self, auth: Option<SessionAuth>) -> Self {
+    fn with_auth(mut self, auth: Option<SessionAuth>) -> Self {
         self.auth = auth;
         self
     }
 
-    pub fn writer(&self) -> VlessInboundMuxWriter {
+    fn writer(&self) -> VlessInboundMuxWriter {
         self.writer.clone()
     }
 
-    pub async fn next_opened_stream<S>(
+    async fn next_opened_route_with_auth<S>(
         &mut self,
         stream: &mut S,
-    ) -> Result<Option<VlessInboundMuxEvent>, Error>
+        auth: Option<&SessionAuth>,
+    ) -> Result<Option<VlessInboundMuxOpenedRoute>, Error>
     where
         S: AsyncSocket,
     {
-        loop {
+        let opened = loop {
             tokio::select! {
                 action = self.mux.read_inbound_action(stream) => {
                     let opened = self
                         .streams
                         .apply_inbound_action(&mut self.mux, stream, action?)
                         .await?;
-                    return Ok(opened.map(VlessInboundMuxEvent::Opened));
+                    break opened;
                 }
                 downlink = self.down_rx.recv() => {
                     let Some(downlink) = downlink else {
@@ -545,26 +480,12 @@ impl VlessInboundMuxServer {
                         .await?;
                 }
             }
-        }
-    }
-
-    pub async fn next_opened_route_with_auth<S>(
-        &mut self,
-        stream: &mut S,
-        auth: Option<&SessionAuth>,
-    ) -> Result<Option<VlessInboundMuxOpenedRoute>, Error>
-    where
-        S: AsyncSocket,
-    {
+        };
         let writer = self.writer();
-        self.next_opened_stream(stream).await.map(|event| {
-            event.map(|event| match event {
-                VlessInboundMuxEvent::Opened(opened) => opened.into_route_with_auth(auth, writer),
-            })
-        })
+        Ok(opened.map(|opened| opened.into_route_with_auth(auth, writer)))
     }
 
-    pub async fn next_opened_route<S>(
+    async fn next_opened_route<S>(
         &mut self,
         stream: &mut S,
     ) -> Result<Option<VlessInboundMuxOpenedRoute>, Error>
@@ -576,28 +497,14 @@ impl VlessInboundMuxServer {
             .await
     }
 
-    pub async fn dispatch_next_opened_route<S, D>(
-        &mut self,
-        stream: &mut S,
-        dispatcher: &mut D,
-    ) -> Result<bool, D::Error>
-    where
-        S: AsyncSocket,
-        D: VlessInboundMuxOpenedRouteDispatcher,
-        D::Error: From<Error>,
-    {
-        let Some(route) = self.next_opened_route(stream).await? else {
-            return Ok(false);
-        };
-        let session_id = route.session_id();
-        let accepted = route.dispatch_with(dispatcher).await?;
-        if !accepted {
-            self.reject_opened_stream(stream, session_id).await?;
-        }
-        Ok(accepted)
-    }
-
-    pub async fn dispatch_next_opened_route_with_handlers<S, E, FTcp, FTcpFut, FUdp, FUdpFut>(
+    pub(crate) async fn dispatch_next_opened_route_with_handlers<
+        S,
+        E,
+        FTcp,
+        FTcpFut,
+        FUdp,
+        FUdpFut,
+    >(
         &mut self,
         stream: &mut S,
         on_tcp_opened: FTcp,
@@ -624,7 +531,7 @@ impl VlessInboundMuxServer {
         Ok(accepted)
     }
 
-    pub async fn reject_opened_stream<S>(
+    pub(crate) async fn reject_opened_stream<S>(
         &mut self,
         stream: &mut S,
         session_id: u16,
@@ -639,32 +546,64 @@ impl VlessInboundMuxServer {
 }
 
 #[cfg(feature = "reality")]
+#[async_trait::async_trait]
+impl<S> zero_core::InboundMuxServer<S> for VlessInboundMuxServer
+where
+    S: AsyncSocket,
+{
+    type TcpRelay = VlessInboundMuxTcpRelay;
+    type UdpRelay = VlessInboundMuxUdpRelay;
+
+    async fn dispatch_next_opened_route<E, FTcp, FUdp>(
+        &mut self,
+        stream: &mut S,
+        on_tcp_opened: FTcp,
+        on_udp_opened: FUdp,
+    ) -> Result<bool, E>
+    where
+        E: From<Error>,
+        FTcp: FnOnce(Session, Self::TcpRelay) -> Result<(), E> + Send,
+        FUdp: FnOnce(Self::UdpRelay) -> Result<(), E> + Send,
+    {
+        self.dispatch_next_opened_route_with_handlers(
+            stream,
+            |session, relay| async move {
+                on_tcp_opened(session, relay)?;
+                Ok::<bool, E>(true)
+            },
+            |relay| async move { on_udp_opened(relay).map(|_| true) },
+        )
+        .await
+    }
+}
+
+#[cfg(feature = "reality")]
 impl VlessInboundMuxStreams {
-    pub fn new() -> Self {
+    fn new() -> Self {
         Self::default()
     }
 
-    pub fn open_stream(&mut self, session_id: u16) -> mpsc::UnboundedReceiver<Vec<u8>> {
+    fn open_stream(&mut self, session_id: u16) -> mpsc::UnboundedReceiver<Vec<u8>> {
         let (tx, rx) = mpsc::unbounded_channel::<Vec<u8>>();
         self.streams.insert(session_id, tx);
         rx
     }
 
-    pub fn push_stream_data(&self, session_id: u16, payload: Vec<u8>) -> bool {
+    fn push_stream_data(&self, session_id: u16, payload: Vec<u8>) -> bool {
         self.streams
             .get(&session_id)
             .is_some_and(|tx| tx.send(payload).is_ok())
     }
 
-    pub fn close_inbound_stream(&mut self, session_id: u16) -> bool {
+    fn close_inbound_stream(&mut self, session_id: u16) -> bool {
         self.streams.remove(&session_id).is_some()
     }
 
-    pub fn contains_stream(&self, session_id: u16) -> bool {
+    fn contains_stream(&self, session_id: u16) -> bool {
         self.streams.contains_key(&session_id)
     }
 
-    pub async fn apply_inbound_action<S>(
+    async fn apply_inbound_action<S>(
         &mut self,
         mux: &mut VlessInboundMuxSession,
         stream: &mut S,
@@ -706,7 +645,7 @@ impl VlessInboundMuxStreams {
         }
     }
 
-    pub async fn reject_opened_stream<S>(
+    async fn reject_opened_stream<S>(
         &mut self,
         mux: &mut VlessInboundMuxSession,
         stream: &mut S,
@@ -720,7 +659,7 @@ impl VlessInboundMuxStreams {
         Ok(())
     }
 
-    pub async fn send_inbound_downlink<S>(
+    async fn send_inbound_downlink<S>(
         &mut self,
         mux: &mut VlessInboundMuxSession,
         stream: &mut S,
@@ -747,38 +686,38 @@ impl VlessInboundMuxStreams {
 
 #[cfg(feature = "reality")]
 impl VlessInboundMuxDownlink {
-    pub fn new(session_id: u16, payload: Vec<u8>) -> Self {
+    fn new(session_id: u16, payload: Vec<u8>) -> Self {
         Self {
             session_id,
             payload,
         }
     }
 
-    pub fn session_id(&self) -> u16 {
+    fn session_id(&self) -> u16 {
         self.session_id
     }
 
-    pub fn is_end(&self) -> bool {
+    fn is_end(&self) -> bool {
         self.payload.is_empty()
     }
 
-    pub fn into_parts(self) -> (u16, Vec<u8>) {
+    fn into_parts(self) -> (u16, Vec<u8>) {
         (self.session_id, self.payload)
     }
 }
 
 #[cfg(feature = "reality")]
 impl VlessInboundMuxWriter {
-    pub fn new(down_tx: mpsc::UnboundedSender<VlessInboundMuxDownlink>) -> Self {
+    fn new(down_tx: mpsc::UnboundedSender<VlessInboundMuxDownlink>) -> Self {
         Self { down_tx }
     }
 
-    pub fn channel() -> (Self, mpsc::UnboundedReceiver<VlessInboundMuxDownlink>) {
+    fn channel() -> (Self, mpsc::UnboundedReceiver<VlessInboundMuxDownlink>) {
         let (down_tx, down_rx) = mpsc::unbounded_channel::<VlessInboundMuxDownlink>();
         (Self::new(down_tx), down_rx)
     }
 
-    pub fn data(&self, session_id: u16, payload: Vec<u8>) -> Result<usize, Error> {
+    pub(crate) fn data(&self, session_id: u16, payload: Vec<u8>) -> Result<usize, Error> {
         let len = payload.len();
         self.down_tx
             .send(VlessInboundMuxDownlink::new(session_id, payload))
@@ -786,18 +725,18 @@ impl VlessInboundMuxWriter {
         Ok(len)
     }
 
-    pub fn end(&self, session_id: u16) -> Result<usize, Error> {
+    pub(crate) fn end(&self, session_id: u16) -> Result<usize, Error> {
         self.down_tx
             .send(VlessInboundMuxDownlink::new(session_id, Vec::new()))
             .map_err(|_| Error::Io("failed to queue VLESS MUX end"))?;
         Ok(0)
     }
 
-    pub fn end_inbound_stream(&self, session_id: u16) -> Result<usize, Error> {
+    pub(crate) fn end_inbound_stream(&self, session_id: u16) -> Result<usize, Error> {
         self.end(session_id)
     }
 
-    pub fn write_inbound_stream_payload(
+    pub(crate) fn write_inbound_stream_payload(
         &self,
         session_id: u16,
         payload: Vec<u8>,
@@ -821,52 +760,56 @@ impl VlessInboundMuxWriter {
 // ── frame encode / decode ──
 
 #[cfg(feature = "reality")]
-pub async fn relay_inbound_mux_stream<S>(
+async fn relay_inbound_mux_stream<S>(
     session_id: u16,
     mut up_rx: mpsc::UnboundedReceiver<Vec<u8>>,
     writer: VlessInboundMuxWriter,
-    upstream: S,
+    mut upstream: S,
 ) where
-    S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send + 'static,
+    S: AsyncSocket + 'static,
+    S::Error: Send,
 {
-    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let mut upload_open = true;
+    let mut buf = [0_u8; MUX_MAX_PAYLOAD];
 
-    let (mut upstream_r, mut upstream_w) = tokio::io::split(upstream);
-
-    let upload = tokio::spawn(async move {
-        while let Some(data) = up_rx.recv().await {
-            if upstream_w.write_all(&data).await.is_err() {
-                break;
-            }
-        }
-        let _ = upstream_w.shutdown().await;
-    });
-
-    let download = tokio::spawn(async move {
-        let mut buf = [0_u8; MUX_MAX_PAYLOAD];
-        loop {
-            match upstream_r.read(&mut buf).await {
-                Ok(0) => break,
-                Ok(n) => {
-                    if writer
-                        .write_inbound_stream_payload(session_id, buf[..n].to_vec())
-                        .is_err()
-                    {
-                        break;
+    loop {
+        tokio::select! {
+            inbound = up_rx.recv(), if upload_open => {
+                match inbound {
+                    Some(data) => {
+                        if upstream.write_all(&data).await.is_err() {
+                            break;
+                        }
+                    }
+                    None => {
+                        upload_open = false;
+                        let _ = upstream.shutdown().await;
                     }
                 }
-                Err(_) => break,
+            }
+            read = upstream.read(&mut buf) => {
+                match read {
+                    Ok(0) => break,
+                    Ok(n) => {
+                        if writer
+                            .write_inbound_stream_payload(session_id, buf[..n].to_vec())
+                            .is_err()
+                        {
+                            break;
+                        }
+                    }
+                    Err(_) => break,
+                }
             }
         }
-        let _ = writer.write_inbound_stream_payload(session_id, Vec::new());
-    });
+    }
 
-    let _ = tokio::join!(upload, download);
+    let _ = writer.write_inbound_stream_payload(session_id, Vec::new());
 }
 
 /// Encode a MUX frame: [length:2(BE)][session_id:2(BE)][status:1][options:1][payload…]
 /// length covers session_id(2) + status(1) + options(1) + payload.
-pub fn encode_frame(session_id: u16, status: u8, options: u8, payload: &[u8]) -> Vec<u8> {
+fn encode_frame(session_id: u16, status: u8, options: u8, payload: &[u8]) -> Vec<u8> {
     // length = 4 + payload.len() (session_id:2 + status:1 + options:1 + payload)
     let total_len = 4u16
         .checked_add(payload.len() as u16)
@@ -881,7 +824,7 @@ pub fn encode_frame(session_id: u16, status: u8, options: u8, payload: &[u8]) ->
 }
 
 /// Read a complete MUX frame from the stream.
-pub async fn read_mux_frame<S>(stream: &mut S) -> Result<MuxFrame, Error>
+async fn read_mux_frame<S>(stream: &mut S) -> Result<MuxFrame, Error>
 where
     S: AsyncSocket,
 {
@@ -921,7 +864,11 @@ where
 
 /// Build a new-stream request frame (session_id=0, status=STATUS_NEW).
 /// payload: [network:1][port:2][atyp:1][address…]
-pub fn encode_new_stream(network: u8, port: u16, address: &Address) -> Result<Vec<u8>, Error> {
+pub(crate) fn encode_new_stream(
+    network: u8,
+    port: u16,
+    address: &Address,
+) -> Result<Vec<u8>, Error> {
     let mut payload = Vec::with_capacity(24);
     payload.push(network);
     payload.extend_from_slice(&port.to_be_bytes());
@@ -930,7 +877,7 @@ pub fn encode_new_stream(network: u8, port: u16, address: &Address) -> Result<Ve
 }
 
 /// Parse a new-stream payload into target info.
-pub fn parse_new_stream(payload: &[u8]) -> Result<MuxTarget, Error> {
+fn parse_new_stream(payload: &[u8]) -> Result<MuxTarget, Error> {
     if payload.len() < 4 {
         return Err(Error::Protocol("MUX new stream payload too short"));
     }
@@ -952,7 +899,7 @@ pub fn parse_new_stream(payload: &[u8]) -> Result<MuxTarget, Error> {
 }
 
 /// Build a new-stream response frame.
-pub fn encode_new_stream_response(assigned_id: u16, status: u8) -> Vec<u8> {
+fn encode_new_stream_response(assigned_id: u16, status: u8) -> Vec<u8> {
     let mut payload = Vec::with_capacity(3);
     payload.extend_from_slice(&assigned_id.to_be_bytes());
     payload.push(status);
@@ -960,65 +907,17 @@ pub fn encode_new_stream_response(assigned_id: u16, status: u8) -> Vec<u8> {
 }
 
 /// Parse a new-stream response payload → (assigned_id, status).
-pub fn parse_new_stream_response(payload: &[u8]) -> Result<(u16, u8), Error> {
-    if payload.len() < 3 {
-        return Err(Error::Protocol("MUX new stream response too short"));
-    }
-    Ok((u16::from_be_bytes([payload[0], payload[1]]), payload[2]))
-}
-
 // ── Data / End / KeepAlive frame helpers ──
 
 /// Build a TCP data frame (STATUS_KEEP | OPTION_DATA).
-pub fn encode_data_frame(session_id: u16, data: &[u8]) -> Vec<u8> {
+pub(crate) fn encode_data_frame(session_id: u16, data: &[u8]) -> Vec<u8> {
     encode_frame(session_id, STATUS_KEEP, OPTION_DATA, data)
 }
 
-/// Build a UDP data frame (STATUS_KEEP | OPTION_DATA) with target prepended.
 /// Format: [network:1][port:2][atyp:1][address…][data…]
-pub fn encode_udp_data_frame(
-    session_id: u16,
-    network: u8,
-    port: u16,
-    address: &Address,
-    data: &[u8],
-) -> Result<Vec<u8>, Error> {
-    let mut payload = Vec::with_capacity(24 + data.len());
-    payload.push(network);
-    payload.extend_from_slice(&port.to_be_bytes());
-    write_address(&mut payload, address)?;
-    payload.extend_from_slice(data);
-    Ok(encode_frame(session_id, STATUS_KEEP, OPTION_DATA, &payload))
-}
-
 /// Build an END frame (terminate the session).
-pub fn encode_end_frame(session_id: u16) -> Vec<u8> {
+pub(crate) fn encode_end_frame(session_id: u16) -> Vec<u8> {
     encode_frame(session_id, STATUS_END, 0, &[])
-}
-
-/// Build a KeepAlive frame (session_id=0, status=STATUS_KEEP_ALIVE, empty payload).
-pub fn encode_keepalive() -> Vec<u8> {
-    encode_frame(MUX_STREAM_NEW, STATUS_KEEP_ALIVE, 0, &[])
-}
-
-/// Try to extract target info from a STATUS_KEEP UDP data payload.
-/// Returns None if the payload is too short or missing target info.
-pub fn parse_udp_target_from_keep(payload: &[u8]) -> Option<MuxTarget> {
-    if payload.len() < 4 {
-        return None;
-    }
-    let network = payload[0];
-    if network != NETWORK_TCP && network != NETWORK_UDP {
-        return None;
-    }
-    let port = u16::from_be_bytes([payload[1], payload[2]]);
-    let atyp = payload[3];
-    let address = parse_address_from_bytes(atyp, &payload[4..]).ok()?;
-    Some(MuxTarget {
-        network,
-        port,
-        address,
-    })
 }
 
 // ── Address parsing (internal helper) ──
@@ -1059,201 +958,18 @@ fn parse_address_from_bytes(atyp: u8, data: &[u8]) -> Result<Address, Error> {
 
 // ── mux client ─────────────────────────────────────────
 
-/// State for one MUX stream on the client side.
-#[derive(Debug)]
-pub struct MuxClientStream {
-    pub id: u16,
-}
-
 /// Minimal MUX client — manages stream allocation and frame I/O.
-pub struct MuxClient {
-    next_id: u16,
-    #[cfg(feature = "reality")]
-    crypto: Option<crate::mux_crypto::MuxCrypto>,
-}
-
-impl Default for MuxClient {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl MuxClient {
-    pub fn new() -> Self {
-        Self {
-            next_id: 1,
-            #[cfg(feature = "reality")]
-            crypto: None,
-        }
-    }
-
-    #[cfg(feature = "reality")]
-    pub fn with_encryption(master_uuid: &[u8; 16]) -> Self {
-        Self {
-            next_id: 1,
-            crypto: Some(crate::mux_crypto::MuxCrypto::new(master_uuid)),
-        }
-    }
-
-    /// Allocate next available stream ID.
-    pub fn alloc_id(&mut self) -> u16 {
-        let id = self.next_id;
-        self.next_id = self.next_id.wrapping_add(1);
-        if self.next_id == 0 {
-            self.next_id = 1;
-        }
-        id
-    }
-
-    /// Send a new-stream request (with network type) and return the server-assigned ID.
-    pub async fn open_stream<S>(
-        &self,
-        stream: &mut S,
-        network: u8,
-        port: u16,
-        address: &Address,
-    ) -> Result<(u16, MuxClientStream), Error>
-    where
-        S: AsyncSocket,
-    {
-        let req = encode_new_stream(network, port, address)?;
-        stream
-            .write_all(&req)
-            .await
-            .map_err(|_| Error::Io("failed to write MUX new-stream request"))?;
-
-        let frame = read_mux_frame(stream).await?;
-        if frame.session_id != MUX_STREAM_NEW || frame.status != STATUS_NEW {
-            return Err(Error::Protocol("expected MUX new-stream response"));
-        }
-        let (assigned_id, resp_status) = parse_new_stream_response(&frame.payload)?;
-        if resp_status != MUX_STATUS_OK {
-            return Err(Error::Protocol("MUX server rejected new stream"));
-        }
-
-        Ok((assigned_id, MuxClientStream { id: assigned_id }))
-    }
-
-    /// Write data to a stream as a STATUS_KEEP frame.
-    pub async fn write_data<S>(
-        &mut self,
-        stream: &mut S,
-        sid: u16,
-        data: &[u8],
-    ) -> Result<(), Error>
-    where
-        S: AsyncSocket,
-    {
-        let payload = self.encrypt_payload_c2s(sid, data);
-        let frame = encode_data_frame(sid, &payload);
-        stream
-            .write_all(&frame)
-            .await
-            .map_err(|_| Error::Io("failed to write MUX data frame"))
-    }
-
-    /// Write an END frame for a stream.
-    pub async fn write_end<S>(&mut self, stream: &mut S, sid: u16) -> Result<(), Error>
-    where
-        S: AsyncSocket,
-    {
-        let frame = encode_end_frame(sid);
-        stream
-            .write_all(&frame)
-            .await
-            .map_err(|_| Error::Io("failed to write MUX end frame"))
-    }
-
-    /// Write a keepalive frame.
-    pub async fn write_keepalive<S>(&mut self, stream: &mut S) -> Result<(), Error>
-    where
-        S: AsyncSocket,
-    {
-        let frame = encode_keepalive();
-        stream
-            .write_all(&frame)
-            .await
-            .map_err(|_| Error::Io("failed to write MUX keepalive frame"))
-    }
-
-    /// Read next incoming frame from server.
-    pub async fn recv<S>(&mut self, stream: &mut S) -> Result<MuxFrame, Error>
-    where
-        S: AsyncSocket,
-    {
-        let frame = read_mux_frame(stream).await?;
-        self.decrypt_frame_s2c(frame)
-    }
-
-    fn encrypt_payload_c2s(&mut self, sid: u16, data: &[u8]) -> Vec<u8> {
-        #[cfg(not(feature = "reality"))]
-        let _ = sid;
-        #[cfg(feature = "reality")]
-        if sid != MUX_STREAM_NEW {
-            if let Some(ref mut crypto) = self.crypto {
-                return crypto
-                    .encrypt_c2s(sid, data)
-                    .unwrap_or_else(|_| data.to_vec());
-            }
-        }
-        data.to_vec()
-    }
-
-    fn decrypt_frame_s2c(&mut self, frame: MuxFrame) -> Result<MuxFrame, Error> {
-        #[cfg(feature = "reality")]
-        if frame.session_id != MUX_STREAM_NEW
-            && frame.status != STATUS_KEEP_ALIVE
-            && !frame.payload.is_empty()
-        {
-            if let Some(ref mut crypto) = self.crypto {
-                let decrypted = crypto.decrypt_s2c(frame.session_id, &frame.payload)?;
-                return Ok(MuxFrame {
-                    session_id: frame.session_id,
-                    status: frame.status,
-                    options: frame.options,
-                    payload: decrypted,
-                });
-            }
-        }
-        #[cfg(not(feature = "reality"))]
-        let _ = frame;
-        Ok(frame)
-    }
-}
-
 // ── mux server ─────────────────────────────────────────
 
 /// MUX server-side handler — reads frames and dispatches.
-pub struct MuxServer {
+struct MuxServer {
     next_id: u16,
     #[cfg(feature = "reality")]
     crypto: Option<crate::mux_crypto::MuxCrypto>,
 }
 
-pub struct VlessInboundMuxSession {
+struct VlessInboundMuxSession {
     server: MuxServer,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct VlessInboundMuxContext {
-    master_uuid: [u8; 16],
-}
-
-impl VlessInboundMuxContext {
-    pub fn from_uuid(master_uuid: [u8; 16]) -> Self {
-        Self { master_uuid }
-    }
-
-    pub fn inbound_session(&self) -> VlessInboundMuxSession {
-        #[cfg(feature = "reality")]
-        {
-            VlessInboundMuxSession::with_encryption(&self.master_uuid)
-        }
-        #[cfg(not(feature = "reality"))]
-        {
-            VlessInboundMuxSession::new()
-        }
-    }
 }
 
 impl Default for VlessInboundMuxSession {
@@ -1263,34 +979,34 @@ impl Default for VlessInboundMuxSession {
 }
 
 impl VlessInboundMuxSession {
-    pub fn new() -> Self {
+    fn new() -> Self {
         Self {
             server: MuxServer::new(),
         }
     }
 
     #[cfg(feature = "reality")]
-    pub fn with_encryption(master_uuid: &[u8; 16]) -> Self {
+    fn with_encryption(master_uuid: &[u8; 16]) -> Self {
         Self {
             server: MuxServer::with_encryption(master_uuid),
         }
     }
 
-    pub async fn next_event<S>(&mut self, stream: &mut S) -> Result<MuxServerEvent, Error>
+    async fn next_event<S>(&mut self, stream: &mut S) -> Result<MuxServerEvent, Error>
     where
         S: AsyncSocket,
     {
         self.server.recv_event(stream).await
     }
 
-    pub async fn next_action<S>(&mut self, stream: &mut S) -> Result<VlessInboundMuxAction, Error>
+    async fn next_action<S>(&mut self, stream: &mut S) -> Result<VlessInboundMuxAction, Error>
     where
         S: AsyncSocket,
     {
         self.next_event(stream).await.map(Into::into)
     }
 
-    pub async fn read_inbound_action<S>(
+    async fn read_inbound_action<S>(
         &mut self,
         stream: &mut S,
     ) -> Result<VlessInboundMuxAction, Error>
@@ -1300,47 +1016,42 @@ impl VlessInboundMuxSession {
         self.next_action(stream).await
     }
 
-    pub async fn accept_stream<S>(&mut self, stream: &mut S, sid: u16) -> Result<(), Error>
+    async fn accept_stream<S>(&mut self, stream: &mut S, sid: u16) -> Result<(), Error>
     where
         S: AsyncSocket,
     {
         self.server.write_new_stream_accepted(stream, sid).await
     }
 
-    pub async fn accept_inbound_stream<S>(&mut self, stream: &mut S, sid: u16) -> Result<(), Error>
+    async fn accept_inbound_stream<S>(&mut self, stream: &mut S, sid: u16) -> Result<(), Error>
     where
         S: AsyncSocket,
     {
         self.accept_stream(stream, sid).await
     }
 
-    pub async fn reject_stream<S>(&mut self, stream: &mut S) -> Result<(), Error>
+    async fn reject_stream<S>(&mut self, stream: &mut S) -> Result<(), Error>
     where
         S: AsyncSocket,
     {
         self.server.write_new_stream_rejected(stream).await
     }
 
-    pub async fn reject_inbound_stream<S>(&mut self, stream: &mut S) -> Result<(), Error>
+    async fn reject_inbound_stream<S>(&mut self, stream: &mut S) -> Result<(), Error>
     where
         S: AsyncSocket,
     {
         self.reject_stream(stream).await
     }
 
-    pub async fn send_data<S>(
-        &mut self,
-        stream: &mut S,
-        sid: u16,
-        payload: &[u8],
-    ) -> Result<(), Error>
+    async fn send_data<S>(&mut self, stream: &mut S, sid: u16, payload: &[u8]) -> Result<(), Error>
     where
         S: AsyncSocket,
     {
         self.server.write_data(stream, sid, payload).await
     }
 
-    pub async fn send_inbound_stream_data<S>(
+    async fn send_inbound_stream_data<S>(
         &mut self,
         stream: &mut S,
         sid: u16,
@@ -1352,7 +1063,7 @@ impl VlessInboundMuxSession {
         self.send_data(stream, sid, payload).await
     }
 
-    pub async fn send_inbound_stream_payload<S>(
+    async fn send_inbound_stream_payload<S>(
         &mut self,
         stream: &mut S,
         sid: u16,
@@ -1368,14 +1079,14 @@ impl VlessInboundMuxSession {
         }
     }
 
-    pub async fn end_stream<S>(&mut self, stream: &mut S, sid: u16) -> Result<(), Error>
+    async fn end_stream<S>(&mut self, stream: &mut S, sid: u16) -> Result<(), Error>
     where
         S: AsyncSocket,
     {
         self.server.write_end(stream, sid).await
     }
 
-    pub async fn end_inbound_stream<S>(&mut self, stream: &mut S, sid: u16) -> Result<(), Error>
+    async fn end_inbound_stream<S>(&mut self, stream: &mut S, sid: u16) -> Result<(), Error>
     where
         S: AsyncSocket,
     {
@@ -1402,7 +1113,7 @@ impl From<MuxServerEvent> for VlessInboundMuxAction {
                 payload,
             },
             MuxServerEvent::End { session_id } => Self::End { session_id },
-            MuxServerEvent::Unknown { session_id, .. } => Self::Unknown { session_id },
+            MuxServerEvent::Unknown { session_id } => Self::Unknown { session_id },
         }
     }
 }
@@ -1414,7 +1125,7 @@ impl Default for MuxServer {
 }
 
 impl MuxServer {
-    pub fn new() -> Self {
+    fn new() -> Self {
         Self {
             next_id: 1,
             #[cfg(feature = "reality")]
@@ -1423,14 +1134,14 @@ impl MuxServer {
     }
 
     #[cfg(feature = "reality")]
-    pub fn with_encryption(master_uuid: &[u8; 16]) -> Self {
+    fn with_encryption(master_uuid: &[u8; 16]) -> Self {
         Self {
             next_id: 1,
             crypto: Some(crate::mux_crypto::MuxCrypto::new(master_uuid)),
         }
     }
 
-    pub fn alloc_id(&mut self) -> u16 {
+    fn alloc_id(&mut self) -> u16 {
         let id = self.next_id;
         self.next_id = self.next_id.wrapping_add(1);
         if self.next_id == 0 {
@@ -1439,33 +1150,7 @@ impl MuxServer {
         id
     }
 
-    /// Accept a new stream request, allocate an ID, and send response.
-    /// Returns `(alloc_id, network, port, address)`.
-    pub async fn accept_new_stream<S>(
-        &self,
-        stream: &mut S,
-        alloc_id: u16,
-    ) -> Result<(u16, u8, u16, Address), Error>
-    where
-        S: AsyncSocket,
-    {
-        let frame = read_mux_frame(stream).await?;
-        if frame.session_id != MUX_STREAM_NEW || frame.status != STATUS_NEW {
-            return Err(Error::Protocol("expected MUX new-stream request"));
-        }
-
-        let target = parse_new_stream(&frame.payload)?;
-
-        let resp = encode_new_stream_response(alloc_id, MUX_STATUS_OK);
-        stream
-            .write_all(&resp)
-            .await
-            .map_err(|_| Error::Io("failed to write MUX new-stream response"))?;
-
-        Ok((alloc_id, target.network, target.port, target.address))
-    }
-
-    pub async fn recv_event<S>(&mut self, stream: &mut S) -> Result<MuxServerEvent, Error>
+    async fn recv_event<S>(&mut self, stream: &mut S) -> Result<MuxServerEvent, Error>
     where
         S: AsyncSocket,
     {
@@ -1484,14 +1169,13 @@ impl MuxServer {
             STATUS_END => Ok(MuxServerEvent::End {
                 session_id: frame.session_id,
             }),
-            status => Ok(MuxServerEvent::Unknown {
+            _status => Ok(MuxServerEvent::Unknown {
                 session_id: frame.session_id,
-                status,
             }),
         }
     }
 
-    pub async fn write_new_stream_accepted<S>(
+    async fn write_new_stream_accepted<S>(
         &self,
         stream: &mut S,
         assigned_id: u16,
@@ -1503,7 +1187,7 @@ impl MuxServer {
             .await
     }
 
-    pub async fn write_new_stream_rejected<S>(&self, stream: &mut S) -> Result<(), Error>
+    async fn write_new_stream_rejected<S>(&self, stream: &mut S) -> Result<(), Error>
     where
         S: AsyncSocket,
     {
@@ -1528,7 +1212,7 @@ impl MuxServer {
     }
 
     /// Read next frame (with decryption for non-control frames).
-    pub async fn recv<S>(&mut self, stream: &mut S) -> Result<MuxFrame, Error>
+    async fn recv<S>(&mut self, stream: &mut S) -> Result<MuxFrame, Error>
     where
         S: AsyncSocket,
     {
@@ -1537,12 +1221,7 @@ impl MuxServer {
     }
 
     /// Write data to a stream as a STATUS_KEEP frame.
-    pub async fn write_data<S>(
-        &mut self,
-        stream: &mut S,
-        sid: u16,
-        data: &[u8],
-    ) -> Result<(), Error>
+    async fn write_data<S>(&mut self, stream: &mut S, sid: u16, data: &[u8]) -> Result<(), Error>
     where
         S: AsyncSocket,
     {
@@ -1554,29 +1233,8 @@ impl MuxServer {
             .map_err(|_| Error::Io("failed to write MUX data frame"))
     }
 
-    /// Write UDP data to a stream with target info prepended.
-    pub async fn write_udp_data<S>(
-        &mut self,
-        stream: &mut S,
-        sid: u16,
-        network: u8,
-        port: u16,
-        address: &Address,
-        data: &[u8],
-    ) -> Result<(), Error>
-    where
-        S: AsyncSocket,
-    {
-        let payload = self.encrypt_payload_s2c(sid, data);
-        let frame = encode_udp_data_frame(sid, network, port, address, &payload)?;
-        stream
-            .write_all(&frame)
-            .await
-            .map_err(|_| Error::Io("failed to write MUX UDP data frame"))
-    }
-
     /// Write an END frame for a stream.
-    pub async fn write_end<S>(&mut self, stream: &mut S, sid: u16) -> Result<(), Error>
+    async fn write_end<S>(&mut self, stream: &mut S, sid: u16) -> Result<(), Error>
     where
         S: AsyncSocket,
     {
@@ -1585,18 +1243,6 @@ impl MuxServer {
             .write_all(&frame)
             .await
             .map_err(|_| Error::Io("failed to write MUX end frame"))
-    }
-
-    /// Write a keepalive frame.
-    pub async fn write_keepalive<S>(&mut self, stream: &mut S) -> Result<(), Error>
-    where
-        S: AsyncSocket,
-    {
-        let frame = encode_keepalive();
-        stream
-            .write_all(&frame)
-            .await
-            .map_err(|_| Error::Io("failed to write MUX keepalive frame"))
     }
 
     fn encrypt_payload_s2c(&mut self, sid: u16, data: &[u8]) -> Vec<u8> {

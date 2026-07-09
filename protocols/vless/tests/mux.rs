@@ -1,6 +1,8 @@
-use tokio::sync::mpsc;
+#![cfg(feature = "reality")]
 
-use vless::{VlessInbound, VlessOutbound, VlessUser, VlessUserStore};
+use tokio::sync::mpsc;
+use vless::inbound::{VlessInbound, VlessUser, VlessUserStore};
+use vless::mux_pool::establish_outbound_mux_connection;
 use zero_traits::AsyncSocket;
 
 const USER_ID: &str = "11111111-2222-3333-4444-555555555555";
@@ -21,30 +23,42 @@ struct MockSocket {
 
 impl AsyncSocket for MockSocket {
     type Error = ();
-    async fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
-        // Read at least one byte, then as many more as available
-        let first = self.rx.recv().await.ok_or(())?;
-        buf[0] = first;
-        let mut n = 1;
-        while n < buf.len() {
-            match self.rx.try_recv() {
-                Ok(b) => {
-                    buf[n] = b;
-                    n += 1;
+    fn read<'a>(
+        &'a mut self,
+        buf: &'a mut [u8],
+    ) -> impl core::future::Future<Output = Result<usize, Self::Error>> + Send + 'a {
+        async move {
+            // Read at least one byte, then as many more as available
+            let first = self.rx.recv().await.ok_or(())?;
+            buf[0] = first;
+            let mut n = 1;
+            while n < buf.len() {
+                match self.rx.try_recv() {
+                    Ok(b) => {
+                        buf[n] = b;
+                        n += 1;
+                    }
+                    Err(_) => break,
                 }
-                Err(_) => break,
             }
+            Ok(n)
         }
-        Ok(n)
     }
-    async fn write_all(&mut self, buf: &[u8]) -> Result<(), Self::Error> {
-        for &b in buf {
-            let _ = self.tx.send(b);
+    fn write_all<'a>(
+        &'a mut self,
+        buf: &'a [u8],
+    ) -> impl core::future::Future<Output = Result<(), Self::Error>> + Send + 'a {
+        async move {
+            for &b in buf {
+                let _ = self.tx.send(b);
+            }
+            Ok(())
         }
-        Ok(())
     }
-    async fn shutdown(&mut self) -> Result<(), Self::Error> {
-        Ok(())
+    fn shutdown<'a>(
+        &'a mut self,
+    ) -> impl core::future::Future<Output = Result<(), Self::Error>> + Send + 'a {
+        async move { Ok(()) }
     }
 }
 
@@ -72,13 +86,14 @@ async fn mux_handshake_establishes() {
         let inbound = VlessInbound;
         let auth = TestUsers(id);
         let mut server = server;
-        async move { inbound.accept_mux_header(&mut server, &auth).await }
+        async move { inbound.handshake_mux_with_auth(&mut server, &auth).await }
     });
 
-    let outbound = VlessOutbound;
     let mut client = client;
-    let mux = outbound.establish_mux(&mut client, &id).await.unwrap();
-    drop(mux);
+    establish_outbound_mux_connection(&mut client, &id)
+        .await
+        .unwrap();
 
-    assert!(server_h.await.unwrap().is_ok());
+    let session = server_h.await.unwrap().unwrap();
+    assert!(VlessInbound::is_mux_session(&session));
 }

@@ -17,23 +17,25 @@ default = [
 socks5 = ["dep:socks5"]
 http_connect = ["dep:http_connect"]
 mixed = ["socks5", "http_connect"]
+transport_quic = ["zero-transport/quic"]
 vless = [
     "zero-platform-tokio/vless-reality",
+    "zero-transport/vless",
     "zero-transport/tls",
     "zero-transport/ws",
     "zero-transport/grpc",
     "zero-transport/h2",
     "zero-transport/http_upgrade",
     "zero-transport/split_http",
-    "zero-transport/quic",
+    "transport_quic",
     "dep:vless",
     "vless/reality",
 ]
 hysteria2 = [
     "quic_packet_path",
+    "transport_quic",
     "dep:ring",
     "dep:rustls",
-    "zero-transport/quic",
     "dep:hysteria2",
     "hysteria2/crypto",
     "hysteria2/tokio",
@@ -55,6 +57,7 @@ trojan = [
     "dep:tokio-rustls",
 ]
 vmess = [
+    "zero-transport/vmess",
     "zero-transport/tls",
     "zero-transport/ws",
     "zero-transport/grpc",
@@ -96,7 +99,7 @@ serde_json.workspace = true
 zero-traits = { path = "../traits" }
 zero-tun = { path = "../tun" }
 zero-stack = { path = "../stack" }
-zero-transport = { path = "../transport", optional = true, features = ["vless"] }
+zero-transport = { path = "../transport" }
 
 [dev-dependencies]
 futures-util = "0.3"

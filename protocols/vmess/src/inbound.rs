@@ -71,6 +71,13 @@ impl VmessInboundProfile {
         Self { users }
     }
 
+    fn from_non_empty_users(users: Vec<VmessUser>) -> Result<Self, Error> {
+        if users.is_empty() {
+            return Err(Error::Protocol("vmess requires at least one user"));
+        }
+        Ok(Self::from_users(users))
+    }
+
     pub fn from_config_parts<I>(users: I) -> Result<Self, Error>
     where
         I: IntoIterator<Item = VmessInboundUserConfigParts>,
@@ -90,7 +97,7 @@ impl VmessInboundProfile {
                 },
             )
             .collect::<Result<Vec<_>, Error>>()
-            .map(Self::from_users)
+            .and_then(Self::from_non_empty_users)
     }
 
     pub fn from_config_users<I, U>(users: I) -> Result<Self, Error>
@@ -100,12 +107,7 @@ impl VmessInboundProfile {
     {
         Self::from_config_parts(users.into_iter().map(U::into_vmess_inbound_user_config))
     }
-
-    pub fn is_empty(&self) -> bool {
-        self.users.is_empty()
-    }
-
-    pub async fn accept_tcp<S: AsyncSocket>(
+    async fn accept_tcp<S: AsyncSocket>(
         &self,
         inbound: VmessInbound,
         stream: &mut S,
@@ -123,7 +125,7 @@ impl VmessInboundProfile {
         mut stream: S,
     ) -> Result<(Session, crate::stream::VmessAeadStream<S>), Error> {
         let accepted = self.accept_tcp(inbound, &mut stream).await?;
-        let session = accepted.session.clone();
+        let session = accepted.session().clone();
         let client = crate::stream::wrap_tcp_inbound_stream(stream, accepted)?;
         Ok((session, client))
     }
@@ -141,14 +143,64 @@ impl VmessInboundProfile {
             session, client,
         ))
     }
-}
 
-pub fn inbound_profile_from_config_users<I, U>(users: I) -> Result<VmessInboundProfile, Error>
-where
-    I: IntoIterator<Item = U>,
-    U: IntoVmessInboundUserConfig,
-{
-    VmessInboundProfile::from_config_users(users)
+    pub async fn accept_client_owned<S>(
+        self,
+        inbound: VmessInbound,
+        mut stream: S,
+    ) -> Result<crate::mux::VmessInboundAcceptedStream<crate::stream::VmessAeadStream<S>>, Error>
+    where
+        S: AsyncSocket + tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send + 'static,
+    {
+        let accepted = if self.users.len() == 1 {
+            let user = self
+                .users
+                .into_iter()
+                .next()
+                .expect("single-user profile should contain one user");
+            inbound.accept_tcp(&mut stream, &user).await?
+        } else {
+            let users = self.users;
+            inbound.accept_tcp_multi(&mut stream, &users).await?
+        };
+        let session = accepted.session().clone();
+        let client = crate::stream::wrap_tcp_inbound_stream(stream, accepted)?;
+        Ok(crate::mux::VmessInboundAcceptedStream::from_session_stream(
+            session, client,
+        ))
+    }
+
+    pub async fn accept_route_owned<S>(
+        self,
+        inbound: VmessInbound,
+        stream: S,
+    ) -> Result<crate::mux::VmessInboundAcceptedStream<crate::stream::VmessAeadStream<S>>, Error>
+    where
+        S: AsyncSocket + tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send + 'static,
+    {
+        self.accept_client_owned(inbound, stream).await
+    }
+
+    pub async fn accept_route_owned_with<S, T, E, FRoute, FRouteFut>(
+        self,
+        inbound: VmessInbound,
+        stream: S,
+        on_route: FRoute,
+    ) -> Result<T, E>
+    where
+        S: AsyncSocket + tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send + 'static,
+        FRoute: FnOnce(
+            crate::mux::VmessInboundAcceptedStream<crate::stream::VmessAeadStream<S>>,
+        ) -> FRouteFut,
+        FRouteFut: core::future::Future<Output = Result<T, E>>,
+        E: From<Error>,
+    {
+        let route = self
+            .accept_route_owned(inbound, stream)
+            .await
+            .map_err(E::from)?;
+        on_route(route).await
+    }
 }
 
 pub trait IntoVmessInboundUserConfig {
@@ -178,19 +230,22 @@ impl IntoVmessInboundUserConfig for BorrowedVmessInboundUserConfigParts<'_> {
 #[derive(Debug, Clone, Copy)]
 pub struct VmessInbound;
 
-pub struct VmessAccept {
-    pub session: Session,
-    pub upload_key: Vec<u8>,
-    pub upload_nonce: Vec<u8>,
-    pub download_key: Vec<u8>,
-    pub download_nonce: Vec<u8>,
-    pub cipher: VmessCipher,
-    pub authenticated_length: bool,
-    pub chunk_masking: bool,
-    pub global_padding: bool,
-    pub length_key_source: Vec<u8>,
-    pub length_nonce_source: Vec<u8>,
-    pub response_header: u8,
+pub(crate) struct VmessAcceptedStreamState {
+    pub(crate) upload_key: Vec<u8>,
+    pub(crate) upload_nonce: Vec<u8>,
+    pub(crate) download_key: Vec<u8>,
+    pub(crate) download_nonce: Vec<u8>,
+    pub(crate) cipher: VmessCipher,
+    pub(crate) authenticated_length: bool,
+    pub(crate) chunk_masking: bool,
+    pub(crate) global_padding: bool,
+    pub(crate) length_key_source: Vec<u8>,
+    pub(crate) length_nonce_source: Vec<u8>,
+}
+
+pub(crate) struct VmessAccept {
+    session: Session,
+    stream_state: VmessAcceptedStreamState,
 }
 
 struct ParsedCommand {
@@ -217,10 +272,10 @@ impl VmessInbound {
     ) -> Result<Session, Error> {
         self.accept_tcp(stream, user)
             .await
-            .map(|accepted| accepted.session)
+            .map(VmessAccept::into_session)
     }
 
-    pub async fn accept_tcp<S: AsyncSocket>(
+    pub(crate) async fn accept_tcp<S: AsyncSocket>(
         &self,
         stream: &mut S,
         user: &VmessUser,
@@ -236,17 +291,18 @@ impl VmessInbound {
         .await?;
         Ok(VmessAccept {
             session: parsed.session,
-            upload_key: parsed.body_key.clone(),
-            upload_nonce: parsed.body_nonce.clone(),
-            download_key,
-            download_nonce,
-            cipher: parsed.cipher,
-            authenticated_length: parsed.authenticated_length,
-            chunk_masking: parsed.chunk_masking,
-            global_padding: parsed.global_padding,
-            length_key_source: parsed.body_key,
-            length_nonce_source: parsed.body_nonce,
-            response_header: parsed.response_header,
+            stream_state: VmessAcceptedStreamState {
+                upload_key: parsed.body_key.clone(),
+                upload_nonce: parsed.body_nonce.clone(),
+                download_key,
+                download_nonce,
+                cipher: parsed.cipher,
+                authenticated_length: parsed.authenticated_length,
+                chunk_masking: parsed.chunk_masking,
+                global_padding: parsed.global_padding,
+                length_key_source: parsed.body_key,
+                length_nonce_source: parsed.body_nonce,
+            },
         })
     }
 
@@ -260,10 +316,10 @@ impl VmessInbound {
     ) -> Result<Session, Error> {
         self.accept_tcp_multi(stream, users)
             .await
-            .map(|accepted| accepted.session)
+            .map(VmessAccept::into_session)
     }
 
-    pub async fn accept_tcp_multi<S: AsyncSocket>(
+    pub(crate) async fn accept_tcp_multi<S: AsyncSocket>(
         &self,
         stream: &mut S,
         users: &[VmessUser],
@@ -282,17 +338,18 @@ impl VmessInbound {
                     .await?;
                     return Ok(VmessAccept {
                         session: parsed.session,
-                        upload_key: parsed.body_key.clone(),
-                        upload_nonce: parsed.body_nonce.clone(),
-                        download_key,
-                        download_nonce,
-                        cipher: parsed.cipher,
-                        authenticated_length: parsed.authenticated_length,
-                        chunk_masking: parsed.chunk_masking,
-                        global_padding: parsed.global_padding,
-                        length_key_source: parsed.body_key,
-                        length_nonce_source: parsed.body_nonce,
-                        response_header: parsed.response_header,
+                        stream_state: VmessAcceptedStreamState {
+                            upload_key: parsed.body_key.clone(),
+                            upload_nonce: parsed.body_nonce.clone(),
+                            download_key,
+                            download_nonce,
+                            cipher: parsed.cipher,
+                            authenticated_length: parsed.authenticated_length,
+                            chunk_masking: parsed.chunk_masking,
+                            global_padding: parsed.global_padding,
+                            length_key_source: parsed.body_key,
+                            length_nonce_source: parsed.body_nonce,
+                        },
                     });
                 }
                 Err(_) => continue,
@@ -303,6 +360,20 @@ impl VmessInbound {
         let reject = [0x00u8, 0x00u8];
         let _ = stream.write_all(&reject).await;
         Err(Error::Protocol("vmess: no user matched"))
+    }
+}
+
+impl VmessAccept {
+    fn session(&self) -> &Session {
+        &self.session
+    }
+
+    fn into_session(self) -> Session {
+        self.session
+    }
+
+    pub(crate) fn into_stream_state(self) -> VmessAcceptedStreamState {
+        self.stream_state
     }
 }
 

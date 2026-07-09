@@ -3,10 +3,13 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, DuplexStream, ReadBuf};
-use zero_core::{Address, Network, ProtocolType, Session};
+use zero_core::{Address, Error, Network, ProtocolType, Session};
 use zero_traits::AsyncSocket;
 
-use vmess::{parse_uuid, VmessAeadStream, VmessCipher, VmessInbound, VmessOutbound, VmessUser};
+use vmess::inbound::{VmessInbound, VmessInboundProfile};
+use vmess::outbound::{PreparedVmessOutboundRequestBundle, VmessOutbound};
+use vmess::udp::VmessInboundUdpSession;
+use vmess::VmessCipher;
 use zero_traits::UdpPacketFraming;
 
 struct TestSocket(DuplexStream);
@@ -14,17 +17,27 @@ struct TestSocket(DuplexStream);
 impl AsyncSocket for TestSocket {
     type Error = io::Error;
 
-    async fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
-        AsyncReadExt::read(&mut self.0, buf).await
+    fn read<'a>(
+        &'a mut self,
+        buf: &'a mut [u8],
+    ) -> impl core::future::Future<Output = Result<usize, Self::Error>> + Send + 'a {
+        async move { AsyncReadExt::read(&mut self.0, buf).await }
     }
 
-    async fn write_all(&mut self, buf: &[u8]) -> Result<(), Self::Error> {
-        AsyncWriteExt::write_all(&mut self.0, buf).await?;
-        AsyncWriteExt::flush(&mut self.0).await
+    fn write_all<'a>(
+        &'a mut self,
+        buf: &'a [u8],
+    ) -> impl core::future::Future<Output = Result<(), Self::Error>> + Send + 'a {
+        async move {
+            AsyncWriteExt::write_all(&mut self.0, buf).await?;
+            AsyncWriteExt::flush(&mut self.0).await
+        }
     }
 
-    async fn shutdown(&mut self) -> Result<(), Self::Error> {
-        AsyncWriteExt::shutdown(&mut self.0).await
+    fn shutdown<'a>(
+        &'a mut self,
+    ) -> impl core::future::Future<Output = Result<(), Self::Error>> + Send + 'a {
+        async move { AsyncWriteExt::shutdown(&mut self.0).await }
     }
 }
 
@@ -86,6 +99,21 @@ fn cipher_auto_maps_to_aead_baseline() {
 }
 
 #[test]
+fn inbound_profile_requires_at_least_one_user() {
+    let error = match VmessInboundProfile::from_config_parts(Vec::<
+        vmess::inbound::VmessInboundUserConfigParts,
+    >::new())
+    {
+        Ok(_) => panic!("empty users should fail"),
+        Err(error) => error,
+    };
+    assert!(matches!(
+        error,
+        Error::Protocol(message) if message == "vmess requires at least one user"
+    ));
+}
+
+#[test]
 fn udp_packet_framing_roundtrips_domain_target() {
     let target = Address::Domain("example.com".to_owned());
     let payload = b"vmess udp payload";
@@ -126,9 +154,9 @@ async fn udp_response_encoding_wraps_packet_mode_and_preserves_raw_mode() {
             },
         )
         .expect("build packet");
-    let mut udp_session = vmess::udp::VmessInboundUdpSession::new(default_target, 53);
+    let mut udp_session = VmessInboundUdpSession::new(default_target, 53);
     udp_session
-        .decode_request(&request)
+        .decode_inbound_dispatch(&request)
         .expect("enter packet response mode");
 
     let (mut client, mut server) = tokio::io::duplex(1024);
@@ -152,10 +180,9 @@ async fn udp_response_encoding_wraps_packet_mode_and_preserves_raw_mode() {
     assert_eq!(decoded.port(), 5353);
     assert_eq!(decoded.payload(), b"dns");
 
-    let mut raw_session =
-        vmess::udp::VmessInboundUdpSession::new(Address::Ipv4([127, 0, 0, 1]), 53);
+    let mut raw_session = VmessInboundUdpSession::new(Address::Ipv4([127, 0, 0, 1]), 53);
     raw_session
-        .decode_request(b"raw")
+        .decode_inbound_dispatch(b"raw")
         .expect("enter raw response mode");
     let (mut client, mut server) = tokio::io::duplex(1024);
     raw_session
@@ -184,9 +211,9 @@ fn inbound_udp_payload_decoder_detects_packet_mode_then_requires_packets() {
             },
         )
         .expect("build packet");
-    let mut udp_session = vmess::udp::VmessInboundUdpSession::new(default_target, 53);
+    let mut udp_session = VmessInboundUdpSession::new(default_target, 53);
     let decoded = udp_session
-        .decode_request(&packet)
+        .decode_inbound_dispatch(&packet)
         .expect("decode packet payload");
     assert_eq!(
         decoded.target(),
@@ -195,15 +222,15 @@ fn inbound_udp_payload_decoder_detects_packet_mode_then_requires_packets() {
     assert_eq!(decoded.port(), 5353);
     assert_eq!(decoded.payload(), b"dns");
 
-    assert!(udp_session.decode_request(b"raw").is_err());
+    assert!(udp_session.decode_inbound_dispatch(b"raw").is_err());
 }
 
 #[test]
 fn inbound_udp_payload_decoder_falls_back_to_raw_mode() {
     let default_target = Address::Ipv4([10, 0, 0, 1]);
-    let mut udp_session = vmess::udp::VmessInboundUdpSession::new(default_target.clone(), 9999);
+    let mut udp_session = VmessInboundUdpSession::new(default_target.clone(), 9999);
     let decoded = udp_session
-        .decode_request(b"raw")
+        .decode_inbound_dispatch(b"raw")
         .expect("decode raw payload");
     assert_eq!(decoded.target(), &default_target);
     assert_eq!(decoded.port(), 9999);
@@ -213,8 +240,6 @@ fn inbound_udp_payload_decoder_falls_back_to_raw_mode() {
 #[tokio::test]
 async fn mux_udp_response_encoding_wraps_packet_mode_before_mux_frame() {
     let target = Address::Ipv4([8, 8, 8, 8]);
-    let (write_tx, mut write_rx) = tokio::sync::mpsc::unbounded_channel::<Vec<u8>>();
-    let writer = vmess::mux::VmessInboundMuxWriter::new(write_tx);
     let request =
         <VmessOutbound as UdpPacketFraming<vmess::udp::VmessUdpPacketTarget>>::encode_udp_packet(
             &VmessOutbound,
@@ -225,29 +250,19 @@ async fn mux_udp_response_encoding_wraps_packet_mode_before_mux_frame() {
             },
         )
         .expect("build packet");
-    let mut udp_session = vmess::udp::VmessInboundUdpSession::new(target.clone(), 53);
+    let mut udp_session = VmessInboundUdpSession::new(target.clone(), 53);
     udp_session
-        .decode_request(&request)
+        .decode_inbound_dispatch(&request)
         .expect("enter packet mux response mode");
-    udp_session
-        .write_mux_response(&writer, 7, &target, 53, b"query")
+    let frame = udp_session
+        .encode_mux_response_packet(7, &target, 53, b"query")
         .expect("encode mux udp response");
-    let frame = write_rx.recv().await.expect("mux frame");
-    let (client, server) = tokio::io::duplex(1024);
-    let write = tokio::spawn(async move {
-        let mut client = client;
-        client.write_all(&frame).await.expect("write mux frame");
-    });
-    let mut server = TestSocket(server);
-    let decoded = vmess::mux::read_frame(&mut server)
-        .await
-        .expect("decode mux frame");
-    assert_eq!(decoded.session_id, 7);
-    write.await.expect("writer task");
+    let (session_id, payload) = decode_mux_frame_payload(&frame);
+    assert_eq!(session_id, 7);
     let packet =
         <VmessOutbound as UdpPacketFraming<vmess::udp::VmessUdpPacketTarget>>::decode_udp_packet(
             &VmessOutbound,
-            &decoded.payload,
+            &payload,
         )
         .expect("decode mux udp payload");
     assert_eq!(packet.target(), &target);
@@ -255,8 +270,38 @@ async fn mux_udp_response_encoding_wraps_packet_mode_before_mux_frame() {
     assert_eq!(packet.payload(), b"query");
 }
 
+fn decode_mux_frame_payload(frame: &[u8]) -> (u16, Vec<u8>) {
+    assert!(
+        frame.len() >= 6,
+        "vmess mux frame should contain metadata and length"
+    );
+    let meta_len = u16::from_be_bytes([frame[0], frame[1]]) as usize;
+    assert!(
+        frame.len() >= 2 + meta_len + 2,
+        "vmess mux frame metadata should fit"
+    );
+    let meta = &frame[2..2 + meta_len];
+    let session_id = u16::from_be_bytes([meta[0], meta[1]]);
+    let option = meta[3];
+    if option & 0x01 == 0 {
+        return (session_id, Vec::new());
+    }
+
+    let payload_len_offset = 2 + meta_len;
+    let payload_len =
+        u16::from_be_bytes([frame[payload_len_offset], frame[payload_len_offset + 1]]) as usize;
+    let payload_offset = payload_len_offset + 2;
+    assert!(
+        frame.len() >= payload_offset + payload_len,
+        "vmess mux frame payload should fit"
+    );
+    (
+        session_id,
+        frame[payload_offset..payload_offset + payload_len].to_vec(),
+    )
+}
+
 async fn roundtrip_cipher(cipher: VmessCipher) {
-    let uuid = parse_uuid("11111111-2222-3333-4444-555555555555").expect("uuid");
     let (client_io, server_io) = tokio::io::duplex(128 * 1024);
     let target_session = Session::new(
         0,
@@ -271,29 +316,27 @@ async fn roundtrip_cipher(cipher: VmessCipher) {
     let server_upload = upload.clone();
     let server_download = download.clone();
     let server = tokio::spawn(async move {
-        let mut socket = TestSocket(server_io);
-        let accepted = VmessInbound
-            .accept_tcp(
-                &mut socket,
-                &VmessUser {
-                    id: uuid,
-                    cipher,
-                    credential_id: None,
-                    principal_key: None,
-                    up_bps: None,
-                    down_bps: None,
-                },
-            )
+        let socket = TestSocket(server_io);
+        let profile = VmessInboundProfile::from_config_users([(
+            "11111111-2222-3333-4444-555555555555".to_owned(),
+            cipher.name().to_owned(),
+            None::<String>,
+            None::<String>,
+            None::<u64>,
+            None::<u64>,
+        )])
+        .expect("server profile");
+        let (accepted_session, mut stream) = profile
+            .accept_tcp_stream(VmessInbound, socket)
             .await
             .expect("server accept");
 
         assert_eq!(
-            accepted.session.target,
+            accepted_session.target,
             Address::Domain("example.com".to_owned())
         );
-        assert_eq!(accepted.session.port, 443);
+        assert_eq!(accepted_session.port, 443);
 
-        let mut stream = VmessAeadStream::inbound(socket, accepted).expect("server stream");
         let mut received = vec![0_u8; server_upload.len()];
         stream
             .read_exact(&mut received)
@@ -308,12 +351,18 @@ async fn roundtrip_cipher(cipher: VmessCipher) {
         stream.flush().await.expect("server flush");
     });
 
-    let mut socket = TestSocket(client_io);
-    let outbound_session = VmessOutbound
-        .establish_tcp_session(&mut socket, &target_session, &uuid, cipher)
+    let socket = TestSocket(client_io);
+    let request = PreparedVmessOutboundRequestBundle::from_config(
+        "11111111-2222-3333-4444-555555555555",
+        cipher.name(),
+        None,
+    )
+    .expect("vmess request");
+    let (mut stream, request_bytes) = request
+        .establish_tcp_outbound_stream(socket, &target_session)
         .await
         .expect("client handshake");
-    let mut stream = VmessAeadStream::outbound(socket, outbound_session).expect("client stream");
+    assert!(request_bytes > 0);
 
     stream
         .write_all(&upload)
@@ -332,7 +381,6 @@ async fn roundtrip_cipher(cipher: VmessCipher) {
 }
 
 async fn shutdown_roundtrip_cipher(cipher: VmessCipher) {
-    let uuid = parse_uuid("11111111-2222-3333-4444-555555555555").expect("uuid");
     let (client_io, server_io) = tokio::io::duplex(128 * 1024);
     let target_session = Session::new(
         0,
@@ -345,23 +393,20 @@ async fn shutdown_roundtrip_cipher(cipher: VmessCipher) {
 
     let server_upload = upload.clone();
     let server = tokio::spawn(async move {
-        let mut socket = TestSocket(server_io);
-        let accepted = VmessInbound
-            .accept_tcp(
-                &mut socket,
-                &VmessUser {
-                    id: uuid,
-                    cipher,
-                    credential_id: None,
-                    principal_key: None,
-                    up_bps: None,
-                    down_bps: None,
-                },
-            )
+        let socket = TestSocket(server_io);
+        let profile = VmessInboundProfile::from_config_users([(
+            "11111111-2222-3333-4444-555555555555".to_owned(),
+            cipher.name().to_owned(),
+            None::<String>,
+            None::<String>,
+            None::<u64>,
+            None::<u64>,
+        )])
+        .expect("server profile");
+        let (_accepted_session, mut stream) = profile
+            .accept_tcp_stream(VmessInbound, socket)
             .await
             .expect("server accept");
-
-        let mut stream = VmessAeadStream::inbound(socket, accepted).expect("server stream");
         let mut received = Vec::new();
         stream
             .read_to_end(&mut received)
@@ -370,12 +415,18 @@ async fn shutdown_roundtrip_cipher(cipher: VmessCipher) {
         assert_eq!(received, server_upload);
     });
 
-    let mut socket = TestSocket(client_io);
-    let outbound_session = VmessOutbound
-        .establish_tcp_session(&mut socket, &target_session, &uuid, cipher)
+    let socket = TestSocket(client_io);
+    let request = PreparedVmessOutboundRequestBundle::from_config(
+        "11111111-2222-3333-4444-555555555555",
+        cipher.name(),
+        None,
+    )
+    .expect("vmess request");
+    let (mut stream, request_bytes) = request
+        .establish_tcp_outbound_stream(socket, &target_session)
         .await
         .expect("client handshake");
-    let mut stream = VmessAeadStream::outbound(socket, outbound_session).expect("client stream");
+    assert!(request_bytes > 0);
 
     stream
         .write_all(&upload)

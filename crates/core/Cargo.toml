@@ -8,4 +8,5 @@ repository.workspace = true
 homepage.workspace = true
 
 [dependencies]
+async-trait = "0.1"
 zero-traits = { path = "../traits" }

@@ -11,6 +11,7 @@ use tracing::{info, warn};
 use zero_config::RuntimeConfig;
 use zero_dns::DnsSystem;
 use zero_engine::{Engine, EngineError};
+use zero_platform_tokio::TokioSocket;
 
 use crate::inventory::ProtocolInventory;
 
@@ -18,7 +19,9 @@ pub(crate) mod datagram_udp;
 mod engine_facade;
 mod handle;
 pub(crate) mod http_redirect;
+pub(crate) mod inbound_fallback;
 pub(crate) mod inbound_protocol;
+pub(crate) mod inbound_route;
 pub(crate) mod listener_loop;
 mod listeners;
 pub(crate) mod mux_session;
@@ -86,6 +89,26 @@ impl Proxy {
 
     pub fn engine(&self) -> &Engine {
         &self.engine
+    }
+
+    pub(crate) async fn connect_upstream_host(
+        &self,
+        server: &str,
+        port: u16,
+    ) -> Result<TokioSocket, EngineError> {
+        self.protocols
+            .direct_connector()
+            .connect_host(server, port, self.resolver.as_ref())
+            .await
+            .map_err(Into::into)
+    }
+
+    pub(crate) async fn connect_upstream_host_owned(
+        &self,
+        server: String,
+        port: u16,
+    ) -> Result<TokioSocket, EngineError> {
+        self.connect_upstream_host(&server, port).await
     }
 
     pub fn with_udp_upstream_idle_timeout(mut self, timeout: std::time::Duration) -> Self {

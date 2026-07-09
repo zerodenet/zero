@@ -187,15 +187,25 @@ where
 {
     type Error = io::Error;
 
-    async fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
-        AsyncReadExt::read(self, buf).await
+    fn read<'a>(
+        &'a mut self,
+        buf: &'a mut [u8],
+    ) -> impl core::future::Future<Output = Result<usize, Self::Error>> + Send + 'a {
+        async move { AsyncReadExt::read(self, buf).await }
     }
-    async fn write_all(&mut self, buf: &[u8]) -> Result<(), Self::Error> {
-        AsyncWriteExt::write_all(self, buf).await?;
-        AsyncWriteExt::flush(self).await
+    fn write_all<'a>(
+        &'a mut self,
+        buf: &'a [u8],
+    ) -> impl core::future::Future<Output = Result<(), Self::Error>> + Send + 'a {
+        async move {
+            AsyncWriteExt::write_all(self, buf).await?;
+            AsyncWriteExt::flush(self).await
+        }
     }
-    async fn shutdown(&mut self) -> Result<(), Self::Error> {
-        AsyncWriteExt::shutdown(self).await
+    fn shutdown<'a>(
+        &'a mut self,
+    ) -> impl core::future::Future<Output = Result<(), Self::Error>> + Send + 'a {
+        async move { AsyncWriteExt::shutdown(self).await }
     }
 }
 

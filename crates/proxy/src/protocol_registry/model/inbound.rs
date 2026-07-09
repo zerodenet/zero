@@ -7,14 +7,14 @@
 /// into runtime dispatch.
 pub(crate) enum BoundInbound {
     Tcp(zero_platform_tokio::TokioListener),
-    #[cfg(any(feature = "vless", feature = "hysteria2"))]
+    #[cfg(feature = "transport_quic")]
     Quic(crate::transport::QuicInbound),
 }
 
 impl BoundInbound {
     /// Unwrap into a TCP listener. Panics if the variant is QUIC; that
     /// indicates a dispatch mismatch because bind and spawn disagreed.
-    #[cfg(any(feature = "vless", feature = "hysteria2"))]
+    #[cfg(feature = "transport_quic")]
     pub(crate) fn into_tcp(self) -> zero_platform_tokio::TokioListener {
         match self {
             Self::Tcp(l) => l,
@@ -24,7 +24,7 @@ impl BoundInbound {
         }
     }
 
-    #[cfg(not(any(feature = "vless", feature = "hysteria2")))]
+    #[cfg(not(feature = "transport_quic"))]
     pub(crate) fn into_tcp(self) -> zero_platform_tokio::TokioListener {
         match self {
             Self::Tcp(l) => l,

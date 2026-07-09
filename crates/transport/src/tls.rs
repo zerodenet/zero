@@ -15,11 +15,18 @@ use tokio_rustls::TlsConnector;
 use zero_config::ClientTlsConfig;
 use zero_config::TlsConfig;
 use zero_platform_tokio::TokioSocket;
-use zero_traits::AsyncSocket;
+use zero_traits::{AsyncSocket, ClientTlsProfile};
 
 use zero_engine::EngineError;
 use zero_platform_tokio::ClientStream;
 use zero_platform_tokio::TcpRelayStream;
+
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct InboundClientHello {
+    pub sni: Option<String>,
+    pub alpn: Vec<String>,
+    pub consumed: Vec<u8>,
+}
 
 #[derive(Debug)]
 struct InsecureCertVerifier;
@@ -110,20 +117,87 @@ pub fn build_tls_acceptor(
     Ok(TlsAcceptor::from(Arc::new(config)))
 }
 
-pub async fn connect_tls_upstream(
+pub async fn accept_tls_inbound(
+    stream: TokioSocket,
+    acceptor: &TlsAcceptor,
+) -> Result<InboundTlsStream<TokioSocket>, EngineError> {
+    let tls = acceptor
+        .accept(stream)
+        .await
+        .map_err(|error| EngineError::Io(io::Error::other(error)))?;
+    Ok(InboundTlsStream::new_generic(tls))
+}
+
+pub async fn peek_client_hello<R>(reader: &mut R) -> io::Result<Option<InboundClientHello>>
+where
+    R: AsyncRead + Unpin,
+{
+    let mut consumed = Vec::with_capacity(512);
+
+    let mut record_hdr = [0u8; 5];
+    reader.read_exact(&mut record_hdr).await?;
+    if record_hdr[0] != 0x16 {
+        return Ok(None);
+    }
+    consumed.extend_from_slice(&record_hdr);
+
+    let mut handshake_hdr = [0u8; 4];
+    reader.read_exact(&mut handshake_hdr).await?;
+    if handshake_hdr[0] != 0x01 {
+        return Ok(None);
+    }
+    consumed.extend_from_slice(&handshake_hdr);
+
+    let mut fixed = [0u8; 35];
+    read_exact_client_hello(reader, &mut consumed, &mut fixed).await?;
+    let session_id_len = fixed[34] as usize;
+    skip_exact_client_hello(reader, &mut consumed, session_id_len).await?;
+
+    let mut cipher_suites_len = [0u8; 2];
+    read_exact_client_hello(reader, &mut consumed, &mut cipher_suites_len).await?;
+    skip_exact_client_hello(
+        reader,
+        &mut consumed,
+        u16::from_be_bytes(cipher_suites_len) as usize,
+    )
+    .await?;
+
+    let mut compression_methods_len = [0u8; 1];
+    read_exact_client_hello(reader, &mut consumed, &mut compression_methods_len).await?;
+    skip_exact_client_hello(reader, &mut consumed, compression_methods_len[0] as usize).await?;
+
+    let mut extensions_len = [0u8; 2];
+    match reader.read_exact(&mut extensions_len).await {
+        Ok(_) => consumed.extend_from_slice(&extensions_len),
+        Err(error) if error.kind() == io::ErrorKind::UnexpectedEof => {
+            return Ok(Some(InboundClientHello {
+                consumed,
+                ..Default::default()
+            }));
+        }
+        Err(error) => return Err(error),
+    }
+
+    let extensions_len = u16::from_be_bytes(extensions_len).min(8192) as usize;
+    let mut extensions = vec![0u8; extensions_len];
+    read_exact_client_hello(reader, &mut consumed, &mut extensions).await?;
+
+    Ok(Some(parse_client_hello_extensions(&extensions, consumed)))
+}
+
+pub async fn connect_tls_upstream_with_profile<P>(
     socket: TokioSocket,
-    tls: &ClientTlsConfig,
+    tls: &P,
     base_dir: Option<&Path>,
     default_server_name: &str,
-) -> Result<TcpRelayStream, EngineError> {
-    let server_name = tls
-        .server_name
-        .as_deref()
-        .unwrap_or(default_server_name)
-        .to_owned();
+) -> Result<TcpRelayStream, EngineError>
+where
+    P: ClientTlsProfile + ?Sized,
+{
+    let server_name = tls.server_name().unwrap_or(default_server_name).to_owned();
 
     let mut roots = RootCertStore::from_iter(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
-    if let Some(path) = &tls.ca_cert_path {
+    if let Some(path) = tls.ca_cert_path() {
         for cert in load_certs(&resolve_path(base_dir, path))? {
             roots
                 .add(cert)
@@ -132,7 +206,7 @@ pub async fn connect_tls_upstream(
     }
 
     // Look up fingerprint preset for builder-time configuration
-    let fingerprint = tls.client_fingerprint.as_deref().and_then(|name| {
+    let fingerprint = tls.client_fingerprint().and_then(|name| {
         let fp = crate::fingerprint::lookup_fingerprint(name);
         if fp.is_none() {
             tracing::warn!(fingerprint = %name, "unknown tls fingerprint preset, using defaults");
@@ -144,7 +218,7 @@ pub async fn connect_tls_upstream(
     let config_base = if let Some(ref fp) = fingerprint {
         let provider = Arc::new(crate::fingerprint::build_provider(fp));
         tracing::debug!(
-            fingerprint = %tls.client_fingerprint.as_deref().unwrap_or(""),
+            fingerprint = %tls.client_fingerprint().unwrap_or(""),
             cipher_count = fp.cipher_suites.len(),
             "tls fingerprint applied"
         );
@@ -155,7 +229,7 @@ pub async fn connect_tls_upstream(
         ClientConfig::builder()
     };
 
-    let mut config = if tls.insecure {
+    let mut config = if tls.insecure() {
         config_base
             .dangerous()
             .with_custom_certificate_verifier(Arc::new(InsecureCertVerifier))
@@ -166,14 +240,14 @@ pub async fn connect_tls_upstream(
             .with_no_client_auth()
     };
 
-    if tls.disable_sni {
+    if tls.disable_sni() {
         config.enable_sni = false;
     }
 
     // ALPN: use explicit config if provided, otherwise use fingerprint-suggested ALPN
-    if !tls.alpn.is_empty() {
+    if !tls.alpn().is_empty() {
         config.alpn_protocols = tls
-            .alpn
+            .alpn()
             .iter()
             .map(|proto| proto.as_bytes().to_vec())
             .collect();
@@ -187,7 +261,7 @@ pub async fn connect_tls_upstream(
     if let Some(ref fp) = fingerprint {
         tracing::debug!(
             sni = %server_name_str,
-            fingerprint = %tls.client_fingerprint.as_deref().unwrap_or(""),
+            fingerprint = %tls.client_fingerprint().unwrap_or(""),
             "connecting via custom TLS 1.3 handshake"
         );
         return connect_tls13_upstream(socket, &server_name_str, fp).await;
@@ -202,8 +276,8 @@ pub async fn connect_tls_upstream(
     tracing::debug!(
         sni = %server_name_str,
         peer = ?peer_addr,
-        insecure = tls.insecure,
-        alpn = ?tls.alpn,
+        insecure = tls.insecure(),
+        alpn = ?tls.alpn(),
         "tls connecting"
     );
 
@@ -223,23 +297,29 @@ pub async fn connect_tls_upstream(
     Ok(TcpRelayStream::new(stream))
 }
 
-pub async fn connect_tls_stream<S>(
-    stream: S,
+pub async fn connect_tls_upstream(
+    socket: TokioSocket,
     tls: &ClientTlsConfig,
+    base_dir: Option<&Path>,
+    default_server_name: &str,
+) -> Result<TcpRelayStream, EngineError> {
+    connect_tls_upstream_with_profile(socket, tls, base_dir, default_server_name).await
+}
+
+pub async fn connect_tls_stream_with_profile<S, P>(
+    stream: S,
+    tls: &P,
     base_dir: Option<&Path>,
     default_server_name: &str,
 ) -> Result<TcpRelayStream, EngineError>
 where
     S: AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static,
+    P: ClientTlsProfile + ?Sized,
 {
-    let server_name = tls
-        .server_name
-        .as_deref()
-        .unwrap_or(default_server_name)
-        .to_owned();
+    let server_name = tls.server_name().unwrap_or(default_server_name).to_owned();
 
     let mut roots = RootCertStore::from_iter(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
-    if let Some(path) = &tls.ca_cert_path {
+    if let Some(path) = tls.ca_cert_path() {
         for cert in load_certs(&resolve_path(base_dir, path))? {
             roots
                 .add(cert)
@@ -249,14 +329,13 @@ where
 
     // Route fingerprint TLS through the generic ztls async handshake path
     if let Some(fp) = tls
-        .client_fingerprint
-        .as_deref()
+        .client_fingerprint()
         .and_then(crate::fingerprint::lookup_fingerprint)
     {
         return connect_tls13_stream(stream, &server_name, &fp).await;
     }
 
-    let mut config = if tls.insecure {
+    let mut config = if tls.insecure() {
         ClientConfig::builder()
             .dangerous()
             .with_custom_certificate_verifier(Arc::new(InsecureCertVerifier))
@@ -267,13 +346,13 @@ where
             .with_no_client_auth()
     };
 
-    if tls.disable_sni {
+    if tls.disable_sni() {
         config.enable_sni = false;
     }
 
-    if !tls.alpn.is_empty() {
+    if !tls.alpn().is_empty() {
         config.alpn_protocols = tls
-            .alpn
+            .alpn()
             .iter()
             .map(|proto| proto.as_bytes().to_vec())
             .collect();
@@ -287,6 +366,18 @@ where
     let stream = connector.connect(server_name, stream).await?;
 
     Ok(TcpRelayStream::new(stream))
+}
+
+pub async fn connect_tls_stream<S>(
+    stream: S,
+    tls: &ClientTlsConfig,
+    base_dir: Option<&Path>,
+    default_server_name: &str,
+) -> Result<TcpRelayStream, EngineError>
+where
+    S: AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static,
+{
+    connect_tls_stream_with_profile(stream, tls, base_dir, default_server_name).await
 }
 
 /// Connect over a generic AsyncRead+AsyncWrite stream using our custom
@@ -440,6 +531,90 @@ fn resolve_path(base_dir: Option<&Path>, path: &str) -> PathBuf {
         .unwrap_or(path)
 }
 
+fn parse_client_hello_extensions(ext_data: &[u8], consumed: Vec<u8>) -> InboundClientHello {
+    let mut sni = None;
+    let mut alpn = Vec::new();
+    let mut offset = 0;
+
+    while offset + 4 <= ext_data.len() {
+        let ext_type = u16::from_be_bytes([ext_data[offset], ext_data[offset + 1]]);
+        let ext_len = u16::from_be_bytes([ext_data[offset + 2], ext_data[offset + 3]]) as usize;
+        offset += 4;
+        if offset + ext_len > ext_data.len() {
+            break;
+        }
+        let ext_bytes = &ext_data[offset..offset + ext_len];
+        match ext_type {
+            0x0000 => {
+                if ext_bytes.len() >= 5 && ext_bytes[2] == 0x00 {
+                    let name_len = u16::from_be_bytes([ext_bytes[3], ext_bytes[4]]) as usize;
+                    if 5 + name_len <= ext_bytes.len() {
+                        if let Ok(name) = std::str::from_utf8(&ext_bytes[5..5 + name_len]) {
+                            sni = Some(name.to_owned());
+                        }
+                    }
+                }
+            }
+            0x0010 if ext_bytes.len() >= 4 => {
+                let list_len = u16::from_be_bytes([ext_bytes[2], ext_bytes[3]]) as usize;
+                let mut pos = 4;
+                while pos < ext_bytes.len() && pos < 4 + list_len {
+                    let proto_len = ext_bytes[pos] as usize;
+                    pos += 1;
+                    if pos + proto_len <= ext_bytes.len() {
+                        if let Ok(proto) = std::str::from_utf8(&ext_bytes[pos..pos + proto_len]) {
+                            alpn.push(proto.to_owned());
+                        }
+                        pos += proto_len;
+                    } else {
+                        break;
+                    }
+                }
+            }
+            _ => {}
+        }
+        offset += ext_len;
+    }
+
+    InboundClientHello {
+        sni,
+        alpn,
+        consumed,
+    }
+}
+
+async fn read_exact_client_hello<R>(
+    reader: &mut R,
+    consumed: &mut Vec<u8>,
+    dest: &mut [u8],
+) -> io::Result<()>
+where
+    R: AsyncRead + Unpin,
+{
+    reader.read_exact(dest).await?;
+    consumed.extend_from_slice(dest);
+    Ok(())
+}
+
+async fn skip_exact_client_hello<R>(
+    reader: &mut R,
+    consumed: &mut Vec<u8>,
+    len: usize,
+) -> io::Result<()>
+where
+    R: AsyncRead + Unpin,
+{
+    let mut chunk = vec![0u8; len.min(256)];
+    let mut remaining = len;
+    while remaining > 0 {
+        let to_read = remaining.min(chunk.len());
+        reader.read_exact(&mut chunk[..to_read]).await?;
+        consumed.extend_from_slice(&chunk[..to_read]);
+        remaining -= to_read;
+    }
+    Ok(())
+}
+
 pub struct InboundTlsStream<IO = TcpStream> {
     inner: TlsStream<IO>,
 }
@@ -471,16 +646,24 @@ where
 {
     type Error = io::Error;
 
-    async fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
-        AsyncReadExt::read(&mut self.inner, buf).await
+    fn read<'a>(
+        &'a mut self,
+        buf: &'a mut [u8],
+    ) -> impl core::future::Future<Output = Result<usize, Self::Error>> + Send + 'a {
+        async move { AsyncReadExt::read(&mut self.inner, buf).await }
     }
 
-    async fn write_all(&mut self, buf: &[u8]) -> Result<(), Self::Error> {
-        AsyncWriteExt::write_all(&mut self.inner, buf).await
+    fn write_all<'a>(
+        &'a mut self,
+        buf: &'a [u8],
+    ) -> impl core::future::Future<Output = Result<(), Self::Error>> + Send + 'a {
+        async move { AsyncWriteExt::write_all(&mut self.inner, buf).await }
     }
 
-    async fn shutdown(&mut self) -> Result<(), Self::Error> {
-        AsyncWriteExt::shutdown(&mut self.inner).await
+    fn shutdown<'a>(
+        &'a mut self,
+    ) -> impl core::future::Future<Output = Result<(), Self::Error>> + Send + 'a {
+        async move { AsyncWriteExt::shutdown(&mut self.inner).await }
     }
 }
 

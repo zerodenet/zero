@@ -1,6 +1,11 @@
+use core::future::Future;
+
+use alloc::boxed::Box;
 use alloc::vec::Vec;
 
-use crate::{Address, Error, ProtocolType, SessionAuth};
+use zero_traits::AsyncSocket;
+
+use crate::{Address, Error, ProtocolType, Session, SessionAuth};
 
 /// Neutral UDP payload routed by proxy/runtime glue.
 ///
@@ -51,6 +56,7 @@ pub struct InboundMuxUdpReadFailure {
 /// Protocol crates keep MUX payload sources, framing, and response encoding
 /// private behind this trait so proxy/runtime code does not unpack
 /// protocol-specific relay state just to rebuild a generic request model.
+#[async_trait::async_trait]
 pub trait InboundMuxUdpRelay: Send {
     async fn read_inbound_dispatch(
         &mut self,
@@ -72,6 +78,35 @@ pub trait InboundMuxUdpRelay: Send {
     }
 }
 
+/// Protocol-owned inbound MUX TCP relay consumed by shared runtime glue.
+pub trait InboundMuxTcpRelay: Send + 'static {
+    fn mux_session_id(&self) -> u16;
+
+    fn close_stream(&self) -> impl Future<Output = ()> + Send;
+
+    fn relay_stream<S>(self, upstream: S) -> impl Future<Output = ()> + Send
+    where
+        S: AsyncSocket + 'static,
+        S::Error: Send;
+}
+
+#[async_trait::async_trait]
+pub trait InboundMuxServer<R>: Send {
+    type TcpRelay: InboundMuxTcpRelay;
+    type UdpRelay: InboundMuxUdpRelay;
+
+    async fn dispatch_next_opened_route<E, FTcp, FUdp>(
+        &mut self,
+        reader: &mut R,
+        on_tcp_opened: FTcp,
+        on_udp_opened: FUdp,
+    ) -> Result<bool, E>
+    where
+        E: From<Error>,
+        FTcp: FnOnce(Session, Self::TcpRelay) -> Result<(), E> + Send,
+        FUdp: FnOnce(Self::UdpRelay) -> Result<(), E> + Send;
+}
+
 pub trait MuxUdpResponder: Send {
     fn decode_inbound_dispatch(&mut self, payload: &[u8]) -> Result<InboundUdpDispatch, Error>;
 
@@ -89,6 +124,7 @@ pub trait MuxUdpResponder: Send {
     }
 }
 
+#[async_trait::async_trait]
 pub trait StreamUdpResponder<S>: Send
 where
     S: Send,
@@ -114,6 +150,46 @@ pub trait InboundStreamUdpRelay: Send {
     fn into_stream_udp_parts(self) -> (Self::Stream, Self::Responder, Option<SessionAuth>);
 }
 
+#[async_trait::async_trait]
+pub trait InboundStreamRoute: Send {
+    type TcpStream;
+    type UdpRelay: InboundStreamUdpRelay;
+
+    async fn dispatch_inbound_route<E, FTcp, FTcpFut, FUdp, FUdpFut>(
+        self,
+        on_tcp: FTcp,
+        on_udp: FUdp,
+    ) -> Result<(), E>
+    where
+        FTcp: FnOnce(Session, Self::TcpStream) -> FTcpFut + Send,
+        FTcpFut: Future<Output = Result<(), E>> + Send,
+        FUdp: FnOnce(Session, Self::UdpRelay) -> FUdpFut + Send,
+        FUdpFut: Future<Output = Result<(), E>> + Send;
+}
+
+#[async_trait::async_trait]
+pub trait InboundMuxStreamRoute: Send {
+    type TcpStream;
+    type UdpRelay: InboundStreamUdpRelay;
+    type MuxReader;
+    type MuxServer: Send;
+
+    async fn dispatch_inbound_route<E, FTcp, FTcpFut, FUdp, FUdpFut, FMux, FMuxFut>(
+        self,
+        on_tcp: FTcp,
+        on_udp: FUdp,
+        on_mux: FMux,
+    ) -> Result<(), E>
+    where
+        FTcp: FnOnce(Session, Self::TcpStream) -> FTcpFut + Send,
+        FTcpFut: Future<Output = Result<(), E>> + Send,
+        FUdp: FnOnce(Session, Self::UdpRelay) -> FUdpFut + Send,
+        FUdpFut: Future<Output = Result<(), E>> + Send,
+        FMux: FnOnce(Self::MuxReader, Self::MuxServer) -> FMuxFut + Send,
+        FMuxFut: Future<Output = Result<(), E>> + Send;
+}
+
+#[async_trait::async_trait]
 pub trait DatagramUdpResponder<S>: Send
 where
     S: Send,

@@ -1,7 +1,10 @@
+use alloc::format;
 use alloc::string::String;
 #[cfg(feature = "reality")]
 use alloc::vec;
 use alloc::vec::Vec;
+#[cfg(feature = "reality")]
+use core::future::Future;
 
 #[cfg(feature = "reality")]
 use tokio::sync::{broadcast, mpsc, oneshot};
@@ -17,13 +20,13 @@ use crate::shared::{
 
 /// Target parameters for VLESS UDP packet tunnel over a connected stream.
 #[derive(Debug, Clone, Copy)]
-pub struct VlessUdpPacketTunnelTarget<'a> {
+struct VlessUdpPacketTunnelTarget<'a> {
     pub session: &'a Session,
     pub id: &'a [u8; 16],
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct VlessUdpIdentity {
+struct VlessUdpIdentity {
     pub uuid: [u8; 16],
 }
 
@@ -34,18 +37,220 @@ struct VlessUdpFlowConfig<'a> {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct VlessUdpFlowResume {
+struct VlessUdpFlowResume {
     identity: VlessUdpIdentity,
     flow: Option<String>,
     relay_chain: bool,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum VlessUdpFlowMode {
+    Direct,
+    RelayFinalHop,
+    RelayPairedTransport,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct VlessUdpFlowPlan {
+    resume: VlessUdpFlowResume,
+    mode: VlessUdpFlowMode,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PreparedVlessUdpFlowPlan {
+    plan: VlessUdpFlowPlan,
+    #[cfg(feature = "reality")]
+    mux_transport_profile: crate::mux_pool::OwnedMuxTransportProfile,
+}
+
+impl VlessUdpFlowPlan {
+    fn new(resume: VlessUdpFlowResume, mode: VlessUdpFlowMode) -> Self {
+        Self { resume, mode }
+    }
+
+    pub(crate) fn direct_from_config(id: &str, flow: Option<&str>) -> Result<Self, Error> {
+        udp_direct_flow_resume_from_config(id, flow)
+            .map(|resume| VlessUdpFlowPlan::new(resume, VlessUdpFlowMode::Direct))
+    }
+
+    pub(crate) fn relay_final_hop_from_config(id: &str) -> Result<Self, Error> {
+        udp_relay_flow_resume_from_config(id)
+            .map(|resume| VlessUdpFlowPlan::new(resume, VlessUdpFlowMode::RelayFinalHop))
+    }
+
+    pub(crate) fn relay_paired_transport_from_config(id: &str) -> Result<Self, Error> {
+        udp_relay_flow_resume_from_config(id)
+            .map(|resume| VlessUdpFlowPlan::new(resume, VlessUdpFlowMode::RelayPairedTransport))
+    }
+
+    pub fn connector_flow(
+        &self,
+        server: &str,
+        port: u16,
+        session_id: u64,
+    ) -> VlessUdpConnectorFlow {
+        self.resume().connector_flow(server, port, session_id)
+    }
+
+    fn resume(&self) -> &VlessUdpFlowResume {
+        &self.resume
+    }
+
+    fn mode(&self) -> VlessUdpFlowMode {
+        self.mode
+    }
+
+    #[cfg(feature = "reality")]
+    pub(crate) async fn open_udp_flow_with_transport_or_mux<S, OpenStream, OpenStreamFut, E>(
+        &self,
+        session: &Session,
+        server: &str,
+        port: u16,
+        profile: crate::mux_pool::MuxTransportProfile<'_>,
+        mux_pool: &crate::mux_pool::MuxConnectionPool,
+        open_stream: OpenStream,
+    ) -> Result<VlessUdpFlowConnection, E>
+    where
+        S: AsyncSocket + tokio::io::AsyncRead + tokio::io::AsyncWrite + Send + Sync + 'static,
+        OpenStream: FnOnce() -> OpenStreamFut,
+        OpenStreamFut: Future<Output = Result<S, E>>,
+        E: From<Error>,
+    {
+        if self.mode() != VlessUdpFlowMode::Direct {
+            return Err(E::from(Error::Protocol(
+                "expected direct VLESS UDP flow plan",
+            )));
+        }
+        let resume = self.resume();
+        if let Some(key) = resume.udp_mux_pool_key_from_transport_config(server, port, profile) {
+            let (_session_id, up_tx, down_rx) =
+                mux_pool.open_udp_stream(key, 8, open_stream).await?;
+            return Ok(start_mux_udp_flow(up_tx, down_rx));
+        }
+
+        let stream = open_stream().await?;
+        establish_udp_flow_with_resume(stream, session, resume)
+            .await
+            .map_err(E::from)
+    }
+
+    #[cfg(feature = "reality")]
+    pub(crate) async fn open_relay_udp_flow_with_transport<
+        S,
+        OpenFinalHopTransport,
+        OpenFinalHopTransportFut,
+        E,
+    >(
+        &self,
+        session: &Session,
+        stream: S,
+        open_final_hop_transport: OpenFinalHopTransport,
+    ) -> Result<VlessUdpFlowConnection, E>
+    where
+        S: AsyncSocket + tokio::io::AsyncRead + tokio::io::AsyncWrite + Send + Sync + 'static,
+        OpenFinalHopTransport: FnOnce(S) -> OpenFinalHopTransportFut,
+        OpenFinalHopTransportFut: Future<Output = Result<S, E>>,
+        E: From<Error>,
+    {
+        let stream = match self.mode() {
+            VlessUdpFlowMode::Direct => {
+                return Err(E::from(Error::Protocol(
+                    "expected relay VLESS UDP flow plan",
+                )));
+            }
+            VlessUdpFlowMode::RelayFinalHop => open_final_hop_transport(stream).await?,
+            VlessUdpFlowMode::RelayPairedTransport => stream,
+        };
+
+        establish_udp_flow_with_resume(stream, session, self.resume())
+            .await
+            .map_err(E::from)
+    }
+}
+
+impl PreparedVlessUdpFlowPlan {
+    #[cfg(not(feature = "reality"))]
+    pub(crate) fn new(plan: VlessUdpFlowPlan) -> Self {
+        Self { plan }
+    }
+
+    #[cfg(feature = "reality")]
+    pub(crate) fn with_transport_profile(
+        plan: VlessUdpFlowPlan,
+        mux_transport_profile: crate::mux_pool::OwnedMuxTransportProfile,
+    ) -> Self {
+        Self {
+            plan,
+            mux_transport_profile,
+        }
+    }
+
+    pub fn connector_flow(
+        &self,
+        server: &str,
+        port: u16,
+        session_id: u64,
+    ) -> VlessUdpConnectorFlow {
+        self.plan.connector_flow(server, port, session_id)
+    }
+
+    #[cfg(feature = "reality")]
+    pub async fn open_udp_flow_with_transport_or_mux<S, OpenStream, OpenStreamFut, E>(
+        &self,
+        session: &Session,
+        server: &str,
+        port: u16,
+        mux_pool: &crate::mux_pool::MuxConnectionPool,
+        open_stream: OpenStream,
+    ) -> Result<VlessUdpFlowConnection, E>
+    where
+        S: AsyncSocket + tokio::io::AsyncRead + tokio::io::AsyncWrite + Send + Sync + 'static,
+        OpenStream: FnOnce() -> OpenStreamFut,
+        OpenStreamFut: Future<Output = Result<S, E>>,
+        E: From<Error>,
+    {
+        self.plan
+            .open_udp_flow_with_transport_or_mux(
+                session,
+                server,
+                port,
+                self.mux_transport_profile.as_borrowed(),
+                mux_pool,
+                open_stream,
+            )
+            .await
+    }
+
+    #[cfg(feature = "reality")]
+    pub async fn open_relay_udp_flow_with_transport<
+        S,
+        OpenFinalHopTransport,
+        OpenFinalHopTransportFut,
+        E,
+    >(
+        &self,
+        session: &Session,
+        stream: S,
+        open_final_hop_transport: OpenFinalHopTransport,
+    ) -> Result<VlessUdpFlowConnection, E>
+    where
+        S: AsyncSocket + tokio::io::AsyncRead + tokio::io::AsyncWrite + Send + Sync + 'static,
+        OpenFinalHopTransport: FnOnce(S) -> OpenFinalHopTransportFut,
+        OpenFinalHopTransportFut: Future<Output = Result<S, E>>,
+        E: From<Error>,
+    {
+        self.plan
+            .open_relay_udp_flow_with_transport(session, stream, open_final_hop_transport)
+            .await
+    }
+}
+
 impl VlessUdpFlowResume {
-    pub fn identity(&self) -> VlessUdpIdentity {
+    fn identity(&self) -> VlessUdpIdentity {
         self.identity
     }
 
-    pub fn mux_flow_enabled(&self) -> bool {
+    fn mux_flow_enabled(&self) -> bool {
         matches!(
             self.flow.as_deref(),
             Some("xtls-rprx-vision") | Some("xtls-rprx-vision-udp443")
@@ -53,8 +258,25 @@ impl VlessUdpFlowResume {
     }
 
     #[cfg(feature = "reality")]
-    pub fn mux_pool_identity(&self) -> crate::mux_pool::MuxIdentity {
+    fn mux_pool_identity(&self) -> crate::mux_pool::MuxIdentity {
         crate::mux_pool::MuxIdentity::from_uuid(self.identity.uuid)
+    }
+
+    #[cfg(feature = "reality")]
+    fn udp_mux_pool_key_from_transport_config(
+        &self,
+        server: &str,
+        port: u16,
+        profile: crate::mux_pool::MuxTransportProfile<'_>,
+    ) -> Option<crate::mux_pool::PoolKey> {
+        self.mux_flow_enabled().then(|| {
+            crate::mux_pool::pool_key_from_transport_config(
+                server,
+                port,
+                self.mux_pool_identity(),
+                profile,
+            )
+        })
     }
 
     fn flow_requires_relay_upstream(&self) -> bool {
@@ -101,7 +323,7 @@ impl<'a> VlessUdpFlowConfig<'a> {
     }
 }
 
-pub fn udp_flow_resume_from_config(
+fn udp_flow_resume_from_config(
     id: &str,
     flow: Option<&str>,
     relay_chain: bool,
@@ -109,16 +331,18 @@ pub fn udp_flow_resume_from_config(
     VlessUdpFlowConfig::new(id, flow).map(|config| config.flow_resume(relay_chain))
 }
 
-pub fn connector_flow_from_resume(
-    resume: &VlessUdpFlowResume,
-    server: &str,
-    port: u16,
-    session_id: u64,
-) -> VlessUdpConnectorFlow {
-    resume.connector_flow(server, port, session_id)
+fn udp_direct_flow_resume_from_config(
+    id: &str,
+    flow: Option<&str>,
+) -> Result<VlessUdpFlowResume, Error> {
+    udp_flow_resume_from_config(id, flow, false)
 }
 
-pub fn parse_udp_identity(id: &str) -> Result<VlessUdpIdentity, Error> {
+fn udp_relay_flow_resume_from_config(id: &str) -> Result<VlessUdpFlowResume, Error> {
+    VlessUdpFlowConfig::new(id, None).map(|config| config.flow_resume(true))
+}
+
+fn parse_udp_identity(id: &str) -> Result<VlessUdpIdentity, Error> {
     parse_uuid(id).map(|uuid| VlessUdpIdentity { uuid })
 }
 
@@ -287,7 +511,7 @@ pub fn start_mux_udp_flow(
 }
 
 #[cfg(feature = "reality")]
-pub async fn establish_udp_flow_with_resume<S>(
+async fn establish_udp_flow_with_resume<S>(
     mut stream: S,
     session: &Session,
     resume: &VlessUdpFlowResume,
@@ -509,14 +733,14 @@ impl VlessUdpPacket {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct VlessInboundUdpRequest {
+struct VlessInboundUdpRequest {
     target: Address,
     port: u16,
     payload: Vec<u8>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct VlessInboundUdpDispatchParts {
+struct VlessInboundUdpDispatchParts {
     target: Address,
     port: u16,
     payload: Vec<u8>,
@@ -524,7 +748,7 @@ pub struct VlessInboundUdpDispatchParts {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub struct VlessInboundUdpClientResponse<'a> {
+struct VlessInboundUdpClientResponse<'a> {
     target: &'a Address,
     port: u16,
     payload: &'a [u8],
@@ -537,10 +761,6 @@ impl<'a> VlessInboundUdpClientResponse<'a> {
             port,
             payload,
         }
-    }
-
-    pub fn payload_len(&self) -> usize {
-        self.payload.len()
     }
 
     fn target(&self) -> &'a Address {
@@ -566,18 +786,6 @@ impl VlessInboundUdpRequest {
         }
     }
 
-    pub fn target(&self) -> &Address {
-        &self.target
-    }
-
-    pub fn port(&self) -> u16 {
-        self.port
-    }
-
-    pub fn payload(&self) -> &[u8] {
-        &self.payload
-    }
-
     pub fn into_parts(self) -> (Address, u16, Vec<u8>) {
         (self.target, self.port, self.payload)
     }
@@ -598,27 +806,14 @@ impl VlessInboundUdpDispatchParts {
         ProtocolType::Vless
     }
 
-    pub fn pipe_parts(&self) -> (&Address, u16, &[u8], Option<u64>) {
-        (
-            &self.target,
-            self.port,
-            &self.payload,
-            self.client_session_id,
-        )
-    }
-
     pub fn into_parts(self) -> (Address, u16, Vec<u8>, Option<u64>) {
         (self.target, self.port, self.payload, self.client_session_id)
     }
 
     pub fn into_inbound_dispatch(self) -> InboundUdpDispatch {
-        InboundUdpDispatch::new(
-            ProtocolType::Vless,
-            self.target,
-            self.port,
-            self.payload,
-            self.client_session_id,
-        )
+        let protocol = self.protocol();
+        let (target, port, payload, client_session_id) = self.into_parts();
+        InboundUdpDispatch::new(protocol, target, port, payload, client_session_id)
     }
 }
 
@@ -720,24 +915,6 @@ impl VlessUdpFlowIo {
             return Ok(None);
         }
         self.decode_packet(&buffer[..n]).map(Some)
-    }
-}
-
-#[derive(Debug, Clone, Copy, Default)]
-pub struct VlessUdpFlowCodec;
-
-impl VlessUdpFlowCodec {
-    pub fn encode_packet(
-        &self,
-        target: &Address,
-        port: u16,
-        payload: &[u8],
-    ) -> Result<Vec<u8>, Error> {
-        encode_udp_flow_packet(target, port, payload)
-    }
-
-    pub fn decode_packet(&self, packet: &[u8]) -> Result<VlessUdpPacket, Error> {
-        decode_udp_flow_packet(packet)
     }
 }
 
@@ -958,27 +1135,24 @@ fn encode_inbound_mux_udp_response(
 }
 
 #[derive(Debug, Default, Clone, Copy)]
-pub struct VlessInboundUdpCodec;
+struct VlessInboundUdpCodec;
 
 impl VlessInboundUdpCodec {
-    pub fn decode_request(&self, packet: &[u8]) -> Result<VlessInboundUdpRequest, Error> {
+    fn decode_request(&self, packet: &[u8]) -> Result<VlessInboundUdpRequest, Error> {
         self.decode_datagram(packet)
             .map(VlessInboundUdpRequest::from_packet)
     }
 
-    pub fn decode_dispatch_parts(
-        &self,
-        packet: &[u8],
-    ) -> Result<VlessInboundUdpDispatchParts, Error> {
+    fn decode_dispatch_parts(&self, packet: &[u8]) -> Result<VlessInboundUdpDispatchParts, Error> {
         self.decode_request(packet)
             .map(VlessInboundUdpRequest::into_dispatch_parts)
     }
 
-    pub fn decode_datagram(&self, packet: &[u8]) -> Result<VlessUdpPacket, Error> {
+    fn decode_datagram(&self, packet: &[u8]) -> Result<VlessUdpPacket, Error> {
         decode_inbound_udp_datagram(packet)
     }
 
-    pub fn encode_response(
+    fn encode_response(
         &self,
         target: &Address,
         port: u16,
@@ -988,7 +1162,7 @@ impl VlessInboundUdpCodec {
     }
 
     #[cfg(feature = "reality")]
-    pub async fn write_response_tokio<W>(
+    async fn write_response_tokio<W>(
         &self,
         writer: &mut W,
         target: &Address,
@@ -1010,7 +1184,7 @@ impl VlessInboundUdpCodec {
     }
 
     #[cfg(feature = "reality")]
-    pub async fn write_client_response_tokio<W>(
+    async fn write_client_response_tokio<W>(
         &self,
         writer: &mut W,
         response: VlessInboundUdpClientResponse<'_>,
@@ -1027,7 +1201,7 @@ impl VlessInboundUdpCodec {
         .await
     }
 
-    pub fn encode_mux_response(
+    fn encode_mux_response(
         &self,
         mux_session_id: u16,
         target: &Address,
@@ -1038,7 +1212,7 @@ impl VlessInboundUdpCodec {
     }
 
     #[cfg(feature = "reality")]
-    pub fn send_mux_response(
+    fn send_mux_response(
         &self,
         writer: &crate::mux::VlessInboundMuxWriter,
         mux_session_id: u16,
@@ -1052,7 +1226,7 @@ impl VlessInboundUdpCodec {
 }
 
 #[derive(Debug, Default, Clone, Copy)]
-pub struct VlessInboundUdpSession {
+pub(crate) struct VlessInboundUdpSession {
     codec: VlessInboundUdpCodec,
 }
 
@@ -1063,44 +1237,34 @@ pub struct VlessInboundUdpResponder {
 }
 
 #[cfg(feature = "reality")]
-pub struct VlessInboundMuxUdpResponder {
+pub(crate) struct VlessInboundMuxUdpResponder {
     session: VlessInboundUdpSession,
     writer: crate::mux::VlessInboundMuxWriter,
     mux_session_id: u16,
 }
 
 impl VlessInboundUdpSession {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             codec: VlessInboundUdpCodec,
         }
     }
 
-    pub fn decode_request(&self, packet: &[u8]) -> Result<VlessInboundUdpRequest, Error> {
-        self.codec.decode_request(packet)
-    }
-
-    pub fn decode_dispatch_parts(
-        &self,
-        packet: &[u8],
-    ) -> Result<VlessInboundUdpDispatchParts, Error> {
+    fn decode_dispatch_parts(&self, packet: &[u8]) -> Result<VlessInboundUdpDispatchParts, Error> {
         self.codec.decode_dispatch_parts(packet)
     }
 
-    pub fn decode_mux_dispatch_parts(
-        &self,
-        payload: &[u8],
-    ) -> Result<VlessInboundUdpDispatchParts, Error> {
-        self.decode_dispatch_parts(payload)
-    }
-
-    pub fn decode_mux_inbound_dispatch(&self, payload: &[u8]) -> Result<InboundUdpDispatch, Error> {
-        self.decode_mux_dispatch_parts(payload)
+    fn decode_inbound_dispatch(&self, packet: &[u8]) -> Result<InboundUdpDispatch, Error> {
+        self.decode_dispatch_parts(packet)
             .map(VlessInboundUdpDispatchParts::into_inbound_dispatch)
     }
 
+    fn decode_mux_inbound_dispatch(&self, payload: &[u8]) -> Result<InboundUdpDispatch, Error> {
+        self.decode_inbound_dispatch(payload)
+    }
+
     #[cfg(feature = "reality")]
-    pub async fn read_dispatch_parts_tokio<R>(
+    async fn read_dispatch_parts_tokio<R>(
         &self,
         reader: &mut R,
         buf: &mut [u8],
@@ -1118,7 +1282,7 @@ impl VlessInboundUdpSession {
     }
 
     #[cfg(feature = "reality")]
-    pub async fn read_inbound_dispatch_tokio<R>(
+    async fn read_inbound_dispatch_tokio<R>(
         &self,
         reader: &mut R,
         buf: &mut [u8],
@@ -1132,23 +1296,7 @@ impl VlessInboundUdpSession {
     }
 
     #[cfg(feature = "reality")]
-    pub async fn write_response_tokio<W>(
-        &self,
-        writer: &mut W,
-        target: &Address,
-        port: u16,
-        payload: &[u8],
-    ) -> Result<usize, Error>
-    where
-        W: tokio::io::AsyncWrite + Unpin,
-    {
-        self.codec
-            .write_response_tokio(writer, target, port, payload)
-            .await
-    }
-
-    #[cfg(feature = "reality")]
-    pub async fn write_client_response_tokio<W>(
+    async fn write_client_response_tokio<W>(
         &self,
         writer: &mut W,
         response: VlessInboundUdpClientResponse<'_>,
@@ -1162,7 +1310,7 @@ impl VlessInboundUdpSession {
     }
 
     #[cfg(feature = "reality")]
-    pub async fn write_client_response_for_target_tokio<W>(
+    async fn write_client_response_for_target_tokio<W>(
         &self,
         writer: &mut W,
         target: &Address,
@@ -1179,8 +1327,17 @@ impl VlessInboundUdpSession {
         .await
     }
 
+    fn encode_response_packet(
+        &self,
+        target: &Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<Vec<u8>, Error> {
+        self.codec.encode_response(target, port, payload)
+    }
+
     #[cfg(feature = "reality")]
-    pub fn send_mux_response(
+    pub(crate) fn send_mux_response(
         &self,
         writer: &crate::mux::VlessInboundMuxWriter,
         mux_session_id: u16,
@@ -1193,7 +1350,7 @@ impl VlessInboundUdpSession {
     }
 
     #[cfg(feature = "reality")]
-    pub fn send_mux_client_response(
+    fn send_mux_client_response(
         &self,
         writer: &crate::mux::VlessInboundMuxWriter,
         mux_session_id: u16,
@@ -1209,7 +1366,7 @@ impl VlessInboundUdpSession {
     }
 
     #[cfg(feature = "reality")]
-    pub fn send_mux_client_response_for_target(
+    fn send_mux_client_response_for_target(
         &self,
         writer: &crate::mux::VlessInboundMuxWriter,
         mux_session_id: u16,
@@ -1223,18 +1380,56 @@ impl VlessInboundUdpSession {
             VlessInboundUdpClientResponse::new(target, port, payload),
         )
     }
+
+    #[cfg(feature = "reality")]
+    fn encode_mux_response_packet(
+        &self,
+        mux_session_id: u16,
+        target: &Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<Vec<u8>, Error> {
+        self.codec
+            .encode_mux_response(mux_session_id, target, port, payload)
+    }
+}
+
+pub fn decode_inbound_dispatch(packet: &[u8]) -> Result<InboundUdpDispatch, Error> {
+    VlessInboundUdpSession::new().decode_inbound_dispatch(packet)
+}
+
+pub fn decode_mux_inbound_dispatch(payload: &[u8]) -> Result<InboundUdpDispatch, Error> {
+    VlessInboundUdpSession::new().decode_mux_inbound_dispatch(payload)
+}
+
+pub fn encode_response_packet(
+    target: &Address,
+    port: u16,
+    payload: &[u8],
+) -> Result<Vec<u8>, Error> {
+    VlessInboundUdpSession::new().encode_response_packet(target, port, payload)
+}
+
+#[cfg(feature = "reality")]
+pub fn encode_mux_response_packet(
+    mux_session_id: u16,
+    target: &Address,
+    port: u16,
+    payload: &[u8],
+) -> Result<Vec<u8>, Error> {
+    VlessInboundUdpSession::new().encode_mux_response_packet(mux_session_id, target, port, payload)
 }
 
 #[cfg(feature = "reality")]
 impl VlessInboundUdpResponder {
-    pub fn new(session: VlessInboundUdpSession) -> Self {
+    pub(crate) fn new(session: VlessInboundUdpSession) -> Self {
         Self {
             session,
             read_buf: vec![0_u8; 64 * 1024],
         }
     }
 
-    pub async fn read_inbound_dispatch_tokio<R>(
+    async fn read_inbound_dispatch_tokio<R>(
         &mut self,
         reader: &mut R,
     ) -> Result<Option<InboundUdpDispatch>, Error>
@@ -1246,7 +1441,7 @@ impl VlessInboundUdpResponder {
             .await
     }
 
-    pub async fn write_response_for_target_tokio<W>(
+    async fn write_response_for_target_tokio<W>(
         &self,
         writer: &mut W,
         target: &Address,
@@ -1263,6 +1458,7 @@ impl VlessInboundUdpResponder {
 }
 
 #[cfg(feature = "reality")]
+#[async_trait::async_trait]
 impl<S> StreamUdpResponder<S> for VlessInboundUdpResponder
 where
     S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Send + Unpin,
@@ -1288,7 +1484,7 @@ where
 
 #[cfg(feature = "reality")]
 impl VlessInboundMuxUdpResponder {
-    pub fn new(
+    pub(crate) fn new(
         session: VlessInboundUdpSession,
         writer: crate::mux::VlessInboundMuxWriter,
         mux_session_id: u16,
@@ -1300,11 +1496,14 @@ impl VlessInboundMuxUdpResponder {
         }
     }
 
-    pub fn decode_inbound_dispatch(&self, payload: &[u8]) -> Result<InboundUdpDispatch, Error> {
+    pub(crate) fn decode_inbound_dispatch(
+        &self,
+        payload: &[u8],
+    ) -> Result<InboundUdpDispatch, Error> {
         self.session.decode_mux_inbound_dispatch(payload)
     }
 
-    pub fn write_response_for_target(
+    pub(crate) fn write_response_for_target(
         &self,
         target: &Address,
         port: u16,
@@ -1319,7 +1518,7 @@ impl VlessInboundMuxUdpResponder {
         )
     }
 
-    pub fn end_inbound_stream(&self) -> Result<usize, Error> {
+    pub(crate) fn end_inbound_stream(&self) -> Result<usize, Error> {
         self.writer.end_inbound_stream(self.mux_session_id)
     }
 }
@@ -1395,26 +1594,13 @@ impl VlessUdpPacketV2Codec {
 }
 
 impl crate::inbound::VlessInbound {
-    pub fn udp_session(&self) -> VlessInboundUdpSession {
-        VlessInboundUdpSession::new()
+    #[cfg(feature = "reality")]
+    pub(crate) fn udp_responder(&self) -> VlessInboundUdpResponder {
+        VlessInboundUdpResponder::new(VlessInboundUdpSession::new())
     }
 
     #[cfg(feature = "reality")]
-    pub fn udp_responder(&self) -> VlessInboundUdpResponder {
-        VlessInboundUdpResponder::new(self.udp_session())
-    }
-
-    #[cfg(feature = "reality")]
-    pub fn mux_udp_responder(
-        &self,
-        writer: crate::mux::VlessInboundMuxWriter,
-        mux_session_id: u16,
-    ) -> VlessInboundMuxUdpResponder {
-        VlessInboundMuxUdpResponder::new(self.udp_session(), writer, mux_session_id)
-    }
-
-    #[cfg(feature = "reality")]
-    pub async fn accept_udp_session<S>(
+    pub(crate) async fn accept_udp_session<S>(
         &self,
         stream: &mut S,
     ) -> Result<VlessInboundUdpResponder, Error>

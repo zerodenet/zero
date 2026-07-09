@@ -21,61 +21,64 @@ use crate::adapters::TrojanAdapter;
 use crate::adapters::VlessAdapter;
 #[cfg(feature = "vmess")]
 use crate::adapters::VmessAdapter;
-use crate::protocol_registry::ProtocolRegistry;
+use crate::protocol_registry::{ProtocolRegistry, RegisteredProtocolCapability};
 use crate::runtime::udp_flow::managed::ManagedUdpHandlers;
 use crate::runtime::udp_flow::registered::{RegisteredUdpHandlers, UpstreamUdpHandlers};
 
-pub(crate) fn protocol_registry() -> ProtocolRegistry {
-    let mut registry = ProtocolRegistry::default();
+fn compiled_protocol_adapters() -> Vec<Arc<dyn RegisteredProtocolCapability>> {
+    let mut adapters: Vec<Arc<dyn RegisteredProtocolCapability>> = Vec::new();
 
     #[cfg(feature = "socks5")]
-    registry.register(Arc::new(Socks5Adapter));
+    adapters.push(Arc::new(Socks5Adapter));
     #[cfg(feature = "http_connect")]
-    registry.register(Arc::new(HttpConnectAdapter));
+    adapters.push(Arc::new(HttpConnectAdapter));
     #[cfg(feature = "vless")]
-    registry.register(Arc::new(VlessAdapter::default()));
+    adapters.push(Arc::new(VlessAdapter::default()));
     #[cfg(feature = "hysteria2")]
-    registry.register(Arc::new(Hysteria2Adapter));
+    adapters.push(Arc::new(Hysteria2Adapter));
     #[cfg(feature = "shadowsocks")]
-    registry.register(Arc::new(ShadowsocksAdapter));
+    adapters.push(Arc::new(ShadowsocksAdapter));
     #[cfg(feature = "trojan")]
-    registry.register(Arc::new(TrojanAdapter));
+    adapters.push(Arc::new(TrojanAdapter::default()));
     #[cfg(feature = "vmess")]
-    registry.register(Arc::new(VmessAdapter::default()));
+    adapters.push(Arc::new(VmessAdapter::default()));
     #[cfg(feature = "mieru")]
-    registry.register(Arc::new(MieruAdapter));
+    adapters.push(Arc::new(MieruAdapter));
     #[cfg(feature = "mixed")]
-    registry.register(Arc::new(MixedAdapter));
-    registry.register(Arc::new(DirectAdapter));
+    adapters.push(Arc::new(MixedAdapter));
+    adapters.push(Arc::new(DirectAdapter));
+
+    adapters
+}
+
+pub(crate) fn protocol_registry() -> ProtocolRegistry {
+    let mut registry = ProtocolRegistry::default();
+    for adapter in compiled_protocol_adapters() {
+        registry.register_capability(adapter);
+    }
 
     registry
 }
 
 pub(crate) fn registered_udp_handlers() -> RegisteredUdpHandlers {
+    let adapters = compiled_protocol_adapters();
+
     RegisteredUdpHandlers {
         managed: ManagedUdpHandlers {
-            datagram: vec![
-                #[cfg(feature = "shadowsocks")]
-                crate::adapters::shadowsocks_udp_datagram_handler(),
-                #[cfg(feature = "hysteria2")]
-                crate::adapters::hysteria2_udp_datagram_handler(),
-            ],
-            stream: vec![
-                #[cfg(feature = "trojan")]
-                crate::adapters::trojan_udp_stream_handler(),
-                #[cfg(feature = "vless")]
-                crate::adapters::vless_udp_stream_handler(),
-                #[cfg(feature = "vmess")]
-                crate::adapters::vmess_udp_stream_handler(),
-                #[cfg(feature = "mieru")]
-                crate::adapters::mieru_udp_stream_handler(),
-            ],
+            datagram: adapters
+                .iter()
+                .filter_map(|adapter| adapter.managed_datagram_udp_handler())
+                .collect(),
+            stream: adapters
+                .iter()
+                .filter_map(|adapter| adapter.managed_stream_udp_handler())
+                .collect(),
         },
         upstream: UpstreamUdpHandlers {
-            upstream: vec![
-                #[cfg(feature = "socks5")]
-                crate::adapters::socks5_upstream_association_handler(),
-            ],
+            upstream: adapters
+                .into_iter()
+                .filter_map(|adapter| adapter.upstream_association_handler())
+                .collect(),
         },
     }
 }

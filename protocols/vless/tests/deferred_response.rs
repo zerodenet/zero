@@ -1,7 +1,7 @@
 #![cfg(feature = "reality")]
 
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use vless::{DeferredVlessResponseStream, VLESS_VERSION};
+use vless::{deferred_response::DeferredVlessResponseStream, VLESS_VERSION};
 
 #[tokio::test]
 async fn deferred_vless_response_discards_header_before_payload() {

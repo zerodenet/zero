@@ -16,3 +16,4 @@ serde_json.workspace = true
 thiserror.workspace = true
 zero-api = { path = "../api" }
 zero-router = { path = "../router" }
+zero-traits = { path = "../traits" }
