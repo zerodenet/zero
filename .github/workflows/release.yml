@@ -10,7 +10,7 @@ permissions:
 jobs:
   guard:
     name: Verify tag is on main
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
         with:
@@ -30,7 +30,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
+          # Keep the Linux release artifact on an older glibc baseline so it
+          # remains usable on Debian 12 instead of tracking ubuntu-latest.
+          - os: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
             name: linux-x86_64
             ext: tar.gz
@@ -94,7 +96,7 @@ jobs:
 
   docs:
     name: Build Docs (non-blocking)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     continue-on-error: true
     steps:
       - uses: actions/checkout@v4
@@ -107,7 +109,7 @@ jobs:
 
   release:
     name: Create Release
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     needs: build
     steps:
       - uses: actions/checkout@v4
