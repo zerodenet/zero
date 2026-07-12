@@ -82,6 +82,10 @@ impl Socks5InboundUdpDispatchView {
         }
     }
 
+    pub fn protocol_overhead_bytes(&self) -> u64 {
+        self.protocol_overhead_len as u64
+    }
+
     pub fn record_protocol_overhead<F>(&self, session_id: u64, record: F)
     where
         F: FnOnce(u64, u64),

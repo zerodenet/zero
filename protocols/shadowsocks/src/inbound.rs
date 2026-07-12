@@ -6,14 +6,16 @@ use alloc::string::String;
 use alloc::sync::Arc;
 #[cfg(feature = "crypto")]
 use alloc::vec::Vec;
+#[cfg(feature = "crypto")]
+use core::future::Future;
 use zero_core::ProtocolType;
 #[cfg(feature = "crypto")]
 use zero_core::{Error, Network, Session, SessionAuth};
 
 #[cfg(feature = "crypto")]
 use crate::udp::{
-    ShadowsocksInboundAcceptedUdpSession, ShadowsocksInboundUdpCodec,
-    ShadowsocksInboundUdpResponder, ShadowsocksInboundUdpSession,
+    ShadowsocksInboundUdpCodec, ShadowsocksInboundUdpRelay, ShadowsocksInboundUdpResponder,
+    ShadowsocksInboundUdpSession,
 };
 
 /// Shadowsocks inbound handler.
@@ -132,6 +134,21 @@ impl ShadowsocksInboundTcpAcceptor {
 
         Ok((session, client))
     }
+
+    pub async fn accept_and_dispatch_stream<S, H, HFut, E>(
+        &self,
+        stream: S,
+        handoff: H,
+    ) -> Result<(), E>
+    where
+        S: zero_traits::AsyncSocket,
+        H: FnOnce(Session, super::stream::ShadowsocksAeadStream<S>) -> HFut,
+        HFut: Future<Output = Result<(), E>>,
+        E: From<Error>,
+    {
+        let (session, client) = self.accept_stream(stream).await.map_err(E::from)?;
+        handoff(session, client).await
+    }
 }
 
 #[cfg(feature = "crypto")]
@@ -192,8 +209,16 @@ impl ShadowsocksInboundProfile {
         self.udp_responder()
     }
 
-    pub fn accept_udp_session_with_auth(&self) -> ShadowsocksInboundAcceptedUdpSession {
-        ShadowsocksInboundAcceptedUdpSession::new(self.accept_udp_session(), self.inbound_auth())
+    pub fn accept_udp_relay(&self) -> ShadowsocksInboundUdpRelay {
+        ShadowsocksInboundUdpRelay::new(self.accept_udp_session(), self.inbound_auth())
+    }
+
+    pub fn into_listener_bindings(
+        self,
+    ) -> (ShadowsocksInboundTcpAcceptor, ShadowsocksInboundUdpRelay) {
+        let udp_relay = self.accept_udp_relay();
+        let tcp_acceptor = ShadowsocksInboundTcpAcceptor::new(self);
+        (tcp_acceptor, udp_relay)
     }
 
     pub async fn accept_request<S: zero_traits::AsyncSocket>(

@@ -3,7 +3,7 @@ use core::future::Future;
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 
-use zero_traits::AsyncSocket;
+use zero_traits::{AsyncSocket, SocketAddress};
 
 use crate::{Address, Error, ProtocolType, Session, SessionAuth};
 
@@ -17,6 +17,17 @@ pub struct UdpFlowPacket {
     pub target: Address,
     pub port: u16,
     pub payload: Vec<u8>,
+}
+
+/// Neutral outbound datagram built by a protocol-owned inbound UDP association.
+///
+/// Protocol crates use this to hand protocol-framed response payloads plus the
+/// destination client endpoint back to proxy/runtime glue. Runtime owns the
+/// socket lifecycle and actual datagram send.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InboundUdpAssociationResponse {
+    recipient: SocketAddress,
+    payload: Vec<u8>,
 }
 
 /// Neutral inbound UDP request ready for proxy dispatch.
@@ -150,6 +161,15 @@ pub trait InboundStreamUdpRelay: Send {
     fn into_stream_udp_parts(self) -> (Self::Stream, Self::Responder, Option<SessionAuth>);
 }
 
+pub trait InboundDatagramUdpRelay<S>: Send
+where
+    S: Send,
+{
+    type Responder: DatagramUdpResponder<S>;
+
+    fn into_datagram_udp_parts(self) -> (Self::Responder, Option<SessionAuth>);
+}
+
 #[async_trait::async_trait]
 pub trait InboundStreamRoute: Send {
     type TcpStream;
@@ -215,6 +235,58 @@ where
     ) -> Result<Option<usize>, Error>;
 }
 
+#[allow(async_fn_in_trait)]
+pub trait InboundUdpAssociationDispatcher {
+    type Error;
+
+    async fn dispatch_local_dns(&mut self, domain: &str) -> Result<(), Self::Error>;
+
+    async fn dispatch_inbound_packet(
+        &mut self,
+        dispatch: InboundUdpDispatch,
+        protocol_overhead_bytes: u64,
+    ) -> Result<(), Self::Error>;
+
+    async fn dispatch_peer_response(
+        &mut self,
+        sender: SocketAddress,
+        payload: &[u8],
+    ) -> Result<(), Self::Error>;
+
+    async fn dispatch_unexpected_sender(
+        &mut self,
+        sender: SocketAddress,
+    ) -> Result<(), Self::Error>;
+}
+
+#[allow(async_fn_in_trait)]
+pub trait InboundUdpAssociation: Send {
+    async fn dispatch_datagram<D>(
+        &mut self,
+        sender: SocketAddress,
+        packet: &[u8],
+        dispatcher: &mut D,
+    ) -> Result<(), D::Error>
+    where
+        D: InboundUdpAssociationDispatcher,
+        D::Error: From<Error>;
+}
+
+pub trait InboundUdpAssociationResponder: Send {
+    fn build_response_for_target(
+        &self,
+        target: &Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<Option<InboundUdpAssociationResponse>, Error>;
+
+    fn build_peer_response(
+        &self,
+        sender: SocketAddress,
+        payload: &[u8],
+    ) -> Result<Option<InboundUdpAssociationResponse>, Error>;
+}
+
 impl InboundUdpDispatch {
     pub fn new(
         protocol: ProtocolType,
@@ -260,6 +332,24 @@ impl InboundUdpDispatch {
             self.payload,
             self.client_session_id,
         )
+    }
+}
+
+impl InboundUdpAssociationResponse {
+    pub fn new(recipient: SocketAddress, payload: Vec<u8>) -> Self {
+        Self { recipient, payload }
+    }
+
+    pub fn recipient(&self) -> SocketAddress {
+        self.recipient
+    }
+
+    pub fn payload(&self) -> &[u8] {
+        &self.payload
+    }
+
+    pub fn into_parts(self) -> (SocketAddress, Vec<u8>) {
+        (self.recipient, self.payload)
     }
 }
 

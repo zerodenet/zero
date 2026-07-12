@@ -1,4 +1,3 @@
-use socks5::Socks5InboundTcpAcceptor;
 use tokio::sync::watch;
 use zero_engine::EngineError;
 use zero_traits::AsyncSocket;
@@ -13,7 +12,7 @@ use crate::transport::{MeteredStream, PrefixedSocket, TcpRelayStream};
 
 pub(crate) struct MixedInboundRequest {
     pub(crate) inbound_tag: String,
-    pub(crate) socks5_acceptor: Socks5InboundTcpAcceptor,
+    pub(crate) socks5_acceptor: zero_transport::socks5_transport::OwnedSocks5InboundAcceptor,
 }
 
 pub(crate) async fn run_mixed_listener_with_bound(
@@ -37,10 +36,16 @@ pub(crate) async fn run_mixed_listener_with_bound(
         shutdown,
         handler: move |engine, tag, stream, source_addr| {
             let socks5_acceptor = socks5_acceptor.clone();
-            let http_h = http_handler.clone();
             async move {
-                handle_mixed_connection(engine, tag, stream, source_addr, socks5_acceptor, http_h)
-                    .await;
+                handle_mixed_connection(
+                    engine,
+                    tag,
+                    stream,
+                    source_addr,
+                    socks5_acceptor,
+                    http_handler,
+                )
+                .await;
             }
         },
     })
@@ -52,7 +57,7 @@ async fn handle_mixed_connection(
     tag: String,
     mut stream: zero_platform_tokio::TokioSocket,
     source_addr: Option<std::net::SocketAddr>,
-    socks5_acceptor: Socks5InboundTcpAcceptor,
+    socks5_acceptor: zero_transport::socks5_transport::OwnedSocks5InboundAcceptor,
     http_h: HttpConnectInboundHandler,
 ) {
     // Detect protocol from first byte.

@@ -1,4 +1,3 @@
-mod request;
 mod transport;
 
 use zero_config::InboundConfig;
@@ -8,7 +7,6 @@ use crate::adapters::hysteria2::Hysteria2Adapter;
 use crate::protocol_registry::BoundInbound;
 use crate::runtime::Proxy;
 
-pub(crate) use request::Hysteria2InboundListenerRequest;
 pub(crate) use transport::run_hysteria2_listener_with_bound;
 
 impl Hysteria2Adapter {
@@ -22,8 +20,9 @@ impl Hysteria2Adapter {
     ) {
         let proxy = proxy.clone();
         listeners.spawn(async move {
-            let request = Hysteria2InboundListenerRequest::from_protocol_config(&inbound.protocol)?;
-            run_hysteria2_listener_with_bound(&proxy, inbound, request, bound, shutdown_rx).await
+            let profile =
+                zero_transport::hysteria2_quic::inbound_profile_from_protocol(&inbound.protocol)?;
+            run_hysteria2_listener_with_bound(&proxy, inbound, profile, bound, shutdown_rx).await
         });
     }
 }

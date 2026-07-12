@@ -9,8 +9,6 @@ use zero_engine::EngineError;
 use zero_platform_tokio::TokioSocket;
 
 use crate::ClientStream;
-#[cfg(feature = "quic")]
-use crate::{MeteredStream, RecordingStream};
 
 pub struct InboundFallback<R> {
     pub config: FallbackConfig,
@@ -23,6 +21,29 @@ pub type ReplayToUpstreamFuture<'a, S> =
 pub enum RouteAcceptResult<R, F> {
     Route(R),
     Fallback(InboundFallback<F>),
+}
+
+#[derive(Clone, Copy)]
+pub struct RecordedMuxRouteDefaults {
+    pub udp_protocol: &'static str,
+    pub mux_protocol: &'static str,
+    pub panic_message: &'static str,
+    pub abort_on_end: bool,
+    pub udp_accept_log_message: Option<&'static str>,
+}
+
+#[derive(Clone, Copy)]
+pub struct NoClientMuxRouteDefaults {
+    pub udp_protocol: &'static str,
+    pub mux_protocol: &'static str,
+    pub panic_message: &'static str,
+    pub abort_on_end: bool,
+    pub read_error_log: &'static str,
+}
+
+#[derive(Clone, Copy)]
+pub struct NoClientStreamRouteDefaults {
+    pub udp_protocol: &'static str,
 }
 
 trait ReplayToUpstreamFn<S>: Send {
@@ -155,33 +176,6 @@ where
     }
 }
 
-#[async_trait::async_trait]
-pub trait StreamRouteRequest: Send {
-    type Route: Send + 'static;
-
-    async fn accept_route(self, socket: TokioSocket) -> Result<Self::Route, EngineError>;
-}
-
-#[async_trait::async_trait]
-pub trait MuxRouteRequest: Send {
-    type Route: Send + 'static;
-
-    async fn accept_route(self, socket: TokioSocket) -> Result<Self::Route, EngineError>;
-}
-
-pub trait ProtocolInboundRequestMetadata {
-    const ERROR_PROTOCOL_NAME: &'static str;
-
-    fn protocol_name(&self) -> &'static str;
-}
-
-pub trait ProtocolInboundRequestFactory: Sized {
-    fn from_protocol_config(
-        protocol: &InboundProtocolConfig,
-        source_dir: Option<&Path>,
-    ) -> Result<Self, EngineError>;
-}
-
 pub enum TransportInboundBindTarget {
     Tcp,
     #[cfg(feature = "quic")]
@@ -196,63 +190,4 @@ pub trait ProtocolInboundBindPlan: Sized {
     ) -> Result<Self, EngineError>;
 
     async fn bind(&self, listen_addr: &str) -> Result<TransportInboundBindTarget, EngineError>;
-}
-
-pub trait ProtocolStreamRouteDispatchMetadata: ProtocolInboundRequestMetadata {
-    const UDP_PROTOCOL: &'static str;
-}
-
-pub trait ProtocolMuxRouteDispatchMetadata: ProtocolInboundRequestMetadata {
-    const UDP_PROTOCOL: &'static str;
-    const MUX_PROTOCOL: &'static str;
-    const PANIC_MESSAGE: &'static str;
-    const ABORT_ON_END: bool;
-    const READ_ERROR_LOG: &'static str;
-}
-
-pub trait RecordedProtocolMuxRouteDispatchMetadata: ProtocolInboundRequestMetadata {
-    type ResponseProtocol: Clone + Send + Sync + 'static;
-
-    const UDP_PROTOCOL: &'static str;
-    const MUX_PROTOCOL: &'static str;
-    const PANIC_MESSAGE: &'static str;
-    const ABORT_ON_END: bool;
-
-    fn response_protocol(&self) -> Self::ResponseProtocol;
-}
-
-#[cfg(feature = "quic")]
-#[async_trait::async_trait]
-pub trait RecordedBoundMuxRouteRequest:
-    Clone
-    + Send
-    + Sync
-    + 'static
-    + ProtocolInboundRequestFactory
-    + RecordedProtocolMuxRouteDispatchMetadata
-{
-    type TcpStream: ClientStream + 'static;
-    type TcpRoute: InboundMuxStreamRoute<
-            TcpStream = MeteredStream<RecordingStream<Self::TcpStream>>,
-            MuxReader = MeteredStream<RecordingStream<Self::TcpStream>>,
-        > + Send
-        + 'static;
-    type TcpFallback: FallbackReplayToUpstream + 'static;
-    type QuicStream: ClientStream + 'static;
-    type QuicRoute: InboundMuxStreamRoute<
-            TcpStream = MeteredStream<RecordingStream<Self::QuicStream>>,
-            MuxReader = MeteredStream<RecordingStream<Self::QuicStream>>,
-        > + Send
-        + 'static;
-    type QuicFallback: FallbackReplayToUpstream + 'static;
-
-    async fn accept_tcp_bound_route(
-        self,
-        socket: TokioSocket,
-    ) -> Result<Option<RouteAcceptResult<Self::TcpRoute, Self::TcpFallback>>, EngineError>;
-
-    async fn accept_quic_bound_route(
-        self,
-        stream: crate::quic::QuicStream,
-    ) -> Result<RouteAcceptResult<Self::QuicRoute, Self::QuicFallback>, EngineError>;
 }

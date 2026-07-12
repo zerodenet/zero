@@ -8,6 +8,8 @@ mod runtime;
 mod support;
 mod validation;
 
+pub(crate) use outbound::{direct_leaf_runtime, proxy_leaf_runtime};
+
 /// Registry of all compiled-in protocol adapters.
 ///
 /// Constructed at proxy startup via `build()`. Replaces the manual

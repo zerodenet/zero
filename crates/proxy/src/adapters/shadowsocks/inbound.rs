@@ -1,4 +1,3 @@
-mod request;
 mod transport;
 
 use zero_config::InboundConfig;
@@ -8,7 +7,6 @@ use crate::adapters::shadowsocks::ShadowsocksAdapter;
 use crate::protocol_registry::BoundInbound;
 use crate::runtime::Proxy;
 
-pub(crate) use request::ShadowsocksInboundListenerRequest;
 pub(crate) use transport::run_shadowsocks_listener_with_bound;
 
 impl ShadowsocksAdapter {
@@ -22,12 +20,13 @@ impl ShadowsocksAdapter {
     ) {
         let proxy = proxy.clone();
         listeners.spawn(async move {
-            let request =
-                ShadowsocksInboundListenerRequest::from_protocol_config(&inbound.protocol)?;
+            let profile = zero_transport::shadowsocks_transport::inbound_profile_from_protocol(
+                &inbound.protocol,
+            )?;
             run_shadowsocks_listener_with_bound(
                 &proxy,
                 inbound,
-                request,
+                profile,
                 bound.into_tcp(),
                 shutdown_rx,
             )

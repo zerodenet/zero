@@ -1,7 +1,9 @@
 use zero_core::Session;
 use zero_engine::ResolvedLeafOutbound;
+use zero_transport::mieru_transport::MieruTransportLeaf;
 
 use crate::adapters::mieru::MieruAdapter;
+use crate::protocol_registry::unreachable_udp_leaf;
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
 use crate::runtime::udp_flow::managed::ManagedStreamFlowHandler;
 use crate::runtime::Proxy;
@@ -22,7 +24,10 @@ impl MieruAdapter {
         leaf: &ResolvedLeafOutbound<'_>,
         payload: &[u8],
     ) -> Result<FlowStartResult, FlowFailure> {
-        flow::start(self, dispatch, proxy, session, leaf, payload).await
+        let Some(leaf) = MieruTransportLeaf::from_resolved_leaf(leaf) else {
+            return Err(unreachable_udp_leaf("mieru", leaf));
+        };
+        flow::start(dispatch, proxy, session, payload, leaf.udp_flow_plan(false)).await
     }
 
     pub(super) async fn start_udp_relay_final_hop_impl(
@@ -33,6 +38,16 @@ impl MieruAdapter {
         leaf: &ResolvedLeafOutbound<'_>,
         payload: &[u8],
     ) -> Result<FlowStartResult, FlowFailure> {
-        flow::start_relay_final_hop(self, dispatch, session, carrier, leaf, payload).await
+        let Some(leaf) = MieruTransportLeaf::from_resolved_leaf(leaf) else {
+            return Err(unreachable_udp_leaf("mieru", leaf));
+        };
+        flow::start_relay_final_hop(
+            dispatch,
+            session,
+            carrier,
+            payload,
+            leaf.udp_flow_plan(true),
+        )
+        .await
     }
 }

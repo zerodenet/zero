@@ -2,7 +2,6 @@ use async_trait::async_trait;
 use http_connect::HttpConnectInbound;
 use tokio::io::AsyncWriteExt;
 use tokio::sync::watch;
-use zero_core::Session;
 use zero_engine::EngineError;
 
 use crate::logging::log_listener_connection_error;
@@ -34,17 +33,6 @@ impl HttpConnectInboundHandler {
 #[async_trait]
 impl InboundProtocol for HttpConnectInboundHandler {
     type ClientStream = TcpRelayStream;
-
-    async fn accept(
-        &self,
-        stream: TcpRelayStream,
-    ) -> Result<(Session, Self::ClientStream), EngineError> {
-        let mut metered = MeteredStream::new(stream);
-        match self.http_connect_inbound.accept_request(&mut metered).await {
-            Ok(session) => Ok((session, metered.into_inner())),
-            Err(error) => Err(error.into()),
-        }
-    }
 
     async fn send_ok(&self, client: &mut TcpRelayStream) -> Result<(), EngineError> {
         self.http_connect_inbound

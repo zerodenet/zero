@@ -31,6 +31,12 @@ pub struct VlessInboundListenerRequest {
 }
 
 impl VlessInboundListenerRequest {
+    pub const ERROR_PROTOCOL_NAME: &'static str = "vless";
+    pub const UDP_PROTOCOL: &'static str = "vless_udp";
+    pub const MUX_PROTOCOL: &'static str = "vless_mux";
+    pub const PANIC_MESSAGE: &'static str = "vless mux task panicked";
+    pub const ABORT_ON_END: bool = true;
+
     fn new(
         profile: vless::inbound::VlessInboundProfile,
         transport: OwnedVlessInboundTransportPlan,
@@ -43,7 +49,7 @@ impl VlessInboundListenerRequest {
         }
     }
 
-    fn from_protocol_config(
+    pub fn from_protocol_config(
         protocol: &InboundProtocolConfig,
         source_dir: Option<&Path>,
     ) -> Result<Self, EngineError> {
@@ -92,6 +98,28 @@ impl VlessInboundListenerRequest {
         )?;
 
         Ok(Self::new(profile, transport, fallback.as_deref().cloned()))
+    }
+
+    pub fn protocol_name(&self) -> &'static str {
+        "vless"
+    }
+
+    pub fn error_protocol_name(&self) -> &'static str {
+        Self::ERROR_PROTOCOL_NAME
+    }
+
+    pub fn recorded_mux_route_defaults(&self) -> crate::inbound_route::RecordedMuxRouteDefaults {
+        crate::inbound_route::RecordedMuxRouteDefaults {
+            udp_protocol: Self::UDP_PROTOCOL,
+            mux_protocol: Self::MUX_PROTOCOL,
+            panic_message: Self::PANIC_MESSAGE,
+            abort_on_end: Self::ABORT_ON_END,
+            udp_accept_log_message: Some("MUX stream accepted"),
+        }
+    }
+
+    pub fn response_protocol(&self) -> vless::inbound::VlessInbound {
+        vless::inbound::VlessInbound
     }
 
     async fn accept_tcp_route<S, FWrap>(
@@ -145,7 +173,7 @@ impl VlessInboundListenerRequest {
         accept_vless_stream_route(profile, fallback, stream, sni, wrap_stream).await
     }
 
-    async fn accept_recorded_tcp_route(
+    pub async fn accept_recorded_tcp_route(
         self,
         socket: TokioSocket,
     ) -> Result<
@@ -164,7 +192,7 @@ impl VlessInboundListenerRequest {
         self.accept_tcp_route(socket, record_client_stream).await
     }
 
-    async fn accept_recorded_stream_route<T>(
+    pub async fn accept_recorded_stream_route<T>(
         self,
         stream: T,
     ) -> Result<
@@ -183,71 +211,6 @@ impl VlessInboundListenerRequest {
     {
         self.accept_stream_route(stream, None, record_client_stream)
             .await
-    }
-}
-
-impl crate::inbound_route::ProtocolInboundRequestFactory for VlessInboundListenerRequest {
-    fn from_protocol_config(
-        protocol: &InboundProtocolConfig,
-        source_dir: Option<&Path>,
-    ) -> Result<Self, EngineError> {
-        VlessInboundListenerRequest::from_protocol_config(protocol, source_dir)
-    }
-}
-
-impl crate::inbound_route::ProtocolInboundRequestMetadata for VlessInboundListenerRequest {
-    const ERROR_PROTOCOL_NAME: &'static str = "vless";
-
-    fn protocol_name(&self) -> &'static str {
-        "vless"
-    }
-}
-
-impl crate::inbound_route::RecordedProtocolMuxRouteDispatchMetadata
-    for VlessInboundListenerRequest
-{
-    type ResponseProtocol = vless::inbound::VlessInbound;
-
-    const UDP_PROTOCOL: &'static str = "vless_udp";
-    const MUX_PROTOCOL: &'static str = "vless_mux";
-    const PANIC_MESSAGE: &'static str = "vless mux task panicked";
-    const ABORT_ON_END: bool = true;
-
-    fn response_protocol(&self) -> Self::ResponseProtocol {
-        vless::inbound::VlessInbound
-    }
-}
-
-#[cfg(feature = "quic")]
-#[async_trait::async_trait]
-impl crate::inbound_route::RecordedBoundMuxRouteRequest for VlessInboundListenerRequest {
-    type TcpStream = TcpRelayStream;
-    type TcpRoute = OpaqueMuxRoute<
-        vless::inbound::VlessAcceptedClientRoute<
-            crate::MeteredStream<crate::RecordingStream<TcpRelayStream>>,
-        >,
-    >;
-    type TcpFallback = OpaqueFallbackReplay<TcpRelayStream>;
-    type QuicStream = crate::quic::QuicStream;
-    type QuicRoute = OpaqueMuxRoute<
-        vless::inbound::VlessAcceptedClientRoute<
-            crate::MeteredStream<crate::RecordingStream<crate::quic::QuicStream>>,
-        >,
-    >;
-    type QuicFallback = OpaqueFallbackReplay<crate::quic::QuicStream>;
-
-    async fn accept_tcp_bound_route(
-        self,
-        socket: TokioSocket,
-    ) -> Result<Option<RouteAcceptResult<Self::TcpRoute, Self::TcpFallback>>, EngineError> {
-        self.accept_recorded_tcp_route(socket).await
-    }
-
-    async fn accept_quic_bound_route(
-        self,
-        stream: crate::quic::QuicStream,
-    ) -> Result<RouteAcceptResult<Self::QuicRoute, Self::QuicFallback>, EngineError> {
-        self.accept_recorded_stream_route(stream).await
     }
 }
 

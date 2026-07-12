@@ -94,16 +94,21 @@ pub(crate) async fn run_protocol_mux_udp_task<R>(
     run_protocol_mux_udp_relay(&proxy, relay, &inbound_tag, protocol).await;
 }
 
-pub(crate) async fn run_logged_protocol_mux_udp_relay<R, FLog>(
+pub(crate) async fn run_protocol_mux_udp_task_with_accept_log<R>(
     proxy: Proxy,
     relay: R,
     inbound_tag: String,
     protocol: &'static str,
-    log_opened: FLog,
+    accept_log_message: Option<&'static str>,
 ) where
     R: InboundMuxUdpRelay,
-    FLog: Fn(&str, &R),
 {
-    log_opened(&inbound_tag, &relay);
+    if let Some(message) = accept_log_message {
+        info!(
+            inbound_tag = %inbound_tag,
+            network = "udp",
+            "{message}"
+        );
+    }
     run_protocol_mux_udp_relay(&proxy, relay, &inbound_tag, protocol).await;
 }

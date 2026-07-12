@@ -3,36 +3,37 @@ use alloc::vec::Vec;
 #[cfg(feature = "crypto")]
 use zero_core::Address;
 #[cfg(feature = "crypto")]
-use zero_core::{DatagramUdpResponder, Error, InboundUdpDispatch, ProtocolType, SessionAuth};
+use zero_core::{
+    DatagramUdpResponder, Error, InboundDatagramUdpRelay, InboundUdpDispatch, ProtocolType,
+    SessionAuth,
+};
 #[cfg(feature = "crypto")]
 use zero_traits::{DatagramCodec, UdpDatagramFraming};
 
 #[cfg(feature = "crypto")]
-pub struct ShadowsocksInboundAcceptedUdpSession {
+pub struct ShadowsocksInboundUdpRelay {
     responder: ShadowsocksInboundUdpResponder,
     auth: SessionAuth,
 }
 
 #[cfg(feature = "crypto")]
-impl ShadowsocksInboundAcceptedUdpSession {
+impl ShadowsocksInboundUdpRelay {
     pub fn new(responder: ShadowsocksInboundUdpResponder, auth: SessionAuth) -> Self {
         Self { responder, auth }
     }
 
-    pub fn responder(&self) -> &ShadowsocksInboundUdpResponder {
-        &self.responder
-    }
-
-    pub fn auth(&self) -> &SessionAuth {
-        &self.auth
-    }
-
-    pub fn into_parts(self) -> (ShadowsocksInboundUdpResponder, SessionAuth) {
+    fn into_parts(self) -> (ShadowsocksInboundUdpResponder, SessionAuth) {
         (self.responder, self.auth)
     }
+}
 
-    pub fn into_datagram_relay_parts(self) -> (ShadowsocksInboundUdpResponder, SessionAuth) {
-        (self.responder, self.auth)
+#[cfg(feature = "crypto")]
+impl InboundDatagramUdpRelay<std::sync::Arc<tokio::net::UdpSocket>> for ShadowsocksInboundUdpRelay {
+    type Responder = ShadowsocksInboundUdpResponder;
+
+    fn into_datagram_udp_parts(self) -> (Self::Responder, Option<SessionAuth>) {
+        let (responder, auth) = self.into_parts();
+        (responder, Some(auth))
     }
 }
 

@@ -25,30 +25,35 @@ use crate::protocol_registry::{ProtocolRegistry, RegisteredProtocolCapability};
 use crate::runtime::udp_flow::managed::ManagedUdpHandlers;
 use crate::runtime::udp_flow::registered::{RegisteredUdpHandlers, UpstreamUdpHandlers};
 
+fn capability<T>(adapter: T) -> Arc<dyn RegisteredProtocolCapability>
+where
+    T: RegisteredProtocolCapability + 'static,
+{
+    Arc::new(adapter)
+}
+
 fn compiled_protocol_adapters() -> Vec<Arc<dyn RegisteredProtocolCapability>> {
-    let mut adapters: Vec<Arc<dyn RegisteredProtocolCapability>> = Vec::new();
-
-    #[cfg(feature = "socks5")]
-    adapters.push(Arc::new(Socks5Adapter));
-    #[cfg(feature = "http_connect")]
-    adapters.push(Arc::new(HttpConnectAdapter));
-    #[cfg(feature = "vless")]
-    adapters.push(Arc::new(VlessAdapter::default()));
-    #[cfg(feature = "hysteria2")]
-    adapters.push(Arc::new(Hysteria2Adapter));
-    #[cfg(feature = "shadowsocks")]
-    adapters.push(Arc::new(ShadowsocksAdapter));
-    #[cfg(feature = "trojan")]
-    adapters.push(Arc::new(TrojanAdapter::default()));
-    #[cfg(feature = "vmess")]
-    adapters.push(Arc::new(VmessAdapter::default()));
-    #[cfg(feature = "mieru")]
-    adapters.push(Arc::new(MieruAdapter));
-    #[cfg(feature = "mixed")]
-    adapters.push(Arc::new(MixedAdapter));
-    adapters.push(Arc::new(DirectAdapter));
-
-    adapters
+    vec![
+        #[cfg(feature = "socks5")]
+        capability(Socks5Adapter),
+        #[cfg(feature = "http_connect")]
+        capability(HttpConnectAdapter),
+        #[cfg(feature = "vless")]
+        capability(VlessAdapter::default()),
+        #[cfg(feature = "hysteria2")]
+        capability(Hysteria2Adapter),
+        #[cfg(feature = "shadowsocks")]
+        capability(ShadowsocksAdapter),
+        #[cfg(feature = "trojan")]
+        capability(TrojanAdapter::default()),
+        #[cfg(feature = "vmess")]
+        capability(VmessAdapter::default()),
+        #[cfg(feature = "mieru")]
+        capability(MieruAdapter),
+        #[cfg(feature = "mixed")]
+        capability(MixedAdapter),
+        capability(DirectAdapter),
+    ]
 }
 
 pub(crate) fn protocol_registry() -> ProtocolRegistry {

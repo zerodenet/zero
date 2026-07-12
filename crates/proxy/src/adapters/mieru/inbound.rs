@@ -1,4 +1,3 @@
-mod request;
 mod transport;
 
 use zero_config::InboundConfig;
@@ -8,7 +7,6 @@ use crate::adapters::mieru::MieruAdapter;
 use crate::protocol_registry::BoundInbound;
 use crate::runtime::Proxy;
 
-pub(crate) use request::MieruInboundListenerRequest;
 pub(crate) use transport::run_mieru_listener_with_bound;
 
 impl MieruAdapter {
@@ -22,8 +20,9 @@ impl MieruAdapter {
     ) {
         let proxy = proxy.clone();
         listeners.spawn(async move {
-            let request = MieruInboundListenerRequest::from_protocol_config(&inbound.protocol)?;
-            run_mieru_listener_with_bound(&proxy, inbound, request, bound.into_tcp(), shutdown_rx)
+            let profile =
+                zero_transport::mieru_transport::inbound_profile_from_protocol(&inbound.protocol)?;
+            run_mieru_listener_with_bound(&proxy, inbound, profile, bound.into_tcp(), shutdown_rx)
                 .await
         });
     }

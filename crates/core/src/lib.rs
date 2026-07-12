@@ -16,8 +16,9 @@ pub use inbound::{InboundClientResponse, InboundFallbackCapture};
 
 pub use session::{Network, ProtocolType, Session, SessionAuth};
 pub use udp::{
-    DatagramUdpResponder, InboundMuxServer, InboundMuxStreamRoute, InboundMuxTcpRelay,
-    InboundMuxUdpReadFailure, InboundMuxUdpReadFailureAction, InboundMuxUdpRelay,
-    InboundStreamRoute, InboundStreamUdpRelay, InboundUdpDispatch, MuxUdpDecodeFailure,
-    MuxUdpResponder, StreamUdpResponder, UdpFlowPacket,
+    DatagramUdpResponder, InboundDatagramUdpRelay, InboundMuxServer, InboundMuxStreamRoute,
+    InboundMuxTcpRelay, InboundMuxUdpReadFailure, InboundMuxUdpReadFailureAction,
+    InboundMuxUdpRelay, InboundStreamRoute, InboundStreamUdpRelay, InboundUdpAssociation,
+    InboundUdpAssociationDispatcher, InboundUdpAssociationResponder, InboundUdpAssociationResponse,
+    InboundUdpDispatch, MuxUdpDecodeFailure, MuxUdpResponder, StreamUdpResponder, UdpFlowPacket,
 };

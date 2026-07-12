@@ -5,7 +5,7 @@ use alloc::vec::Vec;
 use core::future::Future;
 #[cfg(all(feature = "tokio", feature = "crypto"))]
 use tokio::task::JoinSet;
-use zero_core::{Error, Network, ProtocolType, Session, SessionAuth};
+use zero_core::{Error, InboundClientResponse, Network, ProtocolType, Session, SessionAuth};
 use zero_traits::AsyncSocket;
 
 /// Hysteria2 inbound handler — validates client auth and dispatches streams.
@@ -44,30 +44,6 @@ pub struct Hysteria2AcceptedQuicConnection {
 }
 
 #[cfg(all(feature = "tokio", feature = "crypto"))]
-pub trait Hysteria2AcceptedQuicDispatcher<S> {
-    type Error;
-
-    async fn dispatch_udp_session(
-        &mut self,
-        conn: std::sync::Arc<quinn::Connection>,
-        responder: crate::udp::Hysteria2InboundUdpResponder,
-        tasks: &mut JoinSet<Result<(), Self::Error>>,
-    ) -> Result<(), Self::Error>;
-
-    async fn dispatch_tcp_stream(
-        &mut self,
-        session: Session,
-        stream: S,
-        tasks: &mut JoinSet<Result<(), Self::Error>>,
-    ) -> Result<(), Self::Error>;
-
-    async fn dispatch_stream_task_result(
-        &mut self,
-        result: Result<Result<(), Self::Error>, tokio::task::JoinError>,
-    ) -> Result<(), Self::Error>;
-}
-
-#[cfg(all(feature = "tokio", feature = "crypto"))]
 impl Hysteria2AcceptedQuicConnection {
     pub fn new(conn: quinn::Connection) -> Self {
         Self {
@@ -80,7 +56,7 @@ impl Hysteria2AcceptedQuicConnection {
         self.conn.clone()
     }
 
-    pub fn accept_udp_session(&self) -> crate::udp::Hysteria2InboundUdpResponder {
+    pub fn accept_udp_session(&self) -> crate::udp::Hysteria2InboundUdpRelay {
         Hysteria2Inbound.accept_udp_session()
     }
 
@@ -100,50 +76,6 @@ impl Hysteria2AcceptedQuicConnection {
         let mut stream = stream_factory(send, recv);
         let session = self.tcp_acceptor.accept_stream(&mut stream).await?;
         Ok(Some((session, stream)))
-    }
-
-    pub async fn dispatch_session<S, F, D>(
-        &self,
-        stream_factory: F,
-        dispatcher: &mut D,
-    ) -> Result<(), D::Error>
-    where
-        S: AsyncSocket + Send + 'static,
-        F: Fn(quinn::SendStream, quinn::RecvStream) -> S + Copy,
-        D: Hysteria2AcceptedQuicDispatcher<S>,
-        D::Error: From<Error> + Send + 'static,
-    {
-        let mut stream_tasks = JoinSet::new();
-        dispatcher
-            .dispatch_udp_session(
-                self.connection(),
-                self.accept_udp_session(),
-                &mut stream_tasks,
-            )
-            .await?;
-
-        loop {
-            tokio::select! {
-                accepted_stream = self.accept_next_tcp_stream(stream_factory) => {
-                    match accepted_stream? {
-                        Some((session, stream)) => {
-                            dispatcher
-                                .dispatch_tcp_stream(session, stream, &mut stream_tasks)
-                                .await?;
-                        }
-                        None => break,
-                    }
-                }
-                result = stream_tasks.join_next(), if !stream_tasks.is_empty() => {
-                    if let Some(result) = result {
-                        dispatcher.dispatch_stream_task_result(result).await?;
-                    }
-                }
-            }
-        }
-
-        stream_tasks.abort_all();
-        Ok(())
     }
 
     pub async fn dispatch_session_with_handlers<
@@ -168,7 +100,7 @@ impl Hysteria2AcceptedQuicConnection {
         F: Fn(quinn::SendStream, quinn::RecvStream) -> S + Copy,
         Udp: FnMut(
             std::sync::Arc<quinn::Connection>,
-            crate::udp::Hysteria2InboundUdpResponder,
+            crate::udp::Hysteria2InboundUdpRelay,
             &mut JoinSet<Result<(), E>>,
         ) -> UdpFut,
         UdpFut: Future<Output = Result<(), E>>,
@@ -235,6 +167,25 @@ impl Hysteria2InboundTcpAcceptor {
         S: AsyncSocket,
     {
         self.inbound.send_connect_error(stream, message).await
+    }
+}
+
+impl<S> InboundClientResponse<S> for Hysteria2InboundTcpAcceptor
+where
+    S: AsyncSocket,
+{
+    async fn send_ok(&self, client: &mut S) -> Result<(), Error> {
+        Hysteria2InboundTcpAcceptor::send_ok(self, client).await
+    }
+
+    async fn send_blocked(&self, client: &mut S) -> Result<(), Error> {
+        let _ = Hysteria2InboundTcpAcceptor::send_error(self, client, "blocked").await;
+        Ok(())
+    }
+
+    async fn send_upstream_failure(&self, client: &mut S) -> Result<(), Error> {
+        let _ = Hysteria2InboundTcpAcceptor::send_error(self, client, "outbound failed").await;
+        Ok(())
     }
 }
 
@@ -346,6 +297,52 @@ impl Hysteria2InboundProfile {
             .await?;
         Ok(Hysteria2AcceptedQuicConnection::new(conn))
     }
+
+    #[cfg(all(feature = "tokio", feature = "crypto"))]
+    pub async fn accept_and_dispatch_authenticated_quic_session<
+        S,
+        F,
+        Udp,
+        UdpFut,
+        Tcp,
+        TcpFut,
+        TaskResult,
+        TaskResultFut,
+        E,
+    >(
+        &self,
+        conn: quinn::Connection,
+        stream_factory: F,
+        on_udp_session: Udp,
+        on_tcp_stream: Tcp,
+        on_stream_task_result: TaskResult,
+    ) -> Result<(), E>
+    where
+        S: AsyncSocket + Send + 'static,
+        F: Fn(quinn::SendStream, quinn::RecvStream) -> S + Copy,
+        Udp: FnMut(
+            std::sync::Arc<quinn::Connection>,
+            crate::udp::Hysteria2InboundUdpRelay,
+            &mut JoinSet<Result<(), E>>,
+        ) -> UdpFut,
+        UdpFut: Future<Output = Result<(), E>>,
+        Tcp: FnMut(Session, S, &mut JoinSet<Result<(), E>>) -> TcpFut,
+        TcpFut: Future<Output = Result<(), E>>,
+        TaskResult: FnMut(Result<Result<(), E>, tokio::task::JoinError>) -> TaskResultFut,
+        TaskResultFut: Future<Output = Result<(), E>>,
+        E: From<Error> + Send + 'static,
+    {
+        self.accept_authenticated_quic_session(conn, stream_factory)
+            .await
+            .map_err(E::from)?
+            .dispatch_session_with_handlers(
+                stream_factory,
+                on_udp_session,
+                on_tcp_stream,
+                on_stream_task_result,
+            )
+            .await
+    }
 }
 
 #[cfg(feature = "crypto")]
@@ -374,8 +371,8 @@ impl Hysteria2Inbound {
     }
 
     #[cfg(feature = "tokio")]
-    pub fn accept_udp_session(&self) -> crate::udp::Hysteria2InboundUdpResponder {
-        self.udp_responder()
+    pub fn accept_udp_session(&self) -> crate::udp::Hysteria2InboundUdpRelay {
+        crate::udp::Hysteria2InboundUdpRelay::new(self.udp_responder())
     }
 
     pub fn accept_tcp_connect_header(&self, header: &[u8]) -> Result<Session, Error> {

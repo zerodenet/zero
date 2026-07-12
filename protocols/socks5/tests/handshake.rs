@@ -9,7 +9,10 @@ use socks5::udp::{
 use socks5::{
     Socks5Inbound, Socks5Outbound, Socks5OutboundAuth, Socks5PasswordAuth, Socks5Request,
 };
-use zero_core::{Address, Error, Network, ProtocolType, Session};
+use zero_core::{
+    Address, Error, InboundUdpAssociationDispatcher, InboundUdpDispatch, Network, ProtocolType,
+    Session,
+};
 use zero_traits::{AsyncSocket, DatagramSocket, IpAddress};
 
 #[derive(Debug, Default)]
@@ -154,7 +157,7 @@ struct CaptureInboundUdpDispatch {
     packets: Vec<(Address, u16, Vec<u8>, Option<u64>)>,
 }
 
-impl socks5::udp::Socks5InboundUdpDispatchActionDispatcher for CaptureInboundUdpDispatch {
+impl InboundUdpAssociationDispatcher for CaptureInboundUdpDispatch {
     type Error = Error;
 
     async fn dispatch_local_dns(&mut self, domain: &str) -> Result<(), Self::Error> {
@@ -164,10 +167,28 @@ impl socks5::udp::Socks5InboundUdpDispatchActionDispatcher for CaptureInboundUdp
 
     async fn dispatch_inbound_packet(
         &mut self,
-        view: socks5::udp::Socks5InboundUdpDispatchView,
+        dispatch: InboundUdpDispatch,
+        _protocol_overhead_bytes: u64,
     ) -> Result<(), Self::Error> {
-        self.packets.push(view.into_pipe_parts());
+        let (_, target, port, payload, client_session_id) = dispatch.into_parts();
+        self.packets
+            .push((target, port, payload, client_session_id));
         Ok(())
+    }
+
+    async fn dispatch_peer_response(
+        &mut self,
+        _sender: zero_traits::SocketAddress,
+        _payload: &[u8],
+    ) -> Result<(), Self::Error> {
+        unreachable!("client-packet dispatcher should not receive peer responses")
+    }
+
+    async fn dispatch_unexpected_sender(
+        &mut self,
+        _sender: zero_traits::SocketAddress,
+    ) -> Result<(), Self::Error> {
+        unreachable!("client-packet dispatcher should not receive unexpected senders")
     }
 }
 
@@ -176,34 +197,6 @@ struct CaptureRelayPacketDispatch {
     client_packets: Vec<Vec<u8>>,
     peer_response: Option<(zero_traits::SocketAddress, Vec<u8>)>,
     unexpected_senders: Vec<zero_traits::SocketAddress>,
-}
-
-struct RelayPacketCapture<'a>(&'a RefCell<CaptureRelayPacketDispatch>);
-
-impl socks5::udp::Socks5InboundUdpRelayPacketDispatcher for RelayPacketCapture<'_> {
-    type Error = Error;
-
-    async fn dispatch_client_packet(&mut self, payload: &[u8]) -> Result<(), Self::Error> {
-        self.0.borrow_mut().client_packets.push(payload.to_vec());
-        Ok(())
-    }
-
-    async fn dispatch_peer_response(
-        &mut self,
-        sender: zero_traits::SocketAddress,
-        payload: &[u8],
-    ) -> Result<(), Self::Error> {
-        self.0.borrow_mut().peer_response = Some((sender, payload.to_vec()));
-        Ok(())
-    }
-
-    async fn dispatch_unexpected_sender(
-        &mut self,
-        sender: zero_traits::SocketAddress,
-    ) -> Result<(), Self::Error> {
-        self.0.borrow_mut().unexpected_senders.push(sender);
-        Ok(())
-    }
 }
 
 #[tokio::test]
@@ -598,28 +591,40 @@ async fn inbound_udp_association_sends_peer_response_to_current_client() {
     let mut association = Socks5InboundUdpAssociationSession::new();
     let relay_dispatch = RefCell::new(CaptureRelayPacketDispatch::default());
 
-    association
-        .dispatch_relay_packet(
-            zero_traits::SocketAddress {
-                ip: IpAddress::V4([127, 0, 0, 1]),
-                port: 10000,
-            },
-            b"client packet",
-            &mut RelayPacketCapture(&relay_dispatch),
-        )
-        .await
-        .expect("dispatch client packet");
-    association
-        .dispatch_relay_packet(
-            zero_traits::SocketAddress {
-                ip: IpAddress::V4([8, 8, 8, 8]),
-                port: 53,
-            },
-            b"pong",
-            &mut RelayPacketCapture(&relay_dispatch),
-        )
-        .await
-        .expect("dispatch peer response");
+    association.dispatch_relay_packet_with(
+        zero_traits::SocketAddress {
+            ip: IpAddress::V4([127, 0, 0, 1]),
+            port: 10000,
+        },
+        b"client packet",
+        |payload| {
+            relay_dispatch
+                .borrow_mut()
+                .client_packets
+                .push(payload.to_vec())
+        },
+        |sender, payload| {
+            relay_dispatch.borrow_mut().peer_response = Some((sender, payload.to_vec()))
+        },
+        |sender| relay_dispatch.borrow_mut().unexpected_senders.push(sender),
+    );
+    association.dispatch_relay_packet_with(
+        zero_traits::SocketAddress {
+            ip: IpAddress::V4([8, 8, 8, 8]),
+            port: 53,
+        },
+        b"pong",
+        |payload| {
+            relay_dispatch
+                .borrow_mut()
+                .client_packets
+                .push(payload.to_vec())
+        },
+        |sender, payload| {
+            relay_dispatch.borrow_mut().peer_response = Some((sender, payload.to_vec()))
+        },
+        |sender| relay_dispatch.borrow_mut().unexpected_senders.push(sender),
+    );
 
     assert_eq!(
         relay_dispatch.borrow().client_packets,
@@ -651,6 +656,89 @@ async fn inbound_udp_association_sends_peer_response_to_current_client() {
 }
 
 #[tokio::test]
+async fn inbound_udp_association_dispatches_relay_packet_with_handlers() {
+    let mut association = Socks5InboundUdpAssociationSession::new();
+    let mut relay_dispatch = CaptureRelayPacketDispatch::default();
+
+    association.dispatch_relay_packet_with(
+        zero_traits::SocketAddress {
+            ip: IpAddress::V4([127, 0, 0, 1]),
+            port: 10000,
+        },
+        b"client packet",
+        |payload| relay_dispatch.client_packets.push(payload.to_vec()),
+        |sender, payload| relay_dispatch.peer_response = Some((sender, payload.to_vec())),
+        |sender| relay_dispatch.unexpected_senders.push(sender),
+    );
+    association.dispatch_relay_packet_with(
+        zero_traits::SocketAddress {
+            ip: IpAddress::V4([8, 8, 8, 8]),
+            port: 53,
+        },
+        b"pong",
+        |payload| relay_dispatch.client_packets.push(payload.to_vec()),
+        |sender, payload| relay_dispatch.peer_response = Some((sender, payload.to_vec())),
+        |sender| relay_dispatch.unexpected_senders.push(sender),
+    );
+
+    assert_eq!(
+        relay_dispatch.client_packets,
+        vec![b"client packet".to_vec()]
+    );
+    assert_eq!(
+        relay_dispatch.peer_response,
+        Some((
+            zero_traits::SocketAddress {
+                ip: IpAddress::V4([8, 8, 8, 8]),
+                port: 53,
+            },
+            b"pong".to_vec()
+        ))
+    );
+    assert!(relay_dispatch.unexpected_senders.is_empty());
+}
+
+#[tokio::test]
+async fn inbound_udp_association_classifies_relay_packets_in_protocol() {
+    let mut association = Socks5InboundUdpAssociationSession::new();
+
+    let client_packet = association.classify_relay_packet(
+        zero_traits::SocketAddress {
+            ip: IpAddress::V4([127, 0, 0, 1]),
+            port: 10000,
+        },
+        b"client packet",
+    );
+    match client_packet {
+        socks5::udp::Socks5InboundUdpRelayPacketAction::ClientPacket { payload } => {
+            assert_eq!(payload, b"client packet");
+        }
+        other => panic!("expected client packet, got {other:?}"),
+    }
+
+    let peer_packet = association.classify_relay_packet(
+        zero_traits::SocketAddress {
+            ip: IpAddress::V4([8, 8, 8, 8]),
+            port: 53,
+        },
+        b"pong",
+    );
+    match peer_packet {
+        socks5::udp::Socks5InboundUdpRelayPacketAction::PeerResponse { sender, payload } => {
+            assert_eq!(
+                sender,
+                zero_traits::SocketAddress {
+                    ip: IpAddress::V4([8, 8, 8, 8]),
+                    port: 53,
+                }
+            );
+            assert_eq!(payload, b"pong");
+        }
+        other => panic!("expected peer response, got {other:?}"),
+    }
+}
+
+#[tokio::test]
 async fn inbound_udp_association_uses_udp_associate_client_hint_when_present() {
     let socket = MockDatagramSocket::default();
     let mut association =
@@ -660,17 +748,23 @@ async fn inbound_udp_association_uses_udp_associate_client_hint_when_present() {
         });
     let relay_dispatch = RefCell::new(CaptureRelayPacketDispatch::default());
 
-    association
-        .dispatch_relay_packet(
-            zero_traits::SocketAddress {
-                ip: IpAddress::V4([8, 8, 8, 8]),
-                port: 53,
-            },
-            b"pong",
-            &mut RelayPacketCapture(&relay_dispatch),
-        )
-        .await
-        .expect("dispatch peer response");
+    association.dispatch_relay_packet_with(
+        zero_traits::SocketAddress {
+            ip: IpAddress::V4([8, 8, 8, 8]),
+            port: 53,
+        },
+        b"pong",
+        |payload| {
+            relay_dispatch
+                .borrow_mut()
+                .client_packets
+                .push(payload.to_vec())
+        },
+        |sender, payload| {
+            relay_dispatch.borrow_mut().peer_response = Some((sender, payload.to_vec()))
+        },
+        |sender| relay_dispatch.borrow_mut().unexpected_senders.push(sender),
+    );
 
     let (sender, payload) = relay_dispatch
         .borrow_mut()

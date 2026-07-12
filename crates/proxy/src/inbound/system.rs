@@ -13,7 +13,6 @@
 //! [`SystemTcpStack`].  Each connection is dispatched through the same
 //! `serve_inbound()` pipeline as any other inbound protocol.
 
-use std::io;
 use std::net::SocketAddr;
 
 use async_trait::async_trait;
@@ -37,15 +36,6 @@ struct SystemProtocol;
 impl InboundProtocol for SystemProtocol {
     type ClientStream = TcpStream;
 
-    async fn accept(
-        &self,
-        _: crate::transport::TcpRelayStream,
-    ) -> Result<(Session, Self::ClientStream), EngineError> {
-        Err(EngineError::Io(io::Error::new(
-            io::ErrorKind::Unsupported,
-            "system accept handled by stack",
-        )))
-    }
     async fn send_ok(&self, _: &mut TcpStream) -> Result<(), EngineError> {
         Ok(())
     }

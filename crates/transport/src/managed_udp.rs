@@ -1,4 +1,5 @@
 use core::future::Future;
+use std::net::SocketAddr;
 
 use zero_core::{Address, Session, UdpFlowPacket};
 use zero_engine::EngineError;
@@ -66,6 +67,48 @@ pub trait ProtocolManagedStreamUdpBridgeHandlerMetadata {
     fn managed_stream_flow_stages() -> ProtocolManagedStreamFlowStages {
         ProtocolManagedStreamFlowStages::from_resume::<Self::Resume>()
     }
+}
+
+pub trait ProtocolManagedDatagramUdpResumeMetadata {
+    const ESTABLISH_STAGE: &'static str;
+    const MISMATCH_STAGE: &'static str;
+    const MISMATCH_MESSAGE: &'static str;
+}
+
+#[async_trait::async_trait]
+pub trait ProtocolManagedDatagramUdpResumeConnectionOps:
+    ProtocolManagedDatagramUdpResumeMetadata + Send + Sync + std::fmt::Debug + Clone + 'static
+{
+    type RawConnection: ManagedTupleUdpConnectionOps;
+
+    fn connector_flow_cache_key(&self, server: &str, port: u16) -> String;
+
+    async fn open_protocol_connection(
+        &self,
+        server: &str,
+        port: u16,
+        target: &Address,
+        target_port: u16,
+        payload: &[u8],
+    ) -> Result<Self::RawConnection, EngineError>;
+}
+
+#[async_trait::async_trait]
+pub trait ProtocolManagedDatagramSocketUdpResumeConnectionOps:
+    ProtocolManagedDatagramUdpResumeMetadata + Send + Sync + std::fmt::Debug + Clone + 'static
+{
+    type RawConnection: ManagedDatagramConnectionOps;
+
+    const SEND_STAGE: &'static str;
+    const RESOLVE_UPSTREAM_MESSAGE: &'static str;
+    const PROXY_CONTEXT_MESSAGE: &'static str = "expected proxy context for managed datagram flow";
+
+    fn connector_flow_cache_key(&self, server: &str, port: u16) -> String;
+
+    async fn open_protocol_connection(
+        &self,
+        endpoint: SocketAddr,
+    ) -> Result<Self::RawConnection, EngineError>;
 }
 
 #[derive(Debug, Clone)]
@@ -196,4 +239,22 @@ pub trait ManagedPacketUdpConnectionOps: Send + Sync + 'static {
     fn subscribe_protocol_packets(&self) -> tokio::sync::broadcast::Receiver<UdpFlowPacket>;
 
     fn closed_message_for_connection(&self) -> &'static str;
+}
+
+#[async_trait::async_trait]
+pub trait ManagedDatagramConnectionOps: Send + Sync + 'static {
+    type SendError: std::fmt::Display + Send + Sync + 'static;
+
+    async fn send_protocol_datagram(
+        &self,
+        target: &Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<(), Self::SendError>;
+
+    fn subscribe_protocol_datagrams(
+        &self,
+    ) -> tokio::sync::broadcast::Receiver<(Address, u16, Vec<u8>)>;
+
+    fn closed_message_for_datagram_connection(&self) -> &'static str;
 }

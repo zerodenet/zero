@@ -1,25 +1,19 @@
 use std::sync::Arc;
 
+use zero_core::InboundDatagramUdpRelay;
 use zero_engine::EngineError;
 
-use crate::runtime::datagram_udp::{run_datagram_udp_relay, DatagramUdpRelayRequest};
+use crate::runtime::datagram_udp::run_protocol_datagram_udp_relay;
 use crate::runtime::Proxy;
 
-pub(super) async fn hysteria2_datagram_loop(
+pub(super) async fn hysteria2_datagram_loop<R>(
     conn: Arc<quinn::Connection>,
-    responder: hysteria2::udp::Hysteria2InboundUdpResponder,
+    relay: R,
     inbound_tag: String,
     proxy: Proxy,
-) -> Result<(), EngineError> {
-    run_datagram_udp_relay(
-        &proxy,
-        DatagramUdpRelayRequest {
-            source: conn,
-            responder,
-            inbound_tag: &inbound_tag,
-            poll_upstream: true,
-            auth: None,
-        },
-    )
-    .await
+) -> Result<(), EngineError>
+where
+    R: InboundDatagramUdpRelay<Arc<quinn::Connection>>,
+{
+    run_protocol_datagram_udp_relay(&proxy, conn, relay, &inbound_tag, true).await
 }

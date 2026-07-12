@@ -1,8 +1,8 @@
 use zero_core::Session;
 use zero_engine::ResolvedLeafOutbound;
 
-use crate::adapters::common::unreachable_udp_leaf;
 use crate::adapters::direct::DirectAdapter;
+use crate::protocol_registry::unreachable_udp_leaf;
 use crate::protocol_registry::ProtocolSupportCapability;
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
 use crate::runtime::udp_flow::outbound::UdpFlowOutbound;

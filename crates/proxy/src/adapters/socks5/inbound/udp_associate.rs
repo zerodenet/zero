@@ -1,13 +1,4 @@
-#[path = "udp_associate/direct_response.rs"]
-mod direct_response;
-#[path = "udp_associate/dispatch.rs"]
-mod dispatch;
-#[path = "udp_associate/relay_socket.rs"]
-mod relay_socket;
-#[path = "udp_associate/setup.rs"]
-mod setup;
-
-use socks5::udp::Socks5UdpAssociateRequest;
+use tracing::info;
 
 use crate::runtime::udp_association::{run_udp_association_loop, UdpAssociationLoopRequest};
 use crate::runtime::Proxy;
@@ -18,22 +9,27 @@ pub(crate) async fn run_socks5_udp_associate<S>(
     proxy: &Proxy,
     mut client: MeteredStream<S>,
     inbound_tag: &str,
-    request: Socks5UdpAssociateRequest,
+    setup: zero_transport::socks5_transport::Socks5InboundUdpAssociationSetup,
 ) -> Result<(), EngineError>
 where
     S: ClientStream,
 {
-    let setup = setup::setup_association(&mut client, inbound_tag).await?;
-    let relay = setup.relay;
-    let handler = relay_socket::Socks5UdpAssociationHandler::new(request);
+    let relay_addr = setup.relay.local_addr()?;
+
+    info!(
+        inbound_tag = inbound_tag,
+        protocol = "socks5_udp",
+        relay = %relay_addr,
+        "socks5 udp association ready"
+    );
 
     run_udp_association_loop(UdpAssociationLoopRequest {
         proxy,
         client: &mut client,
         inbound_tag,
-        relay,
+        relay: setup.relay,
         pending_control_traffic: setup.pending_control_traffic,
-        handler,
+        handler: setup.handler,
     })
     .await
 }

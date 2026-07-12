@@ -1,6 +1,8 @@
 #[cfg(feature = "trojan")]
 use async_trait::async_trait;
 #[cfg(feature = "trojan")]
+mod listener;
+#[cfg(feature = "trojan")]
 use zero_config::InboundConfig;
 use zero_config::{InboundProtocolConfig, OutboundProtocolConfig};
 #[cfg(feature = "trojan")]
@@ -8,33 +10,33 @@ use zero_core::Session;
 #[cfg(feature = "trojan")]
 use zero_engine::{EngineError, ResolvedLeafOutbound};
 use zero_traits::{ProtocolCapabilityDescriptor, ProtocolMetadata};
-#[cfg(feature = "trojan")]
-use zero_transport::trojan_transport::TrojanInboundListenerRequest;
 use zero_transport::trojan_transport::TrojanTlsBridge;
 
 use crate::adapters::common::{
-    apply_protocol_transport_bridge_adapter_relay_hop,
-    connect_protocol_transport_bridge_adapter_tcp, named_protocol_supports_inbound,
-    named_protocol_supports_outbound, start_protocol_transport_bridge_adapter_udp_flow,
-    start_protocol_transport_bridge_adapter_udp_relay_final_hop,
-    transport_bridge_adapter_claims_runtime_leaf, transport_bridge_adapter_leaf_runtime,
-    transport_bridge_adapter_managed_stream_udp_handler, NamedProtocolAdapter,
-    ProtocolTransportBridgeAdapter,
+    named_protocol_claims_runtime_leaf, named_protocol_supports_inbound,
+    named_protocol_supports_outbound, NamedProtocolAdapter, ProtocolTransportBridgeAdapter,
 };
 use crate::protocol_registry::{
-    BoundInbound, InboundAdapterContext, InboundListenerCapability, OutboundAdapterContext,
-    OutboundLeafRuntime, ProtocolSupportCapability, TcpOutboundCapability, UdpAdapterContext,
-    UdpFlowCapability, UdpPacketPathCapability,
+    proxy_leaf_runtime, BoundInbound, InboundAdapterContext, InboundListenerCapability,
+    OutboundAdapterContext, OutboundLeafRuntime, ProtocolSupportCapability, TcpOutboundCapability,
+    UdpAdapterContext, UdpFlowCapability, UdpPacketPathCapability,
 };
-#[cfg(feature = "trojan")]
-use crate::runtime::inbound_route::spawn_transport_stream_route_inbound_listener_with_request;
 use crate::runtime::orchestration::TcpPathCategory;
 #[cfg(feature = "trojan")]
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
 #[cfg(feature = "trojan")]
-use crate::runtime::udp_flow::managed::ManagedStreamFlowHandler;
+use crate::runtime::udp_flow::managed::{
+    bridge::{
+        managed_stream_udp_handler_for_bridge, start_protocol_transport_bridge_udp_flow,
+        start_protocol_transport_bridge_udp_relay_final_hop,
+    },
+    ManagedStreamFlowHandler,
+};
 #[cfg(feature = "trojan")]
-use crate::transport::{EstablishedTcpOutbound, TcpOutboundFailure};
+use crate::transport::{
+    apply_protocol_transport_bridge_relay_hop, connect_protocol_transport_bridge_tcp,
+    EstablishedTcpOutbound, TcpOutboundFailure,
+};
 
 #[cfg(feature = "trojan")]
 #[derive(Debug)]
@@ -111,13 +113,7 @@ impl InboundListenerCapability for TrojanAdapter {
         shutdown_rx: tokio::sync::watch::Receiver<bool>,
         listeners: &mut tokio::task::JoinSet<Result<(), EngineError>>,
     ) {
-        spawn_transport_stream_route_inbound_listener_with_request::<TrojanInboundListenerRequest>(
-            ctx.proxy(),
-            inbound,
-            bound,
-            shutdown_rx,
-            listeners,
-        );
+        listener::spawn(ctx.proxy(), inbound, bound, shutdown_rx, listeners);
     }
 }
 
@@ -125,14 +121,14 @@ impl InboundListenerCapability for TrojanAdapter {
 #[async_trait]
 impl TcpOutboundCapability for TrojanAdapter {
     fn claims_outbound_leaf(&self, leaf: &ResolvedLeafOutbound<'_>) -> bool {
-        transport_bridge_adapter_claims_runtime_leaf::<Self>(leaf)
+        named_protocol_claims_runtime_leaf::<Self>(leaf)
     }
 
     fn outbound_leaf_runtime<'a>(
         &self,
         leaf: &ResolvedLeafOutbound<'a>,
     ) -> Option<OutboundLeafRuntime<'a>> {
-        transport_bridge_adapter_leaf_runtime::<Self>(leaf)
+        proxy_leaf_runtime(leaf, Self::TCP_PATH)
     }
 
     async fn connect_tcp(
@@ -141,16 +137,7 @@ impl TcpOutboundCapability for TrojanAdapter {
         session: &Session,
         leaf: &ResolvedLeafOutbound<'_>,
     ) -> Result<EstablishedTcpOutbound, TcpOutboundFailure> {
-        connect_protocol_transport_bridge_adapter_tcp(self, ctx, session, leaf, |traffic| {
-            tracing::debug!(
-                session_id = session.id,
-                trojan_handshake_tx = traffic.written_bytes,
-                target = ?session.target,
-                target_port = session.port,
-                "trojan upstream connected"
-            );
-        })
-        .await
+        connect_protocol_transport_bridge_tcp(self.bridge(), ctx, session, leaf, |_| {}).await
     }
 
     async fn apply_relay_hop(
@@ -160,7 +147,7 @@ impl TcpOutboundCapability for TrojanAdapter {
         session: &Session,
         leaf: &ResolvedLeafOutbound<'_>,
     ) -> Result<crate::transport::TcpRelayStream, EngineError> {
-        apply_protocol_transport_bridge_adapter_relay_hop(self, ctx, stream, session, leaf).await
+        apply_protocol_transport_bridge_relay_hop(self.bridge(), ctx, stream, session, leaf).await
     }
 }
 
@@ -168,7 +155,7 @@ impl TcpOutboundCapability for TrojanAdapter {
 #[async_trait]
 impl UdpFlowCapability for TrojanAdapter {
     fn managed_stream_udp_handler(&self) -> Option<Box<dyn ManagedStreamFlowHandler>> {
-        Some(transport_bridge_adapter_managed_stream_udp_handler::<Self>())
+        Some(managed_stream_udp_handler_for_bridge::<TrojanTlsBridge>())
     }
 
     async fn start_udp_flow(
@@ -179,8 +166,13 @@ impl UdpFlowCapability for TrojanAdapter {
         leaf: &ResolvedLeafOutbound<'_>,
         payload: &[u8],
     ) -> Result<FlowStartResult, FlowFailure> {
-        start_protocol_transport_bridge_adapter_udp_flow(
-            self, dispatch, ctx, session, leaf, payload,
+        start_protocol_transport_bridge_udp_flow(
+            self.bridge(),
+            dispatch,
+            ctx.proxy(),
+            session,
+            leaf,
+            payload,
         )
         .await
     }
@@ -194,8 +186,14 @@ impl UdpFlowCapability for TrojanAdapter {
         leaf: &ResolvedLeafOutbound<'_>,
         payload: &[u8],
     ) -> Result<FlowStartResult, FlowFailure> {
-        start_protocol_transport_bridge_adapter_udp_relay_final_hop(
-            self, dispatch, ctx, session, carrier, leaf, payload,
+        start_protocol_transport_bridge_udp_relay_final_hop(
+            self.bridge(),
+            dispatch,
+            ctx.proxy(),
+            session,
+            carrier,
+            leaf,
+            payload,
         )
         .await
     }

@@ -15,6 +15,8 @@ pub mod inbound_route;
 pub mod inbound_stack;
 pub mod managed_udp;
 pub mod metered;
+#[cfg(feature = "mieru")]
+pub mod mieru_transport;
 #[cfg(any(feature = "vless", feature = "vmess"))]
 pub mod mux_stack;
 pub mod outbound_leaf;
@@ -24,6 +26,8 @@ pub mod outbound_stack;
 pub mod quic;
 #[cfg(feature = "shadowsocks")]
 pub mod shadowsocks_transport;
+#[cfg(feature = "socks5")]
+pub mod socks5_transport;
 pub mod stream;
 pub mod transport_plan;
 #[cfg(feature = "shadowsocks")]

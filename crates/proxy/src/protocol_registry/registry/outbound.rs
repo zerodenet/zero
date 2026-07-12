@@ -8,6 +8,37 @@ use crate::protocol_registry::{
 };
 use crate::runtime::orchestration::TcpPathCategory;
 
+pub(crate) fn direct_leaf_runtime<'a>(
+    leaf: &ResolvedLeafOutbound<'a>,
+) -> Option<OutboundLeafRuntime<'a>> {
+    match leaf {
+        ResolvedLeafOutbound::Direct { tag } => Some(OutboundLeafRuntime {
+            tcp_path: TcpPathCategory::Direct,
+            health_tag: None,
+            endpoint: None,
+            kernel_tag: *tag,
+            udp_policy_tag: *tag,
+        }),
+        _ => None,
+    }
+}
+
+pub(crate) fn proxy_leaf_runtime<'a>(
+    leaf: &ResolvedLeafOutbound<'a>,
+    tcp_path: TcpPathCategory,
+) -> Option<OutboundLeafRuntime<'a>> {
+    let tag = leaf.tag()?;
+    let (server, port) = leaf.proxy_endpoint()?;
+
+    Some(OutboundLeafRuntime {
+        tcp_path,
+        health_tag: Some(tag),
+        endpoint: Some(crate::runtime::orchestration::OutboundEndpoint { server, port }),
+        kernel_tag: None,
+        udp_policy_tag: Some(tag),
+    })
+}
+
 impl ProtocolRegistry {
     /// Find the adapter that owns this resolved outbound leaf, if any.
     ///

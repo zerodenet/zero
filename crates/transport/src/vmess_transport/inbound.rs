@@ -4,10 +4,7 @@ use zero_config::{GrpcConfig, InboundProtocolConfig, WebSocketConfig};
 use zero_engine::EngineError;
 use zero_platform_tokio::{TcpRelayStream, TokioSocket};
 
-use crate::inbound_route::{
-    MuxRouteRequest, OpaqueMuxRoute, ProtocolInboundRequestFactory, ProtocolInboundRequestMetadata,
-    ProtocolMuxRouteDispatchMetadata,
-};
+use crate::inbound_route::OpaqueMuxRoute;
 use crate::inbound_stack::InboundStreamStack;
 use crate::tls;
 
@@ -21,7 +18,14 @@ pub struct VmessInboundListenerRequest {
 }
 
 impl VmessInboundListenerRequest {
-    fn from_protocol_config(
+    pub const ERROR_PROTOCOL_NAME: &'static str = "vmess";
+    pub const UDP_PROTOCOL: &'static str = "vmess_udp";
+    pub const MUX_PROTOCOL: &'static str = "vmess_mux";
+    pub const PANIC_MESSAGE: &'static str = "vmess mux task panicked";
+    pub const ABORT_ON_END: bool = false;
+    pub const READ_ERROR_LOG: &'static str = "vmess mux frame read failed";
+
+    pub fn from_protocol_config(
         protocol: &InboundProtocolConfig,
         source_dir: Option<&Path>,
     ) -> Result<Self, EngineError> {
@@ -75,41 +79,34 @@ impl VmessInboundListenerRequest {
             protocol_name,
         })
     }
-}
 
-#[async_trait::async_trait]
-impl ProtocolInboundRequestFactory for VmessInboundListenerRequest {
-    fn from_protocol_config(
-        protocol: &InboundProtocolConfig,
-        source_dir: Option<&Path>,
-    ) -> Result<Self, EngineError> {
-        VmessInboundListenerRequest::from_protocol_config(protocol, source_dir)
-    }
-}
-
-impl ProtocolInboundRequestMetadata for VmessInboundListenerRequest {
-    const ERROR_PROTOCOL_NAME: &'static str = "vmess";
-
-    fn protocol_name(&self) -> &'static str {
+    pub fn protocol_name(&self) -> &'static str {
         self.protocol_name
     }
-}
 
-impl ProtocolMuxRouteDispatchMetadata for VmessInboundListenerRequest {
-    const UDP_PROTOCOL: &'static str = "vmess_udp";
-    const MUX_PROTOCOL: &'static str = "vmess_mux";
-    const PANIC_MESSAGE: &'static str = "vmess mux task panicked";
-    const ABORT_ON_END: bool = false;
-    const READ_ERROR_LOG: &'static str = "vmess mux frame read failed";
-}
+    pub fn error_protocol_name(&self) -> &'static str {
+        Self::ERROR_PROTOCOL_NAME
+    }
 
-#[async_trait::async_trait]
-impl MuxRouteRequest for VmessInboundListenerRequest {
-    type Route = OpaqueMuxRoute<
-        vmess::mux::VmessInboundAcceptedStream<vmess::stream::VmessAeadStream<TcpRelayStream>>,
-    >;
+    pub fn no_client_mux_route_defaults(&self) -> crate::inbound_route::NoClientMuxRouteDefaults {
+        crate::inbound_route::NoClientMuxRouteDefaults {
+            udp_protocol: Self::UDP_PROTOCOL,
+            mux_protocol: Self::MUX_PROTOCOL,
+            panic_message: Self::PANIC_MESSAGE,
+            abort_on_end: Self::ABORT_ON_END,
+            read_error_log: Self::READ_ERROR_LOG,
+        }
+    }
 
-    async fn accept_route(self, socket: TokioSocket) -> Result<Self::Route, EngineError> {
+    pub async fn accept_route(
+        self,
+        socket: TokioSocket,
+    ) -> Result<
+        OpaqueMuxRoute<
+            vmess::mux::VmessInboundAcceptedStream<vmess::stream::VmessAeadStream<TcpRelayStream>>,
+        >,
+        EngineError,
+    > {
         let stream = crate::inbound_stack::accept_tls_inbound_stream_stack(
             socket,
             &self.tls_acceptor,

@@ -1,11 +1,12 @@
 use zero_core::Session;
 use zero_engine::{EngineError, ResolvedLeafOutbound};
 
-use crate::adapters::common::unreachable_leaf;
 use crate::adapters::mieru::MieruAdapter;
+use crate::protocol_registry::unreachable_leaf;
 use crate::protocol_registry::ProtocolSupportCapability;
 use crate::runtime::Proxy;
 use crate::transport::{EstablishedTcpOutbound, TcpOutboundFailure, TcpRelayStream};
+use zero_transport::mieru_transport::MieruTransportLeaf;
 
 impl MieruAdapter {
     pub(super) async fn connect_tcp_impl(
@@ -14,24 +15,20 @@ impl MieruAdapter {
         session: &Session,
         leaf: &ResolvedLeafOutbound<'_>,
     ) -> Result<EstablishedTcpOutbound, TcpOutboundFailure> {
-        let ResolvedLeafOutbound::Mieru {
-            tag,
-            server,
-            port,
-            username,
-            password,
-        } = leaf
-        else {
+        let Some(leaf) = MieruTransportLeaf::from_resolved_leaf(leaf) else {
             return Err(unreachable_leaf(self.name(), leaf));
         };
-        match connect_tcp(proxy, session, server, *port, username, password).await {
+        match connect_tcp(proxy, session, &leaf).await {
             Ok(upstream) => Ok(EstablishedTcpOutbound::proxied(
-                *tag, *server, *port, upstream,
+                leaf.tag().to_owned(),
+                leaf.server().to_owned(),
+                leaf.port(),
+                upstream,
             )),
             Err(error) => Err(TcpOutboundFailure {
                 stage: "connect_upstream_mieru",
                 error,
-                upstream_endpoint: Some(((*server).to_string(), *port)),
+                upstream_endpoint: Some((leaf.server().to_string(), leaf.port())),
             }),
         }
     }
@@ -42,49 +39,38 @@ impl MieruAdapter {
         session: &Session,
         leaf: &ResolvedLeafOutbound<'_>,
     ) -> Result<crate::transport::TcpRelayStream, EngineError> {
-        let ResolvedLeafOutbound::Mieru {
-            username, password, ..
-        } = leaf
-        else {
+        let Some(leaf) = MieruTransportLeaf::from_resolved_leaf(leaf) else {
             return Err(unreachable_leaf(self.name(), leaf).error);
         };
-        apply_tcp_hop(stream, session, username, password).await
+        apply_tcp_hop(stream, session, &leaf).await
     }
 }
 
 async fn connect_tcp(
     proxy: &Proxy,
     session: &Session,
-    server: &str,
-    port: u16,
-    username: &str,
-    password: &str,
+    leaf: &MieruTransportLeaf<'_>,
 ) -> Result<TcpRelayStream, EngineError> {
-    let socket = proxy
-        .protocols
-        .direct_connector()
-        .connect_host(server, port, proxy.resolver.as_ref())
-        .await?;
-
-    let stream = TcpRelayStream::new(socket);
-    let profile = mieru::tcp_outbound_profile_from_config(username, password);
-    let mieru_stream = profile
-        .establish_tcp_tunnel(stream, session)
-        .await
-        .map_err(|e| EngineError::Io(std::io::Error::other(format!("mieru tcp tunnel: {e}"))))?;
-    Ok(TcpRelayStream::new(mieru_stream))
+    let connector = proxy.protocols.direct_connector();
+    let resolver = proxy.resolver.clone();
+    let server = leaf.server().to_owned();
+    let port = leaf.port();
+    leaf.open_tcp_stream(session, move |_, _| {
+        let server = server.clone();
+        let resolver = resolver.clone();
+        async move {
+            connector
+                .connect_host(&server, port, resolver.as_ref())
+                .await
+        }
+    })
+    .await
 }
 
 async fn apply_tcp_hop(
     stream: TcpRelayStream,
     session: &Session,
-    username: &str,
-    password: &str,
+    leaf: &MieruTransportLeaf<'_>,
 ) -> Result<TcpRelayStream, EngineError> {
-    let profile = mieru::tcp_outbound_profile_from_config(username, password);
-    let mieru_stream = profile
-        .establish_tcp_tunnel(stream, session)
-        .await
-        .map_err(|e| EngineError::Io(std::io::Error::other(format!("mieru tcp tunnel: {e}"))))?;
-    Ok(TcpRelayStream::new(mieru_stream))
+    leaf.open_tcp_relay_hop(stream, session).await
 }

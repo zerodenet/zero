@@ -5,8 +5,11 @@ use core::pin::Pin;
 use core::task::{Context, Poll};
 use std::io;
 
-use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
-use zero_core::{Error, Network, ProtocolType, Session, SessionAuth};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf};
+use zero_core::{
+    Error, InboundClientResponse, InboundStreamUdpRelay, Network, ProtocolType, Session,
+    SessionAuth,
+};
 use zero_traits::AsyncSocket;
 
 use crate::crypto::{try_derive_keys, MieruCipher};
@@ -52,21 +55,19 @@ impl MieruInboundProfile {
 
     pub async fn accept_request<S: AsyncSocket>(
         &self,
-        inbound: &MieruInbound,
         stream: &mut S,
     ) -> Result<MieruAccept, Error> {
-        inbound.accept_request(stream, &self.users).await
+        MieruInbound.accept_request(stream, &self.users).await
     }
 
     pub async fn accept_tunneled_stream<S>(
         &self,
-        inbound: &MieruInbound,
         mut stream: S,
     ) -> Result<(Session, MieruInboundStream<S>), Error>
     where
         S: AsyncSocket + AsyncRead + AsyncWrite + Unpin,
     {
-        let accept = self.accept_request(inbound, &mut stream).await?;
+        let accept = self.accept_request(&mut stream).await?;
         let mut client = MieruInboundStream::new(stream, accept);
         let mut session = client.accept_tunneled_socks5_session().await?;
         session.apply_auth(self.inbound_auth());
@@ -75,16 +76,36 @@ impl MieruInboundProfile {
 
     pub async fn accept_client<S>(
         &self,
-        inbound: &MieruInbound,
         stream: S,
     ) -> Result<MieruInboundAcceptedSession<MieruInboundStream<S>>, Error>
     where
         S: AsyncSocket + AsyncRead + AsyncWrite + Unpin,
     {
-        let (session, client) = self.accept_tunneled_stream(inbound, stream).await?;
+        let (session, client) = self.accept_tunneled_stream(stream).await?;
         Ok(MieruInboundAcceptedSession::from_session_stream(
             session, client,
         ))
+    }
+
+    pub async fn accept_and_dispatch_client<S, Tcp, TcpFut, Udp, UdpFut, E>(
+        &self,
+        stream: S,
+        tcp: Tcp,
+        udp: Udp,
+    ) -> Result<(), E>
+    where
+        S: AsyncSocket + AsyncRead + AsyncWrite + Unpin,
+        Tcp: FnOnce(Session, MieruInboundStream<S>) -> TcpFut,
+        TcpFut: core::future::Future<Output = Result<(), E>>,
+        Udp: FnOnce(Session, MieruInboundUdpRelay<MieruInboundStream<S>>) -> UdpFut,
+        UdpFut: core::future::Future<Output = Result<(), E>>,
+        E: From<Error>,
+    {
+        self.accept_client(stream)
+            .await
+            .map_err(E::from)?
+            .dispatch(tcp, udp)
+            .await
     }
 }
 
@@ -139,29 +160,15 @@ pub enum MieruInboundAcceptedSession<S> {
         stream: S,
     },
     Udp {
-        auth: Option<SessionAuth>,
-        responder: crate::udp::MieruInboundUdpResponder,
         session: Session,
-        stream: S,
+        relay: MieruInboundUdpRelay<S>,
     },
 }
 
-pub trait MieruInboundAcceptedSessionDispatcher<S> {
-    type Error;
-
-    async fn dispatch_tcp_session(
-        &mut self,
-        session: Session,
-        stream: S,
-    ) -> Result<(), Self::Error>;
-
-    async fn dispatch_udp_session(
-        &mut self,
-        session: Session,
-        stream: S,
-        responder: crate::udp::MieruInboundUdpResponder,
-        auth: Option<SessionAuth>,
-    ) -> Result<(), Self::Error>;
+pub struct MieruInboundUdpRelay<S> {
+    auth: Option<SessionAuth>,
+    responder: crate::udp::MieruInboundUdpResponder,
+    stream: S,
 }
 
 pub fn classify_inbound_session(session: &Session) -> MieruInboundSessionKind {
@@ -175,12 +182,17 @@ impl<S> MieruInboundAcceptedSession<S> {
     pub fn from_session_stream(session: Session, stream: S) -> Self {
         match classify_inbound_session(&session) {
             MieruInboundSessionKind::Tcp => Self::Tcp { session, stream },
-            MieruInboundSessionKind::Udp => Self::Udp {
-                auth: session.auth.clone(),
-                responder: MieruInbound.accept_udp_session(),
-                session,
-                stream,
-            },
+            MieruInboundSessionKind::Udp => {
+                let auth = session.auth.clone();
+                Self::Udp {
+                    session,
+                    relay: MieruInboundUdpRelay::new(
+                        stream,
+                        MieruInbound.accept_udp_session(),
+                        auth,
+                    ),
+                }
+            }
         }
     }
 
@@ -188,38 +200,43 @@ impl<S> MieruInboundAcceptedSession<S> {
     where
         Tcp: FnOnce(Session, S) -> TcpFut,
         TcpFut: core::future::Future<Output = Result<(), E>>,
-        Udp:
-            FnOnce(Session, S, crate::udp::MieruInboundUdpResponder, Option<SessionAuth>) -> UdpFut,
+        Udp: FnOnce(Session, MieruInboundUdpRelay<S>) -> UdpFut,
         UdpFut: core::future::Future<Output = Result<(), E>>,
     {
         match self {
             Self::Tcp { session, stream } => tcp(session, stream).await,
-            Self::Udp {
-                auth,
-                responder,
-                session,
-                stream,
-            } => udp(session, stream, responder, auth).await,
+            Self::Udp { session, relay } => udp(session, relay).await,
+        }
+    }
+}
+
+impl<S> MieruInboundUdpRelay<S> {
+    fn new(
+        stream: S,
+        responder: crate::udp::MieruInboundUdpResponder,
+        auth: Option<SessionAuth>,
+    ) -> Self {
+        Self {
+            auth,
+            responder,
+            stream,
         }
     }
 
-    pub async fn dispatch_with<D>(self, dispatcher: &mut D) -> Result<(), D::Error>
-    where
-        D: MieruInboundAcceptedSessionDispatcher<S>,
-    {
-        match self {
-            Self::Tcp { session, stream } => dispatcher.dispatch_tcp_session(session, stream).await,
-            Self::Udp {
-                auth,
-                responder,
-                session,
-                stream,
-            } => {
-                dispatcher
-                    .dispatch_udp_session(session, stream, responder, auth)
-                    .await
-            }
-        }
+    fn into_parts(self) -> (S, crate::udp::MieruInboundUdpResponder, Option<SessionAuth>) {
+        (self.stream, self.responder, self.auth)
+    }
+}
+
+impl<S> InboundStreamUdpRelay for MieruInboundUdpRelay<S>
+where
+    S: AsyncSocket + AsyncRead + AsyncWrite + Unpin,
+{
+    type Stream = S;
+    type Responder = crate::udp::MieruInboundUdpResponder;
+
+    fn into_stream_udp_parts(self) -> (Self::Stream, Self::Responder, Option<SessionAuth>) {
+        self.into_parts()
     }
 }
 
@@ -471,6 +488,43 @@ where
 
     fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         Pin::new(&mut self.inner).poll_shutdown(cx)
+    }
+}
+
+impl<S> AsyncSocket for MieruInboundStream<S>
+where
+    S: AsyncRead + AsyncWrite + Unpin + Send + Sync,
+{
+    type Error = io::Error;
+
+    async fn read<'a>(&'a mut self, buf: &'a mut [u8]) -> Result<usize, Self::Error> {
+        AsyncReadExt::read(self, buf).await
+    }
+
+    async fn write_all<'a>(&'a mut self, buf: &'a [u8]) -> Result<(), Self::Error> {
+        AsyncWriteExt::write_all(self, buf).await?;
+        AsyncWriteExt::flush(self).await
+    }
+
+    async fn shutdown(&mut self) -> Result<(), Self::Error> {
+        AsyncWriteExt::shutdown(self).await
+    }
+}
+
+impl<S> InboundClientResponse<MieruInboundStream<S>> for MieruInbound
+where
+    S: AsyncRead + AsyncWrite + Unpin + Send + Sync,
+{
+    async fn send_ok(&self, _client: &mut MieruInboundStream<S>) -> Result<(), Error> {
+        Ok(())
+    }
+
+    async fn send_blocked(&self, _client: &mut MieruInboundStream<S>) -> Result<(), Error> {
+        Ok(())
+    }
+
+    async fn send_upstream_failure(&self, client: &mut MieruInboundStream<S>) -> Result<(), Error> {
+        self.send_blocked(client).await
     }
 }
 

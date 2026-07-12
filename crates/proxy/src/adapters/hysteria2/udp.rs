@@ -1,23 +1,16 @@
 use zero_core::Session;
 use zero_engine::{EngineError, ResolvedLeafOutbound};
 
-use crate::adapters::common::{unreachable_leaf, unreachable_udp_leaf};
 use crate::adapters::hysteria2::Hysteria2Adapter;
 use crate::protocol_registry::ProtocolSupportCapability;
+use crate::protocol_registry::{unreachable_leaf, unreachable_udp_leaf};
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
 use crate::runtime::udp_flow::managed::ManagedDatagramFlowHandler;
+use zero_transport::hysteria2_quic::Hysteria2TransportLeaf;
 
-mod connector;
 mod flow;
 mod managed;
 mod packet_path;
-
-pub(crate) struct Hysteria2UdpFlowStart<'a> {
-    pub(crate) tag: &'a str,
-    pub(crate) server: &'a str,
-    pub(crate) port: u16,
-    pub(crate) resume: hysteria2::udp::Hysteria2UdpFlowResume,
-}
 
 pub(crate) fn managed_datagram_handler() -> Box<dyn ManagedDatagramFlowHandler> {
     managed::handler()
@@ -28,25 +21,8 @@ impl Hysteria2Adapter {
         &self,
         leaf: &ResolvedLeafOutbound<'_>,
     ) -> Option<crate::runtime::udp_flow::packet_path::PacketPathCarrierDescriptor> {
-        let ResolvedLeafOutbound::Hysteria2 {
-            tag,
-            server,
-            port,
-            password,
-            client_fingerprint,
-            ..
-        } = leaf
-        else {
-            return None;
-        };
-        let descriptor = hysteria2::udp::udp_packet_path_carrier_descriptor_from_config(
-            tag,
-            server,
-            *port,
-            password,
-            *client_fingerprint,
-        );
-        Some(packet_path::carrier_descriptor(descriptor))
+        let leaf = Hysteria2TransportLeaf::from_resolved_leaf(leaf)?;
+        Some(packet_path::carrier_descriptor(leaf.udp_packet_path_plan()))
     }
 
     pub(super) async fn build_udp_packet_path_impl(
@@ -56,24 +32,10 @@ impl Hysteria2Adapter {
         std::sync::Arc<dyn crate::runtime::udp_flow::packet_path::PacketPathCarrier>,
         EngineError,
     > {
-        let ResolvedLeafOutbound::Hysteria2 {
-            server,
-            port,
-            password,
-            client_fingerprint,
-            ..
-        } = leaf
-        else {
+        let Some(leaf) = Hysteria2TransportLeaf::from_resolved_leaf(leaf) else {
             return Err(unreachable_leaf(self.name(), leaf).error);
         };
-        let carrier = hysteria2::udp::udp_packet_path_carrier_build_from_config(
-            "",
-            server,
-            *port,
-            password,
-            *client_fingerprint,
-        );
-        packet_path::build(carrier).await
+        packet_path::build(leaf.udp_packet_path_plan()).await
     }
 
     pub(super) async fn start_udp_flow_impl(
@@ -83,30 +45,9 @@ impl Hysteria2Adapter {
         leaf: &ResolvedLeafOutbound<'_>,
         payload: &[u8],
     ) -> Result<FlowStartResult, FlowFailure> {
-        let ResolvedLeafOutbound::Hysteria2 {
-            tag,
-            server,
-            port,
-            password,
-            client_fingerprint,
-            ..
-        } = leaf
-        else {
+        let Some(leaf) = Hysteria2TransportLeaf::from_resolved_leaf(leaf) else {
             return Err(unreachable_udp_leaf(self.name(), leaf));
         };
-        let resume = hysteria2::udp::udp_flow_resume_from_config(
-            tag,
-            server,
-            *port,
-            password,
-            *client_fingerprint,
-        );
-        let request = Hysteria2UdpFlowStart {
-            tag,
-            server,
-            port: *port,
-            resume,
-        };
-        flow::start(dispatch, session, request, payload).await
+        flow::start(dispatch, session, payload, leaf.udp_flow_plan()).await
     }
 }

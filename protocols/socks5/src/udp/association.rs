@@ -1,3 +1,5 @@
+use core::future::Future;
+
 use alloc::vec::Vec;
 
 use zero_core::{Address, Error};
@@ -91,6 +93,45 @@ impl Socks5UdpAssociationTarget {
         S: AsyncSocket,
     {
         establish_udp_relay_with_control(control_stream, self.association_config()).await
+    }
+
+    pub async fn establish_with_transport<
+        C,
+        S,
+        E,
+        OpenControl,
+        OpenControlFut,
+        ResolveRelay,
+        ResolveRelayFut,
+        RecordControl,
+    >(
+        &self,
+        open_control: OpenControl,
+        resolve_relay: ResolveRelay,
+        record_control: RecordControl,
+    ) -> Result<Socks5EstablishedUdpAssociation<C, S>, E>
+    where
+        C: AsyncSocket,
+        S: DatagramSocket,
+        E: From<Error>,
+        OpenControl: FnOnce(&str, u16) -> OpenControlFut,
+        OpenControlFut: Future<Output = Result<C, E>>,
+        ResolveRelay: FnOnce(Address, u16) -> ResolveRelayFut,
+        ResolveRelayFut: Future<Output = Result<(SocketAddress, S), E>>,
+        RecordControl: FnOnce(&mut C),
+    {
+        let mut control = open_control(self.server(), self.port()).await?;
+        let (relay_address, relay_port) = self
+            .establish_with_control(&mut control)
+            .await
+            .map_err(E::from)?;
+        record_control(&mut control);
+        let (relay_endpoint, relay_socket) = resolve_relay(relay_address, relay_port).await?;
+        Ok(Socks5EstablishedUdpAssociation::from_relay_socket_address(
+            control,
+            relay_socket,
+            relay_endpoint,
+        ))
     }
 
     pub fn log_parts(&self) -> (&str, &str, u16) {

@@ -7,7 +7,8 @@ use alloc::string::String;
 use alloc::vec::Vec;
 
 use zero_core::{
-    Address, DatagramUdpResponder, Error, InboundUdpDispatch, ProtocolType, UdpFlowPacket,
+    Address, DatagramUdpResponder, Error, InboundDatagramUdpRelay, InboundUdpDispatch,
+    ProtocolType, SessionAuth, UdpFlowPacket,
 };
 use zero_traits::DatagramCodec;
 
@@ -242,6 +243,11 @@ pub struct Hysteria2InboundUdpResponder {
 }
 
 #[cfg(feature = "tokio")]
+pub struct Hysteria2InboundUdpRelay {
+    responder: Hysteria2InboundUdpResponder,
+}
+
+#[cfg(feature = "tokio")]
 impl Hysteria2InboundUdpSession {
     pub fn new() -> Self {
         Self {
@@ -425,6 +431,26 @@ impl Hysteria2InboundUdpResponder {
             port,
             payload,
         )
+    }
+}
+
+#[cfg(feature = "tokio")]
+impl Hysteria2InboundUdpRelay {
+    pub fn new(responder: Hysteria2InboundUdpResponder) -> Self {
+        Self { responder }
+    }
+
+    fn into_parts(self) -> (Hysteria2InboundUdpResponder, Option<SessionAuth>) {
+        (self.responder, None)
+    }
+}
+
+#[cfg(feature = "tokio")]
+impl InboundDatagramUdpRelay<Arc<quinn::Connection>> for Hysteria2InboundUdpRelay {
+    type Responder = Hysteria2InboundUdpResponder;
+
+    fn into_datagram_udp_parts(self) -> (Self::Responder, Option<SessionAuth>) {
+        self.into_parts()
     }
 }
 

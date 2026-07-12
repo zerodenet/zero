@@ -1,0 +1,120 @@
+use async_trait::async_trait;
+
+use super::super::super::flow::ManagedUdpFlowResume;
+use super::super::super::model::{ManagedRelaySend, ManagedStreamFlowHandler};
+use super::super::connector::ManagedStreamFlowConnector;
+use super::mismatch::managed_mismatch;
+use super::model::{ManagedStreamFlowManager, ManagedStreamRelayRequest};
+use crate::runtime::orchestration::OutboundEndpoint;
+use crate::runtime::udp_dispatch::FlowFailure;
+use crate::runtime::udp_flow::packet_path::{UdpFlowContext, UdpPacketRef};
+
+impl<T> ManagedStreamFlowManager<T>
+where
+    T: ManagedStreamFlowConnector,
+{
+    async fn send_relay(
+        &mut self,
+        request: ManagedStreamRelayRequest<'_, T>,
+    ) -> Result<usize, FlowFailure> {
+        let session_id = request.ctx.session_id;
+        let upstream = request.endpoint.upstream();
+        let (cache_key, _) = request
+            .resume
+            .connector_flow(request.endpoint, session_id)
+            .into_parts();
+        let entry = request
+            .resume
+            .establish_relay(
+                request.stream,
+                request.tls_server_name,
+                request.proxy,
+                request.session,
+                request.endpoint,
+            )
+            .await
+            .map_err(|error| FlowFailure {
+                stage: self.relay_establish_stage,
+                error,
+                upstream: Some(upstream.clone()),
+            })?;
+
+        self.upstreams
+            .insert_and_send_key(
+                cache_key,
+                request.ctx.chain_tasks,
+                session_id,
+                request.packet_ref,
+                entry,
+            )
+            .await
+            .map_err(|error| FlowFailure {
+                stage: self.relay_send_stage,
+                error,
+                upstream: Some(upstream),
+            })
+    }
+
+    async fn send_managed_relay_existing(
+        &mut self,
+        request: ManagedRelaySend<'_>,
+    ) -> Result<usize, FlowFailure> {
+        let Some(resume) = request.resume.cloned::<T>() else {
+            return Err(managed_mismatch(
+                self.mismatch_stage,
+                request.server,
+                request.port,
+                self.mismatch_message,
+            ));
+        };
+        self.send_relay(ManagedStreamRelayRequest {
+            ctx: UdpFlowContext {
+                chain_tasks: request.chain_tasks,
+                session_id: request.session_id,
+            },
+            stream: request.stream,
+            tls_server_name: request.tls_server_name,
+            proxy: request.proxy,
+            session: request.session,
+            endpoint: OutboundEndpoint {
+                server: request.server,
+                port: request.port,
+            },
+            resume,
+            packet_ref: UdpPacketRef {
+                target: request.target,
+                port: request.target_port,
+                payload: request.payload,
+            },
+        })
+        .await
+    }
+}
+
+#[async_trait]
+impl<T> ManagedStreamFlowHandler for ManagedStreamFlowManager<T>
+where
+    T: ManagedStreamFlowConnector,
+{
+    fn supports_managed_existing(&self, resume: &ManagedUdpFlowResume) -> bool {
+        ManagedStreamFlowManager::supports_managed_existing(self, resume)
+    }
+
+    fn supports_managed_relay_existing(&self, resume: &ManagedUdpFlowResume) -> bool {
+        ManagedStreamFlowManager::supports_managed_existing(self, resume)
+    }
+
+    async fn send_managed_existing(
+        &mut self,
+        request: super::super::super::model::ManagedExistingSend<'_>,
+    ) -> Result<usize, FlowFailure> {
+        ManagedStreamFlowManager::send_managed_existing(self, request).await
+    }
+
+    async fn send_managed_relay_existing(
+        &mut self,
+        request: ManagedRelaySend<'_>,
+    ) -> Result<usize, FlowFailure> {
+        ManagedStreamFlowManager::send_managed_relay_existing(self, request).await
+    }
+}

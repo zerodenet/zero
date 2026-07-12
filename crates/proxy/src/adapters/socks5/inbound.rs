@@ -1,4 +1,3 @@
-mod request;
 mod transport;
 
 use zero_config::InboundConfig;
@@ -8,7 +7,6 @@ use crate::adapters::socks5::Socks5Adapter;
 use crate::protocol_registry::BoundInbound;
 use crate::runtime::Proxy;
 
-pub(crate) use request::{socks5_acceptor_from_users, Socks5InboundListenerRequest};
 pub(crate) use transport::{handle_socks5_connection, run_socks5_listener_with_bound};
 
 impl Socks5Adapter {
@@ -22,8 +20,10 @@ impl Socks5Adapter {
     ) {
         let proxy = proxy.clone();
         listeners.spawn(async move {
-            let request = Socks5InboundListenerRequest::from_protocol_config(&inbound.protocol)?;
-            run_socks5_listener_with_bound(&proxy, inbound, request, bound.into_tcp(), shutdown_rx)
+            let acceptor = zero_transport::socks5_transport::inbound_acceptor_from_protocol(
+                &inbound.protocol,
+            )?;
+            run_socks5_listener_with_bound(&proxy, inbound, acceptor, bound.into_tcp(), shutdown_rx)
                 .await
         });
     }

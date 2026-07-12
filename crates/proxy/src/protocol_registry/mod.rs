@@ -18,5 +18,7 @@ pub(crate) use capability::{
 pub(crate) use context::{InboundAdapterContext, OutboundAdapterContext, UdpAdapterContext};
 #[cfg(feature = "transport_quic")]
 pub(crate) use defaults::bind_transport_inbound;
+pub(crate) use defaults::{unreachable_leaf, unreachable_udp_leaf};
 pub(crate) use model::{BoundInbound, OutboundLeafRuntime};
 pub(crate) use registry::ProtocolRegistry;
+pub(crate) use registry::{direct_leaf_runtime, proxy_leaf_runtime};

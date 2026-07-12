@@ -39,12 +39,3 @@ where
 {
     A::HAS_OUTBOUND && config.protocol_name() == A::PROTOCOL_NAME
 }
-
-pub(crate) fn transport_bridge_adapter_claims_runtime_leaf<A>(
-    leaf: &ResolvedLeafOutbound<'_>,
-) -> bool
-where
-    A: ProtocolTransportBridgeAdapter,
-{
-    named_protocol_claims_runtime_leaf::<A>(leaf)
-}

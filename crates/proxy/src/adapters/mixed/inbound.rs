@@ -2,7 +2,6 @@ use zero_config::{InboundConfig, InboundProtocolConfig};
 use zero_engine::EngineError;
 
 use crate::adapters::mixed::MixedAdapter;
-use crate::adapters::socks5::inbound::socks5_acceptor_from_users;
 use crate::protocol_registry::BoundInbound;
 use crate::runtime::Proxy;
 
@@ -29,7 +28,9 @@ impl MixedAdapter {
                 &p,
                 listener::MixedInboundRequest {
                     inbound_tag: inbound.tag,
-                    socks5_acceptor: socks5_acceptor_from_users(socks5_users),
+                    socks5_acceptor: zero_transport::socks5_transport::inbound_acceptor_from_users(
+                        socks5_users,
+                    ),
                 },
                 bound.into_tcp(),
                 shutdown_rx,

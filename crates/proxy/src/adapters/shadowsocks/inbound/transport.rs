@@ -2,73 +2,49 @@
 
 use std::sync::Arc;
 
-use async_trait::async_trait;
-use shadowsocks::{ShadowsocksAeadStream, ShadowsocksInboundTcpAcceptor};
 use tokio::net::UdpSocket;
 use tokio::sync::watch;
 use tracing::warn;
 use zero_config::InboundConfig;
-use zero_core::Session;
 use zero_engine::EngineError;
 
 use crate::logging::log_listener_connection_error;
-use crate::runtime::inbound_protocol::{serve_inbound, InboundProtocol};
+use crate::runtime::inbound_protocol::{serve_inbound, NoClientResponseStreamProtocol};
 use crate::runtime::listener_loop::{run_tcp_listener_loop, TcpListenerLoopRequest};
 use crate::runtime::Proxy;
 use crate::transport::{MeteredStream, TcpRelayStream};
 
-use super::request::ShadowsocksInboundListenerRequest;
-
 #[path = "udp.rs"]
 mod udp;
 
-#[derive(Clone)]
-pub(crate) struct ShadowsocksInboundHandler {
-    acceptor: ShadowsocksInboundTcpAcceptor,
-}
-
-#[async_trait]
-impl InboundProtocol for ShadowsocksInboundHandler {
-    type ClientStream = ShadowsocksAeadStream<MeteredStream<TcpRelayStream>>;
-
-    async fn accept(
-        &self,
-        stream: TcpRelayStream,
-    ) -> Result<(Session, Self::ClientStream), EngineError> {
-        let metered = MeteredStream::new(stream);
-        self.acceptor
-            .accept_stream(metered)
-            .await
-            .map_err(EngineError::from)
-    }
-
-    async fn send_ok(&self, _client: &mut Self::ClientStream) -> Result<(), EngineError> {
-        Ok(()) // Shadowsocks has no success response
-    }
-
-    async fn send_blocked(&self, _client: &mut Self::ClientStream) -> Result<(), EngineError> {
-        Ok(())
-    }
-
-    async fn send_upstream_failure(
-        &self,
-        _client: &mut Self::ClientStream,
-    ) -> Result<(), EngineError> {
-        Ok(())
+pub(crate) async fn handle_shadowsocks_connection(
+    proxy: &Proxy,
+    inbound_tag: &str,
+    source_addr: Option<std::net::SocketAddr>,
+    stream: TcpRelayStream,
+    acceptor: &zero_transport::shadowsocks_transport::OwnedShadowsocksInboundTcpAcceptor,
+) {
+    if let Err(error) = acceptor
+        .accept_and_dispatch_stream(MeteredStream::new(stream), |session, client| async move {
+            let protocol = NoClientResponseStreamProtocol::new();
+            let _ =
+                serve_inbound(proxy, session, client, &protocol, inbound_tag, source_addr).await;
+            Ok::<(), EngineError>(())
+        })
+        .await
+    {
+        log_listener_connection_error("shadowsocks", inbound_tag, &source_addr, &error);
     }
 }
 
 pub(crate) async fn run_shadowsocks_listener_with_bound(
     proxy: &Proxy,
     inbound: InboundConfig,
-    request: ShadowsocksInboundListenerRequest,
+    profile: zero_transport::shadowsocks_transport::OwnedShadowsocksInboundProfile,
     listener: zero_platform_tokio::TokioListener,
     shutdown: watch::Receiver<bool>,
 ) -> Result<(), EngineError> {
-    let ShadowsocksInboundListenerRequest {
-        profile,
-        udp_session,
-    } = request;
+    let (acceptor, udp_session) = profile.into_listener_bindings().into_parts();
 
     let udp_socket = match UdpSocket::bind(&format!(
         "{}:{}",
@@ -81,10 +57,6 @@ pub(crate) async fn run_shadowsocks_listener_with_bound(
             warn!(error = %e, "shadowsocks: failed to bind UDP socket, UDP disabled");
             None
         }
-    };
-
-    let handler = ShadowsocksInboundHandler {
-        acceptor: ShadowsocksInboundTcpAcceptor::new(profile.clone()),
     };
 
     let udp_task = udp_socket.as_ref().map(|udp| {
@@ -108,18 +80,16 @@ pub(crate) async fn run_shadowsocks_listener_with_bound(
                        tag: String,
                        stream: zero_platform_tokio::TokioSocket,
                        source_addr: Option<std::net::SocketAddr>| {
-            let handler = handler.clone();
+            let acceptor = acceptor.clone();
             async move {
-                match handler.accept(stream.into()).await {
-                    Ok((session, client)) => {
-                        let _ =
-                            serve_inbound(&engine, session, client, &handler, &tag, source_addr)
-                                .await;
-                    }
-                    Err(error) => {
-                        log_listener_connection_error("shadowsocks", &tag, &source_addr, &error);
-                    }
-                }
+                handle_shadowsocks_connection(
+                    &engine,
+                    &tag,
+                    source_addr,
+                    TcpRelayStream::from(stream),
+                    &acceptor,
+                )
+                .await;
             }
         },
     })

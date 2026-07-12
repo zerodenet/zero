@@ -13,8 +13,8 @@ pub use config::{
     packet_path_carrier_association_target, Socks5UdpFlowConfig, Socks5UdpPacketPathCarrierBuild,
     Socks5UdpPacketPathCarrierDescriptor, Socks5UdpPacketPathSpec,
 };
-pub use dispatch::{Socks5InboundUdpCodec, Socks5InboundUdpDispatchActionDispatcher};
+pub use dispatch::Socks5InboundUdpCodec;
 pub use packet::{Socks5InboundUdpDispatchView, Socks5InboundUdpRequest, Socks5InboundUdpResponse};
-pub use session::{Socks5InboundUdpAssociationSession, Socks5InboundUdpRelayPacketDispatcher};
+pub use session::{Socks5InboundUdpAssociationSession, Socks5InboundUdpRelayPacketAction};
 
 pub(crate) use association::Socks5OwnedUdpAssociationConfig;

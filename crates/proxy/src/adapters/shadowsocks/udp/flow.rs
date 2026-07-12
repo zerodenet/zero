@@ -1,4 +1,5 @@
 use zero_core::Session;
+use zero_transport::shadowsocks_transport::ShadowsocksManagedUdpFlowPlan;
 
 use crate::runtime::udp_dispatch::{
     FlowFailure, FlowStartResult, ManagedDatagramStart, UdpDispatch,
@@ -9,17 +10,18 @@ pub(super) async fn start(
     dispatch: &mut UdpDispatch,
     proxy: &Proxy,
     session: &Session,
-    request: super::ShadowsocksUdpFlowStart<'_>,
     payload: &[u8],
+    plan: ShadowsocksManagedUdpFlowPlan<'_>,
 ) -> Result<FlowStartResult, FlowFailure> {
+    let (tag, server, port, resume) = plan.into_parts();
     dispatch
         .start_tracked_managed_datagram(ManagedDatagramStart {
             proxy: Some(proxy),
-            tag: request.tag,
+            tag,
             session,
-            server: request.server,
-            port: request.port,
-            resume: request.resume,
+            server,
+            port,
+            resume,
             payload,
         })
         .await

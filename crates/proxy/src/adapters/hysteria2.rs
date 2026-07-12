@@ -10,20 +10,19 @@ use zero_transport::hysteria2_quic::OwnedHysteria2InboundBindPlan;
 
 use crate::adapters::common::{
     named_protocol_claims_runtime_leaf, named_protocol_supports_inbound,
-    named_protocol_supports_outbound, proxy_leaf_runtime, NamedProtocolAdapter,
+    named_protocol_supports_outbound, NamedProtocolAdapter,
 };
 use crate::protocol_registry::{
-    bind_transport_inbound, BoundInbound, InboundAdapterContext, InboundListenerCapability,
-    OutboundAdapterContext, OutboundLeafRuntime, ProtocolSupportCapability, TcpOutboundCapability,
-    UdpAdapterContext, UdpFlowCapability, UdpPacketPathCapability,
+    bind_transport_inbound, proxy_leaf_runtime, BoundInbound, InboundAdapterContext,
+    InboundListenerCapability, OutboundAdapterContext, OutboundLeafRuntime,
+    ProtocolSupportCapability, TcpOutboundCapability, UdpAdapterContext, UdpFlowCapability,
+    UdpPacketPathCapability,
 };
 use crate::runtime::orchestration::TcpPathCategory;
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
 use crate::runtime::udp_flow::managed::ManagedDatagramFlowHandler;
 use crate::transport::{EstablishedTcpOutbound, TcpOutboundFailure};
 
-#[cfg(feature = "hysteria2")]
-mod connector;
 #[cfg(feature = "hysteria2")]
 mod inbound;
 #[cfg(feature = "hysteria2")]

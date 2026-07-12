@@ -1,0 +1,230 @@
+use zero_core::{InboundMuxServer, InboundMuxStreamRoute, InboundMuxTcpRelay, InboundMuxUdpRelay};
+use zero_engine::EngineError;
+use zero_transport::inbound_route::{FallbackReplayToUpstream, RouteAcceptResult};
+
+use super::dispatch::{
+    dispatch_optional_recorded_protocol_mux_route_accept_result,
+    dispatch_recorded_protocol_mux_route_accept_result,
+};
+use super::model::RecordedProtocolMuxRouteDefaults;
+use crate::runtime::inbound_protocol::InboundProtocol;
+use crate::runtime::mux_tcp::run_protocol_mux_tcp_task;
+use crate::runtime::mux_udp::run_protocol_mux_udp_task_with_accept_log;
+use crate::runtime::Proxy;
+use crate::transport::{ClientStream, MeteredStream, RecordingStream, TcpRelayStream};
+
+pub(crate) async fn dispatch_recorded_protocol_mux_tcp_request_result<
+    R,
+    P,
+    S,
+    FR,
+    FTcp,
+    FTcpFut,
+    FUdp,
+    FUdpFut,
+>(
+    accept_result: Result<Option<RouteAcceptResult<R, FR>>, EngineError>,
+    proxy: Proxy,
+    inbound_tag: String,
+    source_addr: Option<std::net::SocketAddr>,
+    protocol: P,
+    defaults: RecordedProtocolMuxRouteDefaults,
+    spawn_tcp: FTcp,
+    spawn_udp: FUdp,
+) -> Result<(), EngineError>
+where
+    S: ClientStream + 'static,
+    R: InboundMuxStreamRoute<
+        TcpStream = MeteredStream<RecordingStream<S>>,
+        MuxReader = MeteredStream<RecordingStream<S>>,
+    >,
+    R::UdpRelay: zero_core::InboundStreamUdpRelay<Stream = MeteredStream<RecordingStream<S>>>,
+    R::MuxServer: InboundMuxServer<MeteredStream<S>>,
+    <R::UdpRelay as zero_core::InboundStreamUdpRelay>::Responder:
+        zero_core::StreamUdpResponder<MeteredStream<S>>,
+    R::MuxReader: Send,
+    P: InboundProtocol<ClientStream = TcpRelayStream> + 'static,
+    FR: FallbackReplayToUpstream + 'static,
+    FTcp: FnMut(
+            Proxy,
+            zero_core::Session,
+            <R::MuxServer as InboundMuxServer<MeteredStream<S>>>::TcpRelay,
+            String,
+        ) -> FTcpFut
+        + Send,
+    FTcpFut: core::future::Future<Output = ()> + Send + 'static,
+    FUdp: FnMut(
+            Proxy,
+            <R::MuxServer as InboundMuxServer<MeteredStream<S>>>::UdpRelay,
+            String,
+        ) -> FUdpFut
+        + Send,
+    FUdpFut: core::future::Future<Output = ()> + Send + 'static,
+{
+    dispatch_optional_recorded_protocol_mux_route_accept_result(
+        accept_result?,
+        proxy,
+        inbound_tag,
+        source_addr,
+        protocol,
+        defaults,
+        spawn_tcp,
+        spawn_udp,
+    )
+    .await
+}
+
+pub(crate) async fn dispatch_recorded_protocol_mux_stream_request_result<
+    R,
+    P,
+    S,
+    FR,
+    FTcp,
+    FTcpFut,
+    FUdp,
+    FUdpFut,
+>(
+    accept_result: Result<RouteAcceptResult<R, FR>, EngineError>,
+    proxy: Proxy,
+    inbound_tag: String,
+    source_addr: Option<std::net::SocketAddr>,
+    protocol: P,
+    defaults: RecordedProtocolMuxRouteDefaults,
+    spawn_tcp: FTcp,
+    spawn_udp: FUdp,
+) -> Result<(), EngineError>
+where
+    S: ClientStream + 'static,
+    R: InboundMuxStreamRoute<
+        TcpStream = MeteredStream<RecordingStream<S>>,
+        MuxReader = MeteredStream<RecordingStream<S>>,
+    >,
+    R::UdpRelay: zero_core::InboundStreamUdpRelay<Stream = MeteredStream<RecordingStream<S>>>,
+    R::MuxServer: InboundMuxServer<MeteredStream<S>>,
+    <R::UdpRelay as zero_core::InboundStreamUdpRelay>::Responder:
+        zero_core::StreamUdpResponder<MeteredStream<S>>,
+    R::MuxReader: Send,
+    P: InboundProtocol<ClientStream = TcpRelayStream> + 'static,
+    FR: FallbackReplayToUpstream + 'static,
+    FTcp: FnMut(
+            Proxy,
+            zero_core::Session,
+            <R::MuxServer as InboundMuxServer<MeteredStream<S>>>::TcpRelay,
+            String,
+        ) -> FTcpFut
+        + Send,
+    FTcpFut: core::future::Future<Output = ()> + Send + 'static,
+    FUdp: FnMut(
+            Proxy,
+            <R::MuxServer as InboundMuxServer<MeteredStream<S>>>::UdpRelay,
+            String,
+        ) -> FUdpFut
+        + Send,
+    FUdpFut: core::future::Future<Output = ()> + Send + 'static,
+{
+    dispatch_recorded_protocol_mux_route_accept_result(
+        accept_result?,
+        proxy,
+        inbound_tag,
+        source_addr,
+        protocol,
+        defaults,
+        spawn_tcp,
+        spawn_udp,
+    )
+    .await
+}
+
+pub(crate) async fn dispatch_recorded_protocol_mux_tcp_request_with_defaults<R, P, S, FR>(
+    accept_result: Result<Option<RouteAcceptResult<R, FR>>, EngineError>,
+    proxy: Proxy,
+    inbound_tag: String,
+    source_addr: Option<std::net::SocketAddr>,
+    protocol: P,
+    defaults: RecordedProtocolMuxRouteDefaults,
+) -> Result<(), EngineError>
+where
+    S: ClientStream + 'static,
+    R: InboundMuxStreamRoute<
+        TcpStream = MeteredStream<RecordingStream<S>>,
+        MuxReader = MeteredStream<RecordingStream<S>>,
+    >,
+    R::UdpRelay: zero_core::InboundStreamUdpRelay<Stream = MeteredStream<RecordingStream<S>>>,
+    R::MuxServer: InboundMuxServer<MeteredStream<S>>,
+    <R::UdpRelay as zero_core::InboundStreamUdpRelay>::Responder:
+        zero_core::StreamUdpResponder<MeteredStream<S>>,
+    R::MuxReader: Send,
+    P: InboundProtocol<ClientStream = TcpRelayStream> + 'static,
+    FR: FallbackReplayToUpstream + 'static,
+    <R::MuxServer as InboundMuxServer<MeteredStream<S>>>::TcpRelay: InboundMuxTcpRelay + 'static,
+    <R::MuxServer as InboundMuxServer<MeteredStream<S>>>::UdpRelay: InboundMuxUdpRelay + 'static,
+{
+    dispatch_recorded_protocol_mux_tcp_request_result(
+        accept_result,
+        proxy,
+        inbound_tag,
+        source_addr,
+        protocol,
+        defaults,
+        move |proxy, session, relay, inbound_tag| {
+            run_protocol_mux_tcp_task(proxy, session, relay, inbound_tag, defaults.mux_protocol)
+        },
+        move |proxy, relay, inbound_tag| {
+            run_protocol_mux_udp_task_with_accept_log(
+                proxy,
+                relay,
+                inbound_tag,
+                defaults.udp_protocol,
+                defaults.udp_accept_log_message,
+            )
+        },
+    )
+    .await
+}
+
+pub(crate) async fn dispatch_recorded_protocol_mux_stream_request_with_defaults<R, P, S, FR>(
+    accept_result: Result<RouteAcceptResult<R, FR>, EngineError>,
+    proxy: Proxy,
+    inbound_tag: String,
+    source_addr: Option<std::net::SocketAddr>,
+    protocol: P,
+    defaults: RecordedProtocolMuxRouteDefaults,
+) -> Result<(), EngineError>
+where
+    S: ClientStream + 'static,
+    R: InboundMuxStreamRoute<
+        TcpStream = MeteredStream<RecordingStream<S>>,
+        MuxReader = MeteredStream<RecordingStream<S>>,
+    >,
+    R::UdpRelay: zero_core::InboundStreamUdpRelay<Stream = MeteredStream<RecordingStream<S>>>,
+    R::MuxServer: InboundMuxServer<MeteredStream<S>>,
+    <R::UdpRelay as zero_core::InboundStreamUdpRelay>::Responder:
+        zero_core::StreamUdpResponder<MeteredStream<S>>,
+    R::MuxReader: Send,
+    P: InboundProtocol<ClientStream = TcpRelayStream> + 'static,
+    FR: FallbackReplayToUpstream + 'static,
+    <R::MuxServer as InboundMuxServer<MeteredStream<S>>>::TcpRelay: InboundMuxTcpRelay + 'static,
+    <R::MuxServer as InboundMuxServer<MeteredStream<S>>>::UdpRelay: InboundMuxUdpRelay + 'static,
+{
+    dispatch_recorded_protocol_mux_stream_request_result(
+        accept_result,
+        proxy,
+        inbound_tag,
+        source_addr,
+        protocol,
+        defaults,
+        move |proxy, session, relay, inbound_tag| {
+            run_protocol_mux_tcp_task(proxy, session, relay, inbound_tag, defaults.mux_protocol)
+        },
+        move |proxy, relay, inbound_tag| {
+            run_protocol_mux_udp_task_with_accept_log(
+                proxy,
+                relay,
+                inbound_tag,
+                defaults.udp_protocol,
+                defaults.udp_accept_log_message,
+            )
+        },
+    )
+    .await
+}

@@ -13,11 +13,6 @@
 //! - [`packet_path_chain`]: generic datagram-over-packet-path manager for
 //!   relay chains (Shadowsocks -> Shadowsocks, SOCKS5 -> Shadowsocks, etc.)
 //!
-//! # Supported outbounds
-//!
-//! All outbound types: direct, block, socks5, vless, shadowsocks, hysteria2,
-//! trojan, mieru.
-//!
 //! # UDP relay chain model
 //!
 //! The relay chain model is:

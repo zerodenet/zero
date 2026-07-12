@@ -14,7 +14,7 @@ default = [
     "mixed",
     "vless",
 ]
-socks5 = ["dep:socks5"]
+socks5 = ["zero-transport/socks5", "dep:socks5"]
 http_connect = ["dep:http_connect"]
 mixed = ["socks5", "http_connect"]
 transport_quic = ["zero-transport/quic"]
@@ -34,6 +34,7 @@ vless = [
 hysteria2 = [
     "quic_packet_path",
     "transport_quic",
+    "zero-transport/hysteria2",
     "dep:ring",
     "dep:rustls",
     "dep:hysteria2",

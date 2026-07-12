@@ -4,10 +4,8 @@ use zero_config::InboundProtocolConfig;
 use zero_engine::EngineError;
 use zero_platform_tokio::TokioSocket;
 
-use crate::inbound_route::{
-    OpaqueStreamRoute, ProtocolInboundRequestFactory, ProtocolInboundRequestMetadata,
-    ProtocolStreamRouteDispatchMetadata, StreamRouteRequest,
-};
+use crate::inbound_route::OpaqueStreamRoute;
+
 type TrojanInboundTlsStream = crate::tls::InboundTlsStream<TokioSocket>;
 
 #[derive(Clone)]
@@ -17,7 +15,10 @@ pub struct TrojanInboundListenerRequest {
 }
 
 impl TrojanInboundListenerRequest {
-    fn from_protocol_config(
+    pub const ERROR_PROTOCOL_NAME: &'static str = "trojan";
+    pub const UDP_PROTOCOL: &'static str = "trojan_udp";
+
+    pub fn from_protocol_config(
         protocol: &InboundProtocolConfig,
         source_dir: Option<&Path>,
     ) -> Result<Self, EngineError> {
@@ -37,35 +38,30 @@ impl TrojanInboundListenerRequest {
             )?,
         })
     }
-}
 
-impl ProtocolInboundRequestFactory for TrojanInboundListenerRequest {
-    fn from_protocol_config(
-        protocol: &InboundProtocolConfig,
-        source_dir: Option<&Path>,
-    ) -> Result<Self, EngineError> {
-        TrojanInboundListenerRequest::from_protocol_config(protocol, source_dir)
-    }
-}
-
-impl ProtocolInboundRequestMetadata for TrojanInboundListenerRequest {
-    const ERROR_PROTOCOL_NAME: &'static str = "trojan";
-
-    fn protocol_name(&self) -> &'static str {
+    pub fn protocol_name(&self) -> &'static str {
         "trojan"
     }
-}
 
-impl ProtocolStreamRouteDispatchMetadata for TrojanInboundListenerRequest {
-    const UDP_PROTOCOL: &'static str = "trojan_udp";
-}
+    pub fn error_protocol_name(&self) -> &'static str {
+        Self::ERROR_PROTOCOL_NAME
+    }
 
-#[async_trait::async_trait]
-impl StreamRouteRequest for TrojanInboundListenerRequest {
-    type Route =
-        OpaqueStreamRoute<trojan::inbound::TrojanInboundAcceptedSession<TrojanInboundTlsStream>>;
+    pub fn no_client_stream_route_defaults(
+        &self,
+    ) -> crate::inbound_route::NoClientStreamRouteDefaults {
+        crate::inbound_route::NoClientStreamRouteDefaults {
+            udp_protocol: Self::UDP_PROTOCOL,
+        }
+    }
 
-    async fn accept_route(self, socket: TokioSocket) -> Result<Self::Route, EngineError> {
+    pub async fn accept_route(
+        self,
+        socket: TokioSocket,
+    ) -> Result<
+        OpaqueStreamRoute<trojan::inbound::TrojanInboundAcceptedSession<TrojanInboundTlsStream>>,
+        EngineError,
+    > {
         let stream =
             crate::inbound_stack::accept_tls_inbound_stream(socket, &self.tls_acceptor).await?;
         self.profile

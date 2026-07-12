@@ -1,10 +1,8 @@
-//! Direct inbound — fixed-target forwarder.
+//! Direct inbound - fixed-target forwarder.
 //!
 //! Listens on a port, accepts raw TCP connections with no protocol
 //! handshake, and forwards all traffic through the kernel pipeline
 //! to a configured outbound (node or group).
-
-use std::io;
 
 use async_trait::async_trait;
 use tokio::sync::watch;
@@ -23,8 +21,6 @@ pub(crate) struct DirectInboundRequest {
     pub(crate) port: Option<u16>,
 }
 
-// ── Handler ────────────────────────────────────────────────────────────
-
 #[derive(Clone)]
 pub(crate) struct DirectInboundHandler;
 
@@ -32,31 +28,18 @@ pub(crate) struct DirectInboundHandler;
 impl InboundProtocol for DirectInboundHandler {
     type ClientStream = TcpRelayStream;
 
-    async fn accept(
-        &self,
-        _stream: TcpRelayStream,
-    ) -> Result<(Session, Self::ClientStream), EngineError> {
-        // Direct inbound has no protocol handshake — the session is built
-        // from config in the listener and dispatched via serve_inbound_direct.
-        Err(EngineError::Io(io::Error::new(
-            io::ErrorKind::Unsupported,
-            "direct accept handled inline by listener",
-        )))
-    }
-
     async fn send_ok(&self, _: &mut TcpRelayStream) -> Result<(), EngineError> {
         Ok(())
     }
+
     async fn send_blocked(&self, _: &mut TcpRelayStream) -> Result<(), EngineError> {
         Ok(())
     }
+
     async fn send_upstream_failure(&self, _: &mut TcpRelayStream) -> Result<(), EngineError> {
         Ok(())
     }
-    // relay uses default
 }
-
-// ── Listener ────────────────────────────────────────────────────────────
 
 pub(crate) async fn run_direct_listener_with_bound(
     proxy: &Proxy,

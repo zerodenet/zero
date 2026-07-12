@@ -4,7 +4,7 @@ use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
 
-use zero_core::{Address, Error, Network, ProtocolType, Session};
+use zero_core::{Address, Error, InboundClientResponse, Network, ProtocolType, Session};
 use zero_traits::AsyncSocket;
 
 use crate::shared::{
@@ -26,17 +26,17 @@ pub enum Socks5Request {
 }
 
 impl Socks5Request {
-    pub async fn dispatch_with_handlers<S, E, FC, FFut, FU, UFut>(
+    pub async fn dispatch_with_handlers<S, Connect, ConnectFut, Udp, UdpFut, E>(
         self,
         stream: S,
-        on_connect: FC,
-        on_udp_associate: FU,
+        on_connect: Connect,
+        on_udp_associate: Udp,
     ) -> Result<(), E>
     where
-        FC: FnOnce(Session, S) -> FFut,
-        FFut: core::future::Future<Output = Result<(), E>>,
-        FU: FnOnce(Socks5UdpAssociateRequest, S) -> UFut,
-        UFut: core::future::Future<Output = Result<(), E>>,
+        Connect: FnOnce(Session, S) -> ConnectFut,
+        ConnectFut: core::future::Future<Output = Result<(), E>>,
+        Udp: FnOnce(Socks5UdpAssociateRequest, S) -> UdpFut,
+        UdpFut: core::future::Future<Output = Result<(), E>>,
     {
         match self {
             Self::Connect(session) => on_connect(*session, stream).await,
@@ -199,6 +199,27 @@ impl Socks5InboundTcpAcceptor {
             .await
     }
 
+    pub async fn accept_and_dispatch_command_with<S, Connect, ConnectFut, Udp, UdpFut, E>(
+        &self,
+        mut stream: S,
+        on_connect: Connect,
+        on_udp_associate: Udp,
+    ) -> Result<(), E>
+    where
+        S: AsyncSocket,
+        Connect: FnOnce(Session, S) -> ConnectFut,
+        ConnectFut: core::future::Future<Output = Result<(), E>>,
+        Udp: FnOnce(Socks5UdpAssociateRequest, S) -> UdpFut,
+        UdpFut: core::future::Future<Output = Result<(), E>>,
+        E: From<Error>,
+    {
+        self.accept_command(&mut stream)
+            .await
+            .map_err(E::from)?
+            .dispatch_with_handlers(stream, on_connect, on_udp_associate)
+            .await
+    }
+
     pub async fn accept_request<S>(&self, stream: &mut S) -> Result<Session, Error>
     where
         S: AsyncSocket,
@@ -227,6 +248,27 @@ impl Socks5InboundTcpAcceptor {
         S: AsyncSocket,
     {
         self.inbound.send_upstream_failure_response(stream).await
+    }
+}
+
+impl<S> InboundClientResponse<S> for Socks5InboundTcpAcceptor
+where
+    S: AsyncSocket,
+{
+    async fn send_ok(&self, client: &mut S) -> Result<(), Error> {
+        Socks5InboundTcpAcceptor::send_success(self, client).await
+    }
+
+    async fn send_blocked(&self, client: &mut S) -> Result<(), Error> {
+        let _ = Socks5InboundTcpAcceptor::send_blocked(self, client).await;
+        let _ = client.shutdown().await;
+        Ok(())
+    }
+
+    async fn send_upstream_failure(&self, client: &mut S) -> Result<(), Error> {
+        let _ = Socks5InboundTcpAcceptor::send_upstream_failure(self, client).await;
+        let _ = client.shutdown().await;
+        Ok(())
     }
 }
 
