@@ -270,10 +270,29 @@ fn root_process_entrypoint_delegates_command_execution() {
         "method: \"mode.set\"",
         "method: \"tun.start\"",
         "method: \"tun.stop\"",
+        "IpcRequest",
+        "ProxyHandle",
+        "EngineHandle",
+        "spawn_ipc_server",
+        "spawn_http_server",
+        "spawn_push_connector",
+        "spawn_event_dispatcher",
+        "wait_for_shutdown_signal",
+        "status_server_spec",
     ] {
         assert!(
             !main.contains(request),
-            "process entrypoint must not construct `{request}` requests"
+            "process entrypoint must not own application runtime responsibility `{request}`"
+        );
+    }
+    for implementation in [
+        "async fn main",
+        "async fn try_main",
+        "fn init_tracing_from_config",
+    ] {
+        assert!(
+            main.contains(implementation),
+            "process entrypoint must retain `{implementation}`"
         );
     }
 }

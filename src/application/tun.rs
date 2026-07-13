@@ -36,7 +36,7 @@ pub fn execute(command: Command) -> Result<(), Box<dyn Error>> {
             "tun stopped",
         ),
         Command::TunStatus { socket_path } => {
-            let socket = crate::resolve_socket(socket_path.as_deref())?;
+            let socket = super::resolve_socket(socket_path.as_deref())?;
             let response = crate::ipc::client::send_request(
                 &socket,
                 &IpcRequest::Query {
@@ -74,7 +74,7 @@ fn send_command(
     request: IpcRequest,
     success: &str,
 ) -> Result<(), Box<dyn Error>> {
-    let socket = crate::resolve_socket(socket_path)?;
+    let socket = super::resolve_socket(socket_path)?;
     let response = crate::ipc::client::send_request(&socket, &request)?;
     if response.ok {
         println!("{success}");

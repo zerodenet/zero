@@ -22,3 +22,30 @@ pub async fn execute(command: Command) -> Result<(), Box<dyn Error>> {
         command => inspect::execute(command),
     }
 }
+
+fn resolve_socket(socket_path: Option<&str>) -> Result<String, Box<dyn Error>> {
+    if let Some(path) = socket_path {
+        return Ok(path.to_owned());
+    }
+    if let Ok(executable) = std::env::current_exe() {
+        if let Some(directory) = executable.parent() {
+            let sibling = directory.join("control.sock");
+            if sibling.exists() {
+                return Ok(sibling.display().to_string());
+            }
+        }
+    }
+    let path = crate::ipc::default_ipc_path().ok_or_else(|| {
+        std::io::Error::other(
+            "cannot find control socket: $HOME is not set. Use --socket to specify a path.",
+        )
+    })?;
+    if !path.exists() {
+        return Err(std::io::Error::other(format!(
+            "control socket not found at {} -- is zero running?",
+            path.display()
+        ))
+        .into());
+    }
+    Ok(path.to_string_lossy().to_string())
+}
