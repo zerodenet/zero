@@ -1,9 +1,6 @@
-use std::sync::Arc;
-
 use async_trait::async_trait;
 
 use zero_config::{InboundConfig, InboundProtocolConfig, OutboundProtocolConfig};
-use zero_core::Session;
 use zero_engine::{EngineError, ResolvedLeafOutbound};
 use zero_traits::{ProtocolCapabilityDescriptor, ProtocolMetadata};
 
@@ -12,14 +9,13 @@ use crate::adapters::identity::{
     named_protocol_supports_outbound, NamedProtocolAdapter,
 };
 use crate::protocol_registry::{
-    proxy_leaf_runtime, BoundInbound, InboundAdapterContext, InboundListenerCapability,
-    OutboundAdapterContext, OutboundLeafRuntime, ProtocolSupportCapability, TcpOutboundCapability,
-    UdpAdapterContext, UdpFlowCapability, UdpPacketPathCapability, UpstreamUdpHandlerProvider,
+    proxy_leaf_runtime, InboundListenerCapability, OutboundLeafRuntime, ProtocolSupportCapability,
+    TcpOutboundCapability, UdpFlowCapability, UdpPacketPathCapability, UpstreamUdpHandlerProvider,
 };
 use crate::runtime::path::TcpPathCategory;
-use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
+use crate::runtime::udp_dispatch::FlowFailure;
 use crate::runtime::udp_flow::registered::UpstreamAssociationHandler;
-use crate::transport::{EstablishedTcpOutbound, TcpOutboundFailure};
+use crate::transport::TcpOutboundFailure;
 
 #[cfg(feature = "socks5")]
 pub(super) mod inbound;
@@ -39,38 +35,31 @@ impl NamedProtocolAdapter for Socks5Adapter {
 }
 
 #[cfg(feature = "socks5")]
-#[async_trait]
 impl UdpPacketPathCapability for Socks5Adapter {
-    fn udp_packet_path_carrier_descriptor(
-        &self,
-        leaf: &ResolvedLeafOutbound<'_>,
-    ) -> Option<crate::runtime::udp_flow::packet_path::PacketPathCarrierDescriptor> {
-        self.udp_packet_path_carrier_descriptor_impl(leaf)
-    }
-
-    async fn build_udp_packet_path(
-        &self,
-        ctx: UdpAdapterContext<'_>,
-        leaf: &ResolvedLeafOutbound<'_>,
-    ) -> Result<Arc<dyn crate::runtime::udp_flow::packet_path::PacketPathCarrier>, EngineError>
-    {
-        self.build_udp_packet_path_impl(ctx.proxy(), leaf).await
+    fn prepare_udp_packet_path<'a>(
+        &'a self,
+        leaf: &'a ResolvedLeafOutbound<'a>,
+    ) -> Option<
+        Box<
+            dyn crate::runtime::udp_dispatch::packet_path_operation::PreparedUdpPacketPathOperation
+                + 'a,
+        >,
+    > {
+        self.prepare_udp_packet_path_impl(leaf)
     }
 }
 
 #[cfg(feature = "socks5")]
 #[async_trait]
 impl UdpFlowCapability for Socks5Adapter {
-    async fn start_udp_flow(
-        &self,
-        dispatch: &mut UdpDispatch,
-        ctx: UdpAdapterContext<'_>,
-        session: &Session,
-        leaf: &ResolvedLeafOutbound<'_>,
-        payload: &[u8],
-    ) -> Result<FlowStartResult, FlowFailure> {
-        self.start_udp_flow_impl(dispatch, ctx.proxy(), session, leaf, payload)
-            .await
+    fn prepare_udp_flow<'a>(
+        &'a self,
+        leaf: &'a ResolvedLeafOutbound<'a>,
+    ) -> Result<
+        Box<dyn crate::runtime::udp_dispatch::operation::PreparedUdpFlowOperation + 'a>,
+        FlowFailure,
+    > {
+        self.prepare_udp_flow_impl(leaf)
     }
 }
 
@@ -83,15 +72,15 @@ impl UpstreamUdpHandlerProvider for Socks5Adapter {
 
 #[cfg(feature = "socks5")]
 impl InboundListenerCapability for Socks5Adapter {
-    fn spawn_inbound(
+    fn prepare_inbound_listener(
         &self,
-        ctx: InboundAdapterContext<'_>,
         inbound: InboundConfig,
-        bound: BoundInbound,
-        shutdown_rx: tokio::sync::watch::Receiver<bool>,
-        listeners: &mut tokio::task::JoinSet<Result<(), EngineError>>,
-    ) {
-        self.spawn_inbound_impl(ctx.proxy(), inbound, bound, shutdown_rx, listeners);
+        _source_dir: Option<&std::path::Path>,
+    ) -> Result<
+        Box<dyn crate::runtime::inbound_operation::PreparedInboundListenerOperation>,
+        EngineError,
+    > {
+        self.prepare_inbound_listener_impl(inbound)
     }
 }
 
@@ -109,24 +98,24 @@ impl TcpOutboundCapability for Socks5Adapter {
         proxy_leaf_runtime(leaf, TcpPathCategory::Tunnel)
     }
 
-    async fn connect_tcp(
-        &self,
-        ctx: OutboundAdapterContext<'_>,
-        session: &Session,
-        leaf: &ResolvedLeafOutbound<'_>,
-    ) -> Result<EstablishedTcpOutbound, TcpOutboundFailure> {
-        self.connect_tcp_impl(ctx.proxy(), session, leaf).await
+    fn prepare_tcp_connect<'a>(
+        &'a self,
+        leaf: &'a ResolvedLeafOutbound<'a>,
+    ) -> Result<
+        Box<dyn crate::runtime::tcp_dispatch::operation::PreparedTcpConnectOperation + 'a>,
+        TcpOutboundFailure,
+    > {
+        self.prepare_tcp_connect_impl(leaf)
     }
 
-    async fn apply_relay_hop(
-        &self,
-        ctx: OutboundAdapterContext<'_>,
-        stream: crate::transport::TcpRelayStream,
-        session: &Session,
-        leaf: &ResolvedLeafOutbound<'_>,
-    ) -> Result<crate::transport::TcpRelayStream, EngineError> {
-        self.apply_relay_hop_impl(ctx.proxy(), stream, session, leaf)
-            .await
+    fn prepare_tcp_relay_hop<'a>(
+        &'a self,
+        leaf: &'a ResolvedLeafOutbound<'a>,
+    ) -> Result<
+        Box<dyn crate::runtime::tcp_dispatch::operation::PreparedTcpRelayOperation + 'a>,
+        EngineError,
+    > {
+        self.prepare_tcp_relay_hop_impl(leaf)
     }
 }
 

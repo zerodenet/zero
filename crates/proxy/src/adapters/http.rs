@@ -6,8 +6,8 @@ use crate::adapters::identity::{
     named_protocol_supports_inbound, named_protocol_supports_outbound, NamedProtocolAdapter,
 };
 use crate::protocol_registry::{
-    BoundInbound, InboundAdapterContext, InboundListenerCapability, ProtocolSupportCapability,
-    TcpOutboundCapability, UdpFlowCapability, UdpPacketPathCapability,
+    InboundListenerCapability, ProtocolSupportCapability, TcpOutboundCapability, UdpFlowCapability,
+    UdpPacketPathCapability,
 };
 
 #[cfg(feature = "http")]
@@ -26,15 +26,15 @@ impl NamedProtocolAdapter for HttpConnectAdapter {
 
 #[cfg(feature = "http")]
 impl InboundListenerCapability for HttpConnectAdapter {
-    fn spawn_inbound(
+    fn prepare_inbound_listener(
         &self,
-        ctx: InboundAdapterContext<'_>,
         inbound: InboundConfig,
-        bound: BoundInbound,
-        shutdown_rx: tokio::sync::watch::Receiver<bool>,
-        listeners: &mut tokio::task::JoinSet<Result<(), EngineError>>,
-    ) {
-        self.spawn_inbound_impl(ctx.proxy(), inbound, bound, shutdown_rx, listeners);
+        _source_dir: Option<&std::path::Path>,
+    ) -> Result<
+        Box<dyn crate::runtime::inbound_operation::PreparedInboundListenerOperation>,
+        EngineError,
+    > {
+        self.prepare_inbound_listener_impl(inbound)
     }
 }
 

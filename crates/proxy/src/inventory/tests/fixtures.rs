@@ -12,6 +12,11 @@ use crate::protocol_registry::{
     InboundListenerCapability, OutboundAdapterContext, ProtocolSupportCapability,
     TcpOutboundCapability, UdpFlowCapability, UdpPacketPathCapability,
 };
+use crate::runtime::tcp_dispatch::operation::{
+    PreparedTcpConnectOperation, PreparedTcpRelayOperation,
+};
+use crate::runtime::udp_dispatch::operation::PreparedUdpFlowOperation;
+use crate::runtime::udp_dispatch::packet_path_operation::PreparedUdpPacketPathOperation;
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
 use crate::transport::{EstablishedTcpOutbound, TcpOutboundFailure, TcpRelayStream};
 
@@ -290,16 +295,23 @@ impl InboundListenerCapability for FakeTcpCapability {
         Ok(crate::protocol_registry::BoundInbound::Tcp(listener))
     }
 
-    fn spawn_inbound(
+    fn prepare_inbound_listener(
         &self,
-        _: crate::protocol_registry::InboundAdapterContext<'_>,
         _: zero_config::InboundConfig,
-        bound: crate::protocol_registry::BoundInbound,
-        _: tokio::sync::watch::Receiver<bool>,
-        _: &mut tokio::task::JoinSet<Result<(), EngineError>>,
-    ) {
+        _: Option<&std::path::Path>,
+    ) -> Result<
+        Box<dyn crate::runtime::inbound_operation::PreparedInboundListenerOperation>,
+        EngineError,
+    > {
         self.calls.inbound_spawns.fetch_add(1, Ordering::SeqCst);
-        drop(bound);
+        Ok(Box::new(
+            crate::runtime::inbound_operation::InboundListenerOperation::new(
+                |_, bound: crate::protocol_registry::BoundInbound, _| async move {
+                    drop(bound);
+                    Ok(())
+                },
+            ),
+        ))
     }
 }
 
@@ -332,77 +344,107 @@ impl crate::protocol_registry::ManagedUdpHandlerProvider for FakeTcpCapability {
         }))
     }
 }
-#[async_trait]
-impl UdpFlowCapability for FakeTcpCapability {
-    async fn start_udp_flow(
-        &self,
-        _: &mut UdpDispatch,
-        _: crate::protocol_registry::UdpAdapterContext<'_>,
-        _: &Session,
-        _: &ResolvedLeafOutbound<'_>,
-        payload: &[u8],
-    ) -> Result<FlowStartResult, FlowFailure> {
-        self.calls.udp_starts.fetch_add(1, Ordering::SeqCst);
-        self.calls
-            .udp_payload_bytes
-            .fetch_add(payload.len(), Ordering::SeqCst);
-        if self.calls.fail_udp.load(Ordering::SeqCst) {
-            return Err(FlowFailure {
-                stage: "fake_udp_start",
-                error: EngineError::Io(std::io::Error::other("fake udp failure")),
-                upstream: Some(("fake-upstream.test".to_owned(), 5353)),
-            });
-        }
-        Ok(FlowStartResult::Blocked {
-            tag: "fake-udp".to_owned(),
+enum FakeUdpOperationKind {
+    Leaf,
+    TwoStream,
+    FinalHop(u16),
+}
+
+struct FakeUdpOperation {
+    calls: Arc<TcpCapabilityCalls>,
+    kind: FakeUdpOperationKind,
+}
+
+impl PreparedUdpFlowOperation for FakeUdpOperation {
+    fn execute<'a>(
+        self: Box<Self>,
+        _: &'a mut UdpDispatch,
+        _: crate::protocol_registry::UdpAdapterContext<'a>,
+        _: &'a Session,
+        payload: &'a [u8],
+    ) -> std::pin::Pin<
+        Box<dyn std::future::Future<Output = Result<FlowStartResult, FlowFailure>> + Send + 'a>,
+    >
+    where
+        Self: 'a,
+    {
+        Box::pin(async move {
+            self.calls
+                .udp_payload_bytes
+                .fetch_add(payload.len(), Ordering::SeqCst);
+            match self.kind {
+                FakeUdpOperationKind::Leaf => {
+                    self.calls.udp_starts.fetch_add(1, Ordering::SeqCst);
+                    if self.calls.fail_udp.load(Ordering::SeqCst) {
+                        return Err(FlowFailure {
+                            stage: "fake_udp_start",
+                            error: EngineError::Io(std::io::Error::other("fake udp failure")),
+                            upstream: Some(("fake-upstream.test".to_owned(), 5353)),
+                        });
+                    }
+                    Ok(FlowStartResult::Blocked {
+                        tag: "fake-udp".to_owned(),
+                    })
+                }
+                FakeUdpOperationKind::TwoStream => {
+                    self.calls
+                        .udp_two_stream_starts
+                        .fetch_add(1, Ordering::SeqCst);
+                    Ok(FlowStartResult::Blocked {
+                        tag: "fake-two-stream".to_owned(),
+                    })
+                }
+                FakeUdpOperationKind::FinalHop(port) => {
+                    self.calls
+                        .udp_final_hop_starts
+                        .fetch_add(1, Ordering::SeqCst);
+                    self.calls
+                        .udp_final_hop_port
+                        .store(port as usize, Ordering::SeqCst);
+                    Ok(FlowStartResult::Blocked {
+                        tag: "fake-final-hop".to_owned(),
+                    })
+                }
+            }
         })
+    }
+}
+
+impl UdpFlowCapability for FakeTcpCapability {
+    fn prepare_udp_flow<'a>(
+        &'a self,
+        _: &'a ResolvedLeafOutbound<'a>,
+    ) -> Result<Box<dyn PreparedUdpFlowOperation + 'a>, FlowFailure> {
+        Ok(Box::new(FakeUdpOperation {
+            calls: self.calls.clone(),
+            kind: FakeUdpOperationKind::Leaf,
+        }))
     }
 
     fn udp_relay_needs_two_streams(&self, _: &ResolvedLeafOutbound<'_>) -> bool {
         true
     }
 
-    async fn start_udp_relay_two_stream(
-        &self,
-        _: &mut UdpDispatch,
-        _: crate::protocol_registry::UdpAdapterContext<'_>,
-        _: &Session,
-        chain: Vec<ResolvedLeafOutbound<'_>>,
-        payload: &[u8],
-    ) -> Result<FlowStartResult, FlowFailure> {
+    fn prepare_udp_relay_two_stream<'a>(
+        &'a self,
+        chain: Vec<ResolvedLeafOutbound<'a>>,
+    ) -> Result<Box<dyn PreparedUdpFlowOperation + 'a>, FlowFailure> {
         assert_eq!(chain.len(), 2);
-        self.calls
-            .udp_two_stream_starts
-            .fetch_add(1, Ordering::SeqCst);
-        self.calls
-            .udp_payload_bytes
-            .fetch_add(payload.len(), Ordering::SeqCst);
-        Ok(FlowStartResult::Blocked {
-            tag: "fake-two-stream".to_owned(),
-        })
+        Ok(Box::new(FakeUdpOperation {
+            calls: self.calls.clone(),
+            kind: FakeUdpOperationKind::TwoStream,
+        }))
     }
 
-    async fn start_udp_relay_final_hop(
-        &self,
-        _: &mut UdpDispatch,
-        _: crate::protocol_registry::UdpAdapterContext<'_>,
-        _: &Session,
+    fn prepare_udp_relay_final_hop<'a>(
+        &'a self,
         carrier: crate::transport::RelayCarrier,
-        _: &ResolvedLeafOutbound<'_>,
-        payload: &[u8],
-    ) -> Result<FlowStartResult, FlowFailure> {
-        self.calls
-            .udp_final_hop_starts
-            .fetch_add(1, Ordering::SeqCst);
-        self.calls
-            .udp_final_hop_port
-            .store(carrier.port as usize, Ordering::SeqCst);
-        self.calls
-            .udp_payload_bytes
-            .fetch_add(payload.len(), Ordering::SeqCst);
-        Ok(FlowStartResult::Blocked {
-            tag: "fake-final-hop".to_owned(),
-        })
+        _: &'a ResolvedLeafOutbound<'a>,
+    ) -> Result<Box<dyn PreparedUdpFlowOperation + 'a>, FlowFailure> {
+        Ok(Box::new(FakeUdpOperation {
+            calls: self.calls.clone(),
+            kind: FakeUdpOperationKind::FinalHop(carrier.port),
+        }))
     }
 }
 struct FakeDatagramCodec;
@@ -440,11 +482,13 @@ impl crate::runtime::udp_flow::packet_path::PacketPathCarrier for FakePacketPath
     }
 }
 
-#[async_trait]
-impl UdpPacketPathCapability for FakeTcpCapability {
-    fn udp_packet_path_carrier_descriptor(
-        &self,
-        _: &ResolvedLeafOutbound<'_>,
+struct FakePacketPathOperation {
+    calls: Arc<TcpCapabilityCalls>,
+}
+
+impl PreparedUdpPacketPathOperation for FakePacketPathOperation {
+    fn into_carrier_descriptor(
+        self: Box<Self>,
     ) -> Option<crate::runtime::udp_flow::packet_path::PacketPathCarrierDescriptor> {
         self.calls.packet_descriptors.fetch_add(1, Ordering::SeqCst);
         Some(
@@ -456,21 +500,36 @@ impl UdpPacketPathCapability for FakeTcpCapability {
         )
     }
 
-    async fn build_udp_packet_path(
-        &self,
-        _: crate::protocol_registry::UdpAdapterContext<'_>,
-        _: &ResolvedLeafOutbound<'_>,
-    ) -> Result<Arc<dyn crate::runtime::udp_flow::packet_path::PacketPathCarrier>, EngineError>
+    fn build_carrier<'a>(
+        self: Box<Self>,
+        _: crate::protocol_registry::UdpAdapterContext<'a>,
+    ) -> std::pin::Pin<
+        Box<
+            dyn std::future::Future<
+                    Output = Result<
+                        Arc<dyn crate::runtime::udp_flow::packet_path::PacketPathCarrier>,
+                        EngineError,
+                    >,
+                > + Send
+                + 'a,
+        >,
+    >
+    where
+        Self: 'a,
     {
-        self.calls.packet_builds.fetch_add(1, Ordering::SeqCst);
-        Ok(Arc::new(FakePacketPathCarrier {
-            calls: self.calls.clone(),
-        }))
+        Box::pin(async move {
+            self.calls.packet_builds.fetch_add(1, Ordering::SeqCst);
+            Ok(Arc::new(FakePacketPathCarrier {
+                calls: self.calls.clone(),
+            })
+                as Arc<
+                    dyn crate::runtime::udp_flow::packet_path::PacketPathCarrier,
+                >)
+        })
     }
 
-    fn udp_datagram_source(
-        &self,
-        _: &ResolvedLeafOutbound<'_>,
+    fn into_datagram_source(
+        self: Box<Self>,
     ) -> Option<crate::runtime::udp_flow::packet_path::UdpDatagramSource> {
         self.calls.packet_sources.fetch_add(1, Ordering::SeqCst);
         Some(crate::runtime::udp_flow::packet_path::udp_datagram_source(
@@ -483,40 +542,96 @@ impl UdpPacketPathCapability for FakeTcpCapability {
     }
 }
 
-#[async_trait]
+impl UdpPacketPathCapability for FakeTcpCapability {
+    fn prepare_udp_packet_path<'a>(
+        &'a self,
+        _: &'a ResolvedLeafOutbound<'a>,
+    ) -> Option<Box<dyn PreparedUdpPacketPathOperation + 'a>> {
+        Some(Box::new(FakePacketPathOperation {
+            calls: self.calls.clone(),
+        }))
+    }
+}
+
+struct FakeTcpConnectOperation {
+    calls: Arc<TcpCapabilityCalls>,
+}
+
+impl PreparedTcpConnectOperation for FakeTcpConnectOperation {
+    fn execute<'a>(
+        self: Box<Self>,
+        _: OutboundAdapterContext<'a>,
+        _: &'a Session,
+    ) -> std::pin::Pin<
+        Box<
+            dyn std::future::Future<Output = Result<EstablishedTcpOutbound, TcpOutboundFailure>>
+                + Send
+                + 'a,
+        >,
+    >
+    where
+        Self: 'a,
+    {
+        Box::pin(async move {
+            self.calls.connects.fetch_add(1, Ordering::SeqCst);
+            if self.calls.fail_tcp.load(Ordering::SeqCst) {
+                return Err(TcpOutboundFailure {
+                    stage: "fake_tcp_connect",
+                    error: EngineError::Io(std::io::Error::other("fake TCP failure")),
+                    upstream_endpoint: Some(("fake-tcp.test".to_owned(), 8443)),
+                });
+            }
+            Ok(EstablishedTcpOutbound::block("fake"))
+        })
+    }
+}
+
+struct FakeTcpRelayOperation {
+    calls: Arc<TcpCapabilityCalls>,
+}
+
+impl PreparedTcpRelayOperation for FakeTcpRelayOperation {
+    fn execute<'a>(
+        self: Box<Self>,
+        _: OutboundAdapterContext<'a>,
+        stream: TcpRelayStream,
+        _: &'a Session,
+    ) -> std::pin::Pin<
+        Box<dyn std::future::Future<Output = Result<TcpRelayStream, EngineError>> + Send + 'a>,
+    >
+    where
+        Self: 'a,
+    {
+        Box::pin(async move {
+            self.calls.relay_hops.fetch_add(1, Ordering::SeqCst);
+            if self.calls.fail_relay.load(Ordering::SeqCst) {
+                return Err(EngineError::Io(std::io::Error::other("fake relay failure")));
+            }
+            Ok(stream)
+        })
+    }
+}
+
 impl TcpOutboundCapability for FakeTcpCapability {
     fn claims_outbound_leaf(&self, _: &ResolvedLeafOutbound<'_>) -> bool {
         true
     }
 
-    async fn connect_tcp(
-        &self,
-        _: OutboundAdapterContext<'_>,
-        _: &Session,
-        _: &ResolvedLeafOutbound<'_>,
-    ) -> Result<EstablishedTcpOutbound, TcpOutboundFailure> {
-        self.calls.connects.fetch_add(1, Ordering::SeqCst);
-        if self.calls.fail_tcp.load(Ordering::SeqCst) {
-            return Err(TcpOutboundFailure {
-                stage: "fake_tcp_connect",
-                error: EngineError::Io(std::io::Error::other("fake TCP failure")),
-                upstream_endpoint: Some(("fake-tcp.test".to_owned(), 8443)),
-            });
-        }
-        Ok(EstablishedTcpOutbound::block("fake"))
+    fn prepare_tcp_connect<'a>(
+        &'a self,
+        _: &'a ResolvedLeafOutbound<'a>,
+    ) -> Result<Box<dyn PreparedTcpConnectOperation + 'a>, TcpOutboundFailure> {
+        Ok(Box::new(FakeTcpConnectOperation {
+            calls: self.calls.clone(),
+        }))
     }
 
-    async fn apply_relay_hop(
-        &self,
-        _: OutboundAdapterContext<'_>,
-        stream: TcpRelayStream,
-        _: &Session,
-        _: &ResolvedLeafOutbound<'_>,
-    ) -> Result<TcpRelayStream, EngineError> {
-        self.calls.relay_hops.fetch_add(1, Ordering::SeqCst);
-        if self.calls.fail_relay.load(Ordering::SeqCst) {
-            return Err(EngineError::Io(std::io::Error::other("fake relay failure")));
-        }
-        Ok(stream)
+    fn prepare_tcp_relay_hop<'a>(
+        &'a self,
+        _: &'a ResolvedLeafOutbound<'a>,
+    ) -> Result<Box<dyn PreparedTcpRelayOperation + 'a>, EngineError> {
+        Ok(Box::new(FakeTcpRelayOperation {
+            calls: self.calls.clone(),
+        }))
     }
 }

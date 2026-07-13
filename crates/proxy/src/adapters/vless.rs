@@ -6,7 +6,6 @@ mod listener;
 use zero_config::InboundConfig;
 use zero_config::{InboundProtocolConfig, OutboundProtocolConfig};
 #[cfg(feature = "vless")]
-use zero_core::Session;
 #[cfg(feature = "vless")]
 use zero_engine::{EngineError, ResolvedLeafOutbound};
 use zero_traits::{ProtocolCapabilityDescriptor, ProtocolMetadata};
@@ -19,30 +18,33 @@ use crate::adapters::identity::{
     named_protocol_supports_outbound, NamedProtocolAdapter, ProtocolTransportBridgeAdapter,
 };
 use crate::protocol_registry::{
-    bind_transport_inbound, proxy_leaf_runtime, BoundInbound, InboundAdapterContext,
-    InboundListenerCapability, ManagedUdpHandlerProvider, OutboundAdapterContext,
-    OutboundLeafRuntime, ProtocolSupportCapability, TcpOutboundCapability, UdpAdapterContext,
-    UdpFlowCapability, UdpPacketPathCapability,
+    bind_transport_inbound, proxy_leaf_runtime, BoundInbound, InboundListenerCapability,
+    ManagedUdpHandlerProvider, OutboundLeafRuntime, ProtocolSupportCapability,
+    TcpOutboundCapability, UdpFlowCapability, UdpPacketPathCapability,
 };
 use crate::runtime::path::TcpPathCategory;
 #[cfg(feature = "vless")]
-use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
+use crate::runtime::tcp_dispatch::operation::{
+    PreparedTcpConnectOperation, PreparedTcpRelayOperation, VlessTcpConnectOperation,
+    VlessTcpRelayOperation,
+};
+#[cfg(feature = "vless")]
+use crate::runtime::udp_dispatch::operation::{
+    PreparedTransportUdpOperation, PreparedUdpFlowOperation, VlessRelayTwoStreamUdpOperation,
+    VlessTransportUdpOperation,
+};
+#[cfg(feature = "vless")]
+use crate::runtime::udp_dispatch::FlowFailure;
 #[cfg(feature = "vless")]
 use crate::runtime::udp_flow::managed::{
     bridge::{
         managed_stream_udp_handler_for_bridge,
         protocol_transport_bridge_udp_relay_needs_two_streams,
-        start_protocol_transport_bridge_udp_flow,
-        start_protocol_transport_bridge_udp_relay_final_hop,
-        start_protocol_transport_bridge_udp_relay_two_stream,
     },
     ManagedStreamHandlerPair,
 };
 #[cfg(feature = "vless")]
-use crate::transport::{
-    apply_protocol_transport_bridge_relay_hop, connect_protocol_transport_bridge_tcp,
-    EstablishedTcpOutbound, TcpOutboundFailure,
-};
+use crate::transport::TcpOutboundFailure;
 
 #[cfg(feature = "vless")]
 #[derive(Debug, Default)]
@@ -111,15 +113,15 @@ impl InboundListenerCapability for VlessAdapter {
         bind_transport_inbound::<OwnedVlessInboundBindPlan>(inbound, source_dir).await
     }
 
-    fn spawn_inbound(
+    fn prepare_inbound_listener(
         &self,
-        ctx: InboundAdapterContext<'_>,
         inbound: InboundConfig,
-        bound: BoundInbound,
-        shutdown_rx: tokio::sync::watch::Receiver<bool>,
-        listeners: &mut tokio::task::JoinSet<Result<(), EngineError>>,
-    ) {
-        listener::spawn(ctx.proxy(), inbound, bound, shutdown_rx, listeners);
+        source_dir: Option<&std::path::Path>,
+    ) -> Result<
+        Box<dyn crate::runtime::inbound_operation::PreparedInboundListenerOperation>,
+        EngineError,
+    > {
+        listener::prepare(inbound, source_dir)
     }
 }
 
@@ -137,90 +139,63 @@ impl TcpOutboundCapability for VlessAdapter {
         proxy_leaf_runtime(leaf, Self::TCP_PATH)
     }
 
-    async fn connect_tcp(
-        &self,
-        ctx: OutboundAdapterContext<'_>,
-        session: &Session,
-        leaf: &ResolvedLeafOutbound<'_>,
-    ) -> Result<EstablishedTcpOutbound, TcpOutboundFailure> {
-        connect_protocol_transport_bridge_tcp(self.bridge(), ctx, session, leaf, |_| {}).await
+    fn prepare_tcp_connect<'a>(
+        &'a self,
+        leaf: &'a ResolvedLeafOutbound<'a>,
+    ) -> Result<Box<dyn PreparedTcpConnectOperation + 'a>, TcpOutboundFailure> {
+        Ok(Box::new(VlessTcpConnectOperation {
+            bridge: self.bridge(),
+            leaf,
+        }))
     }
 
-    async fn apply_relay_hop(
-        &self,
-        ctx: OutboundAdapterContext<'_>,
-        stream: crate::transport::TcpRelayStream,
-        session: &Session,
-        leaf: &ResolvedLeafOutbound<'_>,
-    ) -> Result<crate::transport::TcpRelayStream, EngineError> {
-        apply_protocol_transport_bridge_relay_hop(self.bridge(), ctx, stream, session, leaf).await
+    fn prepare_tcp_relay_hop<'a>(
+        &'a self,
+        leaf: &'a ResolvedLeafOutbound<'a>,
+    ) -> Result<Box<dyn PreparedTcpRelayOperation + 'a>, EngineError> {
+        Ok(Box::new(VlessTcpRelayOperation {
+            bridge: self.bridge(),
+            leaf,
+        }))
     }
 }
 
 #[cfg(feature = "vless")]
 #[async_trait]
 impl UdpFlowCapability for VlessAdapter {
-    async fn start_udp_flow(
-        &self,
-        dispatch: &mut UdpDispatch,
-        ctx: UdpAdapterContext<'_>,
-        session: &Session,
-        leaf: &ResolvedLeafOutbound<'_>,
-        payload: &[u8],
-    ) -> Result<FlowStartResult, FlowFailure> {
-        start_protocol_transport_bridge_udp_flow(
-            self.bridge(),
-            dispatch.flow_start_context(),
-            ctx.proxy(),
-            session,
-            leaf,
-            payload,
-        )
-        .await
+    fn prepare_udp_flow<'a>(
+        &'a self,
+        leaf: &'a ResolvedLeafOutbound<'a>,
+    ) -> Result<Box<dyn PreparedUdpFlowOperation + 'a>, FlowFailure> {
+        Ok(Box::new(VlessTransportUdpOperation {
+            bridge: self.bridge(),
+            operation: PreparedTransportUdpOperation::Direct { leaf },
+        }))
     }
 
     fn udp_relay_needs_two_streams(&self, leaf: &ResolvedLeafOutbound<'_>) -> bool {
         protocol_transport_bridge_udp_relay_needs_two_streams(self.bridge(), leaf)
     }
 
-    async fn start_udp_relay_two_stream(
-        &self,
-        dispatch: &mut UdpDispatch,
-        ctx: UdpAdapterContext<'_>,
-        session: &Session,
-        chain: Vec<ResolvedLeafOutbound<'_>>,
-        payload: &[u8],
-    ) -> Result<FlowStartResult, FlowFailure> {
-        start_protocol_transport_bridge_udp_relay_two_stream(
-            self.bridge(),
-            dispatch.flow_start_context(),
-            ctx.proxy(),
-            session,
-            &chain,
-            payload,
-        )
-        .await
+    fn prepare_udp_relay_two_stream<'a>(
+        &'a self,
+        chain: Vec<ResolvedLeafOutbound<'a>>,
+    ) -> Result<Box<dyn PreparedUdpFlowOperation + 'a>, FlowFailure> {
+        Ok(Box::new(VlessRelayTwoStreamUdpOperation {
+            bridge: self.bridge(),
+            chain,
+        }))
     }
 
-    async fn start_udp_relay_final_hop(
-        &self,
-        dispatch: &mut UdpDispatch,
-        ctx: UdpAdapterContext<'_>,
-        session: &Session,
+    fn prepare_udp_relay_final_hop<'a>(
+        &'a self,
         carrier: crate::transport::RelayCarrier,
-        leaf: &ResolvedLeafOutbound<'_>,
-        payload: &[u8],
-    ) -> Result<FlowStartResult, FlowFailure> {
-        start_protocol_transport_bridge_udp_relay_final_hop(
-            self.bridge(),
-            dispatch.flow_start_context(),
-            ctx.proxy(),
-            session,
-            carrier,
-            leaf,
-            payload,
-        )
-        .await
+        leaf: &'a ResolvedLeafOutbound<'a>,
+    ) -> Result<Box<dyn PreparedUdpFlowOperation + 'a>, FlowFailure> {
+        Ok(Box::new(VlessTransportUdpOperation {
+            bridge: self.bridge(),
+            operation: PreparedTransportUdpOperation::RelayFinalHop { carrier, leaf },
+        }))
     }
 }
 

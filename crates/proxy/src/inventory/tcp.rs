@@ -21,13 +21,10 @@ impl ProtocolInventory {
                     error,
                     upstream_endpoint: None,
                 })?;
-        TcpOutboundCapability::connect_tcp(
-            adapter.as_ref(),
-            OutboundAdapterContext::new(proxy),
-            session,
-            leaf,
-        )
-        .await
+        let operation = TcpOutboundCapability::prepare_tcp_connect(adapter.as_ref(), leaf)?;
+        operation
+            .execute(OutboundAdapterContext::new(proxy), session)
+            .await
     }
 
     /// Apply one relay-chain TCP hop through the adapter that owns `leaf`.
@@ -39,13 +36,9 @@ impl ProtocolInventory {
         leaf: &zero_engine::ResolvedLeafOutbound<'_>,
     ) -> Result<TcpRelayStream, EngineError> {
         let adapter = self.registry.find_outbound_leaf(leaf)?;
-        TcpOutboundCapability::apply_relay_hop(
-            adapter.as_ref(),
-            OutboundAdapterContext::new(proxy),
-            stream,
-            session,
-            leaf,
-        )
-        .await
+        let operation = TcpOutboundCapability::prepare_tcp_relay_hop(adapter.as_ref(), leaf)?;
+        operation
+            .execute(OutboundAdapterContext::new(proxy), stream, session)
+            .await
     }
 }

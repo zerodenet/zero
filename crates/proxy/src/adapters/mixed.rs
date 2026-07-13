@@ -7,8 +7,8 @@ use crate::adapters::identity::{
 };
 use crate::protocol_catalog::protocol_descriptor;
 use crate::protocol_registry::{
-    BoundInbound, InboundAdapterContext, InboundListenerCapability, ProtocolSupportCapability,
-    TcpOutboundCapability, UdpFlowCapability, UdpPacketPathCapability,
+    InboundListenerCapability, ProtocolSupportCapability, TcpOutboundCapability, UdpFlowCapability,
+    UdpPacketPathCapability,
 };
 
 #[cfg(feature = "mixed")]
@@ -27,15 +27,15 @@ impl NamedProtocolAdapter for MixedAdapter {
 
 #[cfg(feature = "mixed")]
 impl InboundListenerCapability for MixedAdapter {
-    fn spawn_inbound(
+    fn prepare_inbound_listener(
         &self,
-        ctx: InboundAdapterContext<'_>,
         inbound: InboundConfig,
-        bound: BoundInbound,
-        shutdown_rx: tokio::sync::watch::Receiver<bool>,
-        listeners: &mut tokio::task::JoinSet<Result<(), EngineError>>,
-    ) {
-        self.spawn_inbound_impl(ctx.proxy(), inbound, bound, shutdown_rx, listeners);
+        _source_dir: Option<&std::path::Path>,
+    ) -> Result<
+        Box<dyn crate::runtime::inbound_operation::PreparedInboundListenerOperation>,
+        EngineError,
+    > {
+        self.prepare_inbound_listener_impl(inbound)
     }
 }
 

@@ -43,10 +43,6 @@ pub(in crate::protocol_registry) fn udp_relay_final_hop_unsupported() -> FlowFai
     )
 }
 
-pub(in crate::protocol_registry) fn packet_path_carrier_unsupported() -> EngineError {
-    unsupported_io("this adapter does not provide a UDP packet-path carrier")
-}
-
 pub(crate) fn unreachable_leaf(
     adapter: &'static str,
     _leaf: &ResolvedLeafOutbound<'_>,

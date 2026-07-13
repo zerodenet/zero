@@ -4,6 +4,8 @@ mod managed_udp;
 
 use core::future::Future;
 
+use crate::outbound_leaf::{ProtocolSocketTcpHandshake, ProtocolTransportLeaf};
+use crate::StreamTraffic;
 use tokio::io::{AsyncRead, AsyncWrite};
 use zero_config::{InboundProtocolConfig, MieruUserConfig};
 use zero_core::{InboundClientResponse, Session};
@@ -34,12 +36,55 @@ pub struct MieruTransportLeaf<'a> {
     password: &'a str,
 }
 
+impl ProtocolTransportLeaf for MieruTransportLeaf<'_> {
+    fn tag(&self) -> &str {
+        self.tag()
+    }
+    fn server(&self) -> &str {
+        self.server()
+    }
+    fn port(&self) -> u16 {
+        self.port()
+    }
+}
+
+#[async_trait::async_trait]
+impl ProtocolSocketTcpHandshake for MieruTransportLeaf<'_> {
+    fn connect_stage(&self) -> &'static str {
+        "connect_upstream_mieru"
+    }
+
+    async fn handshake_socket(
+        &self,
+        socket: TokioSocket,
+        session: &Session,
+    ) -> Result<(TcpRelayStream, StreamTraffic), EngineError> {
+        let stream = establish_mieru_tcp_tunnel(
+            TcpRelayStream::new(socket),
+            session,
+            self.username,
+            self.password,
+        )
+        .await?;
+        Ok((stream, StreamTraffic::default()))
+    }
+
+    async fn handshake_relay(
+        &self,
+        stream: TcpRelayStream,
+        session: &Session,
+    ) -> Result<TcpRelayStream, EngineError> {
+        establish_mieru_tcp_tunnel(stream, session, self.username, self.password).await
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct MieruManagedUdpFlowPlan<'a> {
     tag: &'a str,
     server: &'a str,
     port: u16,
     resume: MieruManagedStreamUdpResume,
+    relay_chain: bool,
 }
 
 pub fn inbound_profile_from_users(users: &[MieruUserConfig]) -> OwnedMieruInboundProfile {
@@ -175,6 +220,7 @@ impl<'a> MieruTransportLeaf<'a> {
             self.server,
             self.port,
             self.flow_resume(relay_chain),
+            relay_chain,
         )
     }
 
@@ -235,12 +281,19 @@ pub fn udp_flow_resume_from_config(
 }
 
 impl<'a> MieruManagedUdpFlowPlan<'a> {
-    fn new(tag: &'a str, server: &'a str, port: u16, resume: MieruManagedStreamUdpResume) -> Self {
+    fn new(
+        tag: &'a str,
+        server: &'a str,
+        port: u16,
+        resume: MieruManagedStreamUdpResume,
+        relay_chain: bool,
+    ) -> Self {
         Self {
             tag,
             server,
             port,
             resume,
+            relay_chain,
         }
     }
 
@@ -258,6 +311,18 @@ impl<'a> MieruManagedUdpFlowPlan<'a> {
 
     pub fn into_parts(self) -> (&'a str, &'a str, u16, MieruManagedStreamUdpResume) {
         (self.tag, self.server, self.port, self.resume)
+    }
+
+    pub fn into_bridge_plan(
+        self,
+    ) -> crate::managed_udp::ManagedStreamPacketBridgePlan<'a, MieruManagedStreamUdpResume> {
+        crate::managed_udp::ManagedStreamPacketBridgePlan::new(
+            self.tag,
+            self.server,
+            self.port,
+            self.resume,
+            self.relay_chain,
+        )
     }
 
     pub fn into_resume(self) -> MieruManagedStreamUdpResume {

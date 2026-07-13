@@ -27,6 +27,7 @@ mod handle;
 pub(crate) mod http_redirect;
 #[cfg(feature = "vless")]
 pub(crate) mod inbound_fallback;
+pub(crate) mod inbound_operation;
 pub(crate) mod inbound_route;
 pub(crate) mod listener_loop;
 mod listeners;
@@ -55,7 +56,7 @@ mod running;
     feature = "mieru"
 ))]
 pub(crate) mod stream_udp;
-mod tcp_dispatch;
+pub(crate) mod tcp_dispatch;
 pub(crate) mod tcp_ingress;
 #[cfg(feature = "socks5")]
 pub(crate) mod udp_association;

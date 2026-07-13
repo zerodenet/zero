@@ -138,6 +138,29 @@ impl UdpDispatch {
     }
 
     #[cfg(any(feature = "hysteria2", feature = "shadowsocks"))]
+    pub(crate) async fn start_transport_managed_datagram<T>(
+        &mut self,
+        proxy: Option<&crate::runtime::Proxy>,
+        session: &zero_core::Session,
+        payload: &[u8],
+        plan: zero_transport::managed_udp::ManagedDatagramStartPlan<'_, T>,
+    ) -> Result<FlowStartResult, FlowFailure>
+    where
+        T: std::any::Any + Send + Sync + std::fmt::Debug,
+    {
+        self.start_tracked_managed_datagram(ManagedDatagramStart {
+            proxy,
+            tag: plan.tag,
+            session,
+            server: plan.server,
+            port: plan.port,
+            resume: plan.resume,
+            payload,
+        })
+        .await
+    }
+
+    #[cfg(any(feature = "hysteria2", feature = "shadowsocks"))]
     pub(crate) async fn start_tracked_managed_datagram<T>(
         &mut self,
         request: ManagedDatagramStart<'_, T>,

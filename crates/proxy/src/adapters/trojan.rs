@@ -6,7 +6,6 @@ mod listener;
 use zero_config::InboundConfig;
 use zero_config::{InboundProtocolConfig, OutboundProtocolConfig};
 #[cfg(feature = "trojan")]
-use zero_core::Session;
 #[cfg(feature = "trojan")]
 use zero_engine::{EngineError, ResolvedLeafOutbound};
 use zero_traits::{ProtocolCapabilityDescriptor, ProtocolMetadata};
@@ -17,27 +16,27 @@ use crate::adapters::identity::{
     named_protocol_supports_outbound, NamedProtocolAdapter, ProtocolTransportBridgeAdapter,
 };
 use crate::protocol_registry::{
-    proxy_leaf_runtime, BoundInbound, InboundAdapterContext, InboundListenerCapability,
-    ManagedUdpHandlerProvider, OutboundAdapterContext, OutboundLeafRuntime,
-    ProtocolSupportCapability, TcpOutboundCapability, UdpAdapterContext, UdpFlowCapability,
-    UdpPacketPathCapability,
+    proxy_leaf_runtime, InboundListenerCapability, ManagedUdpHandlerProvider, OutboundLeafRuntime,
+    ProtocolSupportCapability, TcpOutboundCapability, UdpFlowCapability, UdpPacketPathCapability,
 };
 use crate::runtime::path::TcpPathCategory;
 #[cfg(feature = "trojan")]
-use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
+use crate::runtime::tcp_dispatch::operation::{
+    PreparedTcpConnectOperation, PreparedTcpRelayOperation, TrojanTcpConnectOperation,
+    TrojanTcpRelayOperation,
+};
+#[cfg(feature = "trojan")]
+use crate::runtime::udp_dispatch::operation::{
+    PreparedTransportUdpOperation, PreparedUdpFlowOperation, TrojanTransportUdpOperation,
+};
+#[cfg(feature = "trojan")]
+use crate::runtime::udp_dispatch::FlowFailure;
 #[cfg(feature = "trojan")]
 use crate::runtime::udp_flow::managed::{
-    bridge::{
-        managed_stream_udp_handler_for_bridge, start_protocol_transport_bridge_udp_flow,
-        start_protocol_transport_bridge_udp_relay_final_hop,
-    },
-    ManagedStreamHandlerPair,
+    bridge::managed_stream_udp_handler_for_bridge, ManagedStreamHandlerPair,
 };
 #[cfg(feature = "trojan")]
-use crate::transport::{
-    apply_protocol_transport_bridge_relay_hop, connect_protocol_transport_bridge_tcp,
-    EstablishedTcpOutbound, TcpOutboundFailure,
-};
+use crate::transport::TcpOutboundFailure;
 
 #[cfg(feature = "trojan")]
 #[derive(Debug)]
@@ -106,15 +105,15 @@ impl ProtocolMetadata for TrojanAdapter {
 
 #[cfg(feature = "trojan")]
 impl InboundListenerCapability for TrojanAdapter {
-    fn spawn_inbound(
+    fn prepare_inbound_listener(
         &self,
-        ctx: InboundAdapterContext<'_>,
         inbound: InboundConfig,
-        bound: BoundInbound,
-        shutdown_rx: tokio::sync::watch::Receiver<bool>,
-        listeners: &mut tokio::task::JoinSet<Result<(), EngineError>>,
-    ) {
-        listener::spawn(ctx.proxy(), inbound, bound, shutdown_rx, listeners);
+        source_dir: Option<&std::path::Path>,
+    ) -> Result<
+        Box<dyn crate::runtime::inbound_operation::PreparedInboundListenerOperation>,
+        EngineError,
+    > {
+        listener::prepare(inbound, source_dir)
     }
 }
 
@@ -132,67 +131,49 @@ impl TcpOutboundCapability for TrojanAdapter {
         proxy_leaf_runtime(leaf, Self::TCP_PATH)
     }
 
-    async fn connect_tcp(
-        &self,
-        ctx: OutboundAdapterContext<'_>,
-        session: &Session,
-        leaf: &ResolvedLeafOutbound<'_>,
-    ) -> Result<EstablishedTcpOutbound, TcpOutboundFailure> {
-        connect_protocol_transport_bridge_tcp(self.bridge(), ctx, session, leaf, |_| {}).await
+    fn prepare_tcp_connect<'a>(
+        &'a self,
+        leaf: &'a ResolvedLeafOutbound<'a>,
+    ) -> Result<Box<dyn PreparedTcpConnectOperation + 'a>, TcpOutboundFailure> {
+        Ok(Box::new(TrojanTcpConnectOperation {
+            bridge: self.bridge(),
+            leaf,
+        }))
     }
 
-    async fn apply_relay_hop(
-        &self,
-        ctx: OutboundAdapterContext<'_>,
-        stream: crate::transport::TcpRelayStream,
-        session: &Session,
-        leaf: &ResolvedLeafOutbound<'_>,
-    ) -> Result<crate::transport::TcpRelayStream, EngineError> {
-        apply_protocol_transport_bridge_relay_hop(self.bridge(), ctx, stream, session, leaf).await
+    fn prepare_tcp_relay_hop<'a>(
+        &'a self,
+        leaf: &'a ResolvedLeafOutbound<'a>,
+    ) -> Result<Box<dyn PreparedTcpRelayOperation + 'a>, EngineError> {
+        Ok(Box::new(TrojanTcpRelayOperation {
+            bridge: self.bridge(),
+            leaf,
+        }))
     }
 }
 
 #[cfg(feature = "trojan")]
 #[async_trait]
 impl UdpFlowCapability for TrojanAdapter {
-    async fn start_udp_flow(
-        &self,
-        dispatch: &mut UdpDispatch,
-        ctx: UdpAdapterContext<'_>,
-        session: &Session,
-        leaf: &ResolvedLeafOutbound<'_>,
-        payload: &[u8],
-    ) -> Result<FlowStartResult, FlowFailure> {
-        start_protocol_transport_bridge_udp_flow(
-            self.bridge(),
-            dispatch.flow_start_context(),
-            ctx.proxy(),
-            session,
-            leaf,
-            payload,
-        )
-        .await
+    fn prepare_udp_flow<'a>(
+        &'a self,
+        leaf: &'a ResolvedLeafOutbound<'a>,
+    ) -> Result<Box<dyn PreparedUdpFlowOperation + 'a>, FlowFailure> {
+        Ok(Box::new(TrojanTransportUdpOperation {
+            bridge: self.bridge(),
+            operation: PreparedTransportUdpOperation::Direct { leaf },
+        }))
     }
 
-    async fn start_udp_relay_final_hop(
-        &self,
-        dispatch: &mut UdpDispatch,
-        ctx: UdpAdapterContext<'_>,
-        session: &Session,
+    fn prepare_udp_relay_final_hop<'a>(
+        &'a self,
         carrier: crate::transport::RelayCarrier,
-        leaf: &ResolvedLeafOutbound<'_>,
-        payload: &[u8],
-    ) -> Result<FlowStartResult, FlowFailure> {
-        start_protocol_transport_bridge_udp_relay_final_hop(
-            self.bridge(),
-            dispatch.flow_start_context(),
-            ctx.proxy(),
-            session,
-            carrier,
-            leaf,
-            payload,
-        )
-        .await
+        leaf: &'a ResolvedLeafOutbound<'a>,
+    ) -> Result<Box<dyn PreparedUdpFlowOperation + 'a>, FlowFailure> {
+        Ok(Box::new(TrojanTransportUdpOperation {
+            bridge: self.bridge(),
+            operation: PreparedTransportUdpOperation::RelayFinalHop { carrier, leaf },
+        }))
     }
 }
 

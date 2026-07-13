@@ -1,37 +1,23 @@
-use zero_core::Session;
 use zero_engine::ResolvedLeafOutbound;
 
 use crate::adapters::direct::DirectAdapter;
 use crate::protocol_registry::unreachable_leaf;
 use crate::protocol_registry::ProtocolSupportCapability;
-use crate::runtime::Proxy;
-use crate::transport::{EstablishedTcpOutbound, TcpOutboundFailure};
+use crate::runtime::tcp_dispatch::operation::{
+    DirectTcpConnectOperation, PreparedTcpConnectOperation,
+};
+use crate::transport::TcpOutboundFailure;
 
 impl DirectAdapter {
-    pub(super) async fn connect_tcp_impl(
+    pub(super) fn prepare_tcp_connect_impl<'a>(
         &self,
-        proxy: &Proxy,
-        session: &Session,
-        leaf: &ResolvedLeafOutbound<'_>,
-    ) -> Result<EstablishedTcpOutbound, TcpOutboundFailure> {
+        leaf: &'a ResolvedLeafOutbound<'a>,
+    ) -> Result<Box<dyn PreparedTcpConnectOperation + 'a>, TcpOutboundFailure> {
         let ResolvedLeafOutbound::Direct { tag } = leaf else {
             return Err(unreachable_leaf(self.name(), leaf));
         };
-        match proxy
-            .protocols
-            .direct_connector()
-            .connect(session, proxy.resolver.as_ref())
-            .await
-        {
-            Ok(upstream) => Ok(EstablishedTcpOutbound::direct(
-                (*tag).unwrap_or("direct"),
-                upstream.into(),
-            )),
-            Err(error) => Err(TcpOutboundFailure {
-                stage: "connect_direct",
-                error: error.into(),
-                upstream_endpoint: None,
-            }),
-        }
+        Ok(Box::new(DirectTcpConnectOperation {
+            tag: (*tag).unwrap_or("direct").to_owned(),
+        }))
     }
 }

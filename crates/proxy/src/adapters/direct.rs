@@ -1,7 +1,6 @@
 use async_trait::async_trait;
 
 use zero_config::{InboundConfig, InboundProtocolConfig, OutboundProtocolConfig};
-use zero_core::Session;
 use zero_engine::{EngineError, ResolvedLeafOutbound};
 use zero_traits::{ProtocolCapabilityDescriptor, ProtocolMetadata};
 
@@ -19,11 +18,9 @@ use crate::protocol_catalog::protocol_descriptor;
     feature = "vmess",
     feature = "mieru"
 ))]
-use crate::protocol_registry::UdpAdapterContext;
 use crate::protocol_registry::{
-    direct_leaf_runtime, BoundInbound, InboundAdapterContext, InboundListenerCapability,
-    OutboundAdapterContext, OutboundLeafRuntime, ProtocolSupportCapability, TcpOutboundCapability,
-    UdpFlowCapability, UdpPacketPathCapability,
+    direct_leaf_runtime, InboundListenerCapability, OutboundLeafRuntime, ProtocolSupportCapability,
+    TcpOutboundCapability, UdpFlowCapability, UdpPacketPathCapability,
 };
 #[cfg(any(
     feature = "socks5",
@@ -34,8 +31,8 @@ use crate::protocol_registry::{
     feature = "vmess",
     feature = "mieru"
 ))]
-use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
-use crate::transport::{EstablishedTcpOutbound, TcpOutboundFailure};
+use crate::runtime::udp_dispatch::FlowFailure;
+use crate::transport::TcpOutboundFailure;
 
 mod inbound;
 mod tcp;
@@ -71,16 +68,14 @@ impl NamedProtocolAdapter for DirectAdapter {
     feature = "mieru"
 ))]
 impl UdpFlowCapability for DirectAdapter {
-    async fn start_udp_flow(
-        &self,
-        dispatch: &mut UdpDispatch,
-        ctx: UdpAdapterContext<'_>,
-        session: &Session,
-        leaf: &ResolvedLeafOutbound<'_>,
-        payload: &[u8],
-    ) -> Result<FlowStartResult, FlowFailure> {
-        self.start_udp_flow_impl(dispatch, ctx.proxy(), session, leaf, payload)
-            .await
+    fn prepare_udp_flow<'a>(
+        &'a self,
+        leaf: &'a ResolvedLeafOutbound<'a>,
+    ) -> Result<
+        Box<dyn crate::runtime::udp_dispatch::operation::PreparedUdpFlowOperation + 'a>,
+        FlowFailure,
+    > {
+        self.prepare_udp_flow_impl(leaf)
     }
 }
 
@@ -98,15 +93,15 @@ impl UdpFlowCapability for DirectAdapter {}
 impl UdpPacketPathCapability for DirectAdapter {}
 
 impl InboundListenerCapability for DirectAdapter {
-    fn spawn_inbound(
+    fn prepare_inbound_listener(
         &self,
-        ctx: InboundAdapterContext<'_>,
         inbound: InboundConfig,
-        bound: BoundInbound,
-        shutdown_rx: tokio::sync::watch::Receiver<bool>,
-        listeners: &mut tokio::task::JoinSet<Result<(), EngineError>>,
-    ) {
-        self.spawn_inbound_impl(ctx.proxy(), inbound, bound, shutdown_rx, listeners);
+        _source_dir: Option<&std::path::Path>,
+    ) -> Result<
+        Box<dyn crate::runtime::inbound_operation::PreparedInboundListenerOperation>,
+        EngineError,
+    > {
+        self.prepare_inbound_listener_impl(inbound)
     }
 }
 
@@ -121,13 +116,14 @@ impl TcpOutboundCapability for DirectAdapter {
     ) -> Option<OutboundLeafRuntime<'a>> {
         direct_leaf_runtime(leaf)
     }
-    async fn connect_tcp(
-        &self,
-        ctx: OutboundAdapterContext<'_>,
-        session: &Session,
-        leaf: &ResolvedLeafOutbound<'_>,
-    ) -> Result<EstablishedTcpOutbound, TcpOutboundFailure> {
-        self.connect_tcp_impl(ctx.proxy(), session, leaf).await
+    fn prepare_tcp_connect<'a>(
+        &'a self,
+        leaf: &'a ResolvedLeafOutbound<'a>,
+    ) -> Result<
+        Box<dyn crate::runtime::tcp_dispatch::operation::PreparedTcpConnectOperation + 'a>,
+        TcpOutboundFailure,
+    > {
+        self.prepare_tcp_connect_impl(leaf)
     }
 }
 

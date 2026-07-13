@@ -13,7 +13,44 @@ use super::{
     ShadowsocksManagedUdpPacketPathDatagramSourceBuild, ShadowsocksManagedUdpPacketPathPlan,
     ShadowsocksTransportLeaf,
 };
+use crate::outbound_leaf::{ProtocolSocketTcpHandshake, ProtocolTransportLeaf};
 use crate::{MeteredStream, StreamTraffic, TcpRelayStream};
+
+impl ProtocolTransportLeaf for ShadowsocksTransportLeaf<'_> {
+    fn tag(&self) -> &str {
+        self.tag()
+    }
+    fn server(&self) -> &str {
+        self.server()
+    }
+    fn port(&self) -> u16 {
+        self.port()
+    }
+}
+
+#[async_trait::async_trait]
+impl ProtocolSocketTcpHandshake for ShadowsocksTransportLeaf<'_> {
+    fn connect_stage(&self) -> &'static str {
+        "connect_upstream_shadowsocks"
+    }
+
+    async fn handshake_socket(
+        &self,
+        socket: TokioSocket,
+        session: &Session,
+    ) -> Result<(TcpRelayStream, StreamTraffic), EngineError> {
+        let metered = MeteredStream::new(TcpRelayStream::from(socket));
+        establish_shadowsocks_tcp_connect(metered, session, self.cipher, self.password).await
+    }
+
+    async fn handshake_relay(
+        &self,
+        stream: TcpRelayStream,
+        session: &Session,
+    ) -> Result<TcpRelayStream, EngineError> {
+        apply_shadowsocks_tcp_relay_hop(stream, session, self.cipher, self.password).await
+    }
+}
 
 impl<'a> ShadowsocksTransportLeaf<'a> {
     pub fn new(

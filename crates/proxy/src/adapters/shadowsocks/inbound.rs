@@ -1,36 +1,148 @@
-mod listener;
+//! Shadowsocks listener lifecycle and post-accept TCP/UDP runtime handoff.
 
+use std::sync::Arc;
+
+use tokio::net::UdpSocket;
+use tokio::sync::watch;
+use tracing::warn;
 use zero_config::InboundConfig;
 use zero_engine::EngineError;
 
-use crate::adapters::shadowsocks::ShadowsocksAdapter;
-use crate::protocol_registry::BoundInbound;
+use crate::logging::log_listener_connection_error;
+use crate::runtime::datagram_udp::run_protocol_datagram_udp_relay;
+use crate::runtime::listener_loop::{run_tcp_listener_loop, TcpListenerLoopRequest};
+use crate::runtime::tcp_ingress::{serve_inbound, NoClientResponseStreamProtocol};
 use crate::runtime::Proxy;
+use crate::transport::{MeteredStream, TcpRelayStream};
 
-pub(crate) use listener::run_shadowsocks_listener_with_bound;
+pub(crate) async fn handle_shadowsocks_connection(
+    proxy: &Proxy,
+    inbound_tag: &str,
+    source_addr: Option<std::net::SocketAddr>,
+    stream: TcpRelayStream,
+    acceptor: &zero_transport::shadowsocks_transport::OwnedShadowsocksInboundTcpAcceptor,
+) {
+    if let Err(error) = acceptor
+        .accept_and_dispatch_stream(MeteredStream::new(stream), |session, client| async move {
+            let protocol = NoClientResponseStreamProtocol::new();
+            let _ =
+                serve_inbound(proxy, session, client, &protocol, inbound_tag, source_addr).await;
+            Ok::<(), EngineError>(())
+        })
+        .await
+    {
+        log_listener_connection_error(
+            crate::logging::INBOUND_ACCEPT_ROUTE_STAGE,
+            "shadowsocks",
+            inbound_tag,
+            &source_addr,
+            &error,
+        );
+    }
+}
 
-impl ShadowsocksAdapter {
-    pub(super) fn spawn_inbound_impl(
-        &self,
-        proxy: &Proxy,
-        inbound: InboundConfig,
-        bound: BoundInbound,
-        shutdown_rx: tokio::sync::watch::Receiver<bool>,
-        listeners: &mut tokio::task::JoinSet<Result<(), EngineError>>,
-    ) {
-        let proxy = proxy.clone();
-        listeners.spawn(async move {
-            let profile = zero_transport::shadowsocks_transport::inbound_profile_from_protocol(
-                &inbound.protocol,
-            )?;
-            run_shadowsocks_listener_with_bound(
-                &proxy,
-                inbound,
-                profile,
-                bound.into_tcp(),
-                shutdown_rx,
+pub(crate) async fn run_shadowsocks_listener_with_bound(
+    proxy: &Proxy,
+    inbound: InboundConfig,
+    profile: zero_transport::shadowsocks_transport::OwnedShadowsocksInboundProfile,
+    listener: zero_platform_tokio::TokioListener,
+    shutdown: watch::Receiver<bool>,
+) -> Result<(), EngineError> {
+    let (acceptor, udp_session) = profile.into_listener_bindings().into_parts();
+
+    let udp_socket = match UdpSocket::bind(&format!(
+        "{}:{}",
+        inbound.listen.address, inbound.listen.port
+    ))
+    .await
+    {
+        Ok(s) => Some(Arc::new(s)),
+        Err(e) => {
+            warn!(error = %e, "shadowsocks: failed to bind UDP socket, UDP disabled");
+            None
+        }
+    };
+
+    let udp_task = udp_socket.as_ref().map(|udp| {
+        let engine = proxy.clone();
+        let tag = inbound.tag.clone();
+        let udp = udp.clone();
+        tokio::spawn(async move {
+            let response_already_sent = false;
+            if let Err(error) = run_protocol_datagram_udp_relay(
+                &engine,
+                udp,
+                udp_session,
+                &tag,
+                response_already_sent,
             )
             .await
-        });
+            {
+                warn!(%error, "shadowsocks UDP relay stopped");
+            }
+        })
+    });
+
+    let result = run_tcp_listener_loop(TcpListenerLoopRequest {
+        proxy,
+        inbound_tag: inbound.tag,
+        protocol_name: "shadowsocks",
+        listener,
+        shutdown,
+        handler: move |engine: Proxy,
+                       tag: String,
+                       stream: zero_platform_tokio::TokioSocket,
+                       source_addr: Option<std::net::SocketAddr>| {
+            let acceptor = acceptor.clone();
+            async move {
+                handle_shadowsocks_connection(
+                    &engine,
+                    &tag,
+                    source_addr,
+                    TcpRelayStream::from(stream),
+                    &acceptor,
+                )
+                .await;
+            }
+        },
+    })
+    .await;
+
+    if let Some(udp) = udp_socket.as_ref() {
+        drop(udp.clone());
+    }
+    if let Some(task) = udp_task {
+        task.abort();
+        let _ = task.await;
+    }
+
+    result
+}
+
+impl crate::adapters::shadowsocks::ShadowsocksAdapter {
+    pub(super) fn prepare_inbound_listener_impl(
+        &self,
+        inbound: zero_config::InboundConfig,
+    ) -> Result<
+        Box<dyn crate::runtime::inbound_operation::PreparedInboundListenerOperation>,
+        EngineError,
+    > {
+        let profile = zero_transport::shadowsocks_transport::inbound_profile_from_protocol(
+            &inbound.protocol,
+        )?;
+        Ok(Box::new(
+            crate::runtime::inbound_operation::InboundListenerOperation::new(
+                move |proxy, bound: crate::protocol_registry::BoundInbound, shutdown_rx| async move {
+                    run_shadowsocks_listener_with_bound(
+                        &proxy,
+                        inbound,
+                        profile,
+                        bound.into_tcp(),
+                        shutdown_rx,
+                    )
+                    .await
+                },
+            ),
+        ))
     }
 }

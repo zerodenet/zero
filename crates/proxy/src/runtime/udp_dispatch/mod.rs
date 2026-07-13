@@ -198,7 +198,6 @@ pub(crate) use crate::runtime::udp_flow::result::{FlowFailure, FlowStartResult};
 ))]
 pub(crate) use candidate::UdpCandidate;
 #[cfg(any(feature = "hysteria2", feature = "shadowsocks"))]
-pub(crate) use managed::ManagedDatagramStart;
 #[cfg(feature = "socks5")]
 pub(crate) use managed::UpstreamTrackedStart;
 
@@ -299,3 +298,5 @@ impl UdpDispatch {
         }
     }
 }
+pub(crate) mod operation;
+pub(crate) mod packet_path_operation;

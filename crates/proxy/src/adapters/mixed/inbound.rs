@@ -1,41 +1,159 @@
-use zero_config::{InboundConfig, InboundProtocolConfig};
+use tokio::sync::watch;
 use zero_engine::EngineError;
+use zero_traits::AsyncSocket;
 
-use crate::adapters::mixed::MixedAdapter;
-use crate::protocol_registry::BoundInbound;
+use crate::adapters::http::inbound::HttpConnectInboundHandler;
+use crate::adapters::socks5::inbound::handle_socks5_connection;
+use crate::logging::log_listener_connection_error;
+use crate::runtime::listener_loop::{run_tcp_listener_loop, TcpListenerLoopRequest};
+use crate::runtime::tcp_ingress::serve_inbound;
 use crate::runtime::Proxy;
+use crate::transport::{MeteredStream, PrefixedSocket, TcpRelayStream};
 
-mod listener;
+pub(crate) struct MixedInboundRequest {
+    pub(crate) inbound_tag: String,
+    pub(crate) socks5_acceptor: zero_transport::socks5_transport::OwnedSocks5InboundAcceptor,
+}
 
-impl MixedAdapter {
-    pub(super) fn spawn_inbound_impl(
+pub(crate) async fn run_mixed_listener_with_bound(
+    proxy: &Proxy,
+    request: MixedInboundRequest,
+    listener: zero_platform_tokio::TokioListener,
+    shutdown: watch::Receiver<bool>,
+) -> Result<(), EngineError> {
+    let MixedInboundRequest {
+        inbound_tag,
+        socks5_acceptor,
+    } = request;
+
+    let http_handler = HttpConnectInboundHandler::default();
+
+    run_tcp_listener_loop(TcpListenerLoopRequest {
+        proxy,
+        inbound_tag,
+        protocol_name: "mixed",
+        listener,
+        shutdown,
+        handler: move |engine, tag, stream, source_addr| {
+            let socks5_acceptor = socks5_acceptor.clone();
+            async move {
+                handle_mixed_connection(
+                    engine,
+                    tag,
+                    stream,
+                    source_addr,
+                    socks5_acceptor,
+                    http_handler,
+                )
+                .await;
+            }
+        },
+    })
+    .await
+}
+
+async fn handle_mixed_connection(
+    engine: Proxy,
+    tag: String,
+    mut stream: zero_platform_tokio::TokioSocket,
+    source_addr: Option<std::net::SocketAddr>,
+    socks5_acceptor: zero_transport::socks5_transport::OwnedSocks5InboundAcceptor,
+    http_h: HttpConnectInboundHandler,
+) {
+    // Detect protocol from first byte.
+    let mut first = [0_u8; 1];
+    if stream.read(&mut first).await.map_or(true, |n| n == 0) {
+        return;
+    }
+    let first_byte = first[0];
+    let relay_stream = prefixed_relay_stream(stream, first_byte);
+
+    if socks5::is_socks5_greeting_byte(first_byte) {
+        handle_socks5_connection(
+            &engine,
+            &tag,
+            source_addr,
+            MeteredStream::new(relay_stream),
+            &socks5_acceptor,
+            "mixed",
+        )
+        .await;
+    } else {
+        let mut metered = MeteredStream::new(relay_stream);
+        match http_h.http_inbound().accept_request(&mut metered).await {
+            Ok(session) => {
+                let _ = serve_inbound(
+                    &engine,
+                    session,
+                    metered.into_inner(),
+                    &http_h,
+                    &tag,
+                    source_addr,
+                )
+                .await;
+            }
+            Err(err) => {
+                if http_h
+                    .http_inbound()
+                    .send_accept_error_response(&mut metered, &err)
+                    .await
+                    .unwrap_or(false)
+                {
+                    return;
+                }
+                let engine_err = EngineError::from(err);
+                log_listener_connection_error(
+                    crate::logging::INBOUND_ACCEPT_ROUTE_STAGE,
+                    "mixed",
+                    &tag,
+                    &source_addr,
+                    &engine_err,
+                );
+            }
+        }
+    }
+}
+
+fn prefixed_relay_stream(
+    stream: zero_platform_tokio::TokioSocket,
+    first_byte: u8,
+) -> TcpRelayStream {
+    let local_addr = stream.local_addr().ok();
+    let prefixed = PrefixedSocket::from_byte(stream, first_byte);
+
+    match local_addr {
+        Some(addr) => TcpRelayStream::with_local_addr(prefixed, addr),
+        None => TcpRelayStream::new(prefixed),
+    }
+}
+
+impl crate::adapters::mixed::MixedAdapter {
+    pub(super) fn prepare_inbound_listener_impl(
         &self,
-        proxy: &Proxy,
-        inbound: InboundConfig,
-        bound: BoundInbound,
-        shutdown_rx: tokio::sync::watch::Receiver<bool>,
-        listeners: &mut tokio::task::JoinSet<Result<(), EngineError>>,
-    ) {
-        let p = proxy.clone();
-        listeners.spawn(async move {
-            let InboundProtocolConfig::Mixed { socks5_users } = &inbound.protocol else {
-                return Err(EngineError::Io(std::io::Error::new(
-                    std::io::ErrorKind::InvalidInput,
-                    "mixed adapter received non-mixed inbound config",
-                )));
-            };
-            listener::run_mixed_listener_with_bound(
-                &p,
-                listener::MixedInboundRequest {
-                    inbound_tag: inbound.tag,
-                    socks5_acceptor: zero_transport::socks5_transport::inbound_acceptor_from_users(
-                        socks5_users,
-                    ),
+        inbound: zero_config::InboundConfig,
+    ) -> Result<
+        Box<dyn crate::runtime::inbound_operation::PreparedInboundListenerOperation>,
+        EngineError,
+    > {
+        let zero_config::InboundProtocolConfig::Mixed { socks5_users } = &inbound.protocol else {
+            return Err(EngineError::Io(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "mixed adapter received non-mixed inbound config",
+            )));
+        };
+        let request = MixedInboundRequest {
+            inbound_tag: inbound.tag,
+            socks5_acceptor: zero_transport::socks5_transport::inbound_acceptor_from_users(
+                socks5_users,
+            ),
+        };
+        Ok(Box::new(
+            crate::runtime::inbound_operation::InboundListenerOperation::new(
+                move |proxy, bound: crate::protocol_registry::BoundInbound, shutdown_rx| async move {
+                    run_mixed_listener_with_bound(&proxy, request, bound.into_tcp(), shutdown_rx)
+                        .await
                 },
-                bound.into_tcp(),
-                shutdown_rx,
-            )
-            .await
-        });
+            ),
+        ))
     }
 }

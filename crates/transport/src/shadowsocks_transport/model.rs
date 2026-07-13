@@ -177,6 +177,18 @@ impl<'a> ShadowsocksManagedUdpFlowPlan<'a> {
         (self.tag, self.server, self.port, self.resume)
     }
 
+    pub fn into_start_plan(
+        self,
+    ) -> crate::managed_udp::ManagedDatagramStartPlan<'a, ShadowsocksManagedDatagramFlowResume>
+    {
+        crate::managed_udp::ManagedDatagramStartPlan::new(
+            self.tag,
+            self.server,
+            self.port,
+            self.resume,
+        )
+    }
+
     pub fn into_resume(self) -> ShadowsocksManagedDatagramFlowResume {
         self.resume
     }

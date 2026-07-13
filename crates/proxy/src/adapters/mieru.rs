@@ -1,7 +1,6 @@
 use async_trait::async_trait;
 
 use zero_config::{InboundConfig, InboundProtocolConfig, OutboundProtocolConfig};
-use zero_core::Session;
 use zero_engine::{EngineError, ResolvedLeafOutbound};
 use zero_traits::{ProtocolCapabilityDescriptor, ProtocolMetadata};
 
@@ -10,15 +9,13 @@ use crate::adapters::identity::{
     named_protocol_supports_outbound, NamedProtocolAdapter,
 };
 use crate::protocol_registry::{
-    proxy_leaf_runtime, BoundInbound, InboundAdapterContext, InboundListenerCapability,
-    ManagedUdpHandlerProvider, OutboundAdapterContext, OutboundLeafRuntime,
-    ProtocolSupportCapability, TcpOutboundCapability, UdpAdapterContext, UdpFlowCapability,
-    UdpPacketPathCapability,
+    proxy_leaf_runtime, InboundListenerCapability, ManagedUdpHandlerProvider, OutboundLeafRuntime,
+    ProtocolSupportCapability, TcpOutboundCapability, UdpFlowCapability, UdpPacketPathCapability,
 };
 use crate::runtime::path::TcpPathCategory;
-use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
+use crate::runtime::udp_dispatch::FlowFailure;
 use crate::runtime::udp_flow::managed::ManagedStreamHandlerPair;
-use crate::transport::{EstablishedTcpOutbound, TcpOutboundFailure};
+use crate::transport::TcpOutboundFailure;
 
 #[cfg(feature = "mieru")]
 mod inbound;
@@ -40,28 +37,24 @@ impl NamedProtocolAdapter for MieruAdapter {
 #[cfg(feature = "mieru")]
 #[async_trait]
 impl UdpFlowCapability for MieruAdapter {
-    async fn start_udp_flow(
-        &self,
-        dispatch: &mut UdpDispatch,
-        ctx: UdpAdapterContext<'_>,
-        session: &Session,
-        leaf: &ResolvedLeafOutbound<'_>,
-        payload: &[u8],
-    ) -> Result<FlowStartResult, FlowFailure> {
-        self.start_udp_flow_impl(dispatch, ctx.proxy(), session, leaf, payload)
-            .await
+    fn prepare_udp_flow<'a>(
+        &'a self,
+        leaf: &'a ResolvedLeafOutbound<'a>,
+    ) -> Result<
+        Box<dyn crate::runtime::udp_dispatch::operation::PreparedUdpFlowOperation + 'a>,
+        FlowFailure,
+    > {
+        self.prepare_udp_flow_impl(leaf)
     }
-    async fn start_udp_relay_final_hop(
-        &self,
-        dispatch: &mut UdpDispatch,
-        _ctx: UdpAdapterContext<'_>,
-        session: &Session,
+    fn prepare_udp_relay_final_hop<'a>(
+        &'a self,
         carrier: crate::transport::RelayCarrier,
-        leaf: &ResolvedLeafOutbound<'_>,
-        payload: &[u8],
-    ) -> Result<FlowStartResult, FlowFailure> {
-        self.start_udp_relay_final_hop_impl(dispatch, session, carrier, leaf, payload)
-            .await
+        leaf: &'a ResolvedLeafOutbound<'a>,
+    ) -> Result<
+        Box<dyn crate::runtime::udp_dispatch::operation::PreparedUdpFlowOperation + 'a>,
+        FlowFailure,
+    > {
+        self.prepare_udp_relay_final_hop_impl(carrier, leaf)
     }
 }
 
@@ -77,15 +70,15 @@ impl UdpPacketPathCapability for MieruAdapter {}
 
 #[cfg(feature = "mieru")]
 impl InboundListenerCapability for MieruAdapter {
-    fn spawn_inbound(
+    fn prepare_inbound_listener(
         &self,
-        ctx: InboundAdapterContext<'_>,
         inbound: InboundConfig,
-        bound: BoundInbound,
-        shutdown_rx: tokio::sync::watch::Receiver<bool>,
-        listeners: &mut tokio::task::JoinSet<Result<(), EngineError>>,
-    ) {
-        self.spawn_inbound_impl(ctx.proxy(), inbound, bound, shutdown_rx, listeners);
+        _source_dir: Option<&std::path::Path>,
+    ) -> Result<
+        Box<dyn crate::runtime::inbound_operation::PreparedInboundListenerOperation>,
+        EngineError,
+    > {
+        self.prepare_inbound_listener_impl(inbound)
     }
 }
 
@@ -103,23 +96,24 @@ impl TcpOutboundCapability for MieruAdapter {
         proxy_leaf_runtime(leaf, TcpPathCategory::Session)
     }
 
-    async fn connect_tcp(
-        &self,
-        ctx: OutboundAdapterContext<'_>,
-        session: &Session,
-        leaf: &ResolvedLeafOutbound<'_>,
-    ) -> Result<EstablishedTcpOutbound, TcpOutboundFailure> {
-        self.connect_tcp_impl(ctx.proxy(), session, leaf).await
+    fn prepare_tcp_connect<'a>(
+        &'a self,
+        leaf: &'a ResolvedLeafOutbound<'a>,
+    ) -> Result<
+        Box<dyn crate::runtime::tcp_dispatch::operation::PreparedTcpConnectOperation + 'a>,
+        TcpOutboundFailure,
+    > {
+        self.prepare_tcp_connect_impl(leaf)
     }
 
-    async fn apply_relay_hop(
-        &self,
-        _ctx: OutboundAdapterContext<'_>,
-        stream: crate::transport::TcpRelayStream,
-        session: &Session,
-        leaf: &ResolvedLeafOutbound<'_>,
-    ) -> Result<crate::transport::TcpRelayStream, EngineError> {
-        self.apply_relay_hop_impl(stream, session, leaf).await
+    fn prepare_tcp_relay_hop<'a>(
+        &'a self,
+        leaf: &'a ResolvedLeafOutbound<'a>,
+    ) -> Result<
+        Box<dyn crate::runtime::tcp_dispatch::operation::PreparedTcpRelayOperation + 'a>,
+        EngineError,
+    > {
+        self.prepare_tcp_relay_hop_impl(leaf)
     }
 }
 

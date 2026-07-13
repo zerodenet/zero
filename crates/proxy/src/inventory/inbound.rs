@@ -5,7 +5,7 @@ use tokio::sync::watch;
 use tokio::task::JoinSet;
 
 use super::ProtocolInventory;
-use crate::protocol_registry::{BoundInbound, InboundAdapterContext, InboundListenerCapability};
+use crate::protocol_registry::{BoundInbound, InboundListenerCapability};
 use crate::runtime::Proxy;
 
 impl ProtocolInventory {
@@ -48,14 +48,12 @@ impl ProtocolInventory {
         listeners: &mut JoinSet<Result<(), EngineError>>,
     ) -> Result<(), EngineError> {
         let adapter = self.registry.find_inbound(&inbound.protocol)?;
-        InboundListenerCapability::spawn_inbound(
+        let operation = InboundListenerCapability::prepare_inbound_listener(
             adapter.as_ref(),
-            InboundAdapterContext::new(proxy),
             inbound,
-            bound,
-            shutdown_rx,
-            listeners,
-        );
+            proxy.config.source_dir(),
+        )?;
+        listeners.spawn(operation.execute(proxy.clone(), bound, shutdown_rx));
         Ok(())
     }
 }

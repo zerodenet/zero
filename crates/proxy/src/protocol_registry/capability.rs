@@ -1,14 +1,23 @@
 use async_trait::async_trait;
 
 use zero_config::{InboundConfig, InboundProtocolConfig, OutboundProtocolConfig};
-use zero_core::Session;
 use zero_engine::{EngineError, ResolvedLeafOutbound};
 use zero_traits::ProtocolMetadata;
 
-use super::{
-    BoundInbound, InboundAdapterContext, OutboundAdapterContext, OutboundLeafRuntime,
-    UdpAdapterContext,
+use super::{BoundInbound, OutboundLeafRuntime};
+use crate::runtime::tcp_dispatch::operation::{
+    PreparedTcpConnectOperation, PreparedTcpRelayOperation,
 };
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
+use crate::runtime::udp_dispatch::operation::PreparedUdpFlowOperation;
 #[cfg(any(feature = "hysteria2", feature = "shadowsocks"))]
 use crate::runtime::udp_flow::managed::model::ManagedDatagramFlowHandler;
 #[cfg(any(
@@ -20,7 +29,7 @@ use crate::runtime::udp_flow::managed::model::ManagedDatagramFlowHandler;
 use crate::runtime::udp_flow::managed::ManagedStreamHandlerPair;
 #[cfg(feature = "socks5")]
 use crate::runtime::udp_flow::registered::UpstreamAssociationHandler;
-use crate::transport::{EstablishedTcpOutbound, TcpOutboundFailure, TcpRelayStream};
+use crate::transport::TcpOutboundFailure;
 
 pub(crate) trait ProtocolSupportCapability: ProtocolMetadata + Send + Sync {
     fn name(&self) -> &'static str;
@@ -45,15 +54,20 @@ pub(crate) trait InboundListenerCapability: Send + Sync {
         super::defaults::bind_tcp_inbound(inbound).await
     }
 
-    /// Spawn the inbound accept loop for `inbound` into `listeners`.
-    fn spawn_inbound(
+    /// Validate protocol-local listener state and prepare a runtime-executed
+    /// listener operation.
+    fn prepare_inbound_listener(
         &self,
-        _ctx: InboundAdapterContext<'_>,
         _inbound: InboundConfig,
-        _bound: BoundInbound,
-        _shutdown_rx: tokio::sync::watch::Receiver<bool>,
-        _listeners: &mut tokio::task::JoinSet<Result<(), EngineError>>,
-    ) {
+        _source_dir: Option<&std::path::Path>,
+    ) -> Result<
+        Box<dyn crate::runtime::inbound_operation::PreparedInboundListenerOperation>,
+        EngineError,
+    > {
+        Err(EngineError::Io(std::io::Error::new(
+            std::io::ErrorKind::Unsupported,
+            "this adapter does not provide an inbound listener",
+        )))
     }
 }
 
@@ -70,40 +84,28 @@ pub(crate) trait TcpOutboundCapability: Send + Sync {
         None
     }
 
-    async fn connect_tcp(
-        &self,
-        _ctx: OutboundAdapterContext<'_>,
-        _session: &Session,
-        _leaf: &ResolvedLeafOutbound<'_>,
-    ) -> Result<EstablishedTcpOutbound, TcpOutboundFailure> {
+    fn prepare_tcp_connect<'a>(
+        &'a self,
+        _leaf: &'a ResolvedLeafOutbound<'a>,
+    ) -> Result<Box<dyn PreparedTcpConnectOperation + 'a>, TcpOutboundFailure> {
         Err(super::defaults::tcp_outbound_unsupported())
     }
 
-    async fn apply_relay_hop(
-        &self,
-        _ctx: OutboundAdapterContext<'_>,
-        stream: TcpRelayStream,
-        _session: &Session,
-        _leaf: &ResolvedLeafOutbound<'_>,
-    ) -> Result<TcpRelayStream, EngineError> {
-        let _ = stream;
+    fn prepare_tcp_relay_hop<'a>(
+        &'a self,
+        _leaf: &'a ResolvedLeafOutbound<'a>,
+    ) -> Result<Box<dyn PreparedTcpRelayOperation + 'a>, EngineError> {
         Err(super::defaults::relay_hop_unsupported())
     }
 }
 
 #[async_trait]
 pub(crate) trait UdpFlowCapability: Send + Sync {
-    async fn start_udp_flow(
-        &self,
-        _dispatch: &mut crate::runtime::udp_dispatch::UdpDispatch,
-        _ctx: UdpAdapterContext<'_>,
-        _session: &Session,
-        _leaf: &ResolvedLeafOutbound<'_>,
-        _payload: &[u8],
-    ) -> Result<
-        crate::runtime::udp_dispatch::FlowStartResult,
-        crate::runtime::udp_dispatch::FlowFailure,
-    > {
+    fn prepare_udp_flow<'a>(
+        &'a self,
+        _leaf: &'a ResolvedLeafOutbound<'a>,
+    ) -> Result<Box<dyn PreparedUdpFlowOperation + 'a>, crate::runtime::udp_dispatch::FlowFailure>
+    {
         Err(super::defaults::udp_outbound_unsupported())
     }
 
@@ -111,32 +113,20 @@ pub(crate) trait UdpFlowCapability: Send + Sync {
         false
     }
 
-    async fn start_udp_relay_two_stream(
-        &self,
-        _dispatch: &mut crate::runtime::udp_dispatch::UdpDispatch,
-        _ctx: UdpAdapterContext<'_>,
-        _session: &Session,
-        _chain: Vec<ResolvedLeafOutbound<'_>>,
-        _payload: &[u8],
-    ) -> Result<
-        crate::runtime::udp_dispatch::FlowStartResult,
-        crate::runtime::udp_dispatch::FlowFailure,
-    > {
+    fn prepare_udp_relay_two_stream<'a>(
+        &'a self,
+        _chain: Vec<ResolvedLeafOutbound<'a>>,
+    ) -> Result<Box<dyn PreparedUdpFlowOperation + 'a>, crate::runtime::udp_dispatch::FlowFailure>
+    {
         Err(super::defaults::udp_two_stream_relay_unsupported())
     }
 
-    async fn start_udp_relay_final_hop(
-        &self,
-        _dispatch: &mut crate::runtime::udp_dispatch::UdpDispatch,
-        _ctx: UdpAdapterContext<'_>,
-        _session: &Session,
+    fn prepare_udp_relay_final_hop<'a>(
+        &'a self,
         carrier: crate::transport::RelayCarrier,
-        _leaf: &ResolvedLeafOutbound<'_>,
-        _payload: &[u8],
-    ) -> Result<
-        crate::runtime::udp_dispatch::FlowStartResult,
-        crate::runtime::udp_dispatch::FlowFailure,
-    > {
+        _leaf: &'a ResolvedLeafOutbound<'a>,
+    ) -> Result<Box<dyn PreparedUdpFlowOperation + 'a>, crate::runtime::udp_dispatch::FlowFailure>
+    {
         let _ = carrier;
         Err(super::defaults::udp_relay_final_hop_unsupported())
     }
@@ -174,28 +164,15 @@ pub(crate) trait ManagedUdpHandlerProvider: Send + Sync {
 
 #[async_trait]
 pub(crate) trait UdpPacketPathCapability: Send + Sync {
-    fn udp_packet_path_carrier_descriptor(
-        &self,
-        _leaf: &ResolvedLeafOutbound<'_>,
-    ) -> Option<crate::runtime::udp_flow::packet_path::PacketPathCarrierDescriptor> {
-        None
-    }
-
-    async fn build_udp_packet_path(
-        &self,
-        _ctx: UdpAdapterContext<'_>,
-        _leaf: &ResolvedLeafOutbound<'_>,
-    ) -> Result<
-        std::sync::Arc<dyn crate::runtime::udp_flow::packet_path::PacketPathCarrier>,
-        EngineError,
+    fn prepare_udp_packet_path<'a>(
+        &'a self,
+        _leaf: &'a ResolvedLeafOutbound<'a>,
+    ) -> Option<
+        Box<
+            dyn crate::runtime::udp_dispatch::packet_path_operation::PreparedUdpPacketPathOperation
+                + 'a,
+        >,
     > {
-        Err(super::defaults::packet_path_carrier_unsupported())
-    }
-
-    fn udp_datagram_source(
-        &self,
-        _leaf: &ResolvedLeafOutbound<'_>,
-    ) -> Option<crate::runtime::udp_flow::packet_path::UdpDatagramSource> {
         None
     }
 }

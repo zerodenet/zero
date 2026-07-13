@@ -22,14 +22,9 @@ impl ProtocolInventory {
                 upstream: None,
             }
         })?;
-        UdpFlowCapability::start_udp_flow(
-            adapter.as_ref(),
-            dispatch,
-            UdpAdapterContext::new(proxy),
-            session,
-            leaf,
-            payload,
-        )
-        .await
+        let operation = UdpFlowCapability::prepare_udp_flow(adapter.as_ref(), leaf)?;
+        operation
+            .execute(dispatch, UdpAdapterContext::new(proxy), session, payload)
+            .await
     }
 }

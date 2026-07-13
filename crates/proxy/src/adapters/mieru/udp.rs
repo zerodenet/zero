@@ -1,17 +1,16 @@
-use zero_core::Session;
 use zero_engine::ResolvedLeafOutbound;
 use zero_transport::mieru_transport::MieruTransportLeaf;
 
 use crate::adapters::mieru::MieruAdapter;
 use crate::protocol_registry::unreachable_udp_leaf;
-use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
+use crate::runtime::udp_dispatch::operation::{
+    ManagedStreamPacketUdpOperation, PreparedManagedStreamPacketOperation, PreparedUdpFlowOperation,
+};
+use crate::runtime::udp_dispatch::FlowFailure;
 use crate::runtime::udp_flow::managed::{
     bridge::{managed_stream_handler_box, ManagedStreamStages},
     ManagedStreamHandlerPair,
 };
-use crate::runtime::Proxy;
-
-mod flow;
 
 pub(crate) fn managed_stream_handler() -> ManagedStreamHandlerPair {
     managed_stream_handler_box::<zero_transport::mieru_transport::MieruManagedStreamUdpResume>(
@@ -22,38 +21,35 @@ pub(crate) fn managed_stream_handler() -> ManagedStreamHandlerPair {
 }
 
 impl MieruAdapter {
-    pub(super) async fn start_udp_flow_impl(
+    pub(super) fn prepare_udp_flow_impl<'a>(
         &self,
-        dispatch: &mut UdpDispatch,
-        proxy: &Proxy,
-        session: &Session,
-        leaf: &ResolvedLeafOutbound<'_>,
-        payload: &[u8],
-    ) -> Result<FlowStartResult, FlowFailure> {
+        leaf: &'a ResolvedLeafOutbound<'a>,
+    ) -> Result<Box<dyn PreparedUdpFlowOperation + 'a>, FlowFailure> {
         let Some(leaf) = MieruTransportLeaf::from_resolved_leaf(leaf) else {
             return Err(unreachable_udp_leaf("mieru", leaf));
         };
-        flow::start(dispatch, proxy, session, payload, leaf.udp_flow_plan(false)).await
+        Ok(Box::new(ManagedStreamPacketUdpOperation {
+            operation: PreparedManagedStreamPacketOperation::Direct {
+                plan: leaf.udp_flow_plan(false).into_bridge_plan(),
+            },
+            needs_proxy: true,
+        }))
     }
 
-    pub(super) async fn start_udp_relay_final_hop_impl(
+    pub(super) fn prepare_udp_relay_final_hop_impl<'a>(
         &self,
-        dispatch: &mut UdpDispatch,
-        session: &Session,
         carrier: crate::transport::RelayCarrier,
-        leaf: &ResolvedLeafOutbound<'_>,
-        payload: &[u8],
-    ) -> Result<FlowStartResult, FlowFailure> {
+        leaf: &'a ResolvedLeafOutbound<'a>,
+    ) -> Result<Box<dyn PreparedUdpFlowOperation + 'a>, FlowFailure> {
         let Some(leaf) = MieruTransportLeaf::from_resolved_leaf(leaf) else {
             return Err(unreachable_udp_leaf("mieru", leaf));
         };
-        flow::start_relay_final_hop(
-            dispatch,
-            session,
-            carrier,
-            payload,
-            leaf.udp_flow_plan(true),
-        )
-        .await
+        Ok(Box::new(ManagedStreamPacketUdpOperation {
+            operation: PreparedManagedStreamPacketOperation::RelayFinalHop {
+                plan: leaf.udp_flow_plan(true).into_bridge_plan(),
+                carrier,
+            },
+            needs_proxy: false,
+        }))
     }
 }

@@ -87,7 +87,7 @@ pub(crate) use zero_traits::DatagramCodec;
 /// Each concrete carrier implements this so the packet-path manager can hold a
 /// `Arc<dyn PacketPathCarrier>` without a per-protocol enum. Adapters build the
 /// concrete carrier and box it; adding a carrier = implement this trait + the
-/// adapter's `build_udp_packet_path`, zero manager changes.
+/// adapter's prepared packet-path operation, zero manager changes.
 #[async_trait]
 pub(crate) trait PacketPathCarrier: Send + Sync {
     /// Send `payload` to `target:port` through this carrier.
@@ -142,7 +142,7 @@ pub(crate) fn packet_path_payload_carrier(
 
 /// Carrier identity for cache lookup (cheap, computed before dialing).
 ///
-/// Produced by `UdpPacketPathCapability::udp_packet_path_carrier_descriptor`. The
+/// Produced by `PreparedUdpPacketPathOperation::into_carrier_descriptor`. The
 /// `cache_key` uniquely identifies one carrier connection so the manager can
 /// reuse it across packets; `server`/`port` are the endpoint for diagnostics.
 pub(crate) struct PacketPathCarrierDescriptor {
@@ -179,7 +179,7 @@ pub(crate) fn packet_path_carrier_descriptor_from_build(
 
 /// Datagram source params for a relay-chain final hop over a packet path.
 ///
-/// Produced by `UdpPacketPathCapability::udp_datagram_source`. The `cache_key`
+/// Produced by `PreparedUdpPacketPathOperation::into_datagram_source`. The `cache_key`
 /// feeds packet-path cache identity without exposing raw config parsing to the
 /// manager.
 pub(crate) struct UdpDatagramDescriptor {

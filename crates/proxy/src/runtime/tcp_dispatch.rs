@@ -4,4 +4,5 @@
 //! split without turning this file back into a catch-all implementation bucket.
 
 mod leaf;
+pub(crate) mod operation;
 mod relay;

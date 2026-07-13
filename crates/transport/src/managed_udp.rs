@@ -7,6 +7,46 @@ use zero_platform_tokio::TokioSocket;
 
 use crate::TcpRelayStream;
 
+#[derive(Debug, Clone)]
+pub struct ManagedDatagramStartPlan<'a, T> {
+    pub tag: &'a str,
+    pub server: &'a str,
+    pub port: u16,
+    pub resume: T,
+}
+
+impl<'a, T> ManagedDatagramStartPlan<'a, T> {
+    pub fn new(tag: &'a str, server: &'a str, port: u16, resume: T) -> Self {
+        Self {
+            tag,
+            server,
+            port,
+            resume,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ManagedStreamPacketBridgePlan<'a, T> {
+    pub tag: &'a str,
+    pub server: &'a str,
+    pub port: u16,
+    pub resume: T,
+    pub relay_chain: bool,
+}
+
+impl<'a, T> ManagedStreamPacketBridgePlan<'a, T> {
+    pub fn new(tag: &'a str, server: &'a str, port: u16, resume: T, relay_chain: bool) -> Self {
+        Self {
+            tag,
+            server,
+            port,
+            resume,
+            relay_chain,
+        }
+    }
+}
+
 pub trait ProtocolManagedStreamConnectorParts {
     fn into_managed_connector_parts(self) -> (String, bool);
 }

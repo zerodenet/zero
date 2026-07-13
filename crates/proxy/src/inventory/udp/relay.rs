@@ -38,15 +38,10 @@ impl ProtocolInventory {
                 error,
                 upstream: None,
             })?;
-        UdpFlowCapability::start_udp_relay_two_stream(
-            adapter.as_ref(),
-            dispatch,
-            UdpAdapterContext::new(proxy),
-            session,
-            chain,
-            payload,
-        )
-        .await
+        let operation = UdpFlowCapability::prepare_udp_relay_two_stream(adapter.as_ref(), chain)?;
+        operation
+            .execute(dispatch, UdpAdapterContext::new(proxy), session, payload)
+            .await
     }
 
     /// Start a single-stream UDP relay final hop through the final hop adapter.
@@ -69,15 +64,10 @@ impl ProtocolInventory {
                 upstream: None,
             }
         })?;
-        UdpFlowCapability::start_udp_relay_final_hop(
-            adapter.as_ref(),
-            dispatch,
-            UdpAdapterContext::new(proxy),
-            session,
-            carrier,
-            leaf,
-            payload,
-        )
-        .await
+        let operation =
+            UdpFlowCapability::prepare_udp_relay_final_hop(adapter.as_ref(), carrier, leaf)?;
+        operation
+            .execute(dispatch, UdpAdapterContext::new(proxy), session, payload)
+            .await
     }
 }

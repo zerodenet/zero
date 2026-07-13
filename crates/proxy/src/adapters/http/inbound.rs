@@ -1,26 +1,144 @@
-mod listener;
-
-use zero_config::InboundConfig;
+use async_trait::async_trait;
+use http::HttpConnectInbound;
+use tokio::io::AsyncWriteExt;
+use tokio::sync::watch;
 use zero_engine::EngineError;
 
-use crate::adapters::http::HttpConnectAdapter;
-use crate::protocol_registry::BoundInbound;
+use crate::logging::log_listener_connection_error;
+use crate::runtime::http_redirect::select_redirect_target;
+use crate::runtime::listener_loop::{run_tcp_listener_loop, TcpListenerLoopRequest};
+use crate::runtime::tcp_ingress::{serve_inbound, InboundProtocol};
 use crate::runtime::Proxy;
+use crate::transport::{MeteredStream, TcpRelayStream};
 
-pub(crate) use listener::{run_http_listener_with_bound, HttpConnectInboundHandler};
+#[derive(Clone, Copy)]
+pub(crate) struct HttpConnectInboundHandler {
+    http_inbound: HttpConnectInbound,
+}
 
-impl HttpConnectAdapter {
-    pub(super) fn spawn_inbound_impl(
+impl Default for HttpConnectInboundHandler {
+    fn default() -> Self {
+        Self {
+            http_inbound: HttpConnectInbound,
+        }
+    }
+}
+
+impl HttpConnectInboundHandler {
+    pub(crate) fn http_inbound(&self) -> HttpConnectInbound {
+        self.http_inbound
+    }
+}
+
+#[async_trait]
+impl InboundProtocol for HttpConnectInboundHandler {
+    type ClientStream = TcpRelayStream;
+
+    async fn send_ok(&self, client: &mut TcpRelayStream) -> Result<(), EngineError> {
+        self.http_inbound
+            .send_success_response(client)
+            .await
+            .map_err(EngineError::from)
+    }
+
+    async fn send_blocked(&self, client: &mut TcpRelayStream) -> Result<(), EngineError> {
+        let _ = self.http_inbound.send_blocked_response(client).await;
+        let _ = AsyncWriteExt::shutdown(client).await;
+        Ok(())
+    }
+
+    async fn send_upstream_failure(&self, client: &mut TcpRelayStream) -> Result<(), EngineError> {
+        let _ = self
+            .http_inbound
+            .send_upstream_failure_response(client)
+            .await;
+        let _ = AsyncWriteExt::shutdown(client).await;
+        Ok(())
+    }
+}
+
+pub(crate) async fn run_http_listener_with_bound(
+    proxy: &Proxy,
+    inbound: zero_config::InboundConfig,
+    listener: zero_platform_tokio::TokioListener,
+    shutdown: watch::Receiver<bool>,
+) -> Result<(), EngineError> {
+    let handler = HttpConnectInboundHandler::default();
+
+    run_tcp_listener_loop(TcpListenerLoopRequest {
+        proxy,
+        inbound_tag: inbound.tag,
+        protocol_name: "http",
+        listener,
+        shutdown,
+        handler: move |engine: Proxy,
+                       tag: String,
+                       stream: zero_platform_tokio::TokioSocket,
+                       source_addr: Option<std::net::SocketAddr>| {
+            let handler = handler;
+            async move {
+                let mut metered = MeteredStream::new(TcpRelayStream::from(stream));
+                match handler.http_inbound.accept_request(&mut metered).await {
+                    Ok(session) => {
+                        if let Some((status, location)) =
+                            select_redirect_target(&engine.config.route.url_rewrite, &session)
+                        {
+                            let _ = handler
+                                .http_inbound
+                                .send_redirect_response(&mut metered, status, &location)
+                                .await;
+                        } else {
+                            let _ = serve_inbound(
+                                &engine,
+                                session,
+                                metered.into_inner(),
+                                &handler,
+                                &tag,
+                                source_addr,
+                            )
+                            .await;
+                        }
+                    }
+                    Err(error) => {
+                        if handler
+                            .http_inbound
+                            .send_accept_error_response(&mut metered, &error)
+                            .await
+                            .unwrap_or(false)
+                        {
+                            return;
+                        }
+                        let engine_error = EngineError::from(error);
+                        log_listener_connection_error(
+                            crate::logging::INBOUND_ACCEPT_ROUTE_STAGE,
+                            "http",
+                            &tag,
+                            &source_addr,
+                            &engine_error,
+                        );
+                    }
+                }
+            }
+        },
+    })
+    .await
+}
+
+impl crate::adapters::http::HttpConnectAdapter {
+    pub(super) fn prepare_inbound_listener_impl(
         &self,
-        proxy: &Proxy,
-        inbound: InboundConfig,
-        bound: BoundInbound,
-        shutdown_rx: tokio::sync::watch::Receiver<bool>,
-        listeners: &mut tokio::task::JoinSet<Result<(), EngineError>>,
-    ) {
-        let proxy = proxy.clone();
-        listeners.spawn(async move {
-            run_http_listener_with_bound(&proxy, inbound, bound.into_tcp(), shutdown_rx).await
-        });
+        inbound: zero_config::InboundConfig,
+    ) -> Result<
+        Box<dyn crate::runtime::inbound_operation::PreparedInboundListenerOperation>,
+        EngineError,
+    > {
+        Ok(Box::new(
+            crate::runtime::inbound_operation::InboundListenerOperation::new(
+                move |proxy, bound: crate::protocol_registry::BoundInbound, shutdown_rx| async move {
+                    run_http_listener_with_bound(&proxy, inbound, bound.into_tcp(), shutdown_rx)
+                        .await
+                },
+            ),
+        ))
     }
 }

@@ -40,6 +40,33 @@ pub trait ProtocolTransportLeaf {
     }
 }
 
+#[async_trait::async_trait]
+pub trait ProtocolSocketTcpHandshake: ProtocolTransportLeaf + Send + Sync {
+    fn connect_stage(&self) -> &'static str;
+
+    async fn handshake_socket(
+        &self,
+        socket: TokioSocket,
+        session: &Session,
+    ) -> Result<(TcpRelayStream, StreamTraffic), EngineError>;
+
+    async fn handshake_relay(
+        &self,
+        stream: TcpRelayStream,
+        session: &Session,
+    ) -> Result<TcpRelayStream, EngineError>;
+}
+
+#[async_trait::async_trait]
+pub trait ProtocolSessionTcpHandshake: ProtocolTransportLeaf + Send + Sync {
+    fn connect_stage(&self) -> &'static str;
+
+    async fn connect_session_stream(
+        &self,
+        session: &Session,
+    ) -> Result<TcpRelayStream, EngineError>;
+}
+
 pub trait ProtocolTransportLeafResolver<'a> {
     type TransportLeaf: ProtocolTransportLeaf + 'a;
     type ResolveError: std::fmt::Display;

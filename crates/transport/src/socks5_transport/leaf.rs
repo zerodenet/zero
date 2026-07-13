@@ -10,7 +10,44 @@ use super::{
     Socks5ManagedUdpPacketPathCarrierDescriptor, Socks5ManagedUdpPacketPathPlan,
     Socks5TransportLeaf,
 };
+use crate::outbound_leaf::{ProtocolSocketTcpHandshake, ProtocolTransportLeaf};
 use crate::{MeteredStream, StreamTraffic, TcpRelayStream};
+
+impl ProtocolTransportLeaf for Socks5TransportLeaf<'_> {
+    fn tag(&self) -> &str {
+        self.tag()
+    }
+    fn server(&self) -> &str {
+        self.server()
+    }
+    fn port(&self) -> u16 {
+        self.port()
+    }
+}
+
+#[async_trait::async_trait]
+impl ProtocolSocketTcpHandshake for Socks5TransportLeaf<'_> {
+    fn connect_stage(&self) -> &'static str {
+        "connect_upstream_socks5"
+    }
+
+    async fn handshake_socket(
+        &self,
+        socket: TokioSocket,
+        session: &Session,
+    ) -> Result<(TcpRelayStream, StreamTraffic), EngineError> {
+        let metered = MeteredStream::new(TcpRelayStream::from(socket));
+        establish_socks5_tcp_connect(metered, session, self.username, self.password).await
+    }
+
+    async fn handshake_relay(
+        &self,
+        stream: TcpRelayStream,
+        session: &Session,
+    ) -> Result<TcpRelayStream, EngineError> {
+        apply_socks5_tcp_relay_hop(stream, session, self.username, self.password).await
+    }
+}
 
 impl<'a> Socks5TransportLeaf<'a> {
     pub fn new(

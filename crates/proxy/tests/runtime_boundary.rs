@@ -19,20 +19,16 @@ fn virtual_repo_relative(relative: &str) -> Option<&'static str> {
         "crates/proxy/src/transport/http_inbound.rs" => {
             Some("crates/proxy/src/adapters/http/inbound.rs")
         }
-        "crates/proxy/src/transport/http_inbound/listener.rs" => {
-            Some("crates/proxy/src/adapters/http/inbound/listener.rs")
-        }
+
         "crates/proxy/src/transport/hysteria2_inbound.rs" => {
             Some("crates/proxy/src/adapters/hysteria2/inbound.rs")
         }
         "crates/proxy/src/transport/hysteria2_inbound/request.rs" => {
             Some("crates/proxy/src/adapters/hysteria2/inbound/request.rs")
         }
-        "crates/proxy/src/transport/hysteria2_inbound/listener.rs" => {
-            Some("crates/proxy/src/adapters/hysteria2/inbound/listener.rs")
-        }
+
         "crates/proxy/src/transport/hysteria2_inbound/listener/udp.rs" => {
-            Some("crates/proxy/src/adapters/hysteria2/inbound/listener.rs")
+            Some("crates/proxy/src/adapters/hysteria2/inbound.rs")
         }
         "crates/proxy/src/transport/mieru_inbound.rs" => {
             Some("crates/proxy/src/adapters/mieru/inbound.rs")
@@ -40,11 +36,9 @@ fn virtual_repo_relative(relative: &str) -> Option<&'static str> {
         "crates/proxy/src/transport/mieru_inbound/request.rs" => {
             Some("crates/proxy/src/adapters/mieru/inbound/request.rs")
         }
-        "crates/proxy/src/transport/mieru_inbound/listener.rs" => {
-            Some("crates/proxy/src/adapters/mieru/inbound/listener.rs")
-        }
+
         "crates/proxy/src/transport/mieru_inbound/listener/udp.rs" => {
-            Some("crates/proxy/src/adapters/mieru/inbound/listener.rs")
+            Some("crates/proxy/src/adapters/mieru/inbound.rs")
         }
         "crates/proxy/src/transport/shadowsocks_inbound.rs" => {
             Some("crates/proxy/src/adapters/shadowsocks/inbound.rs")
@@ -52,11 +46,9 @@ fn virtual_repo_relative(relative: &str) -> Option<&'static str> {
         "crates/proxy/src/transport/shadowsocks_inbound/request.rs" => {
             Some("crates/proxy/src/adapters/shadowsocks/inbound/request.rs")
         }
-        "crates/proxy/src/transport/shadowsocks_inbound/listener.rs" => {
-            Some("crates/proxy/src/adapters/shadowsocks/inbound/listener.rs")
-        }
+
         "crates/proxy/src/transport/shadowsocks_inbound/listener/udp.rs" => {
-            Some("crates/proxy/src/adapters/shadowsocks/inbound/listener.rs")
+            Some("crates/proxy/src/adapters/shadowsocks/inbound.rs")
         }
         "crates/proxy/src/transport/socks5_inbound.rs" => {
             Some("crates/proxy/src/adapters/socks5/inbound.rs")
@@ -89,32 +81,25 @@ fn virtual_repo_relative(relative: &str) -> Option<&'static str> {
 fn virtual_manifest_relative(relative: &str) -> Option<&'static str> {
     match relative {
         "src/transport/http_inbound.rs" => Some("src/adapters/http/inbound.rs"),
-        "src/transport/http_inbound/listener.rs" => Some("src/adapters/http/inbound/listener.rs"),
+
         "src/transport/hysteria2_inbound.rs" => Some("src/adapters/hysteria2/inbound.rs"),
         "src/transport/hysteria2_inbound/request.rs" => {
             Some("src/adapters/hysteria2/inbound/request.rs")
         }
-        "src/transport/hysteria2_inbound/listener.rs" => {
-            Some("src/adapters/hysteria2/inbound/listener.rs")
-        }
+
         "src/transport/hysteria2_inbound/listener/udp.rs" => {
-            Some("src/adapters/hysteria2/inbound/listener.rs")
+            Some("src/adapters/hysteria2/inbound.rs")
         }
         "src/transport/mieru_inbound.rs" => Some("src/adapters/mieru/inbound.rs"),
         "src/transport/mieru_inbound/request.rs" => Some("src/adapters/mieru/inbound/request.rs"),
-        "src/transport/mieru_inbound/listener.rs" => Some("src/adapters/mieru/inbound/listener.rs"),
-        "src/transport/mieru_inbound/listener/udp.rs" => {
-            Some("src/adapters/mieru/inbound/listener.rs")
-        }
+
+        "src/transport/mieru_inbound/listener/udp.rs" => Some("src/adapters/mieru/inbound.rs"),
         "src/transport/shadowsocks_inbound.rs" => Some("src/adapters/shadowsocks/inbound.rs"),
         "src/transport/shadowsocks_inbound/request.rs" => {
             Some("src/adapters/shadowsocks/inbound/request.rs")
         }
-        "src/transport/shadowsocks_inbound/listener.rs" => {
-            Some("src/adapters/shadowsocks/inbound/listener.rs")
-        }
         "src/transport/shadowsocks_inbound/listener/udp.rs" => {
-            Some("src/adapters/shadowsocks/inbound/listener.rs")
+            Some("src/adapters/shadowsocks/inbound.rs")
         }
         "src/transport/socks5_inbound.rs" => Some("src/adapters/socks5/inbound.rs"),
         "src/transport/socks5_inbound/request.rs" => Some("src/adapters/socks5/inbound/request.rs"),
@@ -141,13 +126,11 @@ fn virtual_manifest_relative(relative: &str) -> Option<&'static str> {
         "src/transport/shadowsocks_inbound/listener" => Some("src/adapters/shadowsocks/inbound"),
         "src/transport/socks5_inbound/listener" => Some("src/adapters/socks5/inbound"),
         "src/adapters/hysteria2/inbound/listener/udp.rs" => {
-            Some("src/adapters/hysteria2/inbound/listener.rs")
+            Some("src/adapters/hysteria2/inbound.rs")
         }
-        "src/adapters/mieru/inbound/listener/udp.rs" => {
-            Some("src/adapters/mieru/inbound/listener.rs")
-        }
+        "src/adapters/mieru/inbound/listener/udp.rs" => Some("src/adapters/mieru/inbound.rs"),
         "src/adapters/shadowsocks/inbound/listener/udp.rs" => {
-            Some("src/adapters/shadowsocks/inbound/listener.rs")
+            Some("src/adapters/shadowsocks/inbound.rs")
         }
         "src/adapters/socks5/inbound/listener/udp_associate.rs" => {
             Some("src/adapters/socks5/inbound/client_association.rs")
@@ -357,6 +340,9 @@ fn rust_sources_under(relative: &str) -> Vec<PathBuf> {
         relative.to_owned()
     };
     let root = manifest_dir().join(root_relative);
+    if root.is_file() {
+        return vec![root];
+    }
     let mut pending = vec![root];
     let mut files = Vec::new();
 
@@ -400,15 +386,15 @@ fn repo_rust_sources_under(relative: &str) -> Vec<PathBuf> {
 fn protocol_inbound_sources() -> Vec<PathBuf> {
     [
         "src/transport/http_inbound.rs",
-        "src/transport/http_inbound/listener.rs",
+        "src/adapters/http/inbound.rs",
         "src/transport/socks5_inbound/listener.rs",
         "src/transport/socks5_inbound/listener",
-        "src/transport/shadowsocks_inbound/listener.rs",
+        "src/adapters/shadowsocks/inbound.rs",
         "src/transport/shadowsocks_inbound/listener",
         "src/adapters/trojan.rs",
-        "src/transport/mieru_inbound/listener.rs",
+        "src/adapters/mieru/inbound.rs",
         "src/transport/mieru_inbound/listener",
-        "src/transport/hysteria2_inbound/listener.rs",
+        "src/adapters/hysteria2/inbound.rs",
         "src/transport/hysteria2_inbound/listener",
         "src/adapters/vless.rs",
         "src/adapters/vmess.rs",
@@ -794,9 +780,9 @@ fn proxy_module_taxonomy_uses_current_responsibility_names() {
         "src/runtime/udp_delivery.rs",
         "src/adapters/socks5/udp/upstream_association.rs",
         "src/adapters/socks5/inbound/listener.rs",
-        "src/adapters/shadowsocks/inbound/listener.rs",
-        "src/adapters/mieru/inbound/listener.rs",
-        "src/adapters/hysteria2/inbound/listener.rs",
+        "src/adapters/shadowsocks/inbound.rs",
+        "src/adapters/mieru/inbound.rs",
+        "src/adapters/hysteria2/inbound.rs",
         "src/adapters/shadowsocks/udp.rs",
         "src/adapters/mieru/udp.rs",
         "src/adapters/hysteria2/udp.rs",
@@ -1163,7 +1149,7 @@ fn custom_tcp_inbound_relays_use_runtime_metering_helpers() {
         "runtime inbound protocol layer should own TCP relay metering helpers"
     );
 
-    let hysteria2 = read("src/transport/hysteria2_inbound/listener.rs");
+    let hysteria2 = read("src/adapters/hysteria2/inbound.rs");
     assert!(
         !hysteria2.contains("record_tcp_upload")
             && !hysteria2.contains("record_tcp_download")
@@ -1407,8 +1393,8 @@ fn inbound_udp_response_accounting_uses_runtime_helpers() {
         "src/adapters/vless.rs",
         "src/adapters/vmess.rs",
         "src/adapters/trojan.rs",
-        "src/transport/mieru_inbound/listener.rs",
-        "src/transport/hysteria2_inbound/listener.rs",
+        "src/adapters/mieru/inbound.rs",
+        "src/adapters/hysteria2/inbound.rs",
         "src/transport/shadowsocks_inbound/listener/udp.rs",
         "src/transport/socks5_inbound/listener/udp_associate/direct_response.rs",
         "src/transport/socks5_inbound/listener/udp_associate/relay_socket.rs",
@@ -1861,6 +1847,7 @@ fn direct_udp_socket_operations_do_not_live_in_outbound_facade() {
 
     let socket = read("src/runtime/udp_socket.rs");
     let adapter = read("src/adapters/direct/udp.rs");
+    let operation = read("src/runtime/udp_dispatch/operation.rs");
     assert!(
         !socket.contains("resolve_udp_target")
             && socket.contains("send_direct_udp_packet")
@@ -1872,9 +1859,13 @@ fn direct_udp_socket_operations_do_not_live_in_outbound_facade() {
         "runtime::udp_socket should not keep historical references to removed outbound direct facades"
     );
     assert!(
-        adapter.contains("resolve_target_addr(session, proxy.resolver.as_ref())")
-            && adapter.contains("send_direct_packet"),
-        "direct adapter should resolve its direct target through DirectConnector and send through UdpDispatch"
+        adapter.contains("DirectUdpFlowOperation")
+            && adapter.contains("fn prepare_udp_flow_impl<'a>(")
+            && !adapter.contains("resolve_target_addr(session, proxy.resolver.as_ref())")
+            && !adapter.contains("send_direct_packet")
+            && operation.contains("resolve_target_addr(session, proxy.resolver.as_ref())")
+            && operation.contains("send_direct_packet"),
+        "direct adapter should prepare a neutral operation while UDP runtime resolves and sends it"
     );
 }
 
@@ -2028,7 +2019,9 @@ fn boundary_docs_lock_post_accept_listener_bridge_and_facade_roots() {
 
     assert!(
         agents.contains("transport-owned request objects")
-            && agents.contains("their adapter roots must not regrow a second generic proxy accept-stage abstraction")
+            && agents.contains("InboundListenerCapability::prepare_inbound_listener")
+            && agents.contains("PreparedInboundListenerOperation")
+            && agents.contains("adapters must not spawn listener tasks directly")
             && agents.contains("crates/proxy/src/runtime/udp_flow/managed/mod.rs")
             && agents.contains("crates/proxy/src/runtime/udp_flow/registered/mod.rs"),
         "AGENTS.md should describe the same final post-accept listener boundary and managed/registered facade roots as the code"
@@ -2267,8 +2260,10 @@ fn runtime_does_not_resolve_inbound_adapter_objects() {
     assert!(
         inventory_inbound.contains("pub(crate) fn spawn_inbound(")
             && inventory_inbound.contains("self.registry.find_inbound(&inbound.protocol)?")
-            && inventory_inbound.contains("InboundListenerCapability::spawn_inbound("),
-        "src/inventory/inbound.rs should own inbound adapter resolution and spawn dispatch"
+            && inventory_inbound
+                .contains("InboundListenerCapability::prepare_inbound_listener(")
+            && inventory_inbound.contains("listeners.spawn(operation.execute("),
+        "src/inventory/inbound.rs should own inbound adapter resolution and execute prepared listener operations"
     );
 }
 
@@ -2285,9 +2280,11 @@ fn tcp_runtime_does_not_resolve_outbound_adapter_objects() {
     }
     assert!(
         inventory_tcp.contains("pub(crate) async fn connect_tcp_leaf(")
-            && inventory_tcp.contains("TcpOutboundCapability::connect_tcp(")
+            && inventory_tcp.contains("TcpOutboundCapability::prepare_tcp_connect(")
+            && inventory_tcp.contains("operation")
+            && inventory_tcp.contains(".execute(OutboundAdapterContext::new(proxy), session)")
             && inventory_tcp.contains("pub(crate) async fn apply_tcp_relay_hop(")
-            && inventory_tcp.contains("TcpOutboundCapability::apply_relay_hop("),
+            && inventory_tcp.contains("TcpOutboundCapability::prepare_tcp_relay_hop("),
         "src/inventory/tcp.rs should own TCP outbound adapter resolution and dispatch"
     );
 }
@@ -2413,9 +2410,9 @@ fn tcp_relay_chain_runtime_uses_inventory_for_all_protocol_hops() {
     assert!(
         inventory_tcp.contains("pub(crate) async fn apply_tcp_relay_hop(")
             && inventory_tcp.contains("self.registry.find_outbound_leaf(leaf)?")
-            && inventory_tcp.contains("TcpOutboundCapability::apply_relay_hop(")
+            && inventory_tcp.contains("TcpOutboundCapability::prepare_tcp_relay_hop(")
             && inventory_tcp.contains("OutboundAdapterContext::new(proxy)")
-            && !tcp_dispatch.contains("TcpOutboundCapability::apply_relay_hop")
+            && !tcp_dispatch.contains("TcpOutboundCapability::prepare_tcp_relay_hop")
             && !tcp_dispatch.contains("self.registry.find_outbound_leaf")
             && !tcp_dispatch.contains("find_outbound_leaf(hop")
             && !tcp_dispatch.contains("find_outbound_leaf(&final_hop"),
@@ -2472,7 +2469,9 @@ fn udp_single_hop_runtime_does_not_resolve_outbound_adapter_objects() {
     }
     assert!(
         inventory_udp_leaf.contains("pub(crate) async fn start_udp_leaf_flow(")
-            && inventory_udp_leaf.contains("UdpFlowCapability::start_udp_flow("),
+            && inventory_udp_leaf.contains("UdpFlowCapability::prepare_udp_flow(")
+            && inventory_udp_leaf.contains("operation")
+            && inventory_udp_leaf.contains(".execute("),
         "src/inventory/udp/leaf.rs should own single-hop UDP adapter resolution and dispatch"
     );
 }
@@ -2520,8 +2519,9 @@ fn udp_relay_runtime_does_not_resolve_packet_path_pair_adapters() {
     assert!(
         inventory_udp_packet_path.contains("pub(crate) fn udp_packet_path_pair")
             && inventory_udp_packet_path
-                .contains("UdpPacketPathCapability::udp_packet_path_carrier_descriptor")
-            && inventory_udp_packet_path.contains("UdpPacketPathCapability::udp_datagram_source")
+                .contains("UdpPacketPathCapability::prepare_udp_packet_path")
+            && inventory_udp_packet_path.contains(".into_carrier_descriptor()")
+            && inventory_udp_packet_path.contains(".into_datagram_source()")
             && inventory_udp_packet_path.contains("PacketPathFlowBinding::new"),
         "src/inventory/udp/packet_path.rs should own packet-path pair adapter probing"
     );
@@ -2571,7 +2571,8 @@ fn packet_path_entry_does_not_resolve_adapter_objects() {
             && inventory_udp_packet_path
                 .contains("pub(crate) async fn build_udp_packet_path_carrier")
             && inventory_udp_packet_path
-                .contains("UdpPacketPathCapability::build_udp_packet_path("),
+                .contains("UdpPacketPathCapability::prepare_udp_packet_path")
+            && inventory_udp_packet_path.contains("operation.build_carrier("),
         "src/inventory/udp/packet_path.rs should own packet-path carrier adapter resolution"
     );
 }
@@ -2976,9 +2977,8 @@ fn direct_inbound_uses_adapter_request_model() {
 fn socks5_inbound_uses_adapter_request_model() {
     let inbound = read("src/transport/socks5_inbound/listener.rs");
     let _proxy_transport = read("src/transport/socks5_inbound.rs");
-    let mixed = read("src/adapters/mixed/inbound/listener.rs");
+    let mixed = read("src/adapters/mixed/inbound.rs");
     let adapter = read("src/adapters/socks5/inbound.rs");
-    let mixed_adapter = read("src/adapters/mixed/inbound.rs");
     let _listener_loop = read("src/runtime/listener_loop.rs");
     let transport = read_repo_module_tree("crates/transport/src/socks5_transport.rs");
     let protocol_inbound = fs::read_to_string(repo_root().join("protocols/socks5/src/inbound.rs"))
@@ -2990,9 +2990,9 @@ fn socks5_inbound_uses_adapter_request_model() {
         !manifest_dir()
             .join("src/adapters/socks5/inbound/request.rs")
             .exists()
-            && adapter.contains("fn spawn_inbound_impl(")
+            && adapter.contains("fn prepare_inbound_listener_impl(")
             && adapter.contains("zero_transport::socks5_transport::inbound_acceptor_from_protocol(")
-            && adapter.contains("run_socks5_listener_with_bound(&proxy, inbound, acceptor")
+            && adapter.contains("run_socks5_listener_with_bound(")
             && !adapter.contains("InboundProtocolConfig::Socks5")
             && inbound.contains("OwnedSocks5InboundAcceptor")
             && inbound.contains("accept_and_dispatch_command(")
@@ -3005,14 +3005,11 @@ fn socks5_inbound_uses_adapter_request_model() {
     assert!(
         mixed.contains("struct MixedInboundRequest")
             && mixed.contains("request: MixedInboundRequest")
-            && mixed_adapter.contains("InboundProtocolConfig::Mixed")
-            && mixed_adapter.contains("MixedInboundRequest")
+            && mixed.contains("InboundProtocolConfig::Mixed")
+            && mixed.contains("MixedInboundRequest")
             && mixed.contains("inbound_tag: String")
-            && !mixed.contains("zero_config::InboundConfig")
-            && !mixed.contains("inbound: zero_config::InboundConfig")
-            && mixed_adapter.contains("inbound_tag: inbound.tag")
-            && !mixed_adapter.contains("inbound,"),
-        "mixed inbound listener should receive an adapter-built request model"
+            && mixed.contains("inbound_tag: inbound.tag"),
+        "mixed inbound orchestration should build a narrow request before entering the listener loop"
     );
     assert!(
         protocol_inbound.contains("pub struct Socks5InboundTcpAcceptor")
@@ -3028,9 +3025,9 @@ fn socks5_inbound_uses_adapter_request_model() {
 
 #[test]
 fn mieru_inbound_uses_adapter_request_model() {
-    let inbound = read("src/adapters/mieru/inbound/listener.rs");
+    let inbound = read("src/adapters/mieru/inbound.rs");
     let adapter = read("src/adapters/mieru/inbound.rs");
-    let udp = read("src/adapters/mieru/inbound/listener.rs");
+    let udp = read("src/adapters/mieru/inbound.rs");
     let transport = read_repo_module_tree("crates/transport/src/mieru_transport.rs");
     let protocol_inbound = fs::read_to_string(repo_root().join("protocols/mieru/src/inbound.rs"))
         .expect("read mieru protocol inbound source");
@@ -3048,7 +3045,7 @@ fn mieru_inbound_uses_adapter_request_model() {
         !manifest_dir()
             .join("src/adapters/mieru/inbound/request.rs")
             .exists()
-            && adapter.contains("fn spawn_inbound_impl(")
+            && adapter.contains("fn prepare_inbound_listener_impl(")
             && adapter.contains("inbound_profile_from_protocol(")
             && adapter.contains("run_mieru_listener_with_bound(")
             && !adapter.contains("InboundProtocolConfig::Mieru")
@@ -3077,7 +3074,7 @@ fn mieru_inbound_uses_adapter_request_model() {
 
 #[test]
 fn shadowsocks_inbound_uses_adapter_request_model() {
-    let inbound = read("src/transport/shadowsocks_inbound/listener.rs");
+    let inbound = read("src/adapters/shadowsocks/inbound.rs");
     let proxy_transport = read("src/transport/shadowsocks_inbound.rs");
     let udp = read("src/transport/shadowsocks_inbound/listener/udp.rs");
     let adapter = read("src/adapters/shadowsocks/inbound.rs");
@@ -3090,7 +3087,7 @@ fn shadowsocks_inbound_uses_adapter_request_model() {
         !manifest_dir()
             .join("src/adapters/shadowsocks/inbound/request.rs")
             .exists()
-            && adapter.contains("fn spawn_inbound_impl(")
+            && adapter.contains("fn prepare_inbound_listener_impl(")
             && adapter.contains(
                 "zero_transport::shadowsocks_transport::inbound_profile_from_protocol("
             )
@@ -3131,10 +3128,10 @@ fn shadowsocks_inbound_uses_adapter_request_model() {
 
 #[test]
 fn inbound_auth_identity_stays_in_protocol_crates() {
-    let shadowsocks_inbound = read("src/transport/shadowsocks_inbound/listener.rs");
+    let shadowsocks_inbound = read("src/adapters/shadowsocks/inbound.rs");
     let shadowsocks_udp = read("src/transport/shadowsocks_inbound/listener/udp.rs");
     let trojan_inbound = read_proxy_module_tree("src/adapters/trojan.rs");
-    let mieru_inbound = read("src/transport/mieru_inbound/listener.rs");
+    let mieru_inbound = read("src/adapters/mieru/inbound.rs");
 
     let shadowsocks_protocol =
         fs::read_to_string(repo_root().join("protocols/shadowsocks/src/inbound.rs"))
@@ -3146,7 +3143,7 @@ fn inbound_auth_identity_stays_in_protocol_crates() {
 
     {
         let (source_name, source, required) = (
-            "src/adapters/shadowsocks/inbound/listener.rs",
+            "src/adapters/shadowsocks/inbound.rs",
             shadowsocks_udp.as_str(),
             "run_protocol_datagram_udp_relay(",
         );
@@ -3165,14 +3162,11 @@ fn inbound_auth_identity_stays_in_protocol_crates() {
 
     for (source_name, source) in [
         (
-            "src/transport/shadowsocks_inbound/listener.rs",
+            "src/adapters/shadowsocks/inbound.rs",
             shadowsocks_inbound.as_str(),
         ),
         ("src/adapters/trojan.rs", trojan_inbound.as_str()),
-        (
-            "src/transport/mieru_inbound/listener.rs",
-            mieru_inbound.as_str(),
-        ),
+        ("src/adapters/mieru/inbound.rs", mieru_inbound.as_str()),
     ] {
         assert!(
             !source.contains("SessionAuth::new(\"shadowsocks\")")
@@ -3330,7 +3324,7 @@ fn trojan_inbound_uses_transport_request_model() {
     assert!(
         manifest_dir().join("src/adapters/trojan.rs").exists()
             && !manifest_dir().join("src/adapters/trojan/inbound.rs").exists()
-            && root.contains("listener::spawn(")
+            && root.contains("listener::prepare(")
             && !root.contains("TrojanInboundListenerRequest::from_protocol_config")
             && !root.contains("request.accept_route(socket).await")
             && adapter.contains("run_logged_tcp_socket_listener_loop(")
@@ -3393,7 +3387,7 @@ fn vmess_inbound_uses_transport_request_model() {
     assert!(
         manifest_dir().join("src/adapters/vmess.rs").exists()
             && !manifest_dir().join("src/adapters/vmess/inbound.rs").exists()
-            && root.contains("listener::spawn(")
+            && root.contains("listener::prepare(")
             && !root.contains("VmessInboundListenerRequest::from_protocol_config")
             && !root.contains("request.accept_route(socket).await")
             && adapter.contains("run_logged_tcp_socket_listener_loop(")
@@ -3452,7 +3446,7 @@ fn vless_inbound_users_are_protocol_parsed() {
     assert!(
         manifest_dir().join("src/adapters/vless.rs").exists()
             && !manifest_dir().join("src/adapters/vless/inbound.rs").exists()
-            && root.contains("listener::spawn(")
+            && root.contains("listener::prepare(")
             && !root.contains("VlessInboundListenerRequest::from_protocol_config")
             && !root.contains("request.accept_recorded_tcp_route(socket).await")
             && !root.contains("request.accept_recorded_stream_route(stream).await")
@@ -3517,7 +3511,7 @@ fn vless_inbound_users_are_protocol_parsed() {
 #[test]
 fn hysteria2_inbound_uses_adapter_request_model() {
     let _proxy_transport = read("src/transport/hysteria2_inbound.rs");
-    let inbound = read("src/transport/hysteria2_inbound/listener.rs").replace("\r\n", "\n");
+    let inbound = read("src/adapters/hysteria2/inbound.rs").replace("\r\n", "\n");
     let _udp = read("src/transport/hysteria2_inbound/listener/udp.rs");
     let _datagram_udp = read("src/runtime/datagram_udp.rs");
     let adapter_root = read("src/adapters/hysteria2.rs");
@@ -3555,8 +3549,8 @@ fn hysteria2_inbound_uses_adapter_request_model() {
             .exists()
             && adapter_root.contains("async fn bind_inbound(")
             && adapter_root.contains("bind_transport_inbound::<OwnedHysteria2InboundBindPlan>")
-            && adapter_root.contains("fn spawn_inbound(")
-            && adapter.contains("pub(super) fn spawn_inbound_impl(")
+            && adapter_root.contains("fn prepare_inbound_listener(")
+            && adapter.contains("pub(super) fn prepare_inbound_listener_impl(")
             && adapter.contains("zero_transport::hysteria2_quic::inbound_profile_from_protocol(")
             && adapter.contains("run_hysteria2_listener_with_bound(&proxy, inbound, profile")
             && bind_defaults.contains("P::from_protocol_config(&inbound.protocol, source_dir)?")
@@ -3697,7 +3691,7 @@ fn vless_inbound_root_does_not_reexport_session_models() {
     assert!(
         !root.contains("struct VlessInboundHandler")
             && !root.contains("vless_inbound: vless::inbound::VlessInbound")
-            && root.contains("listener::spawn(")
+            && root.contains("listener::prepare(")
             && !root.contains("VlessInboundListenerRequest::from_protocol_config")
             && !proxy_transport.contains("impl InboundProtocol for vless::inbound::VlessInbound")
             && !dispatch.contains("mod protocol;")
@@ -4118,17 +4112,15 @@ fn proxy_does_not_reintroduce_protocol_udp_bucket() {
 #[test]
 fn shadowsocks_udp_root_delegates_packet_path_and_flow_building() {
     let root = read("src/adapters/shadowsocks/udp.rs");
-    let packet_path = read("src/adapters/shadowsocks/udp/packet_path.rs");
-    let flow = read("src/adapters/shadowsocks/udp/flow.rs");
+    let packet_path = read("src/adapters/shadowsocks/udp.rs");
+    let flow = read("src/adapters/shadowsocks/udp.rs");
     let transport_udp = read_repo_module_tree("crates/transport/src/shadowsocks_transport.rs");
 
     for required in [
-        "mod flow;",
-        "mod packet_path;",
-        "packet_path::carrier_descriptor",
-        "packet_path::build",
-        "packet_path::datagram_source",
-        "flow::start",
+        "packet_path_carrier_descriptor(",
+        "build_packet_path(",
+        "packet_path_datagram_source(",
+        "ManagedDatagramUdpOperation",
         "managed_datagram_socket_handler_box::<",
         "ShadowsocksTransportLeaf::from_resolved_leaf(leaf)",
         "leaf.udp_packet_path_plan()",
@@ -4198,8 +4190,9 @@ fn shadowsocks_udp_root_delegates_packet_path_and_flow_building() {
             && !flow.contains("shadowsocks::udp::udp_flow_resume_from_config")
             && !flow.contains("ShadowsocksUdpFlowConfig::new")
             && !flow.contains(".flow_resume()")
-            && flow.contains("ManagedDatagramStart")
-            && flow.contains(".start_tracked_managed_datagram(")
+            && flow.contains("into_start_plan")
+            && flow.contains("ManagedDatagramUdpOperation")
+            && !flow.contains(".start_transport_managed_datagram(")
             && !flow.contains("ManagedUdpSend {")
             && !flow.contains("ManagedUdpFlowResume::new"),
         "Shadowsocks packet-path and managed-flow construction should live in explicit protocol-local UDP submodules"
@@ -4209,16 +4202,14 @@ fn shadowsocks_udp_root_delegates_packet_path_and_flow_building() {
 #[test]
 fn hysteria2_udp_root_delegates_packet_path_and_flow_building() {
     let root = read("src/adapters/hysteria2/udp.rs");
-    let packet_path = read("src/adapters/hysteria2/udp/packet_path.rs");
-    let flow = read("src/adapters/hysteria2/udp/flow.rs");
+    let packet_path = read("src/adapters/hysteria2/udp.rs");
+    let flow = read("src/adapters/hysteria2/udp.rs");
     let transport_udp = read_repo_module_tree("crates/transport/src/hysteria2_quic.rs");
 
     for required in [
-        "mod flow;",
-        "mod packet_path;",
-        "packet_path::carrier_descriptor",
-        "packet_path::build",
-        "flow::start",
+        "packet_path_carrier_descriptor(",
+        "build_packet_path(",
+        "ManagedDatagramUdpOperation",
         "managed_datagram_handler_box::<",
         "Hysteria2TransportLeaf::from_resolved_leaf(leaf)",
         "leaf.udp_packet_path_plan()",
@@ -4269,9 +4260,9 @@ fn hysteria2_udp_root_delegates_packet_path_and_flow_building() {
             && !packet_path.contains(".packet_path_cache_key()")
             && !packet_path.contains(".packet_path_codec()")
             && !flow.contains("hysteria2::udp::udp_flow_resume_from_config")
-            && flow.contains("ManagedDatagramStart")
-            && flow.contains("plan.into_parts()")
-            && flow.contains(".start_tracked_managed_datagram(")
+            && flow.contains("into_start_plan")
+            && flow.contains("ManagedDatagramUdpOperation")
+            && !flow.contains(".start_transport_managed_datagram(")
             && !flow.contains("ManagedUdpSend {")
             && !flow.contains("ManagedUdpFlowResume::new"),
         "Hysteria2 packet-path and managed-flow construction should live in explicit protocol-local UDP submodules"
@@ -4307,8 +4298,8 @@ fn stream_udp_roots_delegate_flow_building() {
         let transport = read_repo_module_tree(transport_path);
 
         assert!(
-            root.contains("start_protocol_transport_bridge_udp_flow(")
-                && root.contains("start_protocol_transport_bridge_udp_relay_final_hop(")
+            root.contains("TransportUdpOperation")
+                && root.contains("PreparedTransportUdpOperation::RelayFinalHop")
                 && !root.contains(request_builder)
                 && !root.contains("ManagedStreamPacketStartBridge")
                 && !root.contains("start_tracked_managed_stream_packet("),
@@ -4332,7 +4323,7 @@ fn stream_udp_roots_delegate_flow_building() {
     let vless_root = read_proxy_module_tree("src/adapters/vless.rs");
     assert!(
         vless_root.contains("protocol_transport_bridge_udp_relay_needs_two_streams(")
-            && vless_root.contains("start_protocol_transport_bridge_udp_relay_two_stream("),
+            && vless_root.contains("VlessRelayTwoStreamUdpOperation"),
         "src/adapters/vless.rs should keep the extra VLESS two-stream UDP relay orchestration in the collapsed adapter root"
     );
 }
@@ -4341,18 +4332,17 @@ fn stream_udp_roots_delegate_flow_building() {
 fn socks5_udp_root_delegates_packet_path_and_flow_building() {
     let root = read("src/adapters/socks5/udp.rs");
     let _packet_path = read("src/adapters/socks5/udp/packet_path.rs");
-    let flow = read("src/adapters/socks5/udp/flow.rs");
+    let flow = read("src/adapters/socks5/udp/handler.rs");
     let transport_udp = read_repo_module_tree("crates/transport/src/socks5_transport.rs");
     let _protocol_udp = read_repo_module_tree("protocols/socks5/src/udp.rs");
 
     for required in [
         "mod upstream_association;",
-        "mod flow;",
+        "mod handler;",
         "mod packet_path;",
         "packet_path::carrier_descriptor",
         "packet_path::build",
-        "flow::start",
-        "flow::upstream_association_handler()",
+        "handler::upstream_association_handler()",
         "Socks5TransportLeaf::from_resolved_leaf(leaf)",
         "leaf.udp_packet_path_plan()",
         "leaf.udp_flow_plan()",
@@ -4564,6 +4554,7 @@ fn adapter_roots_keep_tcp_runtime_details_in_tcp_modules() {
 
     let identity_source = read("src/adapters/identity.rs");
     let proxy_tcp_bridge = read_proxy_module_tree("src/transport/tcp_outbound.rs");
+    let tcp_operation = read("src/runtime/tcp_dispatch/operation.rs");
 
     for (adapter_name, forbidden_patterns, required_patterns) in cases {
         let adapter_path = format!("src/adapters/{adapter_name}.rs");
@@ -4594,7 +4585,8 @@ fn adapter_roots_keep_tcp_runtime_details_in_tcp_modules() {
             assert!(
                 tcp_source.contains(required)
                     || transport_source.contains(required)
-                    || proxy_tcp_bridge.contains(required),
+                    || proxy_tcp_bridge.contains(required)
+                    || tcp_operation.contains(required),
                 "src/adapters/{adapter_name}/tcp.rs plus the neutral proxy TCP bridge should own TCP runtime detail `{required}`"
             );
         }
@@ -4686,9 +4678,9 @@ fn hysteria2_tcp_udp_connect_glue_lives_in_adapter_transport_modules() {
     let adapter = read("src/adapters/hysteria2.rs");
     let tcp = read("src/adapters/hysteria2/tcp.rs");
     let udp_root = read("src/adapters/hysteria2/udp.rs");
-    let flow = read("src/adapters/hysteria2/udp/flow.rs");
+    let flow = read("src/adapters/hysteria2/udp.rs");
     let managed = read("src/adapters/hysteria2/udp.rs");
-    let packet_path = read("src/adapters/hysteria2/udp/packet_path.rs");
+    let packet_path = read("src/adapters/hysteria2/udp.rs");
     let udp_transport = read_repo_module_tree("crates/transport/src/hysteria2_quic.rs");
     let protocol_outbound =
         fs::read_to_string(repo_root().join("protocols/hysteria2/src/outbound.rs"))
@@ -4704,12 +4696,14 @@ fn hysteria2_tcp_udp_connect_glue_lives_in_adapter_transport_modules() {
             && adapter.contains("mod tcp;")
             && adapter.contains("pub(crate) mod udp;")
             && tcp.contains("Hysteria2TransportLeaf::from_resolved_leaf(leaf)")
-            && tcp.contains("leaf.open_tcp_stream(session).await")
+            && tcp.contains("SessionTcpConnectOperation { handshake: leaf }")
+            && !tcp.contains("leaf.open_tcp_stream(session).await")
             && udp_root.contains("Hysteria2TransportLeaf::from_resolved_leaf(leaf)")
-            && udp_root.contains("flow::start(dispatch, session, payload, leaf.udp_flow_plan()).await")
+            && udp_root.contains("ManagedDatagramUdpOperation")
             && managed.contains("managed_datagram_handler_box::<")
             && managed.contains("Hysteria2ManagedDatagramFlowResume")
-            && flow.contains("start_tracked_managed_datagram")
+            && flow.contains("plan: leaf.udp_flow_plan().into_start_plan()")
+            && !flow.contains(".start_transport_managed_datagram(")
             && packet_path.contains("open_hysteria2_udp_packet_path_build(")
             && packet_path.contains("quic_datagram_carrier::build")
             && udp_transport.contains("connect_hysteria2_tcp_outbound(")
@@ -4744,8 +4738,8 @@ fn trojan_tcp_connect_uses_protocol_config() {
 
     assert!(
         !manifest_dir().join("src/adapters/trojan/tcp.rs").exists()
-            && root.contains("connect_protocol_transport_bridge_tcp(")
-            && root.contains("apply_protocol_transport_bridge_relay_hop("),
+            && root.contains("TrojanTcpConnectOperation")
+            && root.contains("TrojanTcpRelayOperation"),
         "Trojan TCP capability forwarding should stay on src/adapters/trojan.rs once the proxy tcp.rs shell is removed"
     );
     assert!(
@@ -4813,12 +4807,12 @@ fn shadowsocks_tcp_connect_uses_request_model() {
         "Shadowsocks should not need a protocol-named proxy outbound module; TCP glue lives in adapters/shadowsocks/tcp.rs and protocol session setup lives in protocols/shadowsocks"
     );
     assert!(
-        adapter.contains("async fn connect_tcp(")
-            && adapter.contains("async fn apply_tcp_hop(")
-            && adapter.contains("ShadowsocksTransportLeaf::from_resolved_leaf(leaf)")
-            && (adapter.contains("leaf\n        .open_tcp_stream(session") || adapter.contains("leaf.open_tcp_stream(session"))
-            && adapter.contains("leaf.open_tcp_relay_hop(stream, session).await"),
-        "Shadowsocks adapter TCP module should own proxy glue while delegating cipher/session setup through a transport leaf"
+        adapter.contains("ShadowsocksTransportLeaf::from_resolved_leaf(leaf)")
+            && adapter.contains("SocketTcpConnectOperation { handshake: leaf }")
+            && adapter.contains("SocketTcpRelayOperation { handshake: leaf }")
+            && !adapter.contains(".open_tcp_stream(")
+            && !adapter.contains(".open_tcp_relay_hop("),
+        "Shadowsocks adapter should prepare neutral socket handshake operations for runtime execution"
     );
     assert!(
         !adapter.contains("CipherKind::from_str")
@@ -4829,6 +4823,9 @@ fn shadowsocks_tcp_connect_uses_request_model() {
             && transport.contains("pub fn from_resolved_leaf(leaf: &ResolvedLeafOutbound<'a>) -> Option<Self>")
             && transport.contains("pub async fn open_tcp_stream<OpenSocket, OpenSocketFut, E>(")
             && transport.contains("pub async fn open_tcp_relay_hop(")
+            && transport.contains("impl ProtocolSocketTcpHandshake for ShadowsocksTransportLeaf")
+            && transport.contains("async fn handshake_socket(")
+            && transport.contains("async fn handshake_relay(")
             && transport.contains("let config = shadowsocks_tcp_connect_config(cipher, password)?;")
             && !adapter.contains("cipher: shadowsocks::CipherKind")
             && !adapter.contains("ShadowsocksTcpTarget {")
@@ -4863,8 +4860,8 @@ fn vmess_tcp_connect_uses_protocol_config() {
 
     assert!(
         !manifest_dir().join("src/adapters/vmess/tcp.rs").exists()
-            && root.contains("connect_protocol_transport_bridge_tcp(")
-            && root.contains("apply_protocol_transport_bridge_relay_hop("),
+            && root.contains("VmessTcpConnectOperation")
+            && root.contains("VmessTcpRelayOperation"),
         "VMess TCP capability forwarding should stay on src/adapters/vmess.rs once the proxy tcp.rs shell is removed"
     );
     assert!(
@@ -4936,8 +4933,8 @@ fn vless_tcp_connect_uses_protocol_config() {
 
     assert!(
         !manifest_dir().join("src/adapters/vless/tcp.rs").exists()
-            && root.contains("connect_protocol_transport_bridge_tcp(")
-            && root.contains("apply_protocol_transport_bridge_relay_hop("),
+            && root.contains("VlessTcpConnectOperation")
+            && root.contains("VlessTcpRelayOperation"),
         "VLESS TCP capability forwarding should stay on src/adapters/vless.rs once the proxy tcp.rs shell is removed"
     );
     assert!(
@@ -5017,8 +5014,10 @@ fn socks5_tcp_adapter_uses_protocol_target_model() {
 
     assert!(
         adapter.contains("Socks5TransportLeaf::from_resolved_leaf(leaf)")
-            && (adapter.contains("leaf\n        .open_tcp_stream(session") || adapter.contains("leaf.open_tcp_stream(session"))
-            && adapter.contains("leaf.open_tcp_relay_hop(stream, session).await")
+            && adapter.contains("SocketTcpConnectOperation { handshake: leaf }")
+            && adapter.contains("SocketTcpRelayOperation { handshake: leaf }")
+            && !adapter.contains(".open_tcp_stream(")
+            && !adapter.contains(".open_tcp_relay_hop(")
             && !adapter.contains("socks5::Socks5TcpConnectSpec::from_config_parts")
             && !adapter.contains("socks5::Socks5TcpOutboundProfile::from_config_parts")
             && !adapter.contains(".establish_tcp_tunnel(")
@@ -5034,6 +5033,7 @@ fn socks5_tcp_adapter_uses_protocol_target_model() {
         transport.contains("pub fn from_resolved_leaf(leaf: &ResolvedLeafOutbound<'a>) -> Option<Self>")
             && transport.contains("pub async fn open_tcp_stream<OpenSocket, OpenSocketFut, E>(")
             && transport.contains("pub async fn open_tcp_relay_hop(")
+            && transport.contains("impl ProtocolSocketTcpHandshake for Socks5TransportLeaf")
             && transport.contains("establish_socks5_tcp_connect(")
             && transport.contains("apply_socks5_tcp_relay_hop(")
             && transport.contains("socks5::Socks5TcpOutboundProfile::from_config_parts(username, password)")
@@ -5069,11 +5069,11 @@ fn mieru_tcp_connect_glue_lives_in_adapter_tcp_module() {
         "Mieru should not need a protocol-named proxy outbound module; TCP glue lives in adapters/mieru/tcp.rs and protocol session setup lives in protocols/mieru"
     );
     assert!(
-        adapter.contains("async fn connect_tcp(")
-            && adapter.contains("async fn apply_tcp_hop(")
-            && adapter.contains("MieruTransportLeaf::from_resolved_leaf(leaf)")
-            && adapter.contains("leaf.open_tcp_stream(session, move |_, _| {")
-            && adapter.contains("leaf.open_tcp_relay_hop(stream, session).await")
+        adapter.contains("MieruTransportLeaf::from_resolved_leaf(leaf)")
+            && adapter.contains("SocketTcpConnectOperation { handshake: leaf }")
+            && adapter.contains("SocketTcpRelayOperation { handshake: leaf }")
+            && !adapter.contains(".open_tcp_stream(")
+            && !adapter.contains(".open_tcp_relay_hop(")
             && !adapter.contains("mieru::tcp_outbound_profile_from_config")
             && !adapter.contains(".establish_tcp_tunnel(")
             && !adapter.contains("MieruTcpOutboundProfile::from_config_parts")
@@ -5091,6 +5091,7 @@ fn mieru_tcp_connect_glue_lives_in_adapter_tcp_module() {
             .contains("pub fn from_resolved_leaf(leaf: &ResolvedLeafOutbound<'a>) -> Option<Self>")
             && transport.contains("pub async fn open_tcp_stream<OpenSocket, OpenSocketFut, E>(")
             && transport.contains("pub async fn open_tcp_relay_hop(")
+            && transport.contains("impl ProtocolSocketTcpHandshake for MieruTransportLeaf")
             && transport.contains("establish_mieru_tcp_tunnel(")
             && transport.contains("mieru::tcp_outbound_profile_from_config(username, password)")
             && protocol_outbound.contains("pub struct MieruTcpOutboundProfile")
@@ -5227,6 +5228,57 @@ fn adapter_modules_do_not_use_wildcard_parent_imports() {
 }
 
 #[test]
+fn inbound_adapter_layout_follows_responsibility_count() {
+    for adapter in ["http", "mixed", "hysteria2", "mieru", "shadowsocks"] {
+        let root = manifest_dir().join(format!("src/adapters/{adapter}/inbound.rs"));
+        let directory = manifest_dir().join(format!("src/adapters/{adapter}/inbound"));
+
+        assert!(
+            root.exists(),
+            "{adapter} should keep inbound orchestration in inbound.rs"
+        );
+        assert!(
+            !directory.exists(),
+            "{adapter} must not create an inbound directory for a lone listener module"
+        );
+    }
+
+    let socks5 = manifest_dir().join("src/adapters/socks5/inbound");
+    assert!(socks5.join("listener.rs").exists());
+    assert!(socks5.join("client_association.rs").exists());
+}
+
+#[test]
+fn udp_adapter_layout_and_start_plans_follow_responsibility_count() {
+    assert!(manifest_dir().join("src/adapters/mieru/udp.rs").exists());
+    assert!(
+        !manifest_dir().join("src/adapters/mieru/udp").exists(),
+        "Mieru must not recreate a single-child udp/flow.rs directory"
+    );
+
+    for adapter in ["hysteria2", "shadowsocks"] {
+        let udp = manifest_dir().join(format!("src/adapters/{adapter}/udp"));
+        assert!(manifest_dir()
+            .join(format!("src/adapters/{adapter}/udp.rs"))
+            .exists());
+        assert!(
+            !udp.exists(),
+            "{adapter} should keep prepared flow and packet-path projection in one udp.rs"
+        );
+    }
+
+    let transport = read_repo_module_tree("crates/transport/src/managed_udp.rs");
+    let mieru = read_repo_module_tree("crates/transport/src/mieru_transport.rs");
+    let hysteria2 = read_repo_module_tree("crates/transport/src/hysteria2_quic.rs");
+    let shadowsocks = read_repo_module_tree("crates/transport/src/shadowsocks_transport.rs");
+    assert!(transport.contains("struct ManagedDatagramStartPlan"));
+    assert!(transport.contains("struct ManagedStreamPacketBridgePlan"));
+    assert!(mieru.contains("fn into_bridge_plan("));
+    assert!(hysteria2.contains("fn into_start_plan("));
+    assert!(shadowsocks.contains("fn into_start_plan("));
+}
+
+#[test]
 fn udp_dispatch_modules_do_not_use_wildcard_parent_imports() {
     for path in rust_sources_under("src/runtime/udp_dispatch") {
         let source = relative(&path);
@@ -5347,12 +5399,12 @@ fn tcp_inbound_source_address_conversion_lives_in_platform_layer() {
 
     for source_path in [
         "src/inbound/direct.rs",
-        "src/transport/http_inbound/listener.rs",
-        "src/adapters/mixed/inbound/listener.rs",
+        "src/adapters/http/inbound.rs",
+        "src/adapters/mixed/inbound.rs",
         "src/transport/socks5_inbound/listener.rs",
-        "src/transport/shadowsocks_inbound/listener.rs",
+        "src/adapters/shadowsocks/inbound.rs",
         "src/adapters/trojan.rs",
-        "src/transport/mieru_inbound/listener.rs",
+        "src/adapters/mieru/inbound.rs",
         "src/adapters/vmess.rs",
     ] {
         let source = read(source_path);
@@ -5381,10 +5433,10 @@ fn tcp_inbound_source_address_conversion_lives_in_platform_layer() {
 
     for source_path in [
         "src/inbound/direct.rs",
-        "src/transport/http_inbound/listener.rs",
-        "src/adapters/mixed/inbound/listener.rs",
-        "src/transport/mieru_inbound/listener.rs",
-        "src/transport/shadowsocks_inbound/listener.rs",
+        "src/adapters/http/inbound.rs",
+        "src/adapters/mixed/inbound.rs",
+        "src/adapters/mieru/inbound.rs",
+        "src/adapters/shadowsocks/inbound.rs",
         "src/transport/socks5_inbound/listener.rs",
         "src/adapters/trojan/listener.rs",
         "src/adapters/vless/listener.rs",
@@ -5417,18 +5469,6 @@ fn tcp_inbound_source_address_conversion_lives_in_platform_layer() {
                     )
                     || contains_helper_call(&source, "spawn_transport_mux_route_inbound_listener"))
                 && !source.contains("listener.accept()")
-                && (!source.contains("JoinSet")
-                    || source.contains("run_logged_tcp_socket_listener_loop(")
-                    || source.contains("run_logged_quic_stream_listener_loop(")
-                    || contains_helper_call(
-                        &source,
-                        "spawn_recorded_transport_mux_bound_inbound_listener",
-                    )
-                    || contains_helper_call(
-                        &source,
-                        "spawn_transport_stream_route_inbound_listener",
-                    )
-                    || contains_helper_call(&source, "spawn_transport_mux_route_inbound_listener"))
                 && !source.contains("zero_platform_tokio::remote_ip_to_socket_addr")
                 && !source.contains("inbound listener ready")
                 && !source.contains("inbound listener stopped"),
@@ -5436,8 +5476,7 @@ fn tcp_inbound_source_address_conversion_lives_in_platform_layer() {
         );
     }
 
-    let hysteria2 =
-        read_repo_module_tree("crates/proxy/src/adapters/hysteria2/inbound/listener.rs");
+    let hysteria2 = read_repo_module_tree("crates/proxy/src/adapters/hysteria2/inbound.rs");
     let vless_listener = read_proxy_module_tree("src/adapters/vless.rs");
     let vless_transport = read_repo_module_tree("crates/transport/src/vless_transport.rs");
     assert!(
@@ -5694,7 +5733,7 @@ fn vless_fallback_recording_stream_lives_in_transport_layer() {
 
 #[test]
 fn mieru_inbound_stream_uses_protocol_codec_not_crypto_primitives() {
-    for path in rust_sources_under("src/adapters/mieru/inbound") {
+    for path in rust_sources_under("src/adapters/mieru/inbound.rs") {
         let source = relative(&path);
         let content = fs::read_to_string(&path).expect("read mieru inbound module");
 
@@ -5713,7 +5752,7 @@ fn mieru_inbound_stream_uses_protocol_codec_not_crypto_primitives() {
         }
     }
 
-    let inbound = read("src/adapters/mieru/inbound/listener.rs");
+    let inbound = read("src/adapters/mieru/inbound.rs");
     let protocol_inbound = fs::read_to_string(repo_root().join("protocols/mieru/src/inbound.rs"))
         .expect("read mieru protocol inbound source");
     let protocol_tunnel = fs::read_to_string(repo_root().join("protocols/mieru/src/tunnel.rs"))
@@ -5776,7 +5815,7 @@ fn mieru_inbound_stream_uses_protocol_codec_not_crypto_primitives() {
 
 #[test]
 fn shadowsocks_udp_inbound_uses_protocol_codec_not_datagram_primitives() {
-    for path in rust_sources_under("src/adapters/shadowsocks/inbound") {
+    for path in rust_sources_under("src/adapters/shadowsocks/inbound.rs") {
         let source = relative(&path);
         let content = fs::read_to_string(&path).expect("read shadowsocks inbound module");
 
@@ -5794,8 +5833,8 @@ fn shadowsocks_udp_inbound_uses_protocol_codec_not_datagram_primitives() {
         }
     }
 
-    let udp = read("src/adapters/shadowsocks/inbound/listener.rs");
-    let transport = read("src/adapters/shadowsocks/inbound/listener.rs");
+    let udp = read("src/adapters/shadowsocks/inbound.rs");
+    let transport = read("src/adapters/shadowsocks/inbound.rs");
     let protocol_udp = read_repo_module_tree("protocols/shadowsocks/src/udp.rs");
     let protocol_shared =
         fs::read_to_string(repo_root().join("protocols/shadowsocks/src/shared.rs"))
@@ -5924,8 +5963,8 @@ fn http_redirect_response_framing_stays_in_protocol_crate() {
         !manifest_dir().join("src/inbound/http.rs").exists(),
         "HTTP CONNECT protocol inbound glue should not live under src/inbound"
     );
-    let inbound = read("src/transport/http_inbound/listener.rs");
-    let mixed = read("src/adapters/mixed/inbound/listener.rs");
+    let inbound = read("src/adapters/http/inbound.rs");
+    let mixed = read("src/adapters/mixed/inbound.rs");
     let redirect = read("src/runtime/http_redirect.rs");
     let protocol_inbound = fs::read_to_string(repo_root().join("protocols/http/src/inbound.rs"))
         .expect("read http protocol inbound source");
@@ -6056,7 +6095,7 @@ fn socks5_udp_association_runtime_state_stays_out_of_outbound_module() {
     let outbound = manifest_dir().join("src/outbound/socks5.rs");
     let adapter = read("src/adapters/socks5/udp.rs");
     let active = read("src/adapters/socks5/udp/upstream_association.rs");
-    let flow = read("src/adapters/socks5/udp/flow.rs");
+    let flow = read("src/adapters/socks5/udp/handler.rs");
     let model = manifest_dir().join("src/adapters/socks5/udp/model.rs");
     let protocol_udp = read_repo_module_tree("protocols/socks5/src/udp.rs");
     let packet_path_source = read("src/adapters/socks5/udp/packet_path.rs");
@@ -6139,7 +6178,8 @@ fn socks5_udp_association_runtime_state_stays_out_of_outbound_module() {
             && runtime_source.contains("boxed_registered_upstream_handler::<")
             && runtime_source.contains("packet_path::carrier_descriptor")
             && runtime_source.contains("packet_path::build")
-            && runtime_source.contains("flow::start")
+            && runtime_source.contains("RegisteredAssociationUdpOperation")
+            && runtime_source.contains("handler::upstream_association_handler()")
             && packet_path_source
                 .contains("establish_packet_path_association(proxy, plan.into_carrier_build()).await?")
             && packet_path_source.contains("packet_path_payload_carrier(association)")
@@ -6326,8 +6366,8 @@ fn vless_udp_state_model_lives_outside_runtime_root() {
             && !root_udp.contains("mod managed;")
             && !root_udp.contains("mod transport;")
             && root_udp.contains("managed_stream_udp_handler_for_bridge::<")
-            && root_udp.contains("start_protocol_transport_bridge_udp_flow(")
-            && root_udp.contains("start_protocol_transport_bridge_udp_relay_final_hop(")
+            && root_udp.contains("TransportUdpOperation")
+            && root_udp.contains("PreparedTransportUdpOperation::RelayFinalHop")
             && !root_udp.contains("ManagedStreamFlowManager::<T>::new")
             && !root_udp.contains("ManagedStreamPacketStartBridge")
             && !root_udp.contains("start_tracked_managed_stream_packet(")
@@ -6358,12 +6398,12 @@ fn vless_udp_transport_opening_lives_in_transport_crate() {
     let transport = read_repo_module_tree("crates/transport/src/vless_transport.rs");
 
     assert!(
-        adapter_udp.contains("start_protocol_transport_bridge_udp_flow(")
+        adapter_udp.contains("TransportUdpOperation")
             && adapter_udp
                 .contains("protocol_transport_bridge_udp_relay_needs_two_streams(")
             && adapter_udp
-                .contains("start_protocol_transport_bridge_udp_relay_two_stream(")
-            && adapter_udp.contains("start_protocol_transport_bridge_udp_relay_final_hop(")
+                .contains("VlessRelayTwoStreamUdpOperation")
+            && adapter_udp.contains("PreparedTransportUdpOperation::RelayFinalHop")
             && !adapter_udp.contains("uses_quic()")
             && !adapter_udp.contains("VLESS QUIC final hop over TCP relay chain is not supported")
             && transport.contains("OwnedVlessOutboundTransportPlan")
@@ -6415,8 +6455,8 @@ fn vless_udp_identity_is_protocol_parsed() {
         .expect("read vless protocol udp source");
 
     assert!(
-        root.contains("start_protocol_transport_bridge_udp_flow(")
-            && root.contains("start_protocol_transport_bridge_udp_relay_final_hop(")
+        root.contains("TransportUdpOperation")
+            && root.contains("PreparedTransportUdpOperation::RelayFinalHop")
             && !root.contains("parse_uuid")
             && !root.contains("parse_udp_identity")
             && !root.contains("PreparedVlessOutboundRequestBundle::from_config_with_transport_hints("),
@@ -6612,8 +6652,8 @@ fn vmess_udp_state_model_lives_outside_runtime_root() {
             && !root_udp.contains("mod managed;")
             && !root_udp.contains("mod transport;")
             && root_udp.contains("managed_stream_udp_handler_for_bridge::<")
-            && root_udp.contains("start_protocol_transport_bridge_udp_flow(")
-            && root_udp.contains("start_protocol_transport_bridge_udp_relay_final_hop(")
+            && root_udp.contains("TransportUdpOperation")
+            && root_udp.contains("PreparedTransportUdpOperation::RelayFinalHop")
             && !root_udp.contains("ManagedStreamFlowManager::<T>::new")
             && !root_udp.contains("ManagedStreamPacketStartBridge")
             && !root_udp.contains("start_tracked_managed_stream_packet(")
@@ -6646,8 +6686,8 @@ fn vmess_udp_transport_opening_lives_in_transport_crate() {
             .expect("read crates/transport/src/outbound_stack.rs");
 
     assert!(
-        adapter_udp.contains("start_protocol_transport_bridge_udp_flow(")
-            && adapter_udp.contains("start_protocol_transport_bridge_udp_relay_final_hop(")
+        adapter_udp.contains("TransportUdpOperation")
+            && adapter_udp.contains("PreparedTransportUdpOperation::RelayFinalHop")
             && transport.contains("OwnedVmessOutboundTransportPlan")
             && stream_manager.contains("connect_upstream_host_owned(")
             && transport.contains("direct_udp_resume(")
@@ -6709,8 +6749,8 @@ fn vmess_udp_identity_is_protocol_parsed() {
         .expect("read vmess protocol udp source");
 
     assert!(
-        root.contains("start_protocol_transport_bridge_udp_flow(")
-            && root.contains("start_protocol_transport_bridge_udp_relay_final_hop(")
+        root.contains("TransportUdpOperation")
+            && root.contains("PreparedTransportUdpOperation::RelayFinalHop")
             && !root.contains("parse_uuid")
             && !root.contains("parse_udp_identity")
             && !root.contains("VmessCipher::from_name")
@@ -7228,8 +7268,8 @@ fn vmess_mux_pool_receives_protocol_parsed_cipher() {
     assert!(
         !root.contains("VmessCipher::from_name")
             && !root.contains("PreparedVmessOutboundRequestBundle::from_config_with_transport_hints(")
-            && tcp.contains("connect_protocol_transport_bridge_tcp(")
-            && udp.contains("start_protocol_transport_bridge_udp_flow("),
+            && tcp.contains("VmessTcpConnectOperation")
+            && udp.contains("TransportUdpOperation"),
         "VMess adapter roots should not parse VMess cipher state while tcp/udp bridge modules own capability glue"
     );
     assert!(
@@ -7354,7 +7394,7 @@ fn vless_mux_pool_model_lives_outside_runtime_root() {
         );
     }
     for required in [
-        "connect_protocol_transport_bridge_tcp(",
+        "VlessTcpConnectOperation",
         "leaf.open_tcp_stream(session, &self.mux_pool, open_socket)",
         "protocol: vless::udp::PreparedVlessUdpFlowPlan",
         ".open_udp_flow_with_transport_or_mux(",
@@ -7467,8 +7507,8 @@ fn protocol_mux_pools_are_transport_bridge_owned_not_runtime_fields() {
             && vless_adapter.contains("self.bridge.on_config_reloaded()")
             && !vless_tcp.contains("crate::adapters::open_vless_mux_stream(")
             && !vless_tcp.contains(".mux_pool")
-            && vless_tcp.contains("connect_protocol_transport_bridge_tcp(")
-            && vless_udp.contains("start_protocol_transport_bridge_udp_flow(")
+            && vless_tcp.contains("VlessTcpConnectOperation")
+            && vless_udp.contains("VlessTransportUdpOperation")
             && vless_transport.contains("struct VlessStreamBridge")
             && vless_transport.contains("mux_pool: vless::mux_pool::MuxConnectionPool")
             && vless_transport.contains("self.mux_pool.evict_all()")
@@ -7486,8 +7526,8 @@ fn protocol_mux_pools_are_transport_bridge_owned_not_runtime_fields() {
             && vmess_adapter.contains("self.bridge.on_config_reloaded()")
             && !vmess_tcp.contains("crate::adapters::open_vmess_mux_stream(")
             && !vmess_tcp.contains(".mux_pool")
-            && vmess_tcp.contains("connect_protocol_transport_bridge_tcp(")
-            && vmess_udp.contains("start_protocol_transport_bridge_udp_flow(")
+            && vmess_tcp.contains("VmessTcpConnectOperation")
+            && vmess_udp.contains("VmessTransportUdpOperation")
             && vmess_transport.contains("struct VmessStreamBridge")
             && vmess_transport.contains("mux_pool: vmess::mux::VmessMuxConnectionPool")
             && vmess_transport.contains("self.mux_pool.evict_all()")
@@ -8582,7 +8622,7 @@ fn trojan_inbound_udp_packet_framing_stays_in_protocol_crate() {
 
 #[test]
 fn mieru_client_stream_model_lives_outside_inbound_root() {
-    let root = read("src/transport/mieru_inbound/listener.rs");
+    let root = read("src/adapters/mieru/inbound.rs");
     let protocol_inbound = fs::read_to_string(repo_root().join("protocols/mieru/src/inbound.rs"))
         .expect("read mieru protocol inbound source");
     let protocol_lib = fs::read_to_string(repo_root().join("protocols/mieru/src/lib.rs"))
@@ -8660,9 +8700,9 @@ fn mieru_client_stream_model_lives_outside_inbound_root() {
 
 #[test]
 fn mieru_inbound_udp_packet_framing_stays_in_protocol_crate() {
-    let root = read("src/adapters/mieru/inbound/listener.rs");
+    let root = read("src/adapters/mieru/inbound.rs");
     let _stream_udp = read("src/runtime/stream_udp.rs");
-    let inbound = read("src/adapters/mieru/inbound/listener.rs");
+    let inbound = read("src/adapters/mieru/inbound.rs");
     let protocol_inbound = fs::read_to_string(repo_root().join("protocols/mieru/src/inbound.rs"))
         .expect("read mieru protocol inbound source");
     let protocol_udp = read_repo_module_tree("protocols/mieru/src/udp.rs");
@@ -8701,7 +8741,7 @@ fn socks5_udp_send_details_stay_out_of_udp_dispatch() {
     let managed = read_proxy_module_tree("src/runtime/udp_dispatch/managed.rs");
     let forward = read("src/runtime/udp_dispatch/forward.rs");
     let socks5_adapter = read("src/adapters/socks5/udp.rs");
-    let socks5_flow = read("src/adapters/socks5/udp/flow.rs");
+    let socks5_flow = read("src/adapters/socks5/udp/handler.rs");
 
     for forbidden in [
         "Socks5UdpAssociation {",
@@ -8724,8 +8764,9 @@ fn socks5_udp_send_details_stay_out_of_udp_dispatch() {
     assert!(
         managed.contains("start_tracked_upstream")
             && managed.contains("forward_managed_relay_flow")
-            && socks5_flow.contains("UpstreamTrackedStart")
-            && socks5_flow.contains(".start_tracked_upstream(")
+            && socks5_adapter.contains("RegisteredAssociationUdpOperation")
+            && !socks5_flow.contains("UpstreamTrackedStart")
+            && !socks5_flow.contains(".start_tracked_upstream(")
             && !socks5_flow.contains("ManagedUdpFlowKind::RelayStream")
             && !socks5_flow.contains("ManagedUdpFlowResume::new")
             && !managed.contains("Socks5UdpPacketSend")
@@ -8757,8 +8798,9 @@ fn socks5_udp_upstream_association_uses_outbound_tag_for_session_lookup() {
 
     assert!(
         !send.exists()
-            && runtime.contains("let (tag, server, port, association_target) = plan.into_parts();")
-            && runtime.contains("resume: association_target")
+            && runtime
+                .contains("let (tag, server, port, resume) = leaf.udp_flow_plan().into_parts();")
+            && runtime.contains("resume,")
             && !runtime.contains("association.into_target()")
             && !runtime.contains(".flow(")
             && !runtime.contains(".association_target()")
@@ -10076,7 +10118,6 @@ fn udp_dispatch_managed_root_is_facade_only() {
         "mod forward;",
         "mod model;",
         "mod start;",
-        "pub(crate) use model::ManagedDatagramStart;",
         "pub(crate) use model::UpstreamTrackedStart;",
     ] {
         assert!(
@@ -10085,16 +10126,15 @@ fn udp_dispatch_managed_root_is_facade_only() {
         );
     }
 
-    for forbidden in ["struct ManagedDatagramStart", "struct UpstreamTrackedStart"] {
-        assert!(
-            !root.contains(forbidden),
-            "runtime::udp_dispatch::managed root should remain a facade and not own `{forbidden}`"
-        );
-        assert!(
-            tree.contains(forbidden),
-            "runtime::udp_dispatch::managed module tree should still own `{forbidden}`"
-        );
-    }
+    let forbidden = "struct UpstreamTrackedStart";
+    assert!(
+        !root.contains(forbidden),
+        "runtime::udp_dispatch::managed root should remain a facade and not own `{forbidden}`"
+    );
+    assert!(
+        tree.contains(forbidden),
+        "runtime::udp_dispatch::managed module tree should still own `{forbidden}`"
+    );
 }
 
 #[test]
@@ -11213,7 +11253,7 @@ fn protocol_udp_upstream_start_dispatch_lives_behind_registered_handlers() {
     let register = read("src/register.rs");
     let socks5_adapter = read("src/adapters/socks5.rs");
     let socks5 = read("src/adapters/socks5/udp.rs");
-    let socks5_flow = read("src/adapters/socks5/udp/flow.rs");
+    let socks5_flow = read("src/adapters/socks5/udp/handler.rs");
 
     for forbidden in [
         "ManagedUdpFlowResume::Socks5",
@@ -11237,7 +11277,7 @@ fn protocol_udp_upstream_start_dispatch_lives_behind_registered_handlers() {
             && socks5_adapter.contains("fn upstream_association_handler(&self)")
             && socks5.contains("pub(crate) fn upstream_association_handler")
             && socks5_flow.contains("boxed_registered_upstream_handler::<")
-            && socks5_flow.contains("UpstreamTrackedStart")
+            && socks5.contains("RegisteredAssociationUdpOperation")
             && upstream_handler
                 .contains("impl<T, A> UpstreamAssociationHandler for RegisteredUpstreamAssociationHandler<T, A>")
             && upstream_handler.contains("start_registered_upstream_flow(")
@@ -11769,7 +11809,7 @@ fn protocol_registry_root_is_facade_only() {
         "mod model;",
         "mod registry;",
         "pub(crate) use capability::",
-        "pub(crate) use context::{InboundAdapterContext, OutboundAdapterContext, UdpAdapterContext};",
+        "pub(crate) use context::{OutboundAdapterContext, UdpAdapterContext};",
         "pub(crate) use model::{BoundInbound, OutboundLeafRuntime};",
         "pub(crate) use registry::ProtocolRegistry;",
     ] {
@@ -11828,7 +11868,6 @@ fn protocol_registry_capabilities_are_split_by_responsibility() {
         "src/protocol_registry/mod.rs should wire the adapter context module"
     );
     for expected in [
-        "pub(crate) struct InboundAdapterContext",
         "pub(crate) struct OutboundAdapterContext",
         "pub(crate) struct UdpAdapterContext",
     ] {
@@ -12150,6 +12189,9 @@ fn protocol_registry_stores_capability_objects() {
 #[test]
 fn protocol_registry_capabilities_use_contexts_not_proxy() {
     let capability = read("src/protocol_registry/capability.rs");
+    let tcp_operation = read("src/runtime/tcp_dispatch/operation.rs");
+    let udp_operation = read("src/runtime/udp_dispatch/operation.rs");
+    let packet_path_operation = read("src/runtime/udp_dispatch/packet_path_operation.rs");
     let old_adapter = manifest_dir().join("src/protocol_registry/adapter.rs");
 
     for forbidden in ["proxy: &Proxy", "_proxy: &Proxy"] {
@@ -12160,16 +12202,28 @@ fn protocol_registry_capabilities_use_contexts_not_proxy() {
     }
 
     assert!(
-        !old_adapter.exists() && capability.contains("UdpAdapterContext<'_>"),
-        "UDP adapter context should live on UDP capability traits, not ProtocolAdapter"
+        !old_adapter.exists()
+            && !capability.contains("UdpAdapterContext<'_>")
+            && capability.contains("fn prepare_udp_flow<'a>(")
+            && capability.contains("fn prepare_udp_packet_path<'a>(")
+            && udp_operation.contains("UdpAdapterContext<'a>")
+            && packet_path_operation.contains("UdpAdapterContext<'a>"),
+        "UDP capabilities should prepare operations while execution context stays in runtime"
     );
     assert!(
-        !old_adapter.exists() && capability.contains("InboundAdapterContext<'_>"),
-        "inbound listener context should live on InboundListenerCapability, not ProtocolAdapter"
+        !old_adapter.exists()
+            && !capability.contains("InboundAdapterContext<'_>")
+            && capability.contains("fn prepare_inbound_listener(")
+            && read("src/runtime/inbound_operation.rs")
+                .contains("trait PreparedInboundListenerOperation"),
+        "inbound capabilities should prepare listener operations while runtime owns execution context"
     );
     assert!(
-        !old_adapter.exists() && capability.contains("OutboundAdapterContext<'_>"),
-        "TCP outbound context should live on TcpOutboundCapability, not ProtocolAdapter"
+        !old_adapter.exists()
+            && !capability.contains("OutboundAdapterContext<'_>")
+            && capability.contains("fn prepare_tcp_connect<'a>(")
+            && tcp_operation.contains("OutboundAdapterContext<'a>"),
+        "TCP capability should prepare operations while execution context stays in runtime"
     );
 }
 
@@ -12598,8 +12652,8 @@ fn protocol_transport_roots_are_facade_only() {
             );
         }
         for required in [
-            "connect_protocol_transport_bridge_tcp(",
-            "start_protocol_transport_bridge_udp_flow(",
+            "fn prepare_tcp_connect<'a>(",
+            "TransportUdpOperation",
             "impl InboundListenerCapability for",
             "impl TcpOutboundCapability for",
             "impl UdpFlowCapability for",
@@ -12695,9 +12749,9 @@ fn protocol_transport_udp_roots_keep_bridge_logic_local_after_facade_collapse() 
             "crates/transport/src/vless_transport.rs",
             &[
                 "managed_stream_udp_handler_for_bridge::<VlessStreamBridge>()",
-                "start_protocol_transport_bridge_udp_flow(",
-                "start_protocol_transport_bridge_udp_relay_final_hop(",
-                "start_protocol_transport_bridge_udp_relay_two_stream(",
+                "VlessTransportUdpOperation",
+                "PreparedTransportUdpOperation::RelayFinalHop",
+                "VlessRelayTwoStreamUdpOperation",
             ][..],
             &[
                 "pub struct VlessManagedUdpFlowResume",
@@ -12711,8 +12765,8 @@ fn protocol_transport_udp_roots_keep_bridge_logic_local_after_facade_collapse() 
             "crates/transport/src/vmess_transport.rs",
             &[
                 "managed_stream_udp_handler_for_bridge::<VmessStreamBridge>()",
-                "start_protocol_transport_bridge_udp_flow(",
-                "start_protocol_transport_bridge_udp_relay_final_hop(",
+                "VmessTransportUdpOperation",
+                "PreparedTransportUdpOperation::RelayFinalHop",
             ][..],
             &[
                 "pub struct VmessManagedUdpFlowResume",
@@ -12726,8 +12780,8 @@ fn protocol_transport_udp_roots_keep_bridge_logic_local_after_facade_collapse() 
             "crates/transport/src/trojan_transport.rs",
             &[
                 "managed_stream_udp_handler_for_bridge::<TrojanTlsBridge>()",
-                "start_protocol_transport_bridge_udp_flow(",
-                "start_protocol_transport_bridge_udp_relay_final_hop(",
+                "TrojanTransportUdpOperation",
+                "PreparedTransportUdpOperation::RelayFinalHop",
             ][..],
             &[
                 "pub struct TrojanManagedUdpFlowResume",
@@ -12782,10 +12836,7 @@ fn protocol_transport_tcp_roots_keep_bridge_logic_local_after_facade_collapse() 
             "src/adapters/vless.rs",
             "src/adapters/vless/tcp/transport.rs",
             "crates/transport/src/vless_transport.rs",
-            &[
-                "connect_protocol_transport_bridge_tcp(",
-                "apply_protocol_transport_bridge_relay_hop(",
-            ][..],
+            &["VlessTcpConnectOperation", "VlessTcpRelayOperation"][..],
             &[
                 "impl ProtocolTransportLeaf for VlessOutboundLeaf<'_>",
                 "impl ProtocolTcpTransportOpenResult for vless::outbound::VlessTcpStreamOpen",
@@ -12802,10 +12853,7 @@ fn protocol_transport_tcp_roots_keep_bridge_logic_local_after_facade_collapse() 
             "src/adapters/vmess.rs",
             "src/adapters/vmess/tcp/transport.rs",
             "crates/transport/src/vmess_transport.rs",
-            &[
-                "connect_protocol_transport_bridge_tcp(",
-                "apply_protocol_transport_bridge_relay_hop(",
-            ][..],
+            &["VmessTcpConnectOperation", "VmessTcpRelayOperation"][..],
             &[
                 "impl ProtocolTransportLeaf for VmessOutboundLeaf<'_>",
                 "impl ProtocolTcpTransportOpenResult for vmess::outbound::VmessTcpStreamOpen",
@@ -12822,10 +12870,7 @@ fn protocol_transport_tcp_roots_keep_bridge_logic_local_after_facade_collapse() 
             "src/adapters/trojan.rs",
             "src/adapters/trojan/tcp/transport.rs",
             "crates/transport/src/trojan_transport.rs",
-            &[
-                "connect_protocol_transport_bridge_tcp(",
-                "apply_protocol_transport_bridge_relay_hop(",
-            ][..],
+            &["TrojanTcpConnectOperation", "TrojanTcpRelayOperation"][..],
             &[
                 "impl ProtocolTransportLeaf for TrojanOutboundLeaf<'_>",
                 "impl ProtocolTcpTransportOpenResult for TrojanTcpStreamOpen",
@@ -12888,7 +12933,7 @@ fn transport_protocol_adapter_roots_stay_capability_only() {
             "parse_uuid",
             &[
                 "protocol_transport_bridge_udp_relay_needs_two_streams(",
-                "start_protocol_transport_bridge_udp_relay_two_stream(",
+                "VlessRelayTwoStreamUdpOperation",
             ][..],
         ),
         (
@@ -12923,12 +12968,12 @@ fn transport_protocol_adapter_roots_stay_capability_only() {
             format!("impl TcpOutboundCapability for {adapter_name}"),
             format!("impl UdpFlowCapability for {adapter_name}"),
             format!("impl UdpPacketPathCapability for {adapter_name}"),
-            "listener::spawn(".to_string(),
-            "connect_protocol_transport_bridge_tcp(".to_string(),
-            "apply_protocol_transport_bridge_relay_hop(".to_string(),
+            "listener::prepare(".to_string(),
+            "fn prepare_tcp_connect<'a>(".to_string(),
+            "fn prepare_tcp_relay_hop<'a>(".to_string(),
             "managed_stream_udp_handler_for_bridge::<".to_string(),
-            "start_protocol_transport_bridge_udp_flow(".to_string(),
-            "start_protocol_transport_bridge_udp_relay_final_hop(".to_string(),
+            "TransportUdpOperation".to_string(),
+            "PreparedTransportUdpOperation::RelayFinalHop".to_string(),
             "fn on_config_reloaded(&self)".to_string(),
             "self.bridge.on_config_reloaded()".to_string(),
         ];
@@ -13860,14 +13905,12 @@ fn protocol_udp_cached_flow_fast_path_lives_outside_state_root() {
             && !state.contains("cached_handler_mut")
             && !vless_flow.exists()
             && !vmess_flow.exists()
-            && vless_transport.contains("start_protocol_transport_bridge_udp_flow(")
-            && vless_transport
-                .contains("start_protocol_transport_bridge_udp_relay_final_hop(")
-            && vmess_adapter.contains("start_protocol_transport_bridge_udp_flow(")
+            && vless_transport.contains("VlessTransportUdpOperation")
+            && vless_transport.contains("PreparedTransportUdpOperation::RelayFinalHop")
+            && vmess_adapter.contains("VmessTransportUdpOperation")
             && !vmess_adapter.contains("start_tracked_managed_stream_packet(")
-            && vmess_transport.contains("start_protocol_transport_bridge_udp_flow(")
-            && vmess_transport
-                .contains("start_protocol_transport_bridge_udp_relay_final_hop(")
+            && vmess_transport.contains("VmessTransportUdpOperation")
+            && vmess_transport.contains("PreparedTransportUdpOperation::RelayFinalHop")
             && !vmess_transport.contains("ManagedStreamPacketStartBridge")
             && !vmess_transport.contains("start_tracked_managed_stream_packet(")
             && !vmess_adapter.contains("register_managed_stream_flow_sender")
@@ -14053,9 +14096,9 @@ fn packet_path_traits_are_grouped_by_responsibility() {
         "packet-path trait docs should not describe packet-path products as monolithic ProtocolRegistry outputs"
     );
     assert!(
-        packet_path.contains("UdpPacketPathCapability::udp_packet_path_carrier_descriptor")
-            && packet_path.contains("UdpPacketPathCapability::udp_datagram_source"),
-        "packet-path trait docs should point carrier/datagram products at UdpPacketPathCapability"
+        packet_path.contains("PreparedUdpPacketPathOperation::into_carrier_descriptor")
+            && packet_path.contains("PreparedUdpPacketPathOperation::into_datagram_source"),
+        "packet-path trait docs should point carrier/datagram products at the prepared operation"
     );
 }
 
@@ -14281,8 +14324,8 @@ fn packet_path_chain_root_does_not_reexport_protocol_carrier_builders() {
     );
 
     for source in [
-        "src/adapters/shadowsocks/udp/packet_path.rs",
-        "src/adapters/hysteria2/udp/packet_path.rs",
+        "src/adapters/shadowsocks/udp.rs",
+        "src/adapters/hysteria2/udp.rs",
     ] {
         let content = read(source);
         assert!(
@@ -14683,8 +14726,8 @@ fn trojan_udp_flow_resume_is_protocol_owned() {
         .expect("read trojan protocol udp source");
 
     assert!(
-        root.contains("start_protocol_transport_bridge_udp_flow(")
-            && root.contains("start_protocol_transport_bridge_udp_relay_final_hop(")
+        root.contains("TrojanTransportUdpOperation")
+            && root.contains("PreparedTransportUdpOperation::RelayFinalHop")
             && !root.contains("TrojanUdpFlowPlan::direct_from_config")
             && !root.contains("TrojanUdpFlowPlan::relay_from_config")
             && !root.contains("PreparedTrojanOutboundRequestBundle::from_config("),
@@ -14843,7 +14886,7 @@ fn mieru_udp_managed_connector_is_thin_protocol_glue() {
     let managed = read("src/adapters/mieru/udp.rs");
     let connector = read_repo_module_tree("crates/transport/src/mieru_transport/managed_udp.rs");
     let adapter = read("src/adapters/mieru/udp.rs");
-    let adapter_flow = read("src/adapters/mieru/udp/flow.rs");
+    let adapter_flow = read("src/adapters/mieru/udp.rs");
     let transport = read_repo_module_tree("crates/transport/src/mieru_transport.rs");
     let stream_manager = read_proxy_module_tree("src/runtime/udp_flow/managed/stream_manager.rs");
     let connection = read_proxy_module_tree("src/runtime/udp_flow/managed/connection.rs");
@@ -14907,8 +14950,8 @@ fn mieru_udp_managed_connector_is_thin_protocol_glue() {
             && adapter.contains("MieruTransportLeaf::from_resolved_leaf")
             && adapter.contains("leaf.udp_flow_plan(false)")
             && adapter.contains("leaf.udp_flow_plan(true)")
-            && adapter_flow.contains("start_direct_managed_stream_packet(")
-            && adapter_flow.contains("start_relay_managed_stream_packet(")
+            && adapter_flow.contains("ManagedStreamPacketUdpOperation")
+            && adapter_flow.contains("PreparedManagedStreamPacketOperation::RelayFinalHop")
             && transport.contains("pub type MieruManagedStreamUdpResume = ManagedTupleUdpResume<MieruManagedUdpFlowResume>;")
             && connector.contains("impl ManagedConnectorFlowOps for mieru::udp::MieruUdpConnectorFlow")
             && connector.contains("impl ProtocolManagedTupleUdpFlowResumeConnectionOps for MieruManagedUdpFlowResume")
@@ -15040,8 +15083,8 @@ fn trojan_udp_managed_connector_is_thin_protocol_glue() {
 
     assert!(
         adapter.contains("managed_stream_udp_handler_for_bridge::<TrojanTlsBridge>()")
-            && adapter.contains("start_protocol_transport_bridge_udp_flow(")
-            && adapter.contains("start_protocol_transport_bridge_udp_relay_final_hop(")
+            && adapter.contains("TrojanTransportUdpOperation")
+            && adapter.contains("PreparedTransportUdpOperation::RelayFinalHop")
             && stream_manager.contains("managed_stream_connector_flow_from_build(")
             && transport.contains("impl ManagedConnectorFlowOps for trojan::udp::TrojanUdpConnectorFlow")
             && stream_manager.contains("managed_packet_udp_connection_from_flow(connection)")
@@ -15151,8 +15194,8 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
     let connector_flow_impl = impl_block(&protocol_udp, "Hysteria2UdpConnectorFlow");
     let protocol_lib = fs::read_to_string(repo_root().join("protocols/hysteria2/src/lib.rs"))
         .expect("read hysteria2 protocol lib source");
-    let adapter_flow = read("src/adapters/hysteria2/udp/flow.rs");
-    let adapter_packet_path = read("src/adapters/hysteria2/udp/packet_path.rs");
+    let adapter_flow = read("src/adapters/hysteria2/udp.rs");
+    let adapter_packet_path = read("src/adapters/hysteria2/udp.rs");
     let _profile_connector_uses = connector
         .matches("Hysteria2UdpConnector::from_udp_profile")
         .count();
@@ -15410,7 +15453,7 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
 #[test]
 fn h2_packet_path_carrier_uses_protocol_built_codec() {
     let adapter = read("src/adapters/hysteria2/udp.rs");
-    let adapter_packet_path = read("src/adapters/hysteria2/udp/packet_path.rs");
+    let adapter_packet_path = read("src/adapters/hysteria2/udp.rs");
     let carrier = read("src/runtime/udp_flow/packet_path_chain/carriers/quic_datagram_carrier.rs");
     let transport = fs::read_to_string(repo_root().join("crates/transport/src/udp_packet_path.rs"))
         .expect("read zero-transport udp packet path source");
@@ -15527,7 +15570,7 @@ fn h2_udp_packet_stream_tasks_live_outside_manager() {
     let _transport = fs::read_to_string(repo_root().join("crates/transport/src/hysteria2_quic.rs"))
         .expect("read zero-transport hysteria2_quic source");
     let connector = read_repo_module_tree("crates/transport/src/hysteria2_quic.rs");
-    let flow = read("src/adapters/hysteria2/udp/flow.rs");
+    let flow = read("src/adapters/hysteria2/udp.rs");
 
     for forbidden in [
         "Hysteria2Connector",
@@ -15565,7 +15608,7 @@ fn h2_udp_packet_stream_tasks_live_outside_manager() {
             && !managed.contains("send_datagram")
             && !managed.contains("read_datagram")
             && !managed.contains("tokio::spawn")
-            && flow.contains("ManagedDatagramStart")
+            && flow.contains("into_start_plan")
             && connector.contains("async fn open_udp_profile_connection")
             && connector.contains("pub async fn establish_hysteria2_udp_flow_connection(")
             && protocol_udp.contains("pub struct Hysteria2UdpFlowConnection")
@@ -15622,7 +15665,8 @@ fn h2_transport_delegates_protocol_handshake_to_protocol_crate() {
             && transport.contains(".authenticate_connection(&conn, &mut stream)")
             && transport.contains(".establish_tcp_connect(&mut stream, session)")
             && transport.contains("hysteria2::outbound_profile_from_config_password")
-            && adapter.contains("leaf.open_tcp_stream(session).await")
+            && adapter.contains("SessionTcpConnectOperation { handshake: leaf }")
+            && transport.contains("impl ProtocolSessionTcpHandshake for Hysteria2TransportLeaf")
             && adapter.contains("open_hysteria2_udp_packet_path_build(")
             && protocol_outbound.contains("struct Hysteria2OutboundProfile")
             && protocol_outbound.contains("pub async fn authenticate_with_salt")
@@ -15765,8 +15809,8 @@ fn shadowsocks_udp_datagram_codec_lives_outside_manager() {
     let managed = read("src/adapters/shadowsocks/udp.rs");
     let outbound = manifest_dir().join("src/outbound/shadowsocks.rs");
     let adapter = read("src/adapters/shadowsocks/udp.rs");
-    let _adapter_flow = read("src/adapters/shadowsocks/udp/flow.rs");
-    let _adapter_packet_path = read("src/adapters/shadowsocks/udp/packet_path.rs");
+    let _adapter_flow = read("src/adapters/shadowsocks/udp.rs");
+    let _adapter_packet_path = read("src/adapters/shadowsocks/udp.rs");
     let generic_manager =
         read_proxy_module_tree("src/runtime/udp_flow/managed/datagram_manager.rs");
     let transport = format!(
@@ -15976,7 +16020,7 @@ fn shadowsocks_udp_state_model_lives_outside_manager() {
 #[test]
 fn shadowsocks_udp_flow_cipher_is_protocol_parsed() {
     let adapter = read("src/adapters/shadowsocks/udp.rs");
-    let adapter_flow = read("src/adapters/shadowsocks/udp/flow.rs");
+    let adapter_flow = read("src/adapters/shadowsocks/udp.rs");
     let flows = read_proxy_module_tree("src/runtime/udp_flow/managed/flow.rs");
     let managed = read("src/adapters/shadowsocks/udp.rs");
     let outbound = manifest_dir().join("src/outbound/shadowsocks.rs");
@@ -16133,8 +16177,8 @@ fn shadowsocks_udp_flow_cipher_is_protocol_parsed() {
 #[test]
 fn shadowsocks_packet_path_cipher_is_protocol_parsed() {
     let adapter = read("src/adapters/shadowsocks/udp.rs");
-    let adapter_flow = read("src/adapters/shadowsocks/udp/flow.rs");
-    let adapter_packet_path = read("src/adapters/shadowsocks/udp/packet_path.rs");
+    let adapter_flow = read("src/adapters/shadowsocks/udp.rs");
+    let adapter_packet_path = read("src/adapters/shadowsocks/udp.rs");
     let shadowsocks_transport =
         read_repo_module_tree("crates/transport/src/shadowsocks_transport.rs");
     let protocol_outbound = manifest_dir()
@@ -16153,7 +16197,7 @@ fn shadowsocks_packet_path_cipher_is_protocol_parsed() {
     let traits = read("src/runtime/udp_flow/packet_path.rs");
     let key = read("src/runtime/udp_flow/packet_path_chain/key.rs");
     let outbound = read("src/runtime/udp_flow/outbound.rs");
-    let shadowsocks_packet_path = read("src/adapters/shadowsocks/udp/packet_path.rs");
+    let shadowsocks_packet_path = read("src/adapters/shadowsocks/udp.rs");
     let carrier_snapshot = read("src/runtime/udp_flow/packet_path.rs");
     let snapshot = read("src/runtime/udp_flow/packet_path_chain/snapshot.rs");
     let forward = read_proxy_module_tree("src/runtime/udp_flow/managed/datagram.rs");
@@ -16337,7 +16381,7 @@ fn udp_build_traits_consume_protocol_parts() {
     let packet_path = read("src/runtime/udp_flow/packet_path.rs");
     let packet_path_key = read("src/runtime/udp_flow/packet_path_chain/key.rs");
     let socks5_packet_path = read("src/adapters/socks5/udp/packet_path.rs");
-    let shadowsocks_packet_path = read("src/adapters/shadowsocks/udp/packet_path.rs");
+    let shadowsocks_packet_path = read("src/adapters/shadowsocks/udp.rs");
     let _shadowsocks_managed = read("src/adapters/shadowsocks/udp.rs");
     let hysteria2_connector = read_repo_module_tree("crates/transport/src/hysteria2_quic.rs");
     let trojan_connector = read_repo_module_tree("crates/transport/src/trojan_transport.rs");
@@ -16429,8 +16473,6 @@ fn udp_build_traits_consume_protocol_parts() {
             && !socks5_packet_path.contains("self.port()")
             && !shadowsocks_packet_path.contains("self.server()")
             && !shadowsocks_packet_path.contains("self.port()")
-            && !hysteria2_connector.contains("self.server()")
-            && !hysteria2_connector.contains("self.port()")
             && socks5_packet_path.contains("fn into_parts(self) -> (String, String, u16)")
             && shadowsocks_protocol.contains(
                 "pub fn into_parts(self) -> (alloc::string::String, alloc::string::String, u16)"
@@ -16525,7 +16567,7 @@ fn adapters_do_not_own_udp_packet_path_cache_key_formats() {
     for source in [
         "src/adapters/socks5/udp.rs",
         "src/adapters/socks5/udp/packet_path.rs",
-        "src/adapters/shadowsocks/udp/packet_path.rs",
+        "src/adapters/shadowsocks/udp.rs",
         "src/adapters/hysteria2/udp.rs",
     ] {
         let content = read(source);
@@ -16662,8 +16704,6 @@ fn adapters_do_not_construct_udp_packet_path_snapshots_directly() {
     ] {
         let content = read(source);
         for forbidden in [
-            "PacketPathCarrierDescriptor {",
-            "UdpDatagramSource {",
             "UdpPacketPathCarrier::Socks5",
             "UdpPacketPathCarrier::Shadowsocks",
             "UdpPacketPathCarrier::Hysteria2",
@@ -16744,8 +16784,8 @@ fn adapters_do_not_construct_udp_packet_path_snapshots_directly() {
         );
     }
     for source in [
-        "src/adapters/shadowsocks/udp/packet_path.rs",
-        "src/adapters/hysteria2/udp/packet_path.rs",
+        "src/adapters/shadowsocks/udp.rs",
+        "src/adapters/hysteria2/udp.rs",
     ] {
         let content = read(source);
         assert!(
@@ -16840,12 +16880,18 @@ fn udp_adapters_use_neutral_managed_bridge_for_registered() {
     }
 
     for (source, required) in [
-        ("src/adapters/socks5/udp/flow.rs", "UpstreamTrackedStart"),
         (
-            "src/adapters/shadowsocks/udp/flow.rs",
-            "ManagedDatagramStart",
+            "src/adapters/socks5/udp.rs",
+            "RegisteredAssociationUdpOperation",
         ),
-        ("src/adapters/hysteria2/udp/flow.rs", "ManagedDatagramStart"),
+        (
+            "src/adapters/shadowsocks/udp.rs",
+            "ManagedDatagramUdpOperation",
+        ),
+        (
+            "src/adapters/hysteria2/udp.rs",
+            "ManagedDatagramUdpOperation",
+        ),
     ] {
         let adapter = read(source);
         assert!(
@@ -16876,14 +16922,14 @@ fn udp_adapters_use_neutral_managed_bridge_for_registered() {
         }
     }
 
-    let mieru_adapter = read("src/adapters/mieru/udp/flow.rs");
+    let mieru_adapter = read("src/adapters/mieru/udp.rs");
     assert!(
-        mieru_adapter.contains("start_direct_managed_stream_packet(")
-            && mieru_adapter.contains("start_relay_managed_stream_packet(")
+        mieru_adapter.contains("ManagedStreamPacketUdpOperation")
+            && mieru_adapter.contains("PreparedManagedStreamPacketOperation::RelayFinalHop")
             && !mieru_adapter.contains("ManagedUdpSend")
             && !mieru_adapter.contains("ManagedUdpOutboundKind")
             && !mieru_adapter.contains("start_tracked_managed_udp"),
-        "src/adapters/mieru/udp/flow.rs should use the higher-level neutral managed stream start helpers instead of owning runtime flow construction"
+        "src/adapters/mieru/udp.rs should use the higher-level neutral managed stream start helpers instead of owning runtime flow construction"
     );
     for forbidden in [
         "ManagedUdpFlowResume::Socks5",
@@ -16901,7 +16947,7 @@ fn udp_adapters_use_neutral_managed_bridge_for_registered() {
     ] {
         assert!(
             !mieru_adapter.contains(forbidden),
-            "src/adapters/mieru/udp/flow.rs should not call removed protocol-named UdpDispatch facade `{forbidden}`"
+            "src/adapters/mieru/udp.rs should not call removed protocol-named UdpDispatch facade `{forbidden}`"
         );
     }
 
@@ -16912,9 +16958,8 @@ fn udp_adapters_use_neutral_managed_bridge_for_registered() {
     ] {
         let transport = read(source);
         assert!(
-            transport.contains("start_protocol_transport_bridge_udp_flow(")
-                && transport
-                    .contains("start_protocol_transport_bridge_udp_relay_final_hop(")
+            transport.contains("TransportUdpOperation")
+                && transport.contains("PreparedTransportUdpOperation::RelayFinalHop")
                 && !transport.contains("ManagedStreamPacketStartBridge")
                 && !transport.contains("start_tracked_managed_stream_packet(")
                 && !transport.contains("UdpFlowOutbound::StreamPacket")
@@ -17036,9 +17081,9 @@ fn udp_dispatch_does_not_unpack_protocol_flow_resume() {
     let managed = read_proxy_module_tree("src/runtime/udp_dispatch/managed.rs");
     for source in [
         "src/runtime/udp_dispatch/managed.rs",
-        "src/adapters/socks5/udp/flow.rs",
-        "src/adapters/hysteria2/udp/flow.rs",
-        "src/adapters/mieru/udp/flow.rs",
+        "src/adapters/socks5/udp/handler.rs",
+        "src/adapters/hysteria2/udp.rs",
+        "src/adapters/mieru/udp.rs",
         "src/adapters/shadowsocks/udp.rs",
         "src/adapters/trojan.rs",
     ] {
