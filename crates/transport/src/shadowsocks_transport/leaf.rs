@@ -2,7 +2,7 @@ use core::future::Future;
 use std::sync::Arc;
 
 use zero_core::{Address, Session};
-use zero_engine::{EngineError, ResolvedLeafOutbound};
+use zero_engine::EngineError;
 use zero_platform_tokio::TokioSocket;
 use zero_traits::DatagramCodec;
 
@@ -67,20 +67,6 @@ impl<'a> ShadowsocksTransportLeaf<'a> {
             cipher,
             password,
         }
-    }
-
-    pub fn from_resolved_leaf(leaf: &ResolvedLeafOutbound<'a>) -> Option<Self> {
-        let ResolvedLeafOutbound::Shadowsocks {
-            tag,
-            server,
-            port,
-            password,
-            cipher,
-        } = leaf
-        else {
-            return None;
-        };
-        Some(Self::new(tag, server, *port, cipher, password))
     }
 
     pub fn tag(&self) -> &str {

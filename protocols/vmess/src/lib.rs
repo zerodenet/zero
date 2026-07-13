@@ -9,4 +9,4 @@ mod shared;
 pub mod stream;
 pub mod udp;
 
-pub use shared::VmessCipher;
+pub use shared::{parse_uuid, VmessCipher};

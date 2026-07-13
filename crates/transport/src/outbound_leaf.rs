@@ -1,8 +1,7 @@
 use std::future::Future;
-use std::path::Path;
 
 use zero_core::Session;
-use zero_engine::{EngineError, ResolvedLeafOutbound};
+use zero_engine::EngineError;
 use zero_platform_tokio::TokioSocket;
 
 use crate::{StreamTraffic, TcpRelayStream};
@@ -14,11 +13,6 @@ where
     OpenSocket: Clone + Fn(&str, u16) -> OpenSocketFut,
 {
     move |server, port| open_socket.clone()(server, port)
-}
-
-pub enum ResolveTransportLeafError<E> {
-    InvalidConfig(E),
-    MissingLeaf,
 }
 
 #[derive(Clone, Copy)]
@@ -65,17 +59,6 @@ pub trait ProtocolSessionTcpHandshake: ProtocolTransportLeaf + Send + Sync {
         &self,
         session: &Session,
     ) -> Result<TcpRelayStream, EngineError>;
-}
-
-pub trait ProtocolTransportLeafResolver<'a> {
-    type TransportLeaf: ProtocolTransportLeaf + 'a;
-    type ResolveError: std::fmt::Display;
-
-    fn resolve_transport_leaf(
-        &self,
-        source_dir: Option<&Path>,
-        leaf: &ResolvedLeafOutbound<'a>,
-    ) -> Result<Option<Self::TransportLeaf>, Self::ResolveError>;
 }
 
 pub trait ProtocolTcpTransportOpenResult {
@@ -137,31 +120,6 @@ pub trait ProtocolRelayTwoStreamTransportLeaf: ProtocolTransportLeaf {
     fn needs_relay_two_streams(&self) -> bool;
 }
 
-pub fn resolve_transport_leaf<'a, T, E, F>(
-    source_dir: Option<&Path>,
-    leaf: &ResolvedLeafOutbound<'a>,
-    build: F,
-) -> Result<T, ResolveTransportLeafError<E>>
-where
-    F: FnOnce(Option<&Path>, &ResolvedLeafOutbound<'a>) -> Result<Option<T>, E>,
-{
-    build(source_dir, leaf)
-        .map_err(ResolveTransportLeafError::InvalidConfig)?
-        .ok_or(ResolveTransportLeafError::MissingLeaf)
-}
-
-pub fn resolve_last_transport_leaf<'a, 'chain, T, E, F>(
-    chain: &'chain [ResolvedLeafOutbound<'a>],
-    source_dir: Option<&Path>,
-    build: F,
-) -> Result<T, ResolveTransportLeafError<E>>
-where
-    F: FnOnce(Option<&Path>, &ResolvedLeafOutbound<'a>) -> Result<Option<T>, E>,
-{
-    let leaf = chain.last().ok_or(ResolveTransportLeafError::MissingLeaf)?;
-    resolve_transport_leaf(source_dir, leaf, build)
-}
-
 pub fn transport_leaf_endpoint<TLeaf>(leaf: &TLeaf) -> TransportLeafEndpoint<'_>
 where
     TLeaf: ProtocolTransportLeaf,
@@ -202,40 +160,6 @@ where
     pub fn validate_udp_relay_final_hop(&self) -> Result<(), EngineError> {
         self.leaf().validate_udp_relay_final_hop()
     }
-}
-
-pub fn prepare_transport_bridge_leaf<'a, TBridge>(
-    bridge: &TBridge,
-    source_dir: Option<&Path>,
-    leaf: &ResolvedLeafOutbound<'a>,
-) -> Result<
-    PreparedTransportBridgeLeaf<<TBridge as ProtocolTransportLeafResolver<'a>>::TransportLeaf>,
-    ResolveTransportLeafError<<TBridge as ProtocolTransportLeafResolver<'a>>::ResolveError>,
->
-where
-    TBridge: ProtocolTransportLeafResolver<'a>,
-{
-    resolve_transport_leaf(source_dir, leaf, |source_dir, leaf| {
-        bridge.resolve_transport_leaf(source_dir, leaf)
-    })
-    .map(PreparedTransportBridgeLeaf::new)
-}
-
-pub fn prepare_last_transport_bridge_leaf<'a, 'chain, TBridge>(
-    bridge: &TBridge,
-    chain: &'chain [ResolvedLeafOutbound<'a>],
-    source_dir: Option<&Path>,
-) -> Result<
-    PreparedTransportBridgeLeaf<<TBridge as ProtocolTransportLeafResolver<'a>>::TransportLeaf>,
-    ResolveTransportLeafError<<TBridge as ProtocolTransportLeafResolver<'a>>::ResolveError>,
->
-where
-    TBridge: ProtocolTransportLeafResolver<'a>,
-{
-    resolve_last_transport_leaf(chain, source_dir, |source_dir, leaf| {
-        bridge.resolve_transport_leaf(source_dir, leaf)
-    })
-    .map(PreparedTransportBridgeLeaf::new)
 }
 
 pub async fn open_prepared_tcp_transport_bridge_stream<TLeaf, TBridge, OpenSocket, OpenSocketFut>(

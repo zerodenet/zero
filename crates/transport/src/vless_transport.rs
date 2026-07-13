@@ -12,3 +12,5 @@ mod outbound;
 
 pub use bridge::VlessStreamBridge;
 pub use inbound::{OwnedVlessInboundBindPlan, VlessInboundListenerRequest};
+pub use leaf::VlessOutboundLeaf;
+pub use outbound::OwnedVlessOutboundTransportPlan;

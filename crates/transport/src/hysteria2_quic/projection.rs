@@ -1,6 +1,6 @@
 use crate::outbound_leaf::{ProtocolSessionTcpHandshake, ProtocolTransportLeaf};
 use zero_core::Session;
-use zero_engine::{EngineError, ResolvedLeafOutbound};
+use zero_engine::EngineError;
 
 use super::{
     connect_hysteria2_tcp_outbound, Hysteria2ManagedDatagramFlowResume,
@@ -85,21 +85,6 @@ impl<'a> Hysteria2TransportLeaf<'a> {
             password,
             client_fingerprint,
         }
-    }
-
-    pub fn from_resolved_leaf(leaf: &ResolvedLeafOutbound<'a>) -> Option<Self> {
-        let ResolvedLeafOutbound::Hysteria2 {
-            tag,
-            server,
-            port,
-            password,
-            client_fingerprint,
-            ..
-        } = leaf
-        else {
-            return None;
-        };
-        Some(Self::new(tag, server, *port, password, *client_fingerprint))
     }
 
     pub fn tag(&self) -> &str {

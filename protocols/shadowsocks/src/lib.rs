@@ -10,6 +10,7 @@ pub mod shared;
 #[cfg(feature = "crypto")]
 mod stream;
 pub mod udp;
+pub mod validation;
 
 pub use inbound::ShadowsocksInbound;
 #[cfg(feature = "crypto")]

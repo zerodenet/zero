@@ -12,7 +12,6 @@ use crate::runtime::udp_flow::packet_path::{
     packet_path_carrier_descriptor_from_build, DatagramCodec, PacketPathCarrier,
     PacketPathCarrierDescriptor, PacketPathCarrierDescriptorBuild,
 };
-use zero_transport::hysteria2_quic::Hysteria2TransportLeaf;
 use zero_transport::hysteria2_quic::{
     Hysteria2ManagedUdpPacketPathCarrierDescriptor, Hysteria2ManagedUdpPacketPathPlan,
 };
@@ -83,7 +82,7 @@ impl Hysteria2Adapter {
         &self,
         leaf: &'a ResolvedLeafOutbound<'a>,
     ) -> Option<Box<dyn PreparedUdpPacketPathOperation + 'a>> {
-        let leaf = Hysteria2TransportLeaf::from_resolved_leaf(leaf)?;
+        let leaf = super::transport_leaf(leaf)?;
         Some(Box::new(Hysteria2PacketPathOperation {
             plan: leaf.udp_packet_path_plan(),
         }))
@@ -96,7 +95,7 @@ impl Hysteria2Adapter {
         Box<dyn crate::runtime::udp_dispatch::operation::PreparedUdpFlowOperation + 'a>,
         FlowFailure,
     > {
-        let Some(leaf) = Hysteria2TransportLeaf::from_resolved_leaf(leaf) else {
+        let Some(leaf) = super::transport_leaf(leaf) else {
             return Err(unreachable_udp_leaf(self.name(), leaf));
         };
         Ok(Box::new(

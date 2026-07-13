@@ -12,7 +12,6 @@ use crate::runtime::udp_flow::packet_path::{
     packet_path_carrier_descriptor_from_build, udp_datagram_source_from_build, PacketPathCarrier,
     PacketPathCarrierDescriptor, UdpDatagramSource,
 };
-use zero_transport::shadowsocks_transport::ShadowsocksTransportLeaf;
 use zero_transport::shadowsocks_transport::{
     ShadowsocksManagedUdpPacketPathCarrierDescriptor,
     ShadowsocksManagedUdpPacketPathDatagramSourceBuild, ShadowsocksManagedUdpPacketPathPlan,
@@ -105,7 +104,7 @@ impl ShadowsocksAdapter {
         &self,
         leaf: &'a ResolvedLeafOutbound<'a>,
     ) -> Option<Box<dyn PreparedUdpPacketPathOperation + 'a>> {
-        let leaf = ShadowsocksTransportLeaf::from_resolved_leaf(leaf)?;
+        let leaf = super::transport_leaf(leaf)?;
         Some(Box::new(ShadowsocksPacketPathOperation {
             plan: leaf.udp_packet_path_plan().ok()?,
         }))
@@ -118,7 +117,7 @@ impl ShadowsocksAdapter {
         Box<dyn crate::runtime::udp_dispatch::operation::PreparedUdpFlowOperation + 'a>,
         FlowFailure,
     > {
-        let Some(leaf) = ShadowsocksTransportLeaf::from_resolved_leaf(leaf) else {
+        let Some(leaf) = super::transport_leaf(leaf) else {
             return Err(unreachable_udp_leaf(self.name(), leaf));
         };
         let plan = leaf.udp_flow_plan().map_err(|error| FlowFailure {

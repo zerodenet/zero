@@ -25,7 +25,7 @@ pub struct VmessOutboundLeaf<'a> {
 
 #[cfg(feature = "vmess")]
 impl<'a> VmessOutboundLeaf<'a> {
-    pub(super) fn new(
+    pub fn new(
         tag: &'a str,
         server: &'a str,
         port: u16,

@@ -20,7 +20,7 @@ pub struct TrojanOutboundLeaf<'a> {
 }
 
 impl<'a> TrojanOutboundLeaf<'a> {
-    pub(super) fn new(
+    pub fn new(
         tag: &'a str,
         server: &'a str,
         port: u16,

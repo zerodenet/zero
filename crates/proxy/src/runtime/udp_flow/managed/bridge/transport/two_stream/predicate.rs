@@ -1,9 +1,9 @@
+use crate::protocol_registry::{prepare_transport_bridge_leaf, ProtocolTransportLeafResolver};
 use zero_engine::ResolvedLeafOutbound;
 use zero_transport::managed_udp::ProtocolRelayTwoStreamManagedUdpBridgeOps;
 use zero_transport::outbound_leaf::{
-    prepare_transport_bridge_leaf, prepared_udp_relay_needs_two_streams,
-    ProtocolRelayTwoStreamTransportLeaf, ProtocolRelayTwoStreamUdpTransportBridgeMetadata,
-    ProtocolTransportLeafResolver,
+    prepared_udp_relay_needs_two_streams, ProtocolRelayTwoStreamTransportLeaf,
+    ProtocolRelayTwoStreamUdpTransportBridgeMetadata,
 };
 
 pub(crate) fn protocol_transport_bridge_udp_relay_needs_two_streams<'a, TBridge>(

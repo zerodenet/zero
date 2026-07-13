@@ -381,7 +381,7 @@ fn validate_outbound_auth(auth: Socks5OutboundAuth<'_>) -> Result<(), Error> {
     validate_credential_part(auth.password, "password")
 }
 
-fn validate_credential_part(value: &str, field: &'static str) -> Result<(), Error> {
+pub fn validate_credential_part(value: &str, field: &'static str) -> Result<(), Error> {
     let len = value.len();
     if len == 0 {
         return Err(Error::Config(match field {

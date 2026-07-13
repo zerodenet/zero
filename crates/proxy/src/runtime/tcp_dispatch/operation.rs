@@ -5,13 +5,15 @@ use zero_core::Session;
 use zero_engine::{EngineError, ResolvedLeafOutbound};
 use zero_transport::outbound_leaf::{
     open_prepared_tcp_transport_bridge_relay_hop, open_prepared_tcp_transport_bridge_stream,
-    prepare_transport_bridge_leaf, PreparedTransportBridgeLeaf, ProtocolSessionTcpHandshake,
-    ProtocolSocketTcpHandshake, ProtocolTcpTransportBridgeMetadata, ProtocolTcpTransportBridgeOps,
-    ProtocolTcpTransportOpenResult, ProtocolTransportLeaf, ProtocolTransportLeafResolver,
-    ResolveTransportLeafError,
+    PreparedTransportBridgeLeaf, ProtocolSessionTcpHandshake, ProtocolSocketTcpHandshake,
+    ProtocolTcpTransportBridgeMetadata, ProtocolTcpTransportBridgeOps,
+    ProtocolTcpTransportOpenResult, ProtocolTransportLeaf,
 };
 
-use crate::protocol_registry::OutboundAdapterContext;
+use crate::protocol_registry::{
+    prepare_transport_bridge_leaf, OutboundAdapterContext, ProtocolTransportLeafResolver,
+    ResolveTransportLeafError,
+};
 use crate::transport::{EstablishedTcpOutbound, TcpOutboundFailure, TcpRelayStream};
 
 pub(crate) trait PreparedTcpConnectOperation: Send {

@@ -24,7 +24,7 @@ pub struct VlessOutboundLeaf<'a> {
 }
 
 impl<'a> VlessOutboundLeaf<'a> {
-    pub(super) fn new(
+    pub fn new(
         tag: &'a str,
         server: &'a str,
         port: u16,

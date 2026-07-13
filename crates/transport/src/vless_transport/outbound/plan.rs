@@ -161,7 +161,7 @@ impl OwnedVlessUdpTransportOptions {
 }
 
 #[derive(Debug, Clone)]
-pub(in crate::vless_transport) struct OwnedVlessOutboundTransportPlan {
+pub struct OwnedVlessOutboundTransportPlan {
     server: String,
     pub(super) port: u16,
     transport: OwnedVlessUdpTransportOptions,
@@ -169,7 +169,7 @@ pub(in crate::vless_transport) struct OwnedVlessOutboundTransportPlan {
 
 impl OwnedVlessOutboundTransportPlan {
     #[allow(clippy::too_many_arguments)]
-    pub(in crate::vless_transport) fn from_config_refs(
+    pub fn from_config_refs(
         source_dir: Option<&Path>,
         server: &str,
         port: u16,
@@ -235,7 +235,7 @@ impl OwnedVlessOutboundTransportPlan {
         self.transport().uses_paired_relay_transport()
     }
 
-    pub(in crate::vless_transport) fn mux_transport_hints(&self) -> StreamMuxTransportHints {
+    pub fn mux_transport_hints(&self) -> StreamMuxTransportHints {
         let transport = self.stream_transport_options();
         StreamMuxTransportHints::new(
             transport.tls.and_then(|config| config.server_name.clone()),

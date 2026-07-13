@@ -9,9 +9,12 @@ repository.workspace = true
 homepage.workspace = true
 
 [features]
-default = ["tokio"]
+default = ["tokio", "runtime"]
 tokio = ["dep:tokio"]
+runtime = []
+validation = ["dep:base64"]
 reality = [
+    "runtime",
     "tokio",
     "dep:base64",
     "dep:hex",

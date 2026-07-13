@@ -10,7 +10,6 @@ use tokio::io::{AsyncRead, AsyncWrite};
 use zero_config::{InboundProtocolConfig, MieruUserConfig};
 use zero_core::{InboundClientResponse, Session};
 use zero_engine::EngineError;
-use zero_engine::ResolvedLeafOutbound;
 use zero_platform_tokio::TokioSocket;
 use zero_traits::AsyncSocket;
 
@@ -181,20 +180,6 @@ impl<'a> MieruTransportLeaf<'a> {
             username,
             password,
         }
-    }
-
-    pub fn from_resolved_leaf(leaf: &ResolvedLeafOutbound<'a>) -> Option<Self> {
-        let ResolvedLeafOutbound::Mieru {
-            tag,
-            server,
-            port,
-            username,
-            password,
-        } = leaf
-        else {
-            return None;
-        };
-        Some(Self::new(tag, server, *port, username, password))
     }
 
     pub fn tag(&self) -> &str {

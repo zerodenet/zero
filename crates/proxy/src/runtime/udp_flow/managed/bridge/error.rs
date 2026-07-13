@@ -1,5 +1,5 @@
+use crate::protocol_registry::ResolveTransportLeafError;
 use zero_engine::{EngineError, ResolvedLeafOutbound};
-use zero_transport::outbound_leaf::ResolveTransportLeafError;
 
 use crate::runtime::udp_flow::result::FlowFailure;
 #[cfg(feature = "vless")]

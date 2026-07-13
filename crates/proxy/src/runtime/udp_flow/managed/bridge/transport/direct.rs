@@ -2,14 +2,14 @@ use zero_core::Session;
 use zero_engine::ResolvedLeafOutbound;
 use zero_transport::managed_udp::ProtocolManagedStreamUdpBridgeOps;
 use zero_transport::outbound_leaf::{
-    prepare_transport_bridge_leaf, prepared_direct_udp_resume, ProtocolTransportLeaf,
-    ProtocolTransportLeafResolver, ProtocolUdpTransportBridgeMetadata,
+    prepared_direct_udp_resume, ProtocolTransportLeaf, ProtocolUdpTransportBridgeMetadata,
 };
 
 use super::super::error::udp_prepare_failure;
 use super::super::stream_packet::{
     start_direct_managed_stream_packet, ManagedStreamPacketStartBridge,
 };
+use crate::protocol_registry::{prepare_transport_bridge_leaf, ProtocolTransportLeafResolver};
 use crate::runtime::udp_flow::result::{FlowFailure, FlowStartResult};
 use crate::runtime::udp_flow::state::UdpFlowStartContext;
 use crate::runtime::Proxy;

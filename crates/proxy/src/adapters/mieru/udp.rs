@@ -1,5 +1,4 @@
 use zero_engine::ResolvedLeafOutbound;
-use zero_transport::mieru_transport::MieruTransportLeaf;
 
 use crate::adapters::mieru::MieruAdapter;
 use crate::protocol_registry::unreachable_udp_leaf;
@@ -25,7 +24,7 @@ impl MieruAdapter {
         &self,
         leaf: &'a ResolvedLeafOutbound<'a>,
     ) -> Result<Box<dyn PreparedUdpFlowOperation + 'a>, FlowFailure> {
-        let Some(leaf) = MieruTransportLeaf::from_resolved_leaf(leaf) else {
+        let Some(leaf) = super::transport_leaf(leaf) else {
             return Err(unreachable_udp_leaf("mieru", leaf));
         };
         Ok(Box::new(ManagedStreamPacketUdpOperation {
@@ -41,7 +40,7 @@ impl MieruAdapter {
         carrier: crate::transport::RelayCarrier,
         leaf: &'a ResolvedLeafOutbound<'a>,
     ) -> Result<Box<dyn PreparedUdpFlowOperation + 'a>, FlowFailure> {
-        let Some(leaf) = MieruTransportLeaf::from_resolved_leaf(leaf) else {
+        let Some(leaf) = super::transport_leaf(leaf) else {
             return Err(unreachable_udp_leaf("mieru", leaf));
         };
         Ok(Box::new(ManagedStreamPacketUdpOperation {

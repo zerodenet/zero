@@ -8,11 +8,9 @@ use zero_transport::managed_udp::ProtocolRelayTwoStreamManagedUdpBridgeOps;
 use zero_transport::outbound_leaf::{
     ProtocolRelayTwoStreamTransportLeaf, ProtocolRelayTwoStreamUdpTransportBridgeMetadata,
 };
-use zero_transport::outbound_leaf::{
-    ProtocolTransportLeaf, ProtocolTransportLeafResolver, ProtocolUdpTransportBridgeMetadata,
-};
+use zero_transport::outbound_leaf::{ProtocolTransportLeaf, ProtocolUdpTransportBridgeMetadata};
 
-use crate::protocol_registry::UdpAdapterContext;
+use crate::protocol_registry::{ProtocolTransportLeafResolver, UdpAdapterContext};
 use crate::runtime::udp_dispatch::UdpDispatch;
 #[cfg(feature = "socks5")]
 use crate::runtime::udp_dispatch::UpstreamTrackedStart;

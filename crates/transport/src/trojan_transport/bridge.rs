@@ -1,7 +1,7 @@
-use std::{future::Future, path::Path};
+use std::future::Future;
 
-use zero_core::{Error, Session};
-use zero_engine::{EngineError, ResolvedLeafOutbound};
+use zero_core::Session;
+use zero_engine::EngineError;
 use zero_platform_tokio::{TcpRelayStream, TokioSocket};
 
 use crate::managed_udp::{
@@ -10,12 +10,12 @@ use crate::managed_udp::{
 };
 use crate::outbound_leaf::{
     ProtocolTcpTransportBridgeMetadata, ProtocolTcpTransportBridgeOps,
-    ProtocolTransportLeafResolver, ProtocolUdpTransportBridgeMetadata,
+    ProtocolUdpTransportBridgeMetadata,
 };
 
 use super::leaf::TrojanOutboundLeaf;
 use super::managed_udp::TrojanManagedStreamUdpResume;
-use super::outbound::{OwnedTrojanOutboundTlsPlan, TrojanTcpStreamOpen};
+use super::outbound::TrojanTcpStreamOpen;
 
 #[cfg(feature = "trojan")]
 #[derive(Debug, Default, Clone, Copy)]
@@ -24,43 +24,6 @@ pub struct TrojanTlsBridge;
 #[cfg(feature = "trojan")]
 impl TrojanTlsBridge {
     pub fn on_config_reloaded(&self) {}
-}
-
-impl<'a> ProtocolTransportLeafResolver<'a> for TrojanTlsBridge {
-    type TransportLeaf = TrojanOutboundLeaf<'a>;
-    type ResolveError = Error;
-
-    fn resolve_transport_leaf(
-        &self,
-        source_dir: Option<&Path>,
-        leaf: &ResolvedLeafOutbound<'a>,
-    ) -> Result<Option<Self::TransportLeaf>, Self::ResolveError> {
-        let _ = self;
-        let ResolvedLeafOutbound::Trojan {
-            tag,
-            server,
-            port,
-            password,
-            sni,
-            insecure,
-            client_fingerprint,
-        } = leaf
-        else {
-            return Ok(None);
-        };
-
-        let protocol = ::trojan::outbound::PreparedTrojanOutboundRequestBundle::from_config(
-            password,
-            *sni,
-            *insecure,
-            *client_fingerprint,
-        );
-        let transport = OwnedTrojanOutboundTlsPlan::from_parts(source_dir, server, *port);
-
-        Ok(Some(TrojanOutboundLeaf::new(
-            tag, server, *port, transport, protocol,
-        )))
-    }
 }
 
 impl ProtocolTcpTransportBridgeMetadata for TrojanTlsBridge {

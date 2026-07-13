@@ -8,14 +8,14 @@ use crate::transport_plan::ProfiledTcpStreamTransportPlan;
 pub(super) type TrojanTcpStreamOpen = trojan::outbound::TrojanTcpStreamOpen<TcpRelayStream>;
 
 #[derive(Debug, Clone)]
-pub(super) struct OwnedTrojanOutboundTlsPlan {
+pub struct OwnedTrojanOutboundTlsPlan {
     server: String,
     port: u16,
     source_dir: Option<PathBuf>,
 }
 
 impl OwnedTrojanOutboundTlsPlan {
-    pub(super) fn from_parts(source_dir: Option<&Path>, server: &str, port: u16) -> Self {
+    pub fn from_parts(source_dir: Option<&Path>, server: &str, port: u16) -> Self {
         Self {
             server: server.to_owned(),
             port,

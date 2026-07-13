@@ -3,6 +3,7 @@ use async_trait::async_trait;
 use zero_config::{InboundConfig, InboundProtocolConfig, OutboundProtocolConfig};
 use zero_engine::{EngineError, ResolvedLeafOutbound};
 use zero_traits::{ProtocolCapabilityDescriptor, ProtocolMetadata};
+use zero_transport::hysteria2_quic::Hysteria2TransportLeaf;
 use zero_transport::hysteria2_quic::OwnedHysteria2InboundBindPlan;
 
 use crate::adapters::identity::{
@@ -29,6 +30,27 @@ pub(crate) mod udp;
 #[cfg(feature = "hysteria2")]
 #[derive(Debug)]
 pub(crate) struct Hysteria2Adapter;
+
+fn transport_leaf<'a>(leaf: &'a ResolvedLeafOutbound<'a>) -> Option<Hysteria2TransportLeaf<'a>> {
+    let ResolvedLeafOutbound::Hysteria2 {
+        tag,
+        server,
+        port,
+        password,
+        client_fingerprint,
+        ..
+    } = leaf
+    else {
+        return None;
+    };
+    Some(Hysteria2TransportLeaf::new(
+        tag,
+        server,
+        *port,
+        password,
+        *client_fingerprint,
+    ))
+}
 
 #[cfg(feature = "hysteria2")]
 impl NamedProtocolAdapter for Hysteria2Adapter {

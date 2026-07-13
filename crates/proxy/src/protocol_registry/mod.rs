@@ -10,6 +10,7 @@ mod context;
 mod defaults;
 mod model;
 mod registry;
+mod transport_leaf;
 
 #[cfg(any(
     feature = "hysteria2",
@@ -57,3 +58,7 @@ pub(crate) use registry::fake_direct_leaf;
 ))]
 pub(crate) use registry::proxy_leaf_runtime;
 pub(crate) use registry::ProtocolRegistry;
+pub(crate) use transport_leaf::{
+    prepare_last_transport_bridge_leaf, prepare_transport_bridge_leaf,
+    ProtocolTransportLeafResolver, ResolveTransportLeafError,
+};

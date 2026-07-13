@@ -8,14 +8,13 @@ use crate::runtime::tcp_dispatch::operation::{
     SocketTcpRelayOperation,
 };
 use crate::transport::TcpOutboundFailure;
-use zero_transport::mieru_transport::MieruTransportLeaf;
 
 impl MieruAdapter {
     pub(super) fn prepare_tcp_connect_impl<'a>(
         &self,
         leaf: &'a ResolvedLeafOutbound<'a>,
     ) -> Result<Box<dyn PreparedTcpConnectOperation + 'a>, TcpOutboundFailure> {
-        let Some(leaf) = MieruTransportLeaf::from_resolved_leaf(leaf) else {
+        let Some(leaf) = super::transport_leaf(leaf) else {
             return Err(unreachable_leaf(self.name(), leaf));
         };
         Ok(Box::new(SocketTcpConnectOperation { handshake: leaf }))
@@ -25,7 +24,7 @@ impl MieruAdapter {
         &self,
         leaf: &'a ResolvedLeafOutbound<'a>,
     ) -> Result<Box<dyn PreparedTcpRelayOperation + 'a>, EngineError> {
-        let Some(leaf) = MieruTransportLeaf::from_resolved_leaf(leaf) else {
+        let Some(leaf) = super::transport_leaf(leaf) else {
             return Err(unreachable_leaf(self.name(), leaf).error);
         };
         Ok(Box::new(SocketTcpRelayOperation { handshake: leaf }))

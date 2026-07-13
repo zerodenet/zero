@@ -1,7 +1,7 @@
-use std::{future::Future, path::Path};
+use std::future::Future;
 
-use zero_core::{Error, Session};
-use zero_engine::{EngineError, ResolvedLeafOutbound};
+use zero_core::Session;
+use zero_engine::EngineError;
 use zero_platform_tokio::{TcpRelayStream, TokioSocket};
 
 use crate::managed_udp::{
@@ -10,12 +10,11 @@ use crate::managed_udp::{
 };
 use crate::outbound_leaf::{
     ProtocolTcpTransportBridgeMetadata, ProtocolTcpTransportBridgeOps,
-    ProtocolTransportLeafResolver, ProtocolUdpTransportBridgeMetadata,
+    ProtocolUdpTransportBridgeMetadata,
 };
 
 use super::leaf::VmessOutboundLeaf;
 use super::managed_udp::VmessManagedStreamUdpResume;
-use super::outbound::OwnedVmessOutboundTransportPlan;
 
 #[cfg(feature = "vmess")]
 #[derive(Debug, Clone)]
@@ -36,48 +35,6 @@ impl Default for VmessStreamBridge {
 impl VmessStreamBridge {
     pub fn on_config_reloaded(&self) {
         self.mux_pool.evict_all();
-    }
-}
-
-impl<'a> ProtocolTransportLeafResolver<'a> for VmessStreamBridge {
-    type TransportLeaf = VmessOutboundLeaf<'a>;
-    type ResolveError = Error;
-
-    fn resolve_transport_leaf(
-        &self,
-        source_dir: Option<&Path>,
-        leaf: &ResolvedLeafOutbound<'a>,
-    ) -> Result<Option<Self::TransportLeaf>, Self::ResolveError> {
-        let _ = self;
-        let ResolvedLeafOutbound::Vmess {
-            tag,
-            server,
-            port,
-            id,
-            cipher,
-            mux_concurrency,
-            tls,
-            ws,
-            grpc,
-            ..
-        } = leaf
-        else {
-            return Ok(None);
-        };
-
-        let transport = OwnedVmessOutboundTransportPlan::from_config_refs(
-            source_dir, server, *port, *tls, *ws, *grpc,
-        );
-        let protocol = ::vmess::outbound::PreparedVmessOutboundRequestBundle::from_config_with_transport_hints(
-            id,
-            cipher,
-            *mux_concurrency,
-            transport.mux_transport_hints(),
-        )?;
-
-        Ok(Some(VmessOutboundLeaf::new(
-            tag, server, *port, transport, protocol,
-        )))
     }
 }
 

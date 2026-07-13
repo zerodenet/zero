@@ -49,14 +49,14 @@ impl OwnedVmessTransportOptions {
 }
 
 #[derive(Debug, Clone)]
-pub(super) struct OwnedVmessOutboundTransportPlan {
+pub struct OwnedVmessOutboundTransportPlan {
     server: String,
     port: u16,
     transport: OwnedVmessTransportOptions,
 }
 
 impl OwnedVmessOutboundTransportPlan {
-    pub(super) fn from_config_refs(
+    pub fn from_config_refs(
         source_dir: Option<&Path>,
         server: &str,
         port: u16,
@@ -91,7 +91,7 @@ impl OwnedVmessOutboundTransportPlan {
         self.transport.as_borrowed()
     }
 
-    pub(super) fn mux_transport_hints(&self) -> StreamMuxTransportHints {
+    pub fn mux_transport_hints(&self) -> StreamMuxTransportHints {
         let transport = self.transport();
         StreamMuxTransportHints::new(
             transport.tls.and_then(|config| config.server_name.clone()),

@@ -8,7 +8,6 @@ repository.workspace = true
 homepage.workspace = true
 
 [dependencies]
-base64 = "0.22"
 ipnet.workspace = true
 maxminddb.workspace = true
 serde.workspace = true
@@ -17,3 +16,7 @@ thiserror.workspace = true
 zero-api = { path = "../api" }
 zero-router = { path = "../router" }
 zero-traits = { path = "../traits" }
+shadowsocks = { path = "../../protocols/shadowsocks", features = ["blake3"] }
+socks5 = { path = "../../protocols/socks5" }
+vless = { path = "../../protocols/vless", default-features = false, features = ["validation"] }
+vmess = { path = "../../protocols/vmess" }

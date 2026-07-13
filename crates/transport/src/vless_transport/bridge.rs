@@ -1,7 +1,7 @@
-use std::{future::Future, path::Path};
+use std::future::Future;
 
-use zero_core::{Error, Session};
-use zero_engine::{EngineError, ResolvedLeafOutbound};
+use zero_core::Session;
+use zero_engine::EngineError;
 use zero_platform_tokio::{TcpRelayStream, TokioSocket};
 
 use crate::managed_udp::{
@@ -10,13 +10,11 @@ use crate::managed_udp::{
 };
 use crate::outbound_leaf::{
     ProtocolRelayTwoStreamUdpTransportBridgeMetadata, ProtocolTcpTransportBridgeMetadata,
-    ProtocolTcpTransportBridgeOps, ProtocolTransportLeafResolver,
-    ProtocolUdpTransportBridgeMetadata,
+    ProtocolTcpTransportBridgeOps, ProtocolUdpTransportBridgeMetadata,
 };
 
 use super::leaf::VlessOutboundLeaf;
 use super::managed_udp::VlessManagedStreamUdpResume;
-use super::outbound::OwnedVlessOutboundTransportPlan;
 
 #[derive(Debug, Clone)]
 pub struct VlessStreamBridge {
@@ -34,63 +32,6 @@ impl Default for VlessStreamBridge {
 impl VlessStreamBridge {
     pub fn on_config_reloaded(&self) {
         self.mux_pool.evict_all();
-    }
-}
-
-impl<'a> ProtocolTransportLeafResolver<'a> for VlessStreamBridge {
-    type TransportLeaf = VlessOutboundLeaf<'a>;
-    type ResolveError = Error;
-
-    fn resolve_transport_leaf(
-        &self,
-        source_dir: Option<&Path>,
-        leaf: &ResolvedLeafOutbound<'a>,
-    ) -> Result<Option<Self::TransportLeaf>, Self::ResolveError> {
-        let _ = self;
-        let ResolvedLeafOutbound::Vless {
-            tag,
-            server,
-            port,
-            id,
-            flow,
-            mux_concurrency,
-            tls,
-            reality,
-            ws,
-            grpc,
-            h2,
-            http_upgrade,
-            split_http,
-            quic,
-            ..
-        } = leaf
-        else {
-            return Ok(None);
-        };
-
-        let transport = OwnedVlessOutboundTransportPlan::from_config_refs(
-            source_dir,
-            server,
-            *port,
-            *tls,
-            *reality,
-            *ws,
-            *grpc,
-            *h2,
-            *http_upgrade,
-            *split_http,
-            *quic,
-        );
-        let protocol = ::vless::outbound::PreparedVlessOutboundRequestBundle::from_config_with_transport_hints(
-            id,
-            *flow,
-            *mux_concurrency,
-            transport.mux_transport_hints(),
-        )?;
-
-        Ok(Some(VlessOutboundLeaf::new(
-            tag, server, *port, transport, protocol,
-        )))
     }
 }
 

@@ -3,6 +3,7 @@ use async_trait::async_trait;
 use zero_config::{InboundConfig, InboundProtocolConfig, OutboundProtocolConfig};
 use zero_engine::{EngineError, ResolvedLeafOutbound};
 use zero_traits::{ProtocolCapabilityDescriptor, ProtocolMetadata};
+use zero_transport::mieru_transport::MieruTransportLeaf;
 
 use crate::adapters::identity::{
     named_protocol_claims_runtime_leaf, named_protocol_supports_inbound,
@@ -27,6 +28,22 @@ pub(crate) mod udp;
 #[cfg(feature = "mieru")]
 #[derive(Debug)]
 pub(crate) struct MieruAdapter;
+
+fn transport_leaf<'a>(leaf: &'a ResolvedLeafOutbound<'a>) -> Option<MieruTransportLeaf<'a>> {
+    let ResolvedLeafOutbound::Mieru {
+        tag,
+        server,
+        port,
+        username,
+        password,
+    } = leaf
+    else {
+        return None;
+    };
+    Some(MieruTransportLeaf::new(
+        tag, server, *port, username, password,
+    ))
+}
 
 #[cfg(feature = "mieru")]
 impl NamedProtocolAdapter for MieruAdapter {

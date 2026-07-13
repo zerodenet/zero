@@ -1,11 +1,9 @@
-use std::io;
 use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
-use tracing::{info, warn};
-use zero_api::{EventFilter, RawApiEvent};
+use tracing::info;
 use zero_config::{ModeConfig, RuntimeConfig};
 use zero_core::{Address, Session};
 use zero_router::{RouteAction, RouteContext, RuleSet};
@@ -13,7 +11,7 @@ use zero_router::{RouteAction, RouteContext, RuleSet};
 use super::completed_sessions::{CompletedSessionHistory, CompletedSessionRecord};
 use super::error::EngineError;
 use super::event_log::EngineEventLog;
-use super::groups::{OutboundGroupStateStore, UrlTestGroupState, UrlTestMemberState};
+use super::groups::OutboundGroupStateStore;
 use super::hook::{FlowHook, FlowHookChain};
 use super::outbound_health::OutboundHealth;
 use super::plan::{EnginePlan, TargetId};
@@ -22,9 +20,12 @@ use super::resolve::{
     resolve_target_chains, resolve_target_id, ResolvedLeafOutbound, ResolvedOutbound,
 };
 use super::session_lifecycle::SessionHandle;
-use super::session_registry::{ActiveSession, SessionRegistry};
+use super::session_registry::SessionRegistry;
 use super::stats::{EngineStats, SessionOutcome};
-use super::view::PlanView;
+
+mod configuration;
+mod observability;
+mod policy;
 
 #[derive(Debug, Clone)]
 pub struct Engine {
@@ -339,219 +340,6 @@ impl Engine {
             )
         };
         Ok((resolved, plan))
-    }
-
-    pub fn stats_snapshot(&self) -> zero_api::StatsSnapshot {
-        self.stats.snapshot()
-    }
-
-    pub fn active_sessions(&self) -> Vec<ActiveSession> {
-        self.session_registry.snapshot()
-    }
-
-    pub fn completed_sessions(&self) -> Vec<CompletedSessionRecord> {
-        self.completed_sessions.snapshot()
-    }
-
-    pub fn events_snapshot(&self, filter: &EventFilter) -> Vec<RawApiEvent> {
-        self.event_log.snapshot(filter)
-    }
-
-    pub fn events_since(
-        &self,
-        since: u64,
-        limit: usize,
-        filter: &EventFilter,
-    ) -> super::event_log::EventsSinceResult {
-        self.event_log.events_since(since, limit, filter)
-    }
-
-    pub fn latest_event_sequence(&self) -> u64 {
-        self.event_log.latest_sequence()
-    }
-
-    pub fn push_stats_sampled(&self) {
-        let snapshot = self.stats_snapshot();
-        self.event_log.push_stats_sampled(&snapshot);
-    }
-
-    /// Emit an `engine.stopped` event during graceful shutdown.
-    pub fn push_engine_stopped(&self, reason: &str) {
-        self.event_log.push_engine_stopped(reason);
-    }
-
-    /// Update the external sink status snapshot (called by the event dispatcher).
-    pub fn update_sink_status(&self, status: Vec<zero_api::SinkStatus>) {
-        *self.sink_status.lock().expect("sink status lock poisoned") = status;
-    }
-
-    /// Read the current sink status snapshot.
-    pub fn sink_status_snapshot(&self) -> zero_api::SinkStatusSnapshot {
-        zero_api::SinkStatusSnapshot {
-            sinks: self
-                .sink_status
-                .lock()
-                .expect("sink status lock poisoned")
-                .clone(),
-        }
-    }
-
-    /// Hot-reload route rules and outbound group definitions.
-    ///
-    /// Both the router and plan are rebuilt from the new config and
-    /// swapped atomically.  Active connections keep using the old plan
-    /// via their held `Arc<EnginePlan>`.  A `config.changed` event is
-    /// emitted.
-    pub fn reload_config(&self, new_config: RuntimeConfig) -> Result<(), EngineError> {
-        let new_router = Arc::new(new_config.route.compile(new_config.source_dir())?);
-        let new_plan = Arc::new(EnginePlan::build(&new_config)?);
-
-        // Atomically swap router, plan, mode, and config.
-        {
-            let mut guard = self.router.lock().unwrap_or_else(|e| e.into_inner());
-            *guard = new_router;
-        }
-        {
-            let mut guard = self.plan.lock().unwrap_or_else(|e| e.into_inner());
-            *guard = new_plan;
-        }
-        {
-            let mut guard = self.mode.lock().unwrap_or_else(|e| e.into_inner());
-            *guard = new_config.mode.clone();
-        }
-        let config_for_persist = new_config.clone();
-        {
-            let mut guard = self.config.write().expect("config lock poisoned");
-            *guard = Arc::new(new_config);
-        }
-
-        self.event_log.push_config_changed();
-
-        // Write the new config back to disk so it survives node restarts.
-        if let Some(ref path) = self.config_path {
-            if let Err(e) = write_config_to_file(path, &config_for_persist) {
-                warn!(%e, path = %path.display(), "failed to persist config after reload");
-            } else {
-                info!(path = %path.display(), "config persisted");
-            }
-        }
-
-        // Wake every subscriber so the proxy layer can reconcile listeners.
-        let notify = self
-            .reload_notify
-            .lock()
-            .expect("reload notify lock poisoned");
-        for tx in notify.iter() {
-            let _ = tx.send(());
-        }
-
-        Ok(())
-    }
-
-    /// Subscribe to reload notifications.
-    ///
-    /// Returns a receiver that gets a unit value each time `reload_config`
-    /// completes successfully.  The subscriber should re-read the new
-    /// config from `self.config()`.
-    pub fn subscribe_reload(&self) -> std::sync::mpsc::Receiver<()> {
-        let (tx, rx) = std::sync::mpsc::channel();
-        self.reload_notify
-            .lock()
-            .expect("reload notify lock poisoned")
-            .push(tx);
-        rx
-    }
-
-    /// Emit a `policy.probe.completed` event.
-    pub fn push_policy_probe_completed(
-        &self,
-        policy_tag: &str,
-        payload: zero_api::PolicyProbeCompletedPayload,
-    ) {
-        self.event_log
-            .push_policy_probe_completed(policy_tag, payload);
-    }
-
-    /// Emit an `engine.warning` event.
-    pub fn emit_warning(&self, code: &str, message: &str) {
-        self.event_log.push_warning(code, message);
-    }
-
-    /// Emit `flow.updated` events for all currently active sessions.
-    pub fn push_flow_updates(&self) {
-        for session in self.active_sessions() {
-            self.event_log.push_flow_updated(&session);
-        }
-    }
-
-    pub fn set_selector_target(
-        &self,
-        group_tag: &str,
-        target_tag: &str,
-    ) -> Result<(), EngineError> {
-        let plan = self.plan();
-        let group_id =
-            plan.target_id(group_tag)
-                .ok_or_else(|| EngineError::SelectorGroupNotFound {
-                    tag: group_tag.to_owned(),
-                })?;
-        let group = plan
-            .target(group_id)
-            .expect("engine plan should resolve selector group");
-        let Some(selector) = group.as_selector() else {
-            return Err(EngineError::SelectorGroupTypeMismatch {
-                tag: group_tag.to_owned(),
-            });
-        };
-        let target_id =
-            plan.target_id(target_tag)
-                .ok_or_else(|| EngineError::SelectorTargetNotFound {
-                    group_tag: group_tag.to_owned(),
-                    target_tag: target_tag.to_owned(),
-                })?;
-        if !selector.contains_member(target_id) {
-            return Err(EngineError::SelectorTargetNotFound {
-                group_tag: group_tag.to_owned(),
-                target_tag: target_tag.to_owned(),
-            });
-        }
-        let view = PlanView::new(&plan);
-
-        let previous = self
-            .outbound_group_state
-            .selector_selected_target(group_id)
-            .map(|target_id| view.target_tag_owned(target_id))
-            .or_else(|| Some(view.target_tag_owned(selector.initial_member())));
-        self.outbound_group_state
-            .update_selector(group_id, target_id);
-        self.event_log
-            .push_policy_selected(group_tag, "selector", target_tag, previous.as_deref());
-        info!(
-            group_tag = group_tag,
-            previous = previous.as_deref().unwrap_or("-"),
-            selected = target_tag,
-            "selector group target changed"
-        );
-        Ok(())
-    }
-
-    pub fn urltest_state(&self, group_id: TargetId) -> Option<UrlTestGroupState> {
-        self.outbound_group_state.urltest_state(group_id)
-    }
-
-    pub fn urltest_selected_target(&self, group_id: TargetId) -> Option<TargetId> {
-        self.outbound_group_state.urltest_selected_target(group_id)
-    }
-
-    pub fn update_urltest_state(
-        &self,
-        group_id: TargetId,
-        selected: TargetId,
-        latency_ms: Option<u64>,
-        members: Vec<UrlTestMemberState>,
-    ) {
-        self.outbound_group_state
-            .update_urltest(group_id, selected, latency_ms, members);
     }
 
     pub fn prepare_session(&self, session: &mut Session, inbound_tag: &str) {
@@ -927,12 +715,4 @@ fn extract_target_addr(leaf: &crate::ResolvedLeafOutbound<'_>) -> (Option<String
             (Some(server.to_string()), Some(*port))
         }
     }
-}
-
-fn write_config_to_file(path: &Path, config: &RuntimeConfig) -> Result<(), io::Error> {
-    let json = serde_json::to_string_pretty(config).map_err(|e| {
-        io::Error::new(io::ErrorKind::InvalidData, format!("serialize config: {e}"))
-    })?;
-    std::fs::write(path, json)?;
-    Ok(())
 }

@@ -3,6 +3,7 @@ use async_trait::async_trait;
 use zero_config::{InboundConfig, InboundProtocolConfig, OutboundProtocolConfig};
 use zero_engine::{EngineError, ResolvedLeafOutbound};
 use zero_traits::{ProtocolCapabilityDescriptor, ProtocolMetadata};
+use zero_transport::shadowsocks_transport::ShadowsocksTransportLeaf;
 
 use crate::adapters::identity::{
     named_protocol_claims_runtime_leaf, named_protocol_supports_inbound,
@@ -27,6 +28,22 @@ pub(crate) mod udp;
 #[cfg(feature = "shadowsocks")]
 #[derive(Debug)]
 pub(crate) struct ShadowsocksAdapter;
+
+fn transport_leaf<'a>(leaf: &'a ResolvedLeafOutbound<'a>) -> Option<ShadowsocksTransportLeaf<'a>> {
+    let ResolvedLeafOutbound::Shadowsocks {
+        tag,
+        server,
+        port,
+        password,
+        cipher,
+    } = leaf
+    else {
+        return None;
+    };
+    Some(ShadowsocksTransportLeaf::new(
+        tag, server, *port, cipher, password,
+    ))
+}
 
 #[cfg(feature = "shadowsocks")]
 impl NamedProtocolAdapter for ShadowsocksAdapter {

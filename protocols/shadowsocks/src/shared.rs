@@ -3,6 +3,8 @@
 // SIP003 AEAD ciphers: aes-128-gcm, aes-256-gcm, chacha20-ietf-poly1305.
 
 use alloc::string::String;
+#[cfg(feature = "blake3")]
+use alloc::vec;
 use alloc::vec::Vec;
 
 use zero_core::{Address, Error};

@@ -187,7 +187,8 @@ pub(super) fn validate_outbound_protocol(
             split_http,
         } => {
             validate_outbound_endpoint("vless", server, *port)?;
-            validate_uuid_literal(id).map_err(|message| {
+            vless::parse_uuid(id).map_err(|error| {
+                let message = error.to_string();
                 ConfigError::InvalidOutbound(format!("`vless` outbound `id` {message}"))
             })?;
             if let Some(tls) = tls {
@@ -292,8 +293,9 @@ pub(super) fn validate_outbound_protocol(
             grpc,
         } => {
             validate_outbound_endpoint("vmess", server, *port)?;
-            validate_uuid_literal(id)
-                .map_err(|m| ConfigError::InvalidOutbound(format!("`vmess` outbound `id` {m}")))?;
+            vmess::parse_uuid(id).map_err(|error| {
+                ConfigError::InvalidOutbound(format!("`vmess` outbound `id` {error}"))
+            })?;
             validate_vmess_cipher("outbound", cipher)?;
             if let Some(tls) = tls {
                 if let Some(server_name) = &tls.server_name {
@@ -369,7 +371,8 @@ fn validate_vless_users(users: &[VlessUserConfig]) -> Result<(), ConfigError> {
 
     let mut seen = HashSet::new();
     for user in users {
-        validate_uuid_literal(&user.id).map_err(|message| {
+        vless::parse_uuid(&user.id).map_err(|error| {
+            let message = error.to_string();
             ConfigError::InvalidInbound(format!("`vless` inbound user `id` {message}"))
         })?;
 
@@ -399,7 +402,8 @@ fn validate_vmess_users(users: &[VmessUserConfig]) -> Result<(), ConfigError> {
 
     let mut seen = HashSet::new();
     for user in users {
-        validate_uuid_literal(&user.id).map_err(|message| {
+        vmess::parse_uuid(&user.id).map_err(|error| {
+            let message = error.to_string();
             ConfigError::InvalidInbound(format!("`vmess` inbound user `id` {message}"))
         })?;
 
@@ -423,7 +427,7 @@ fn validate_vmess_users(users: &[VmessUserConfig]) -> Result<(), ConfigError> {
 
 fn validate_vmess_cipher(kind: &'static str, cipher: &str) -> Result<(), ConfigError> {
     let valid_ciphers = ["aes-128-gcm", "chacha20-poly1305", "none", "zero"];
-    if valid_ciphers.contains(&cipher) {
+    if cipher != "auto" && vmess::VmessCipher::from_name(cipher).is_some() {
         return Ok(());
     }
 
@@ -439,7 +443,7 @@ fn validate_vmess_cipher(kind: &'static str, cipher: &str) -> Result<(), ConfigE
 
 fn validate_vless_inbound_reality(reality: &InboundRealityConfig) -> Result<(), ConfigError> {
     validate_inbound_optional_non_empty("vless reality.private_key", &reality.private_key)?;
-    if !matches!(base64url_decoded_len(&reality.private_key), Some(32)) {
+    if vless::validation::validate_reality_key(&reality.private_key).is_err() {
         return Err(ConfigError::InvalidInbound(
             "`vless` inbound `reality.private_key` must be a 32-byte base64url value without padding"
                 .to_owned(),
@@ -447,77 +451,44 @@ fn validate_vless_inbound_reality(reality: &InboundRealityConfig) -> Result<(), 
     }
 
     for short_id in &reality.short_ids {
-        validate_short_id("inbound", short_id).map_err(ConfigError::InvalidInbound)?;
+        vless::validation::validate_reality_short_id(short_id).map_err(|error| {
+            ConfigError::InvalidInbound(format!("`vless` inbound `reality.short_id` {error}"))
+        })?;
     }
 
     if let Some(server_name) = &reality.server_name {
         validate_inbound_optional_non_empty("vless reality.server_name", server_name)?;
     }
 
-    validate_reality_cipher_suites("inbound", &reality.cipher_suites)
-        .map_err(ConfigError::InvalidInbound)
+    vless::validation::validate_reality_cipher_suites(&reality.cipher_suites).map_err(|error| {
+        ConfigError::InvalidInbound(format!(
+            "`vless` inbound `reality.cipher_suites` contains {error}"
+        ))
+    })
 }
 
 fn validate_vless_reality(reality: &RealityConfig) -> Result<(), ConfigError> {
     validate_outbound_optional_non_empty("vless reality.public_key", &reality.public_key)?;
-    if !matches!(base64url_decoded_len(&reality.public_key), Some(32)) {
+    if vless::validation::validate_reality_key(&reality.public_key).is_err() {
         return Err(ConfigError::InvalidOutbound(
             "`vless` outbound `reality.public_key` must be a 32-byte base64url value without padding"
                 .to_owned(),
         ));
     }
 
-    validate_short_id("outbound", &reality.short_id).map_err(ConfigError::InvalidOutbound)?;
+    vless::validation::validate_reality_short_id(&reality.short_id).map_err(|error| {
+        ConfigError::InvalidOutbound(format!("`vless` outbound `reality.short_id` {error}"))
+    })?;
 
     if let Some(server_name) = &reality.server_name {
         validate_outbound_optional_non_empty("vless reality.server_name", server_name)?;
     }
 
-    validate_reality_cipher_suites("outbound", &reality.cipher_suites)
-        .map_err(ConfigError::InvalidOutbound)
-}
-
-fn validate_short_id(kind: &str, short_id: &str) -> Result<(), String> {
-    if short_id.len() > 16 {
-        return Err(format!(
-            "`vless` {kind} `reality.short_id` must be at most 16 hex characters"
-        ));
-    }
-    if !short_id.bytes().all(|byte| byte.is_ascii_hexdigit()) {
-        return Err(format!(
-            "`vless` {kind} `reality.short_id` must contain only hex digits"
-        ));
-    }
-    Ok(())
-}
-
-fn validate_reality_cipher_suites(kind: &str, cipher_suites: &[String]) -> Result<(), String> {
-    for cipher_suite in cipher_suites {
-        match cipher_suite.as_str() {
-            "TLS_AES_128_GCM_SHA256"
-            | "TLS_AES_256_GCM_SHA384"
-            | "TLS_CHACHA20_POLY1305_SHA256" => {}
-            _ => {
-                return Err(format!(
-                    "`vless` {kind} `reality.cipher_suites` contains unsupported suite `{cipher_suite}`"
-                ));
-            }
-        }
-    }
-
-    Ok(())
-}
-
-fn base64url_decoded_len(value: &str) -> Option<usize> {
-    let mut bits = 0usize;
-    for byte in value.bytes() {
-        match byte {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' => bits += 6,
-            _ => return None,
-        }
-    }
-
-    Some(bits / 8)
+    vless::validation::validate_reality_cipher_suites(&reality.cipher_suites).map_err(|error| {
+        ConfigError::InvalidOutbound(format!(
+            "`vless` outbound `reality.cipher_suites` contains {error}"
+        ))
+    })
 }
 
 /// Validate the XHTTP `mode` field on a `vless` `split_http` transport config.
@@ -531,12 +502,8 @@ fn validate_xhttp_mode(kind: &str, mode: &str) -> Result<(), ConfigError> {
     } else {
         ConfigError::InvalidOutbound
     };
-    match mode {
-        "" | "auto" | "packet-up" | "stream-up" | "stream-one" => Ok(()),
-        other => Err(ctor(format!(
-            "`vless` {kind} split_http.mode `{other}` is not one of: auto, packet-up, stream-up, stream-one"
-        ))),
-    }
+    vless::validation::validate_xhttp_mode(mode)
+        .map_err(|error| ctor(format!("`vless` {kind} split_http.{error}")))
 }
 
 fn validate_outbound_endpoint(
@@ -599,20 +566,9 @@ fn validate_socks5_outbound_credential_part(
     field: &'static str,
     value: &str,
 ) -> Result<(), ConfigError> {
-    let len = value.len();
-    if len == 0 {
-        return Err(ConfigError::InvalidOutbound(format!(
-            "`socks5` outbound `{field}` must not be empty"
-        )));
-    }
-
-    if len > u8::MAX as usize {
-        return Err(ConfigError::InvalidOutbound(format!(
-            "`socks5` outbound `{field}` must be at most 255 bytes"
-        )));
-    }
-
-    Ok(())
+    socks5::validate_credential_part(value, field).map_err(|error| {
+        ConfigError::InvalidOutbound(format!("`socks5` outbound `{field}` is invalid: {error}"))
+    })
 }
 
 fn validate_socks5_credential_part(
@@ -620,20 +576,9 @@ fn validate_socks5_credential_part(
     field: &'static str,
     value: &str,
 ) -> Result<(), ConfigError> {
-    let len = value.len();
-    if len == 0 {
-        return Err(ConfigError::InvalidInbound(format!(
-            "`{scope}` `{field}` must not be empty"
-        )));
-    }
-
-    if len > u8::MAX as usize {
-        return Err(ConfigError::InvalidInbound(format!(
-            "`{scope}` `{field}` must be at most 255 bytes"
-        )));
-    }
-
-    Ok(())
+    socks5::validate_credential_part(value, field).map_err(|error| {
+        ConfigError::InvalidInbound(format!("`{scope}` `{field}` is invalid: {error}"))
+    })
 }
 
 fn validate_inbound_optional_non_empty(
@@ -708,32 +653,6 @@ fn is_reserved_ws_header(header: &str) -> bool {
     RESERVED_HEADERS.contains(&header)
 }
 
-fn validate_uuid_literal(value: &str) -> Result<(), &'static str> {
-    let value = value.trim();
-    let mut digits = 0;
-
-    for (index, byte) in value.bytes().enumerate() {
-        if byte == b'-' {
-            if value.len() != 36 || !matches!(index, 8 | 13 | 18 | 23) {
-                return Err("must be a canonical UUID or 32 hex digits");
-            }
-            continue;
-        }
-
-        if !byte.is_ascii_hexdigit() {
-            return Err("must contain only hex digits");
-        }
-
-        digits += 1;
-    }
-
-    if digits == 32 {
-        Ok(())
-    } else {
-        Err("must contain 32 hex digits")
-    }
-}
-
 fn normalize_uuid_key(value: &str) -> String {
     value
         .bytes()
@@ -751,7 +670,7 @@ fn validate_shadowsocks_cipher(kind: &'static str, cipher: &str) -> Result<(), C
         "2022-blake3-aes-256-gcm",
         "2022-blake3-chacha20-poly1305",
     ];
-    if !VALID_CIPHERS.contains(&cipher) {
+    if shadowsocks::validation::validate_cipher(cipher).is_err() {
         return Err(match kind {
             "inbound" => ConfigError::InvalidInbound(format!(
                 "`shadowsocks` {kind} cipher `{cipher}` is not valid; expected one of: {}",
@@ -780,61 +699,12 @@ fn validate_shadowsocks_password(
     cipher: &str,
     password: &str,
 ) -> Result<(), ConfigError> {
-    let Some(expected_len) = shadowsocks_2022_key_len(cipher) else {
-        return Ok(());
-    };
-
-    let key = if matches!(
-        cipher,
-        "2022-blake3-aes-128-gcm" | "2022-blake3-aes-256-gcm"
-    ) {
-        password.rsplit(':').next().unwrap_or(password)
-    } else {
-        password
-    };
-
-    let actual_len = decode_shadowsocks_2022_key_len(key).ok_or_else(|| {
+    shadowsocks::validation::validate_password(cipher, password).map_err(|error| {
         shadowsocks_password_error(
             kind,
-            format!("`shadowsocks` {kind} 2022 password must be standard base64 key material"),
+            format!("`shadowsocks` {kind} password is invalid: {error}"),
         )
-    })?;
-
-    if actual_len != expected_len {
-        return Err(shadowsocks_password_error(
-            kind,
-            format!(
-                "`shadowsocks` {kind} 2022 password decoded length must be {expected_len} bytes, got {actual_len}"
-            ),
-        ));
-    }
-
-    Ok(())
-}
-
-fn shadowsocks_2022_key_len(cipher: &str) -> Option<usize> {
-    match cipher {
-        "2022-blake3-aes-128-gcm" => Some(16),
-        "2022-blake3-aes-256-gcm" | "2022-blake3-chacha20-poly1305" => Some(32),
-        _ => None,
-    }
-}
-
-fn decode_shadowsocks_2022_key_len(value: &str) -> Option<usize> {
-    use base64::{
-        alphabet,
-        engine::{DecodePaddingMode, GeneralPurpose, GeneralPurposeConfig},
-        Engine,
-    };
-
-    const ENGINE: GeneralPurpose = GeneralPurpose::new(
-        &alphabet::STANDARD,
-        GeneralPurposeConfig::new()
-            .with_encode_padding(true)
-            .with_decode_padding_mode(DecodePaddingMode::Indifferent),
-    );
-
-    ENGINE.decode(value).ok().map(|bytes| bytes.len())
+    })
 }
 
 fn shadowsocks_password_error(kind: &'static str, message: String) -> ConfigError {

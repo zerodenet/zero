@@ -9,12 +9,15 @@ use zero_config::{InboundProtocolConfig, OutboundProtocolConfig};
 #[cfg(feature = "trojan")]
 use zero_engine::{EngineError, ResolvedLeafOutbound};
 use zero_traits::{ProtocolCapabilityDescriptor, ProtocolMetadata};
-use zero_transport::trojan_transport::TrojanTlsBridge;
+use zero_transport::trojan_transport::{
+    OwnedTrojanOutboundTlsPlan, TrojanOutboundLeaf, TrojanTlsBridge,
+};
 
 use crate::adapters::identity::{
     named_protocol_claims_runtime_leaf, named_protocol_supports_inbound,
     named_protocol_supports_outbound, NamedProtocolAdapter, ProtocolTransportBridgeAdapter,
 };
+use crate::protocol_registry::ProtocolTransportLeafResolver;
 use crate::protocol_registry::{
     proxy_leaf_runtime, InboundListenerCapability, ManagedUdpHandlerProvider, OutboundLeafRuntime,
     ProtocolSupportCapability, TcpOutboundCapability, UdpFlowCapability, UdpPacketPathCapability,
@@ -67,6 +70,41 @@ impl ProtocolTransportBridgeAdapter for TrojanAdapter {
 
     fn bridge(&self) -> &Self::Bridge {
         &self.bridge
+    }
+}
+
+#[cfg(feature = "trojan")]
+impl<'a> ProtocolTransportLeafResolver<'a> for TrojanTlsBridge {
+    type TransportLeaf = TrojanOutboundLeaf<'a>;
+    type ResolveError = zero_core::Error;
+
+    fn resolve_transport_leaf(
+        &self,
+        source_dir: Option<&std::path::Path>,
+        leaf: &ResolvedLeafOutbound<'a>,
+    ) -> Result<Option<Self::TransportLeaf>, Self::ResolveError> {
+        let ResolvedLeafOutbound::Trojan {
+            tag,
+            server,
+            port,
+            password,
+            sni,
+            insecure,
+            client_fingerprint,
+        } = leaf
+        else {
+            return Ok(None);
+        };
+        let protocol = ::trojan::outbound::PreparedTrojanOutboundRequestBundle::from_config(
+            password,
+            *sni,
+            *insecure,
+            *client_fingerprint,
+        );
+        let transport = OwnedTrojanOutboundTlsPlan::from_parts(source_dir, server, *port);
+        Ok(Some(TrojanOutboundLeaf::new(
+            tag, server, *port, transport, protocol,
+        )))
     }
 }
 

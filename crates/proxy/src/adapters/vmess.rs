@@ -9,12 +9,15 @@ use zero_config::{InboundProtocolConfig, OutboundProtocolConfig};
 #[cfg(feature = "vmess")]
 use zero_engine::{EngineError, ResolvedLeafOutbound};
 use zero_traits::{ProtocolCapabilityDescriptor, ProtocolMetadata};
-use zero_transport::vmess_transport::VmessStreamBridge;
+use zero_transport::vmess_transport::{
+    OwnedVmessOutboundTransportPlan, VmessOutboundLeaf, VmessStreamBridge,
+};
 
 use crate::adapters::identity::{
     named_protocol_claims_runtime_leaf, named_protocol_supports_inbound,
     named_protocol_supports_outbound, NamedProtocolAdapter, ProtocolTransportBridgeAdapter,
 };
+use crate::protocol_registry::ProtocolTransportLeafResolver;
 use crate::protocol_registry::{
     proxy_leaf_runtime, InboundListenerCapability, ManagedUdpHandlerProvider, OutboundLeafRuntime,
     ProtocolSupportCapability, TcpOutboundCapability, UdpFlowCapability, UdpPacketPathCapability,
@@ -58,6 +61,46 @@ impl ProtocolTransportBridgeAdapter for VmessAdapter {
 
     fn bridge(&self) -> &Self::Bridge {
         &self.bridge
+    }
+}
+
+#[cfg(feature = "vmess")]
+impl<'a> ProtocolTransportLeafResolver<'a> for VmessStreamBridge {
+    type TransportLeaf = VmessOutboundLeaf<'a>;
+    type ResolveError = zero_core::Error;
+
+    fn resolve_transport_leaf(
+        &self,
+        source_dir: Option<&std::path::Path>,
+        leaf: &ResolvedLeafOutbound<'a>,
+    ) -> Result<Option<Self::TransportLeaf>, Self::ResolveError> {
+        let ResolvedLeafOutbound::Vmess {
+            tag,
+            server,
+            port,
+            id,
+            cipher,
+            mux_concurrency,
+            tls,
+            ws,
+            grpc,
+            ..
+        } = leaf
+        else {
+            return Ok(None);
+        };
+        let transport = OwnedVmessOutboundTransportPlan::from_config_refs(
+            source_dir, server, *port, *tls, *ws, *grpc,
+        );
+        let protocol = ::vmess::outbound::PreparedVmessOutboundRequestBundle::from_config_with_transport_hints(
+            id,
+            cipher,
+            *mux_concurrency,
+            transport.mux_transport_hints(),
+        )?;
+        Ok(Some(VmessOutboundLeaf::new(
+            tag, server, *port, transport, protocol,
+        )))
     }
 }
 

@@ -1,5 +1,5 @@
 use zero_engine::{EngineError, ResolvedLeafOutbound};
-use zero_transport::socks5_transport::{Socks5ManagedUdpPacketPathPlan, Socks5TransportLeaf};
+use zero_transport::socks5_transport::Socks5ManagedUdpPacketPathPlan;
 
 use crate::adapters::socks5::Socks5Adapter;
 use crate::protocol_registry::ProtocolSupportCapability;
@@ -54,7 +54,7 @@ impl Socks5Adapter {
         &self,
         leaf: &'a ResolvedLeafOutbound<'a>,
     ) -> Option<Box<dyn PreparedUdpPacketPathOperation + 'a>> {
-        let leaf = Socks5TransportLeaf::from_resolved_leaf(leaf)?;
+        let leaf = super::transport_leaf(leaf)?;
         Some(Box::new(Socks5PacketPathOperation {
             plan: leaf.udp_packet_path_plan(),
         }))
@@ -67,7 +67,7 @@ impl Socks5Adapter {
         Box<dyn crate::runtime::udp_dispatch::operation::PreparedUdpFlowOperation + 'a>,
         FlowFailure,
     > {
-        let Some(leaf) = Socks5TransportLeaf::from_resolved_leaf(leaf) else {
+        let Some(leaf) = super::transport_leaf(leaf) else {
             return Err(FlowFailure {
                 stage: "udp_unsupported_leaf",
                 error: EngineError::Io(std::io::Error::other(format!(
