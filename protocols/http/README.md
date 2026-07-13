@@ -1,6 +1,6 @@
 # HTTP CONNECT
 
-> RFC 7231 | Crate: `http_connect`
+> RFC 7231 | Crate: `http`
 
 HTTP CONNECT 方法用于通过代理建立 TCP 隧道。这是公开 RFC 协议，无上游实现可参照。
 
@@ -9,7 +9,7 @@ HTTP CONNECT 方法用于通过代理建立 TCP 隧道。这是公开 RFC 协议
 | 项目 | 来源 |
 |------|------|
 | 协议规范 | [RFC 7231 §4.3.6](https://tools.ietf.org/html/rfc7231#section-4.3.6) |
-| 本实现 | `http_connect` crate |
+| 本实现 | `http` crate |
 
 ## 功能对齐状态
 

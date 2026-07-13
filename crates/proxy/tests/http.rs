@@ -8,7 +8,7 @@ use zero_proxy::Proxy as Engine;
 use support::{free_port, spawn_engine, wait_for_listener};
 
 #[tokio::test]
-async fn relays_tcp_through_http_connect_direct_outbound() {
+async fn relays_tcp_through_http_direct_outbound() {
     let echo_port = free_port();
     let proxy_port = free_port();
 
@@ -28,7 +28,7 @@ async fn relays_tcp_through_http_connect_direct_outbound() {
                 {{
                     "tag": "http-in",
                     "listen": {{ "address": "127.0.0.1", "port": {proxy_port} }},
-                    "protocol": {{ "type": "http_connect" }}
+                    "protocol": {{ "type": "http" }}
                 }}
             ],
             "outbounds": [],
@@ -72,7 +72,7 @@ async fn relays_tcp_through_http_connect_direct_outbound() {
 }
 
 #[tokio::test]
-async fn rejects_http_connect_blocked_domain_via_route_rule() {
+async fn rejects_http_blocked_domain_via_route_rule() {
     let proxy_port = free_port();
 
     let config = RuntimeConfig::parse(&format!(
@@ -81,7 +81,7 @@ async fn rejects_http_connect_blocked_domain_via_route_rule() {
                 {{
                     "tag": "http-in",
                     "listen": {{ "address": "127.0.0.1", "port": {proxy_port} }},
-                    "protocol": {{ "type": "http_connect" }}
+                    "protocol": {{ "type": "http" }}
                 }}
             ],
             "outbounds": [],

@@ -232,7 +232,7 @@ Error: invalid inbound: inbounds[0]: `inbound` tag must not be empty
 {
   "inbounds": [
     { "tag": "a", "listen": { "address": "127.0.0.1", "port": 7890 }, "protocol": { "type": "socks5" } },
-    { "tag": "b", "listen": { "address": "127.0.0.1", "port": 7890 }, "protocol": { "type": "http_connect" } }
+    { "tag": "b", "listen": { "address": "127.0.0.1", "port": 7890 }, "protocol": { "type": "http" } }
   ]
 }
 ```

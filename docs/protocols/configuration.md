@@ -27,7 +27,7 @@
 {
   "tag": "http-in",
   "listen": { "address": "127.0.0.1", "port": 8080 },
-  "protocol": { "type": "http_connect" }
+  "protocol": { "type": "http" }
 }
 ```
 

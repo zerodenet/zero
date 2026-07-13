@@ -8,7 +8,7 @@ pub(crate) fn fake_direct_leaf() -> ResolvedLeafOutbound<'static> {
 pub(super) fn inbound_protocol_name(config: &InboundProtocolConfig) -> &'static str {
     match config {
         InboundProtocolConfig::Socks5 { .. } => "socks5",
-        InboundProtocolConfig::HttpConnect => "http_connect",
+        InboundProtocolConfig::HttpConnect => "http",
         InboundProtocolConfig::Mixed { .. } => "mixed",
         InboundProtocolConfig::Vless { .. } => "vless",
         InboundProtocolConfig::Hysteria2 { .. } => "hysteria2",
@@ -42,7 +42,7 @@ pub(super) fn compiled_in_inbound_configs() -> Vec<InboundProtocolConfig> {
 
     #[cfg(feature = "socks5")]
     configs.push(InboundProtocolConfig::Socks5 { users: Vec::new() });
-    #[cfg(feature = "http_connect")]
+    #[cfg(feature = "http")]
     configs.push(InboundProtocolConfig::HttpConnect);
     #[cfg(feature = "mixed")]
     configs.push(InboundProtocolConfig::Mixed {

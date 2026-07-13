@@ -415,7 +415,7 @@ fn api_network_name(network: ApiNetwork) -> &'static str {
 fn protocol_name(protocol: zero_core::ProtocolType) -> &'static str {
     match protocol {
         zero_core::ProtocolType::Socks5 => "socks5",
-        zero_core::ProtocolType::HttpConnect => "http_connect",
+        zero_core::ProtocolType::HttpConnect => "http",
         zero_core::ProtocolType::Vless => "vless",
         zero_core::ProtocolType::Hysteria2 => "hysteria2",
         zero_core::ProtocolType::Shadowsocks => "shadowsocks",

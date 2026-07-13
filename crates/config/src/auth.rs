@@ -15,7 +15,7 @@
 /// The authentication contract a protocol expects.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AuthRequirement {
-    /// No authentication, ever (e.g. `direct`, `block`, `http_connect` inbound).
+    /// No authentication, ever (e.g. `direct`, `block`, `http` inbound).
     None,
     /// Password only; no username concept (e.g. `shadowsocks`, `trojan`, `hysteria2`).
     PasswordOnly,

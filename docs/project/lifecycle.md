@@ -73,7 +73,7 @@ flowchart TD
 当前支持：
 
 - `socks5`
-- `http_connect`
+- `http`
 - `mixed`
 
 入站只负责接收外部请求和完成协议握手，不负责出站选择。
@@ -96,7 +96,7 @@ flowchart TD
 - 目标地址
 - 目标端口
 - 网络类型：`tcp` / `udp`
-- 协议来源：`socks5` / `http_connect`
+- 协议来源：`socks5` / `http`
 - 入站 tag
 
 ## 观测准备

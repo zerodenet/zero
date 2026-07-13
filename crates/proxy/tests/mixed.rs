@@ -8,7 +8,7 @@ use zero_proxy::Proxy as Engine;
 use support::{free_port, spawn_engine, wait_for_listener};
 
 #[tokio::test]
-async fn mixed_inbound_accepts_socks5_and_http_connect_on_same_port() {
+async fn mixed_inbound_accepts_socks5_and_http_on_same_port() {
     let mixed_port = free_port();
     let socks_echo_port = free_port();
     let http_echo_port = free_port();

@@ -120,7 +120,7 @@ accounting, response DTOs, and client delivery helpers live under
 | Adapter | Protocol-owned behavior | Transport-owned behavior | Proxy delegation/state | Registered capabilities |
 | --- | --- | --- | --- | --- |
 | `direct` | none | direct connector primitives | proxy-owned connector; no protocol-private state | support, TCP outbound |
-| `http_connect` | HTTP CONNECT handshake/parser | inbound acceptor construction | listener handoff; stateless | support, inbound, TCP outbound |
+| `http` | HTTP CONNECT handshake/parser | inbound acceptor construction | listener handoff; stateless | support, inbound, TCP outbound |
 | `mixed` | SOCKS5/HTTP protocol implementations | mixed accept classification | proxy-owned multiplexor; stateless | support, inbound |
 | `socks5` | handshake, UDP association framing/classification | inbound acceptor | listener/association handoff and upstream handler registration; stateless | support, inbound, TCP outbound, UDP flow, packet path, upstream provider |
 | `shadowsocks` | cipher/session/framing and UDP codec | inbound profile and carrier opening | listener plus managed datagram handler assembly; stateless | support, inbound, TCP outbound, UDP flow, packet path, managed provider |
@@ -388,7 +388,7 @@ UDP datagram 由内核 UDP 分发路径处理。分发层拥有路由决策、fa
 | 处理程序 | 协议 | 备注 |
 |---------|----------|-------|
 | `socks5` | SOCKS5 | CONNECT + UDP ASSOCIATE |
-| `http_connect` | HTTP CONNECT | |
+| `http` | HTTP CONNECT | |
 | `mixed` | 自动检测 | 同一端口上的 SOCKS5 TCP CONNECT、SOCKS5 UDP ASSOCIATE 和 HTTP CONNECT TCP |
 | `vless` | VLESS | TCP + UDP-over-TCP |
 | `hysteria2` | Hysteria2 | QUIC |

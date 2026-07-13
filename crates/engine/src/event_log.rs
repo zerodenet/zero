@@ -472,7 +472,7 @@ fn api_outcome(outcome: SessionOutcome) -> FlowOutcome {
 fn protocol_name(protocol: ProtocolType) -> &'static str {
     match protocol {
         ProtocolType::Socks5 => "socks5",
-        ProtocolType::HttpConnect => "http_connect",
+        ProtocolType::HttpConnect => "http",
         ProtocolType::Vless => "vless",
         ProtocolType::Hysteria2 => "hysteria2",
         ProtocolType::Shadowsocks => "shadowsocks",

@@ -136,7 +136,7 @@ pub(crate) fn log_session_failed(
 fn protocol_name(protocol: ProtocolType) -> &'static str {
     match protocol {
         ProtocolType::Socks5 => "socks5",
-        ProtocolType::HttpConnect => "http_connect",
+        ProtocolType::HttpConnect => "http",
         ProtocolType::Vless => "vless",
         ProtocolType::Hysteria2 => "hysteria2",
         ProtocolType::Shadowsocks => "shadowsocks",

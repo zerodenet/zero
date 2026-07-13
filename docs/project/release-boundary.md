@@ -58,7 +58,7 @@
 | `direct` | TCP 和 UDP 出站执行 |
 | `block` | TCP 和 UDP 拒绝语义 |
 | `socks5` | TCP CONNECT、UDP ASSOCIATE，入站和出站 |
-| `http_connect` | TCP CONNECT 入站 |
+| `http` | TCP CONNECT 入站 |
 | `mixed` | 同端口入站多路复用，支持 SOCKS5 TCP CONNECT、SOCKS5 UDP ASSOCIATE 和 HTTP CONNECT TCP |
 | `vless` | TCP 和 UDP-over-stream 基线路径，覆盖支持的传输 |
 | `trojan` | TCP 和 UDP-over-stream 基线路径 |

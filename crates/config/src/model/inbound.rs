@@ -29,7 +29,7 @@ pub enum InboundProtocolConfig {
         #[serde(default)]
         users: Vec<Socks5UserConfig>,
     },
-    #[serde(rename = "http_connect")]
+    #[serde(rename = "http")]
     HttpConnect,
     #[serde(rename = "mixed")]
     Mixed {
@@ -117,7 +117,7 @@ impl InboundProtocolConfig {
     pub fn protocol_name(&self) -> &'static str {
         match self {
             Self::Socks5 { .. } => "socks5",
-            Self::HttpConnect => "http_connect",
+            Self::HttpConnect => "http",
             Self::Mixed { .. } => "mixed",
             Self::Vless { .. } => "vless",
             Self::Hysteria2 { .. } => "hysteria2",

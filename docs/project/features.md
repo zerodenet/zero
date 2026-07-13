@@ -24,8 +24,8 @@ cargo build --release --features full,status_api
 | Feature | 协议 | 额外依赖 |
 |---------|------|----------|
 | `socks5` | SOCKS5 入站 | -- |
-| `http_connect` | HTTP CONNECT 入站 | -- |
-| `mixed` | Mixed 入站（同端口 SOCKS5 TCP/UDP + HTTP CONNECT TCP） | 隐含 `socks5` + `http_connect` |
+| `http` | HTTP CONNECT 入站 | -- |
+| `mixed` | Mixed 入站（同端口 SOCKS5 TCP/UDP + HTTP CONNECT TCP） | 隐含 `socks5` + `http` |
 | `vless` | VLESS 入站 | TLS / Reality / WebSocket / gRPC / H2 / QUIC 传输 |
 | `hysteria2` | Hysteria2 入站 | QUIC (quinn) |
 | `shadowsocks` | Shadowsocks 入站 | AEAD 加密 + 2022-blake3 |
@@ -38,7 +38,7 @@ cargo build --release --features full,status_api
 ```bash
 # 裁剪示例：仅 SOCKS5 + HTTP CONNECT
 cargo build --release --no-default-features \
-  --features socks5,http_connect,status_api
+  --features socks5,http,status_api
 ```
 
 ## 出站协议

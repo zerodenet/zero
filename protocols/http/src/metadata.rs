@@ -13,8 +13,8 @@ impl ProtocolMetadata for HttpConnectProtocol {
         let unsupported = ProtocolCapabilityState::unsupported(&[]);
 
         ProtocolCapabilityDescriptor {
-            protocol: "http_connect",
-            feature: "http_connect",
+            protocol: "http",
+            feature: "http",
             status: ProtocolCapabilityLevel::Supported,
             compatibility_baseline: "rfc_7231_connect",
             inbound: ProtocolNetworkCapability::new(supported, not_applicable),

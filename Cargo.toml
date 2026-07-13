@@ -11,7 +11,7 @@ homepage.workspace = true
 default = ["full", "status_api"]
 full = [
     "socks5",
-    "http_connect",
+    "http",
     "mixed",
     "vless",
     "hysteria2",
@@ -23,7 +23,7 @@ full = [
 ]
 dns = ["zero-proxy/dns"]
 socks5 = ["zero-proxy/socks5"]
-http_connect = ["zero-proxy/http_connect"]
+http = ["zero-proxy/http"]
 mixed = ["zero-proxy/mixed"]
 vless = ["zero-proxy/vless"]
 hysteria2 = ["zero-proxy/hysteria2"]
@@ -51,7 +51,7 @@ members = [
     "crates/ztls",
     "crates/transport",
     "protocols/socks5",
-    "protocols/http-connect",
+    "protocols/http",
     "protocols/vless",
     "protocols/hysteria2",
     "protocols/shadowsocks",

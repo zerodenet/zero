@@ -20,7 +20,7 @@ fn duplicate_inbound_listen_fails_at_config_load() {
             {
                 "tag": "b",
                 "listen": { "address": "127.0.0.1", "port": 19999 },
-                "protocol": { "type": "http_connect" }
+                "protocol": { "type": "http" }
             }
         ],
         "outbounds": [

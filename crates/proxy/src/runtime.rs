@@ -23,7 +23,7 @@ use crate::inventory::ProtocolInventory;
 pub(crate) mod datagram_udp;
 mod engine_facade;
 mod handle;
-#[cfg(feature = "http_connect")]
+#[cfg(feature = "http")]
 pub(crate) mod http_redirect;
 #[cfg(feature = "vless")]
 pub(crate) mod inbound_fallback;

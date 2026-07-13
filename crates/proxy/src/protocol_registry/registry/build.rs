@@ -37,7 +37,7 @@ impl ProtocolRegistry {
             feature = "vmess",
             feature = "mieru"
         )),
-        feature = "http_connect",
+        feature = "http",
         feature = "mixed"
     ))]
     pub(crate) fn register_core_capability<T>(&mut self, adapter: Arc<T>)

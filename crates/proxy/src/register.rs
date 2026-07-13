@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use crate::adapters::DirectAdapter;
-#[cfg(feature = "http_connect")]
+#[cfg(feature = "http")]
 use crate::adapters::HttpConnectAdapter;
 #[cfg(feature = "hysteria2")]
 use crate::adapters::Hysteria2Adapter;
@@ -57,7 +57,7 @@ fn compiled_protocol_registry() -> ProtocolRegistry {
     let mut registry = ProtocolRegistry::default();
     #[cfg(feature = "socks5")]
     registry.register_upstream_capability(Arc::new(Socks5Adapter));
-    #[cfg(feature = "http_connect")]
+    #[cfg(feature = "http")]
     registry.register_core_capability(Arc::new(HttpConnectAdapter));
     #[cfg(feature = "vless")]
     registry.register_managed_capability(Arc::new(VlessAdapter::default()));

@@ -20,7 +20,7 @@ fn parses_config_into_adts() {
                 {
                     "tag": "http-in",
                     "listen": { "address": "127.0.0.1", "port": 8080 },
-                    "protocol": { "type": "http_connect" }
+                    "protocol": { "type": "http" }
                 }
             ],
             "outbounds": [
@@ -1142,7 +1142,7 @@ fn rejects_removed_protocol_and_action_aliases() {
                 {
                     "tag": "http-in",
                     "listen": { "address": "127.0.0.1", "port": 8080 },
-                    "protocol": { "type": "http" }
+                    "protocol": { "type": "http_connect" }
                 }
             ],
             "route": {
@@ -1151,7 +1151,7 @@ fn rejects_removed_protocol_and_action_aliases() {
             }
         }"#,
     )
-    .expect_err("http alias should be rejected");
+    .expect_err("legacy http_connect protocol name should be rejected");
 
     assert!(matches!(
         protocol_error,
@@ -1382,7 +1382,7 @@ fn rejects_duplicate_inbound_listen_endpoint() {
                 {
                     "tag": "http-in",
                     "listen": { "address": "127.0.0.1", "port": 1080 },
-                    "protocol": { "type": "http_connect" }
+                    "protocol": { "type": "http" }
                 }
             ],
             "route": {

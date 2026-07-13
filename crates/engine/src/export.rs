@@ -372,7 +372,7 @@ fn build_policy_member_snapshot(
 fn inbound_protocol_name(protocol: &InboundProtocolConfig) -> &'static str {
     match protocol {
         InboundProtocolConfig::Socks5 { .. } => "socks5",
-        InboundProtocolConfig::HttpConnect => "http_connect",
+        InboundProtocolConfig::HttpConnect => "http",
         InboundProtocolConfig::Mixed { .. } => "mixed",
         InboundProtocolConfig::Vless { .. } => "vless",
         InboundProtocolConfig::Hysteria2 { .. } => "hysteria2",
@@ -387,7 +387,7 @@ fn inbound_protocol_name(protocol: &InboundProtocolConfig) -> &'static str {
 fn protocol_name(protocol: ProtocolType) -> &'static str {
     match protocol {
         ProtocolType::Socks5 => "socks5",
-        ProtocolType::HttpConnect => "http_connect",
+        ProtocolType::HttpConnect => "http",
         ProtocolType::Vless => "vless",
         ProtocolType::Hysteria2 => "hysteria2",
         ProtocolType::Shadowsocks => "shadowsocks",

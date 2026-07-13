@@ -113,7 +113,7 @@ make fmt / check / test / clippy / build / release / run / run-status / status /
    - `crates/core` (`zero-core`) — common types and domain models
    - `protocols/*` — protocol implementations:
      - `protocols/socks5` — SOCKS5 (inbound + outbound + UDP)
-     - `protocols/http-connect` — HTTP CONNECT
+     - `protocols/http` — HTTP CONNECT
      - `protocols/vless` — VLESS (Reality TLS 1.3, Vision flow, MUX, XHTTP + 7 other transports)
      - `protocols/hysteria2` — Hysteria2 (QUIC, password auth)
      - `protocols/shadowsocks` — Shadowsocks (AEAD, 2022-blake3)
@@ -165,7 +165,7 @@ core → traits
 
 ```
 inbound/          # Protocol handler structs implementing InboundProtocol trait
-                  #   socks5, vless, http_connect, mixed, hysteria2, shadowsocks, trojan, direct, tun, system
+                  #   socks5, vless, http, mixed, hysteria2, shadowsocks, trojan, direct, tun, system
                   #   Each provides handshake (accept), client responses (send_ok/send_blocked/send_upstream_failure), and relay
 outbound/         # Per-protocol outbound connect logic: direct, socks5, vless, hysteria2, shadowsocks, trojan, vmess, mieru
                   #   Each owns connect_tcp() + apply_tcp_hop() (dial/handshake I/O); the adapter in adapters.rs dispatches via claims_outbound_leaf
@@ -208,7 +208,7 @@ transport/        # Low-level I/O
 Always included: config parsing, routing, `EnginePlan`/`EngineState`, `direct`/`block`, status export.
 
 Optional protocol features:
-- `socks5`, `http_connect`, `mixed`, `vless`, `hysteria2`, `shadowsocks`, `trojan`, `vmess`, `mieru`, `dns`
+- `socks5`, `http`, `mixed`, `vless`, `hysteria2`, `shadowsocks`, `trojan`, `vmess`, `mieru`, `dns`
 - `status_api` — HTTP status endpoint
 - `event_dispatcher`, `sink_jsonl`, `panel_connector` — event connectors
 
@@ -219,7 +219,7 @@ Default: `full,status_api` (all protocols + status API)
 JSON with three top-level sections: `inbounds`, `outbounds`, `route`.
 Route supports `mode` (`rule`/`global`/`direct`), `rules` array, and `final` action.
 
-**Inbound types:** `socks5`, `http_connect`, `mixed`, `vless`, `hysteria2`, `shadowsocks`, `trojan`, `direct`, `tun`
+**Inbound types:** `socks5`, `http`, `mixed`, `vless`, `hysteria2`, `shadowsocks`, `trojan`, `direct`, `tun`
 **Outbound types:** `direct`, `block`, `socks5`, `vless`, `hysteria2`, `shadowsocks`, `trojan`
 **Outbound group types:** `selector`, `fallback`, `url_test`, `relay`, `load_balance`
 **Route conditions:** `domain`, `domain_keyword`, `domain_regex`, `ip`, `rule_set`, `geoip`, `sni`, `and`, `or`

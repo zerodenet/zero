@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use http_connect::HttpConnectInbound;
+use http::HttpConnectInbound;
 use tokio::io::AsyncWriteExt;
 use tokio::sync::watch;
 use zero_engine::EngineError;
@@ -13,20 +13,20 @@ use crate::transport::{MeteredStream, TcpRelayStream};
 
 #[derive(Clone, Copy)]
 pub(crate) struct HttpConnectInboundHandler {
-    http_connect_inbound: HttpConnectInbound,
+    http_inbound: HttpConnectInbound,
 }
 
 impl Default for HttpConnectInboundHandler {
     fn default() -> Self {
         Self {
-            http_connect_inbound: HttpConnectInbound,
+            http_inbound: HttpConnectInbound,
         }
     }
 }
 
 impl HttpConnectInboundHandler {
-    pub(crate) fn http_connect_inbound(&self) -> HttpConnectInbound {
-        self.http_connect_inbound
+    pub(crate) fn http_inbound(&self) -> HttpConnectInbound {
+        self.http_inbound
     }
 }
 
@@ -35,24 +35,21 @@ impl InboundProtocol for HttpConnectInboundHandler {
     type ClientStream = TcpRelayStream;
 
     async fn send_ok(&self, client: &mut TcpRelayStream) -> Result<(), EngineError> {
-        self.http_connect_inbound
+        self.http_inbound
             .send_success_response(client)
             .await
             .map_err(EngineError::from)
     }
 
     async fn send_blocked(&self, client: &mut TcpRelayStream) -> Result<(), EngineError> {
-        let _ = self
-            .http_connect_inbound
-            .send_blocked_response(client)
-            .await;
+        let _ = self.http_inbound.send_blocked_response(client).await;
         let _ = AsyncWriteExt::shutdown(client).await;
         Ok(())
     }
 
     async fn send_upstream_failure(&self, client: &mut TcpRelayStream) -> Result<(), EngineError> {
         let _ = self
-            .http_connect_inbound
+            .http_inbound
             .send_upstream_failure_response(client)
             .await;
         let _ = AsyncWriteExt::shutdown(client).await;
@@ -60,7 +57,7 @@ impl InboundProtocol for HttpConnectInboundHandler {
     }
 }
 
-pub(crate) async fn run_http_connect_listener_with_bound(
+pub(crate) async fn run_http_listener_with_bound(
     proxy: &Proxy,
     inbound: zero_config::InboundConfig,
     listener: zero_platform_tokio::TokioListener,
@@ -71,7 +68,7 @@ pub(crate) async fn run_http_connect_listener_with_bound(
     run_tcp_listener_loop(TcpListenerLoopRequest {
         proxy,
         inbound_tag: inbound.tag,
-        protocol_name: "http_connect",
+        protocol_name: "http",
         listener,
         shutdown,
         handler: move |engine: Proxy,
@@ -81,17 +78,13 @@ pub(crate) async fn run_http_connect_listener_with_bound(
             let handler = handler;
             async move {
                 let mut metered = MeteredStream::new(TcpRelayStream::from(stream));
-                match handler
-                    .http_connect_inbound
-                    .accept_request(&mut metered)
-                    .await
-                {
+                match handler.http_inbound.accept_request(&mut metered).await {
                     Ok(session) => {
                         if let Some((status, location)) =
                             select_redirect_target(&engine.config.route.url_rewrite, &session)
                         {
                             let _ = handler
-                                .http_connect_inbound
+                                .http_inbound
                                 .send_redirect_response(&mut metered, status, &location)
                                 .await;
                         } else {
@@ -108,7 +101,7 @@ pub(crate) async fn run_http_connect_listener_with_bound(
                     }
                     Err(error) => {
                         if handler
-                            .http_connect_inbound
+                            .http_inbound
                             .send_accept_error_response(&mut metered, &error)
                             .await
                             .unwrap_or(false)
@@ -118,7 +111,7 @@ pub(crate) async fn run_http_connect_listener_with_bound(
                         let engine_error = EngineError::from(error);
                         log_listener_connection_error(
                             crate::logging::INBOUND_ACCEPT_ROUTE_STAGE,
-                            "http_connect",
+                            "http",
                             &tag,
                             &source_addr,
                             &engine_error,

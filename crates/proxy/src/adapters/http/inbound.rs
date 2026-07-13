@@ -3,11 +3,11 @@ mod listener;
 use zero_config::InboundConfig;
 use zero_engine::EngineError;
 
-use crate::adapters::http_connect::HttpConnectAdapter;
+use crate::adapters::http::HttpConnectAdapter;
 use crate::protocol_registry::BoundInbound;
 use crate::runtime::Proxy;
 
-pub(crate) use listener::{run_http_connect_listener_with_bound, HttpConnectInboundHandler};
+pub(crate) use listener::{run_http_listener_with_bound, HttpConnectInboundHandler};
 
 impl HttpConnectAdapter {
     pub(super) fn spawn_inbound_impl(
@@ -20,8 +20,7 @@ impl HttpConnectAdapter {
     ) {
         let proxy = proxy.clone();
         listeners.spawn(async move {
-            run_http_connect_listener_with_bound(&proxy, inbound, bound.into_tcp(), shutdown_rx)
-                .await
+            run_http_listener_with_bound(&proxy, inbound, bound.into_tcp(), shutdown_rx).await
         });
     }
 }

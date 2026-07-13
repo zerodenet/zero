@@ -3,7 +3,7 @@
 mod group;
 #[cfg(any(
     feature = "socks5",
-    feature = "http_connect",
+    feature = "http",
     feature = "mixed",
     feature = "vless",
     feature = "shadowsocks",
@@ -19,7 +19,7 @@ mod udp_upstream;
 pub(crate) use group::log_urltest_group_target_changed;
 #[cfg(any(
     feature = "socks5",
-    feature = "http_connect",
+    feature = "http",
     feature = "mixed",
     feature = "vless",
     feature = "shadowsocks",

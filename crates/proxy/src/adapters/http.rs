@@ -10,21 +10,21 @@ use crate::protocol_registry::{
     TcpOutboundCapability, UdpFlowCapability, UdpPacketPathCapability,
 };
 
-#[cfg(feature = "http_connect")]
+#[cfg(feature = "http")]
 pub(super) mod inbound;
 
-#[cfg(feature = "http_connect")]
+#[cfg(feature = "http")]
 #[derive(Debug)]
 pub(crate) struct HttpConnectAdapter;
 
-#[cfg(feature = "http_connect")]
+#[cfg(feature = "http")]
 impl NamedProtocolAdapter for HttpConnectAdapter {
-    const PROTOCOL_NAME: &'static str = "http_connect";
-    const FEATURE_NAME: &'static str = "http_connect";
+    const PROTOCOL_NAME: &'static str = "http";
+    const FEATURE_NAME: &'static str = "http";
     const HAS_OUTBOUND: bool = false;
 }
 
-#[cfg(feature = "http_connect")]
+#[cfg(feature = "http")]
 impl InboundListenerCapability for HttpConnectAdapter {
     fn spawn_inbound(
         &self,
@@ -38,16 +38,16 @@ impl InboundListenerCapability for HttpConnectAdapter {
     }
 }
 
-#[cfg(feature = "http_connect")]
+#[cfg(feature = "http")]
 impl TcpOutboundCapability for HttpConnectAdapter {}
 
-#[cfg(feature = "http_connect")]
+#[cfg(feature = "http")]
 impl UdpFlowCapability for HttpConnectAdapter {}
 
-#[cfg(feature = "http_connect")]
+#[cfg(feature = "http")]
 impl UdpPacketPathCapability for HttpConnectAdapter {}
 
-#[cfg(feature = "http_connect")]
+#[cfg(feature = "http")]
 impl ProtocolSupportCapability for HttpConnectAdapter {
     fn name(&self) -> &'static str {
         <Self as NamedProtocolAdapter>::PROTOCOL_NAME
@@ -74,9 +74,9 @@ impl ProtocolSupportCapability for HttpConnectAdapter {
     }
 }
 
-#[cfg(feature = "http_connect")]
+#[cfg(feature = "http")]
 impl ProtocolMetadata for HttpConnectAdapter {
     fn descriptor(&self) -> ProtocolCapabilityDescriptor {
-        ::http_connect::HttpConnectProtocol.descriptor()
+        ::http::HttpConnectProtocol.descriptor()
     }
 }

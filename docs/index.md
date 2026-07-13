@@ -66,7 +66,7 @@ cargo build --release
   ▼
 ┌───────────────────────────────────────┐
 │ Inbound                               │
-│ socks5 · http_connect · mixed · vless │
+│ socks5 · http · mixed · vless │
 │ hysteria2 · shadowsocks · trojan      │
 │ vmess · mieru · direct · tun          │
 ├───────────────────────────────────────┤

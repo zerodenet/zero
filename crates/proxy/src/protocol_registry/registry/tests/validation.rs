@@ -1,17 +1,17 @@
-#[cfg(not(feature = "http_connect"))]
+#[cfg(not(feature = "http"))]
 use zero_config::InboundConfig;
 #[cfg(not(feature = "socks5"))]
 use zero_config::OutboundConfig;
-#[cfg(any(not(feature = "http_connect"), not(feature = "socks5")))]
+#[cfg(any(not(feature = "http"), not(feature = "socks5")))]
 use zero_engine::EngineError;
 
-#[cfg(not(feature = "http_connect"))]
+#[cfg(not(feature = "http"))]
 #[test]
 fn uncompiled_inbound_protocol_fails_with_feature_metadata() {
     let inbound: InboundConfig = serde_json::from_value(serde_json::json!({
         "tag": "disabled-http",
         "listen": { "address": "127.0.0.1", "port": 18080 },
-        "protocol": { "type": "http_connect" }
+        "protocol": { "type": "http" }
     }))
     .expect("valid HTTP CONNECT inbound config");
 
@@ -24,8 +24,8 @@ fn uncompiled_inbound_protocol_fails_with_feature_metadata() {
         EngineError::CompiledFeatureDisabled {
             kind: "inbound",
             tag,
-            protocol: "http_connect",
-            feature: "http_connect",
+            protocol: "http",
+            feature: "http",
         } if tag == "disabled-http"
     ));
 }

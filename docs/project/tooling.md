@@ -52,8 +52,8 @@ and control-plane features to internal crates.
 | `full` | Enables all protocol capabilities and `dns` |
 | `dns` | DNS subsystem |
 | `socks5` | SOCKS5 inbound/outbound, including TCP CONNECT and UDP ASSOCIATE |
-| `http_connect` | HTTP CONNECT inbound |
-| `mixed` | Same-port inbound auto-detection for SOCKS5 TCP/UDP and HTTP CONNECT TCP; depends on `socks5` and `http_connect` |
+| `http` | HTTP CONNECT inbound |
+| `mixed` | Same-port inbound auto-detection for SOCKS5 TCP/UDP and HTTP CONNECT TCP; depends on `socks5` and `http` |
 | `vless` | VLESS inbound/outbound and related transports |
 | `hysteria2` | Hysteria2 inbound/outbound |
 | `shadowsocks` | Shadowsocks inbound/outbound |

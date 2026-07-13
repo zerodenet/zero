@@ -201,7 +201,7 @@ POST /api/v1/commands
 ### 当前支持的协议
 
 - `socks5`
-- `http_connect`
+- `http`
 - `mixed` -- 同一端口自动检测 SOCKS5 和 HTTP CONNECT；SOCKS5 分支支持 TCP CONNECT 和 UDP ASSOCIATE，HTTP CONNECT 分支仅支持 TCP
 - `vless` -- TCP/TLS/WS/WSS, Reality, gRPC, H2, HTTPUpgrade, XHTTP（原 SplitHTTP，`mode` 默认 `stream-one` 单连接最终跳；`quic` 已被 XTLS 弃用）；MUX + Vision flow + UDP over TCP
 - `hysteria2` -- QUIC，TCP 流和 UDP datagram 转发

@@ -12,7 +12,7 @@
 | `hysteria2` | Hysteria2 | hysteria | ✅ | ⚠️ | — | QUIC |
 | `mieru` | Mieru | mieru | ✅ | ✅ | — | TCP |
 | `socks5` | SOCKS5 | RFC 1928 | ✅ | ✅ | — | TCP |
-| `http_connect` | HTTP CONNECT | RFC 7231 | ✅ | — | — | TCP |
+| `http` | HTTP CONNECT | RFC 7231 | ✅ | — | — | TCP |
 | `vmess` | VMess | Xray-core | ⚠️ stub | ⚠️ | ⚠️ | — |
 
 ## 不是外部协议

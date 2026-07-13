@@ -10,13 +10,13 @@ homepage.workspace = true
 [features]
 default = [
     "socks5",
-    "http_connect",
+    "http",
     "mixed",
     "vless",
 ]
 socks5 = ["zero-transport/socks5", "dep:socks5"]
-http_connect = ["dep:http_connect"]
-mixed = ["socks5", "http_connect"]
+http = ["dep:http"]
+mixed = ["socks5", "http"]
 transport_quic = ["zero-transport/quic"]
 vless = [
     "zero-platform-tokio/vless-reality",
@@ -87,7 +87,7 @@ zero-core = { path = "../core" }
 zero-dns = { path = "../dns" }
 zero-engine = { path = "../engine" }
 zero-platform-tokio = { path = "../platform/tokio" }
-http_connect = { path = "../../protocols/http-connect", optional = true }
+http = { path = "../../protocols/http", optional = true }
 socks5 = { path = "../../protocols/socks5", optional = true }
 vless = { path = "../../protocols/vless", optional = true, default-features = false }
 hysteria2 = { path = "../../protocols/hysteria2", optional = true, default-features = false }

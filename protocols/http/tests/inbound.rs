@@ -1,6 +1,6 @@
 use std::collections::VecDeque;
 
-use http_connect::{HttpConnectInbound, HttpConnectResponse};
+use http::{HttpConnectInbound, HttpConnectResponse};
 use zero_core::Address;
 use zero_traits::AsyncSocket;
 

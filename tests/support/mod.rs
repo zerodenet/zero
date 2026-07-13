@@ -181,7 +181,7 @@ pub fn socks5_connect_ipv4(port: u16, addr: [u8; 4], target_port: u16) -> TcpStr
     stream
 }
 
-pub fn http_connect_tunnel(port: u16, authority: &str) -> TcpStream {
+pub fn http_tunnel(port: u16, authority: &str) -> TcpStream {
     let mut stream = TcpStream::connect(("127.0.0.1", port)).expect("connect http proxy");
     let request =
         format!("CONNECT {authority} HTTP/1.1\r\nHost: {authority}\r\nConnection: close\r\n\r\n");

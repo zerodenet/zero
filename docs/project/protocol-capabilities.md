@@ -57,7 +57,7 @@
 | `direct` | `supported` | `supported` | `unsupported` | `supported` | `supported` | `not_applicable` | `kernel_builtin` |
 | `block` | `supported` | `unsupported` | `unsupported` | `supported` | `supported` | `not_applicable` | `kernel_builtin` |
 | `socks5` | `supported` | `supported` | `supported` | `supported` | `supported` | `not_applicable` | `rfc_1928_rfc_1929` |
-| `http_connect` | `supported` | `supported` | `not_applicable` | `unsupported` | `not_applicable` | `not_applicable` | `rfc_7231_connect` |
+| `http` | `supported` | `supported` | `not_applicable` | `unsupported` | `not_applicable` | `not_applicable` | `rfc_7231_connect` |
 | `mixed` | `supported` | `supported` | `supported` | `unsupported` | `unsupported` | `not_applicable` | `kernel_builtin` |
 | `vless` | `partial` | `supported` | `partial` | `supported` | `partial` | `partial` | `xray_core_vless` |
 | `hysteria2` | `partial` | `supported` | `partial` | `supported` | `partial` | `unsupported` | `hysteria` |
@@ -84,7 +84,7 @@
 | `direct` | 完备 | 无剩余协议缺口 |
 | `block` | 完备 | 无剩余协议缺口 |
 | `socks5` | 完备 | 无剩余协议缺口 |
-| `http_connect` | 完备 | UDP 不适用 |
+| `http` | 完备 | UDP 不适用 |
 | `mixed` | 完备 | Mixed 是内核入站多路复用器：SOCKS5 TCP CONNECT 和 UDP ASSOCIATE 使用 SOCKS5 运行时路径；HTTP CONNECT 使用 HTTP TCP 运行时路径 |
 | `vless` | TCP 和 UDP-over-stream 基线路径完备 | UDP MUX outbound 尚未接入 VlessUdpOutboundManager；XHTTP `stream-one` 最终跳路径尚未与上游 Xray 完成外部互通验证；QUIC 传输已被 XTLS 弃用 |
 | `trojan` | TCP 和 UDP-over-stream 基线路径完备 | 外部互操作性覆盖不完整（中继流 TLS 指纹已支持，见 `relay_stream_tls_client_fingerprint_is_not_supported`） |
@@ -100,7 +100,7 @@
 3. `zero-engine` 暴露通用管控面能力。它不维护协议能力矩阵。
 4. 外部协议描述符位于其协议 crates 中：
    - `socks5::Socks5Protocol`
-   - `http_connect::HttpConnectProtocol`
+   - `http::HttpConnectProtocol`
    - `vless::VlessProtocol`
    - `hysteria2::Hysteria2Protocol`
    - `shadowsocks::ShadowsocksProtocol`

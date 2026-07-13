@@ -544,13 +544,13 @@ fn proxy_handle_capabilities_use_protocol_inventory() {
     assert!(socks5.outbound.tcp.supported);
     assert!(socks5.outbound.udp.supported);
 
-    let http_connect = capabilities
+    let http = capabilities
         .protocols
         .iter()
-        .find(|protocol| protocol.protocol == "http_connect")
-        .expect("http_connect capability");
-    assert_eq!(http_connect.inbound.udp.level, "not_applicable");
-    assert_eq!(http_connect.outbound.tcp.level, "unsupported");
+        .find(|protocol| protocol.protocol == "http")
+        .expect("http capability");
+    assert_eq!(http.inbound.udp.level, "not_applicable");
+    assert_eq!(http.outbound.tcp.level, "unsupported");
 
     let vless = capabilities
         .protocols

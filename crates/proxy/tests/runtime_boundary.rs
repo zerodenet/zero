@@ -16,11 +16,11 @@ fn repo_root() -> PathBuf {
 
 fn virtual_repo_relative(relative: &str) -> Option<&'static str> {
     match relative {
-        "crates/proxy/src/transport/http_connect_inbound.rs" => {
-            Some("crates/proxy/src/adapters/http_connect/inbound.rs")
+        "crates/proxy/src/transport/http_inbound.rs" => {
+            Some("crates/proxy/src/adapters/http/inbound.rs")
         }
-        "crates/proxy/src/transport/http_connect_inbound/listener.rs" => {
-            Some("crates/proxy/src/adapters/http_connect/inbound/listener.rs")
+        "crates/proxy/src/transport/http_inbound/listener.rs" => {
+            Some("crates/proxy/src/adapters/http/inbound/listener.rs")
         }
         "crates/proxy/src/transport/hysteria2_inbound.rs" => {
             Some("crates/proxy/src/adapters/hysteria2/inbound.rs")
@@ -88,10 +88,8 @@ fn virtual_repo_relative(relative: &str) -> Option<&'static str> {
 
 fn virtual_manifest_relative(relative: &str) -> Option<&'static str> {
     match relative {
-        "src/transport/http_connect_inbound.rs" => Some("src/adapters/http_connect/inbound.rs"),
-        "src/transport/http_connect_inbound/listener.rs" => {
-            Some("src/adapters/http_connect/inbound/listener.rs")
-        }
+        "src/transport/http_inbound.rs" => Some("src/adapters/http/inbound.rs"),
+        "src/transport/http_inbound/listener.rs" => Some("src/adapters/http/inbound/listener.rs"),
         "src/transport/hysteria2_inbound.rs" => Some("src/adapters/hysteria2/inbound.rs"),
         "src/transport/hysteria2_inbound/request.rs" => {
             Some("src/adapters/hysteria2/inbound/request.rs")
@@ -401,8 +399,8 @@ fn repo_rust_sources_under(relative: &str) -> Vec<PathBuf> {
 
 fn protocol_inbound_sources() -> Vec<PathBuf> {
     [
-        "src/transport/http_connect_inbound.rs",
-        "src/transport/http_connect_inbound/listener.rs",
+        "src/transport/http_inbound.rs",
+        "src/transport/http_inbound/listener.rs",
         "src/transport/socks5_inbound/listener.rs",
         "src/transport/socks5_inbound/listener",
         "src/transport/shadowsocks_inbound/listener.rs",
@@ -816,7 +814,7 @@ fn production_sources_do_not_hide_dead_code_or_unused_facades() {
     roots.extend(repo_rust_sources_under("crates/transport/src"));
     for protocol in [
         "hysteria2",
-        "http-connect",
+        "http",
         "mieru",
         "shadowsocks",
         "socks5",
@@ -2777,8 +2775,8 @@ fn inbound_root_is_facade_only() {
     }
 
     for forbidden in [
-        "mod http_connect;",
-        "pub(crate) use http_connect::run_http_connect_listener_with_bound;",
+        "mod http;",
+        "pub(crate) use http::run_http_listener_with_bound;",
         "mod socks5;",
         "pub(crate) use socks5::run_socks5_listener_with_bound;",
         "pub(crate) use socks5::Socks5InboundListenerRequest;",
@@ -4404,7 +4402,7 @@ fn adapter_root_is_facade_only() {
     for expected in [
         "mod identity;",
         "mod direct;",
-        "mod http_connect;",
+        "mod http;",
         "mod hysteria2;",
         "mod mieru;",
         "mod mixed;",
@@ -4414,7 +4412,7 @@ fn adapter_root_is_facade_only() {
         "mod vless;",
         "mod vmess;",
         "pub(crate) use direct::DirectAdapter;",
-        "pub(crate) use http_connect::HttpConnectAdapter;",
+        "pub(crate) use http::HttpConnectAdapter;",
         "pub(crate) use hysteria2::Hysteria2Adapter;",
         "pub(crate) use mieru::MieruAdapter;",
         "pub(crate) use mixed::MixedAdapter;",
@@ -5133,8 +5131,8 @@ fn adapter_roots_keep_inbound_runtime_details_in_inbound_modules() {
             true,
         ),
         (
-            "http_connect",
-            &["run_http_connect_listener_with_bound", "bound.into_tcp()"],
+            "http",
+            &["run_http_listener_with_bound", "bound.into_tcp()"],
             true,
         ),
         (
@@ -5349,7 +5347,7 @@ fn tcp_inbound_source_address_conversion_lives_in_platform_layer() {
 
     for source_path in [
         "src/inbound/direct.rs",
-        "src/transport/http_connect_inbound/listener.rs",
+        "src/transport/http_inbound/listener.rs",
         "src/adapters/mixed/inbound/listener.rs",
         "src/transport/socks5_inbound/listener.rs",
         "src/transport/shadowsocks_inbound/listener.rs",
@@ -5383,7 +5381,7 @@ fn tcp_inbound_source_address_conversion_lives_in_platform_layer() {
 
     for source_path in [
         "src/inbound/direct.rs",
-        "src/transport/http_connect_inbound/listener.rs",
+        "src/transport/http_inbound/listener.rs",
         "src/adapters/mixed/inbound/listener.rs",
         "src/transport/mieru_inbound/listener.rs",
         "src/transport/shadowsocks_inbound/listener.rs",
@@ -5921,17 +5919,16 @@ fn generic_udp_dispatch_does_not_encode_protocol_packets_directly() {
 }
 
 #[test]
-fn http_connect_redirect_response_framing_stays_in_protocol_crate() {
+fn http_redirect_response_framing_stays_in_protocol_crate() {
     assert!(
-        !manifest_dir().join("src/inbound/http_connect.rs").exists(),
+        !manifest_dir().join("src/inbound/http.rs").exists(),
         "HTTP CONNECT protocol inbound glue should not live under src/inbound"
     );
-    let inbound = read("src/transport/http_connect_inbound/listener.rs");
+    let inbound = read("src/transport/http_inbound/listener.rs");
     let mixed = read("src/adapters/mixed/inbound/listener.rs");
     let redirect = read("src/runtime/http_redirect.rs");
-    let protocol_inbound =
-        fs::read_to_string(repo_root().join("protocols/http-connect/src/inbound.rs"))
-            .expect("read http-connect protocol inbound source");
+    let protocol_inbound = fs::read_to_string(repo_root().join("protocols/http/src/inbound.rs"))
+        .expect("read http protocol inbound source");
 
     assert!(
         inbound.contains("select_redirect_target")
@@ -5949,7 +5946,7 @@ fn http_connect_redirect_response_framing_stays_in_protocol_crate() {
             && protocol_inbound.contains("pub async fn send_redirect_response")
             && protocol_inbound.contains("HTTP/1.1 {status} Found")
             && protocol_inbound.contains("Location: {location}"),
-        "HTTP CONNECT redirect wire response framing should live in protocols/http-connect; proxy should only select status/location"
+        "HTTP CONNECT redirect wire response framing should live in protocols/http; proxy should only select status/location"
     );
     assert!(
         inbound.contains(".send_success_response(")
@@ -5983,7 +5980,7 @@ fn http_connect_redirect_response_framing_stays_in_protocol_crate() {
             && protocol_inbound.contains("HttpConnectResponse::MethodNotAllowed")
             && protocol_inbound.contains("HttpConnectResponse::Forbidden")
             && protocol_inbound.contains("HttpConnectResponse::BadGateway"),
-        "protocols/http-connect should own concrete response selection for common inbound outcomes"
+        "protocols/http should own concrete response selection for common inbound outcomes"
     );
 }
 
@@ -5998,7 +5995,7 @@ fn protocol_inventory_keeps_protocol_instances_private() {
         "ResolvedLeafOutbound::",
         "pub socks5_inbound:",
         "pub socks5_outbound:",
-        "pub http_connect_inbound:",
+        "pub http_inbound:",
         "pub vless_inbound:",
         "pub vless_outbound:",
         "pub hysteria2_inbound:",
@@ -6026,7 +6023,7 @@ fn protocol_inventory_keeps_protocol_instances_private() {
 #[test]
 fn inventory_does_not_expose_concrete_protocol_accessors() {
     let protocol_access_patterns = [
-        "use http_connect::",
+        "use http::",
         "use shadowsocks::",
         "use socks5::",
         "use trojan::",
@@ -6034,7 +6031,7 @@ fn inventory_does_not_expose_concrete_protocol_accessors() {
         "use vmess::",
         "fn socks5_inbound_protocol(&self)",
         "fn socks5_outbound_protocol(&self)",
-        "fn http_connect_inbound_protocol(&self)",
+        "fn http_inbound_protocol(&self)",
         "fn vless_inbound_protocol(&self)",
         "fn vless_outbound_protocol(&self)",
         "fn shadowsocks_outbound_protocol(&self)",
@@ -11904,7 +11901,7 @@ fn protocol_support_capability_is_not_on_monolithic_adapter() {
 
     for source in [
         "src/adapters/direct.rs",
-        "src/adapters/http_connect.rs",
+        "src/adapters/http.rs",
         "src/adapters/hysteria2.rs",
         "src/adapters/mieru.rs",
         "src/adapters/mixed.rs",
@@ -12037,7 +12034,7 @@ fn udp_packet_path_capability_is_not_on_monolithic_adapter() {
 fn registered_adapters_implement_inbound_listener_capability_explicitly() {
     for (source, adapter) in [
         ("src/adapters/direct.rs", "DirectAdapter"),
-        ("src/adapters/http_connect.rs", "HttpConnectAdapter"),
+        ("src/adapters/http.rs", "HttpConnectAdapter"),
         ("src/adapters/hysteria2.rs", "Hysteria2Adapter"),
         ("src/adapters/mieru.rs", "MieruAdapter"),
         ("src/adapters/mixed.rs", "MixedAdapter"),
@@ -12059,7 +12056,7 @@ fn registered_adapters_implement_inbound_listener_capability_explicitly() {
 fn registered_adapters_implement_udp_flow_capability_explicitly() {
     for (source, adapter) in [
         ("src/adapters/direct.rs", "DirectAdapter"),
-        ("src/adapters/http_connect.rs", "HttpConnectAdapter"),
+        ("src/adapters/http.rs", "HttpConnectAdapter"),
         ("src/adapters/hysteria2.rs", "Hysteria2Adapter"),
         ("src/adapters/mieru.rs", "MieruAdapter"),
         ("src/adapters/mixed.rs", "MixedAdapter"),
@@ -12081,7 +12078,7 @@ fn registered_adapters_implement_udp_flow_capability_explicitly() {
 fn registered_adapters_implement_udp_packet_path_capability_explicitly() {
     for (source, adapter) in [
         ("src/adapters/direct.rs", "DirectAdapter"),
-        ("src/adapters/http_connect.rs", "HttpConnectAdapter"),
+        ("src/adapters/http.rs", "HttpConnectAdapter"),
         ("src/adapters/hysteria2.rs", "Hysteria2Adapter"),
         ("src/adapters/mieru.rs", "MieruAdapter"),
         ("src/adapters/mixed.rs", "MixedAdapter"),
@@ -12103,7 +12100,7 @@ fn registered_adapters_implement_udp_packet_path_capability_explicitly() {
 fn registered_adapters_implement_tcp_outbound_capability_explicitly() {
     for (source, adapter) in [
         ("src/adapters/direct.rs", "DirectAdapter"),
-        ("src/adapters/http_connect.rs", "HttpConnectAdapter"),
+        ("src/adapters/http.rs", "HttpConnectAdapter"),
         ("src/adapters/hysteria2.rs", "Hysteria2Adapter"),
         ("src/adapters/mieru.rs", "MieruAdapter"),
         ("src/adapters/mixed.rs", "MixedAdapter"),

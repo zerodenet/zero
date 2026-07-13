@@ -24,7 +24,7 @@ pub(crate) use tcp_relay::relay_bidirectional_metered_throttled;
 pub(crate) use zero_transport::ClientStream;
 #[cfg(any(
     feature = "socks5",
-    feature = "http_connect",
+    feature = "http",
     feature = "mixed",
     feature = "vless",
     feature = "shadowsocks",

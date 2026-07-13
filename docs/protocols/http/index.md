@@ -1,6 +1,6 @@
 # HTTP CONNECT
 
-HTTP CONNECT 是 Zero 中的稳定 TCP 入站协议。模块结构与 `protocols/http-connect/src/` 对应。
+HTTP CONNECT 是 Zero 中的稳定 TCP 入站协议。模块结构与 `protocols/http/src/` 对应。
 
 ## 当前能力
 

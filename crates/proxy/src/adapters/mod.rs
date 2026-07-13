@@ -1,8 +1,8 @@
 //! Concrete protocol capability bridges for each compiled-in protocol.
 
 mod direct;
-#[cfg(feature = "http_connect")]
-mod http_connect;
+#[cfg(feature = "http")]
+mod http;
 #[cfg(feature = "hysteria2")]
 mod hysteria2;
 mod identity;
@@ -22,8 +22,8 @@ mod vless;
 mod vmess;
 
 pub(crate) use direct::DirectAdapter;
-#[cfg(feature = "http_connect")]
-pub(crate) use http_connect::HttpConnectAdapter;
+#[cfg(feature = "http")]
+pub(crate) use http::HttpConnectAdapter;
 #[cfg(feature = "hysteria2")]
 pub(crate) use hysteria2::Hysteria2Adapter;
 #[cfg(feature = "mieru")]

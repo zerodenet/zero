@@ -109,7 +109,7 @@ API 能力列表。
       "limitations": []
     }
   ],
-  "build_features": ["status_api", "socks5", "http_connect", "mixed", "vless"],
+  "build_features": ["status_api", "socks5", "http", "mixed", "vless"],
   "permissions": ["read"]
 }
 ```

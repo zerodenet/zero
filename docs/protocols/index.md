@@ -17,7 +17,7 @@ This section tracks the protocol implementation surface in the current codebase.
 | Protocol | Config type | Status | TCP inbound | TCP outbound | UDP inbound | UDP outbound | Tracking |
 |------|------|------|-------------|--------------|-------------|--------------|----------|
 | SOCKS5 | `socks5` | `supported` | `supported` | `supported` | `supported` | `supported` | [SOCKS5](./socks5/index.md) |
-| HTTP CONNECT | `http_connect` | `supported` | `supported` | `unsupported` | `not_applicable` | `not_applicable` | [HTTP CONNECT](./http-connect/index.md) |
+| HTTP CONNECT | `http` | `supported` | `supported` | `unsupported` | `not_applicable` | `not_applicable` | [HTTP CONNECT](./http/index.md) |
 | Mixed | `mixed` | `supported` | `supported` | `unsupported` | `supported` | `unsupported` | [Mixed](./mixed/index.md) |
 | VLESS | `vless` | `partial` | `supported` | `supported` | `partial` | `partial` | [VLESS](./vless/index.md) |
 | Hysteria2 | `hysteria2` | `partial` | `supported` | `supported` | `partial` | `partial` | [Hysteria2](./hysteria2/index.md) |

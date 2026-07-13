@@ -6,9 +6,8 @@ use std::net::TcpListener;
 use std::thread;
 
 use support::{
-    acquire_port_lock, create_temp_dir, free_port, http_connect_tunnel, remove_temp_dir,
-    remove_temp_file, socks5_connect, socks5_connect_ipv4, spawn_zero, stop_child, wait_for_port,
-    write_temp_config,
+    acquire_port_lock, create_temp_dir, free_port, http_tunnel, remove_temp_dir, remove_temp_file,
+    socks5_connect, socks5_connect_ipv4, spawn_zero, stop_child, wait_for_port, write_temp_config,
 };
 
 #[test]
@@ -53,7 +52,7 @@ fn zero_binary_relays_tcp_through_socks5_direct() {
 }
 
 #[test]
-fn zero_binary_relays_tcp_through_http_connect() {
+fn zero_binary_relays_tcp_through_http() {
     let _lock = acquire_port_lock();
     let proxy_port = free_port();
     let echo_port = free_port();
@@ -64,7 +63,7 @@ fn zero_binary_relays_tcp_through_http_connect() {
                 {{
                     "tag": "http-in",
                     "listen": {{ "address": "127.0.0.1", "port": {proxy_port} }},
-                    "protocol": {{ "type": "http_connect" }}
+                    "protocol": {{ "type": "http" }}
                 }}
             ],
             "outbounds": [],
@@ -74,14 +73,14 @@ fn zero_binary_relays_tcp_through_http_connect() {
             }}
         }}"#
     );
-    let config_path = write_temp_config(&config, "proxy-smoke-http_connect");
+    let config_path = write_temp_config(&config, "proxy-smoke-http");
 
     let echo_thread = spawn_echo_server(echo_port);
     let mut child = spawn_zero(&["run", config_path.to_str().expect("utf-8 config path")]);
 
     wait_for_port(proxy_port);
 
-    let mut stream = http_connect_tunnel(proxy_port, &format!("127.0.0.1:{echo_port}"));
+    let mut stream = http_tunnel(proxy_port, &format!("127.0.0.1:{echo_port}"));
     stream.write_all(b"pong").expect("write payload");
 
     let mut echoed = [0_u8; 4];

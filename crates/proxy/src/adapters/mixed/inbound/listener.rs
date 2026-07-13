@@ -2,7 +2,7 @@ use tokio::sync::watch;
 use zero_engine::EngineError;
 use zero_traits::AsyncSocket;
 
-use crate::adapters::http_connect::inbound::HttpConnectInboundHandler;
+use crate::adapters::http::inbound::HttpConnectInboundHandler;
 use crate::adapters::socks5::inbound::handle_socks5_connection;
 use crate::logging::log_listener_connection_error;
 use crate::runtime::listener_loop::{run_tcp_listener_loop, TcpListenerLoopRequest};
@@ -80,11 +80,7 @@ async fn handle_mixed_connection(
         .await;
     } else {
         let mut metered = MeteredStream::new(relay_stream);
-        match http_h
-            .http_connect_inbound()
-            .accept_request(&mut metered)
-            .await
-        {
+        match http_h.http_inbound().accept_request(&mut metered).await {
             Ok(session) => {
                 let _ = serve_inbound(
                     &engine,
@@ -98,7 +94,7 @@ async fn handle_mixed_connection(
             }
             Err(err) => {
                 if http_h
-                    .http_connect_inbound()
+                    .http_inbound()
                     .send_accept_error_response(&mut metered, &err)
                     .await
                     .unwrap_or(false)

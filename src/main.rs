@@ -816,8 +816,8 @@ fn collect_build_features() -> Vec<String> {
     if cfg!(feature = "socks5") {
         features.push("socks5".to_owned());
     }
-    if cfg!(feature = "http_connect") {
-        features.push("http_connect".to_owned());
+    if cfg!(feature = "http") {
+        features.push("http".to_owned());
     }
     if cfg!(feature = "mixed") {
         features.push("mixed".to_owned());

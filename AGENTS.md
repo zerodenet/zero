@@ -26,7 +26,7 @@ Root `src/main.rs` builds the `zero` binary. Reusable crates live under `crates/
 
 ### Protocols
 
-External protocol implementations under `protocols/`: `socks5`, `http-connect`, `vless`, `hysteria2`, `shadowsocks`, `trojan`, `vmess`, `mieru`. Each is a standalone crate that depends only on `zero-core` and `zero-traits` (plus its own crypto). The proxy wires them through registered capability objects.
+External protocol implementations under `protocols/`: `socks5`, `http`, `vless`, `hysteria2`, `shadowsocks`, `trojan`, `vmess`, `mieru`. Each is a standalone crate that depends only on `zero-core` and `zero-traits` (plus its own crypto). The proxy wires them through registered capability objects.
 
 ### Key paths
 
@@ -39,7 +39,7 @@ External protocol implementations under `protocols/`: `socks5`, `http-connect`, 
 ## Features & Build
 
 Default build is `--features full,status_api`. Optional features:
-- `socks5`, `http_connect`, `mixed`, `vless`
+- `socks5`, `http`, `mixed`, `vless`
 - `hysteria2`, `shadowsocks`, `trojan`, `vmess`, `mieru`, `dns`
 - `status_api` enables runtime control endpoint and selector switching
 - `event_dispatcher`, `sink_jsonl`, `panel_connector` enable event delivery and panel connector support
