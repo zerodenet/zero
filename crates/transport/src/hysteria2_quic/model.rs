@@ -25,6 +25,11 @@ pub struct OwnedHysteria2InboundTcpResponseProtocol {
 }
 
 #[cfg(feature = "hysteria2")]
+pub struct Hysteria2AuthenticatedQuicConnection {
+    pub(super) protocol: hysteria2::inbound::Hysteria2AcceptedQuicConnection,
+}
+
+#[cfg(feature = "hysteria2")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Hysteria2ManagedUdpPacketPathCarrierDescriptor {
     pub(super) protocol: hysteria2::udp::Hysteria2UdpPacketPathCarrierDescriptor,

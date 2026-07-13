@@ -73,7 +73,13 @@ where
             self.idle_deadline = None;
         }
 
-        match A::establish(proxy, association.clone(), session_id).await {
+        match A::establish(
+            crate::protocol_registry::UdpAdapterContext::new(proxy).runtime_services(),
+            association.clone(),
+            session_id,
+        )
+        .await
+        {
             Ok(a) => {
                 proxy.record_udp_upstream_association_created();
                 self.idle_deadline = Some(TokioInstant::now() + proxy.udp_upstream_idle_timeout());

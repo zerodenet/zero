@@ -10,6 +10,8 @@ pub mod h2;
 pub mod http_upgrade;
 #[cfg(feature = "quic")]
 pub mod hysteria2_quic;
+#[cfg(feature = "hysteria2")]
+pub mod inbound_quic;
 pub mod inbound_route;
 #[cfg(any(feature = "vless", feature = "vmess", feature = "trojan"))]
 pub mod inbound_stack;

@@ -7,16 +7,16 @@ use zero_transport::socks5_transport::{
     Socks5UpstreamUdpAssociation,
 };
 
-use crate::runtime::Proxy;
+use crate::protocol_registry::{UdpAssociationCloseKind, UdpRuntimeServices};
 
 #[derive(Clone)]
 struct ProxySocks5UdpAssociationRuntime {
-    proxy: Proxy,
+    services: UdpRuntimeServices,
 }
 
 impl ProxySocks5UdpAssociationRuntime {
-    fn new(proxy: Proxy) -> Self {
-        Self { proxy }
+    fn new(services: UdpRuntimeServices) -> Self {
+        Self { services }
     }
 }
 
@@ -29,9 +29,7 @@ impl zero_transport::socks5_transport::Socks5UdpAssociationRuntime
         server: &str,
         port: u16,
     ) -> Result<zero_platform_tokio::TokioSocket, EngineError> {
-        self.proxy
-            .connect_upstream_host_owned(server.to_owned(), port)
-            .await
+        self.services.connect_upstream(server, port).await
     }
 
     async fn resolve_udp_relay(
@@ -45,17 +43,13 @@ impl zero_transport::socks5_transport::Socks5UdpAssociationRuntime
         ),
         EngineError,
     > {
-        let (relay_addr, relay) = crate::runtime::udp_socket::resolve_udp_peer_endpoint(
-            &self.proxy,
-            &relay_address,
-            relay_port,
-            "failed to resolve upstream socks5 udp relay",
-        )
-        .await?;
-        Ok((
-            zero_platform_tokio::socket_addr_to_socket_address(relay_addr),
-            relay,
-        ))
+        self.services
+            .resolve_udp_peer(
+                &relay_address,
+                relay_port,
+                "failed to resolve upstream socks5 udp relay",
+            )
+            .await
     }
 
     fn record_control_traffic(
@@ -63,31 +57,34 @@ impl zero_transport::socks5_transport::Socks5UdpAssociationRuntime
         session_id: u64,
         control: &mut crate::transport::MeteredStream<zero_platform_tokio::TokioSocket>,
     ) {
-        self.proxy
-            .record_session_outbound_traffic(session_id, control.drain_traffic());
+        self.services
+            .record_control_traffic(session_id, control.drain_traffic());
     }
 
     fn record_close(&self, reason: Socks5UpstreamAssociationCloseReason) {
         match reason {
             Socks5UpstreamAssociationCloseReason::Closed => {
-                self.proxy.record_udp_upstream_association_closed();
+                self.services
+                    .record_association_close(UdpAssociationCloseKind::Closed);
             }
             Socks5UpstreamAssociationCloseReason::IdleTimeout => {
-                self.proxy.record_udp_upstream_association_idle_timeout();
+                self.services
+                    .record_association_close(UdpAssociationCloseKind::IdleTimeout);
             }
             Socks5UpstreamAssociationCloseReason::Dropped => {
-                self.proxy.record_udp_upstream_association_dropped();
+                self.services
+                    .record_association_close(UdpAssociationCloseKind::Dropped);
             }
         }
     }
 }
 
 pub(super) async fn establish_packet_path_association(
-    proxy: &Proxy,
+    services: UdpRuntimeServices,
     build: zero_transport::socks5_transport::Socks5ManagedUdpPacketPathCarrierBuild,
 ) -> Result<Socks5UpstreamUdpAssociation, EngineError> {
     zero_transport::socks5_transport::establish_packet_path_udp_association(
-        ProxySocks5UdpAssociationRuntime::new(proxy.clone()),
+        ProxySocks5UdpAssociationRuntime::new(services),
         build,
         0,
     )
@@ -120,12 +117,12 @@ impl
     > for Socks5UpstreamUdpAssociation
 {
     async fn establish(
-        proxy: &Proxy,
+        services: UdpRuntimeServices,
         target: Socks5ManagedUdpAssociationTarget,
         session_id: u64,
     ) -> Result<Self, EngineError> {
         zero_transport::socks5_transport::establish_registered_udp_association(
-            ProxySocks5UdpAssociationRuntime::new(proxy.clone()),
+            ProxySocks5UdpAssociationRuntime::new(services),
             target,
             session_id,
         )

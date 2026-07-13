@@ -276,6 +276,24 @@ impl ProtocolSupportCapability for FakeTcpCapability {
     }
 }
 
+struct FakeInboundOperation;
+
+impl crate::runtime::inbound_operation::PreparedInboundListenerOperation for FakeInboundOperation {
+    fn execute(
+        self: Box<Self>,
+        _: crate::runtime::Proxy,
+        bound: crate::protocol_registry::BoundInbound,
+        _: tokio::sync::watch::Receiver<bool>,
+    ) -> std::pin::Pin<
+        Box<dyn std::future::Future<Output = Result<(), EngineError>> + Send + 'static>,
+    > {
+        Box::pin(async move {
+            drop(bound);
+            Ok(())
+        })
+    }
+}
+
 #[async_trait]
 impl InboundListenerCapability for FakeTcpCapability {
     async fn bind_inbound(
@@ -304,14 +322,7 @@ impl InboundListenerCapability for FakeTcpCapability {
         EngineError,
     > {
         self.calls.inbound_spawns.fetch_add(1, Ordering::SeqCst);
-        Ok(Box::new(
-            crate::runtime::inbound_operation::InboundListenerOperation::new(
-                |_, bound: crate::protocol_registry::BoundInbound, _| async move {
-                    drop(bound);
-                    Ok(())
-                },
-            ),
-        ))
+        Ok(Box::new(FakeInboundOperation))
     }
 }
 
@@ -620,6 +631,7 @@ impl TcpOutboundCapability for FakeTcpCapability {
     fn prepare_tcp_connect<'a>(
         &'a self,
         _: &'a ResolvedLeafOutbound<'a>,
+        _: Option<&std::path::Path>,
     ) -> Result<Box<dyn PreparedTcpConnectOperation + 'a>, TcpOutboundFailure> {
         Ok(Box::new(FakeTcpConnectOperation {
             calls: self.calls.clone(),
@@ -629,6 +641,7 @@ impl TcpOutboundCapability for FakeTcpCapability {
     fn prepare_tcp_relay_hop<'a>(
         &'a self,
         _: &'a ResolvedLeafOutbound<'a>,
+        _: Option<&std::path::Path>,
     ) -> Result<Box<dyn PreparedTcpRelayOperation + 'a>, EngineError> {
         Ok(Box::new(FakeTcpRelayOperation {
             calls: self.calls.clone(),

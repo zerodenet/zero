@@ -22,12 +22,12 @@ use crate::protocol_registry::{
 use crate::runtime::path::TcpPathCategory;
 #[cfg(feature = "trojan")]
 use crate::runtime::tcp_dispatch::operation::{
-    PreparedTcpConnectOperation, PreparedTcpRelayOperation, TrojanTcpConnectOperation,
-    TrojanTcpRelayOperation,
+    prepare_transport_bridge_tcp_connect, prepare_transport_bridge_tcp_relay,
+    PreparedTcpConnectOperation, PreparedTcpRelayOperation,
 };
 #[cfg(feature = "trojan")]
 use crate::runtime::udp_dispatch::operation::{
-    PreparedTransportUdpOperation, PreparedUdpFlowOperation, TrojanTransportUdpOperation,
+    PreparedTransportUdpOperation, PreparedUdpFlowOperation, TransportBridgeUdpOperation,
 };
 #[cfg(feature = "trojan")]
 use crate::runtime::udp_dispatch::FlowFailure;
@@ -134,21 +134,17 @@ impl TcpOutboundCapability for TrojanAdapter {
     fn prepare_tcp_connect<'a>(
         &'a self,
         leaf: &'a ResolvedLeafOutbound<'a>,
+        source_dir: Option<&std::path::Path>,
     ) -> Result<Box<dyn PreparedTcpConnectOperation + 'a>, TcpOutboundFailure> {
-        Ok(Box::new(TrojanTcpConnectOperation {
-            bridge: self.bridge(),
-            leaf,
-        }))
+        prepare_transport_bridge_tcp_connect(self.bridge(), source_dir, leaf)
     }
 
     fn prepare_tcp_relay_hop<'a>(
         &'a self,
         leaf: &'a ResolvedLeafOutbound<'a>,
+        source_dir: Option<&std::path::Path>,
     ) -> Result<Box<dyn PreparedTcpRelayOperation + 'a>, EngineError> {
-        Ok(Box::new(TrojanTcpRelayOperation {
-            bridge: self.bridge(),
-            leaf,
-        }))
+        prepare_transport_bridge_tcp_relay(self.bridge(), source_dir, leaf)
     }
 }
 
@@ -159,7 +155,7 @@ impl UdpFlowCapability for TrojanAdapter {
         &'a self,
         leaf: &'a ResolvedLeafOutbound<'a>,
     ) -> Result<Box<dyn PreparedUdpFlowOperation + 'a>, FlowFailure> {
-        Ok(Box::new(TrojanTransportUdpOperation {
+        Ok(Box::new(TransportBridgeUdpOperation {
             bridge: self.bridge(),
             operation: PreparedTransportUdpOperation::Direct { leaf },
         }))
@@ -170,7 +166,7 @@ impl UdpFlowCapability for TrojanAdapter {
         carrier: crate::transport::RelayCarrier,
         leaf: &'a ResolvedLeafOutbound<'a>,
     ) -> Result<Box<dyn PreparedUdpFlowOperation + 'a>, FlowFailure> {
-        Ok(Box::new(TrojanTransportUdpOperation {
+        Ok(Box::new(TransportBridgeUdpOperation {
             bridge: self.bridge(),
             operation: PreparedTransportUdpOperation::RelayFinalHop { carrier, leaf },
         }))

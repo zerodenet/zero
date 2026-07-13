@@ -10,6 +10,6 @@ pub(crate) use quic::{run_logged_quic_stream_listener_loop, LoggedQuicStreamList
 #[cfg(feature = "hysteria2")]
 pub(crate) use quic::{run_quic_listener_loop, QuicListenerLoopRequest};
 pub(crate) use system::{run_system_tcp_stack_loop, SystemTcpStackLoopRequest};
-#[cfg(any(feature = "vless", feature = "vmess", feature = "trojan"))]
 pub(crate) use tcp::{run_logged_tcp_socket_listener_loop, LoggedTcpSocketListenerRequest};
+#[cfg(test)]
 pub(crate) use tcp::{run_tcp_listener_loop, TcpListenerLoopRequest};

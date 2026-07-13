@@ -4,7 +4,6 @@ use zero_transport::socks5_transport::{
 };
 
 use super::upstream_association::establish_packet_path_association;
-use crate::runtime::Proxy;
 
 impl crate::runtime::udp_flow::packet_path::PacketPathCarrierDescriptorBuild
     for zero_transport::socks5_transport::Socks5ManagedUdpPacketPathCarrierDescriptor
@@ -25,12 +24,12 @@ pub(super) fn carrier_descriptor(
 }
 
 pub(super) async fn build(
-    proxy: &Proxy,
+    services: crate::protocol_registry::UdpRuntimeServices,
     plan: Socks5ManagedUdpPacketPathPlan,
 ) -> Result<std::sync::Arc<dyn crate::runtime::udp_flow::packet_path::PacketPathCarrier>, EngineError>
 {
     let association = std::sync::Arc::new(
-        establish_packet_path_association(proxy, plan.into_carrier_build()).await?,
+        establish_packet_path_association(services, plan.into_carrier_build()).await?,
     ) as std::sync::Arc<Socks5UpstreamUdpAssociation>;
     Ok(crate::runtime::udp_flow::packet_path::packet_path_payload_carrier(association))
 }

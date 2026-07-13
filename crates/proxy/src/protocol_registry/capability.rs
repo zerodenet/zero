@@ -87,6 +87,7 @@ pub(crate) trait TcpOutboundCapability: Send + Sync {
     fn prepare_tcp_connect<'a>(
         &'a self,
         _leaf: &'a ResolvedLeafOutbound<'a>,
+        _source_dir: Option<&std::path::Path>,
     ) -> Result<Box<dyn PreparedTcpConnectOperation + 'a>, TcpOutboundFailure> {
         Err(super::defaults::tcp_outbound_unsupported())
     }
@@ -94,6 +95,7 @@ pub(crate) trait TcpOutboundCapability: Send + Sync {
     fn prepare_tcp_relay_hop<'a>(
         &'a self,
         _leaf: &'a ResolvedLeafOutbound<'a>,
+        _source_dir: Option<&std::path::Path>,
     ) -> Result<Box<dyn PreparedTcpRelayOperation + 'a>, EngineError> {
         Err(super::defaults::relay_hop_unsupported())
     }

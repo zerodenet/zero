@@ -21,7 +21,11 @@ impl ProtocolInventory {
                     error,
                     upstream_endpoint: None,
                 })?;
-        let operation = TcpOutboundCapability::prepare_tcp_connect(adapter.as_ref(), leaf)?;
+        let operation = TcpOutboundCapability::prepare_tcp_connect(
+            adapter.as_ref(),
+            leaf,
+            proxy.config.source_dir(),
+        )?;
         operation
             .execute(OutboundAdapterContext::new(proxy), session)
             .await
@@ -36,7 +40,11 @@ impl ProtocolInventory {
         leaf: &zero_engine::ResolvedLeafOutbound<'_>,
     ) -> Result<TcpRelayStream, EngineError> {
         let adapter = self.registry.find_outbound_leaf(leaf)?;
-        let operation = TcpOutboundCapability::prepare_tcp_relay_hop(adapter.as_ref(), leaf)?;
+        let operation = TcpOutboundCapability::prepare_tcp_relay_hop(
+            adapter.as_ref(),
+            leaf,
+            proxy.config.source_dir(),
+        )?;
         operation
             .execute(OutboundAdapterContext::new(proxy), stream, session)
             .await

@@ -30,7 +30,8 @@ pub use managed_udp::{
 };
 #[cfg(feature = "hysteria2")]
 pub use model::{
-    Hysteria2ManagedDatagramFlowResume, Hysteria2ManagedUdpFlowConfig, Hysteria2ManagedUdpFlowPlan,
+    Hysteria2AuthenticatedQuicConnection, Hysteria2ManagedDatagramFlowResume,
+    Hysteria2ManagedUdpFlowConfig, Hysteria2ManagedUdpFlowPlan,
     Hysteria2ManagedUdpPacketPathCarrierBuild, Hysteria2ManagedUdpPacketPathCarrierDescriptor,
     Hysteria2ManagedUdpPacketPathPlan, Hysteria2TransportLeaf, OwnedHysteria2InboundProfile,
     OwnedHysteria2InboundTcpResponseProtocol,

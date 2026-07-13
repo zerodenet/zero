@@ -1,114 +1,62 @@
-use tokio::sync::watch;
 use zero_engine::EngineError;
 use zero_traits::AsyncSocket;
 
 use crate::adapters::http::inbound::HttpConnectInboundHandler;
 use crate::adapters::socks5::inbound::handle_socks5_connection;
-use crate::logging::log_listener_connection_error;
-use crate::runtime::listener_loop::{run_tcp_listener_loop, TcpListenerLoopRequest};
-use crate::runtime::tcp_ingress::serve_inbound;
-use crate::runtime::Proxy;
+use crate::runtime::inbound_operation::{InboundConnectionContext, TcpInboundListenerOperation};
 use crate::transport::{MeteredStream, PrefixedSocket, TcpRelayStream};
 
+#[derive(Clone)]
 pub(crate) struct MixedInboundRequest {
-    pub(crate) inbound_tag: String,
     pub(crate) socks5_acceptor: zero_transport::socks5_transport::OwnedSocks5InboundAcceptor,
-}
-
-pub(crate) async fn run_mixed_listener_with_bound(
-    proxy: &Proxy,
-    request: MixedInboundRequest,
-    listener: zero_platform_tokio::TokioListener,
-    shutdown: watch::Receiver<bool>,
-) -> Result<(), EngineError> {
-    let MixedInboundRequest {
-        inbound_tag,
-        socks5_acceptor,
-    } = request;
-
-    let http_handler = HttpConnectInboundHandler::default();
-
-    run_tcp_listener_loop(TcpListenerLoopRequest {
-        proxy,
-        inbound_tag,
-        protocol_name: "mixed",
-        listener,
-        shutdown,
-        handler: move |engine, tag, stream, source_addr| {
-            let socks5_acceptor = socks5_acceptor.clone();
-            async move {
-                handle_mixed_connection(
-                    engine,
-                    tag,
-                    stream,
-                    source_addr,
-                    socks5_acceptor,
-                    http_handler,
-                )
-                .await;
-            }
-        },
-    })
-    .await
+    pub(crate) http_handler: HttpConnectInboundHandler,
 }
 
 async fn handle_mixed_connection(
-    engine: Proxy,
-    tag: String,
     mut stream: zero_platform_tokio::TokioSocket,
-    source_addr: Option<std::net::SocketAddr>,
-    socks5_acceptor: zero_transport::socks5_transport::OwnedSocks5InboundAcceptor,
-    http_h: HttpConnectInboundHandler,
-) {
+    request: MixedInboundRequest,
+    context: InboundConnectionContext,
+) -> Result<(), EngineError> {
     // Detect protocol from first byte.
     let mut first = [0_u8; 1];
-    if stream.read(&mut first).await.map_or(true, |n| n == 0) {
-        return;
+    if stream.read(&mut first).await? == 0 {
+        return Ok(());
     }
     let first_byte = first[0];
     let relay_stream = prefixed_relay_stream(stream, first_byte);
 
     if socks5::is_socks5_greeting_byte(first_byte) {
         handle_socks5_connection(
-            &engine,
-            &tag,
-            source_addr,
+            context,
             MeteredStream::new(relay_stream),
-            &socks5_acceptor,
-            "mixed",
+            &request.socks5_acceptor,
         )
-        .await;
+        .await
     } else {
         let mut metered = MeteredStream::new(relay_stream);
-        match http_h.http_inbound().accept_request(&mut metered).await {
+        match request
+            .http_handler
+            .http_inbound()
+            .accept_request(&mut metered)
+            .await
+        {
             Ok(session) => {
-                let _ = serve_inbound(
-                    &engine,
-                    session,
-                    metered.into_inner(),
-                    &http_h,
-                    &tag,
-                    source_addr,
-                )
-                .await;
+                context
+                    .serve(session, metered.into_inner(), request.http_handler)
+                    .await
             }
             Err(err) => {
-                if http_h
+                if request
+                    .http_handler
                     .http_inbound()
                     .send_accept_error_response(&mut metered, &err)
                     .await
                     .unwrap_or(false)
                 {
-                    return;
+                    Ok(())
+                } else {
+                    Err(EngineError::from(err))
                 }
-                let engine_err = EngineError::from(err);
-                log_listener_connection_error(
-                    crate::logging::INBOUND_ACCEPT_ROUTE_STAGE,
-                    "mixed",
-                    &tag,
-                    &source_addr,
-                    &engine_err,
-                );
             }
         }
     }
@@ -142,18 +90,19 @@ impl crate::adapters::mixed::MixedAdapter {
             )));
         };
         let request = MixedInboundRequest {
-            inbound_tag: inbound.tag,
             socks5_acceptor: zero_transport::socks5_transport::inbound_acceptor_from_users(
                 socks5_users,
             ),
+            http_handler: HttpConnectInboundHandler::default(),
         };
-        Ok(Box::new(
-            crate::runtime::inbound_operation::InboundListenerOperation::new(
-                move |proxy, bound: crate::protocol_registry::BoundInbound, shutdown_rx| async move {
-                    run_mixed_listener_with_bound(&proxy, request, bound.into_tcp(), shutdown_rx)
-                        .await
-                },
-            ),
-        ))
+        Ok(Box::new(TcpInboundListenerOperation {
+            inbound_tag: inbound.tag,
+            protocol_name: "mixed",
+            error_protocol_name: "mixed",
+            request,
+            dispatch: |request: MixedInboundRequest, socket, context: InboundConnectionContext| async move {
+                handle_mixed_connection(socket, request, context).await
+            },
+        }))
     }
 }

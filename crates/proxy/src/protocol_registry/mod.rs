@@ -26,7 +26,9 @@ pub(crate) use capability::{
     InboundListenerCapability, ProtocolSupportCapability, TcpOutboundCapability, UdpFlowCapability,
     UdpPacketPathCapability,
 };
-pub(crate) use context::{OutboundAdapterContext, UdpAdapterContext};
+pub(crate) use context::{
+    OutboundAdapterContext, UdpAdapterContext, UdpAssociationCloseKind, UdpRuntimeServices,
+};
 #[cfg(feature = "transport_quic")]
 pub(crate) use defaults::bind_transport_inbound;
 pub(crate) use defaults::unreachable_leaf;

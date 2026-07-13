@@ -4,16 +4,15 @@ use std::pin::Pin;
 use zero_core::Session;
 use zero_engine::{EngineError, ResolvedLeafOutbound};
 use zero_transport::outbound_leaf::{
-    ProtocolSessionTcpHandshake, ProtocolSocketTcpHandshake, ProtocolTcpTransportBridgeMetadata,
-    ProtocolTcpTransportBridgeOps, ProtocolTcpTransportOpenResult, ProtocolTransportLeaf,
-    ProtocolTransportLeafResolver,
+    open_prepared_tcp_transport_bridge_relay_hop, open_prepared_tcp_transport_bridge_stream,
+    prepare_transport_bridge_leaf, PreparedTransportBridgeLeaf, ProtocolSessionTcpHandshake,
+    ProtocolSocketTcpHandshake, ProtocolTcpTransportBridgeMetadata, ProtocolTcpTransportBridgeOps,
+    ProtocolTcpTransportOpenResult, ProtocolTransportLeaf, ProtocolTransportLeafResolver,
+    ResolveTransportLeafError,
 };
 
 use crate::protocol_registry::OutboundAdapterContext;
-use crate::transport::{
-    apply_protocol_transport_bridge_relay_hop, connect_protocol_transport_bridge_tcp,
-    EstablishedTcpOutbound, TcpOutboundFailure, TcpRelayStream,
-};
+use crate::transport::{EstablishedTcpOutbound, TcpOutboundFailure, TcpRelayStream};
 
 pub(crate) trait PreparedTcpConnectOperation: Send {
     fn execute<'a>(
@@ -147,102 +146,191 @@ where
     }
 }
 
-macro_rules! transport_bridge_tcp_operations {
-    ($connect:ident, $relay:ident, $bridge:path) => {
-        pub(crate) struct $connect<'a> {
-            pub(crate) bridge: &'a $bridge,
-            pub(crate) leaf: &'a ResolvedLeafOutbound<'a>,
-        }
-
-        impl<'a> PreparedTcpConnectOperation for $connect<'a> {
-            fn execute<'b>(
-                self: Box<Self>,
-                ctx: OutboundAdapterContext<'b>,
-                session: &'b Session,
-            ) -> Pin<
-                Box<
-                    dyn Future<Output = Result<EstablishedTcpOutbound, TcpOutboundFailure>>
-                        + Send
-                        + 'b,
-                >,
-            >
-            where
-                Self: 'b,
-            {
-                Box::pin(async move {
-                    execute_tcp_connect_operation(
-                        self.bridge,
-                        ctx,
-                        session,
-                        PreparedTcpOperation::Connect { leaf: self.leaf },
-                    )
-                    .await
-                })
-            }
-        }
-
-        pub(crate) struct $relay<'a> {
-            pub(crate) bridge: &'a $bridge,
-            pub(crate) leaf: &'a ResolvedLeafOutbound<'a>,
-        }
-
-        impl<'a> PreparedTcpRelayOperation for $relay<'a> {
-            fn execute<'b>(
-                self: Box<Self>,
-                ctx: OutboundAdapterContext<'b>,
-                stream: TcpRelayStream,
-                session: &'b Session,
-            ) -> Pin<Box<dyn Future<Output = Result<TcpRelayStream, EngineError>> + Send + 'b>>
-            where
-                Self: 'b,
-            {
-                Box::pin(async move {
-                    execute_tcp_relay_hop_operation(
-                        self.bridge,
-                        ctx,
-                        session,
-                        PreparedTcpOperation::RelayHop {
-                            stream,
-                            leaf: self.leaf,
-                        },
-                    )
-                    .await
-                })
-            }
-        }
-    };
+pub(crate) struct TransportBridgeTcpConnectOperation<'a, TBridge, TLeaf> {
+    bridge: &'a TBridge,
+    prepared: PreparedTransportBridgeLeaf<TLeaf>,
 }
 
-#[cfg(feature = "vless")]
-transport_bridge_tcp_operations!(
-    VlessTcpConnectOperation,
-    VlessTcpRelayOperation,
-    zero_transport::vless_transport::VlessStreamBridge
-);
-#[cfg(feature = "vmess")]
-transport_bridge_tcp_operations!(
-    VmessTcpConnectOperation,
-    VmessTcpRelayOperation,
-    zero_transport::vmess_transport::VmessStreamBridge
-);
-#[cfg(feature = "trojan")]
-transport_bridge_tcp_operations!(
-    TrojanTcpConnectOperation,
-    TrojanTcpRelayOperation,
-    zero_transport::trojan_transport::TrojanTlsBridge
-);
+impl<TBridge, TLeaf> PreparedTcpConnectOperation
+    for TransportBridgeTcpConnectOperation<'_, TBridge, TLeaf>
+where
+    TBridge:
+        Send + Sync + ProtocolTcpTransportBridgeMetadata + ProtocolTcpTransportBridgeOps<TLeaf>,
+    TLeaf: ProtocolTransportLeaf + Send + Sync,
+    TBridge::Opened: ProtocolTcpTransportOpenResult,
+{
+    fn execute<'a>(
+        self: Box<Self>,
+        ctx: OutboundAdapterContext<'a>,
+        session: &'a Session,
+    ) -> Pin<Box<dyn Future<Output = Result<EstablishedTcpOutbound, TcpOutboundFailure>> + Send + 'a>>
+    where
+        Self: 'a,
+    {
+        Box::pin(async move {
+            let endpoint = self.prepared.endpoint();
+            let tag = endpoint.tag.to_owned();
+            let server = endpoint.server.to_owned();
+            let port = endpoint.port;
+            let proxy = ctx.proxy();
+            let opened = open_prepared_tcp_transport_bridge_stream(
+                self.bridge,
+                session,
+                &self.prepared,
+                move |server, port| proxy.connect_upstream_host_owned(server.to_owned(), port),
+            )
+            .await
+            .map_err(|error| TcpOutboundFailure {
+                stage: TBridge::TCP_CONNECT_STAGE,
+                error,
+                upstream_endpoint: Some((server.clone(), port)),
+            })?;
+            let (stream, traffic) = opened.into_proxied_stream_parts();
+            if !traffic.is_empty() {
+                proxy.record_session_outbound_traffic(session.id, traffic);
+            }
+            Ok(EstablishedTcpOutbound::proxied(tag, server, port, stream))
+        })
+    }
+}
+
+pub(crate) struct TransportBridgeTcpRelayOperation<'a, TBridge, TLeaf> {
+    bridge: &'a TBridge,
+    prepared: PreparedTransportBridgeLeaf<TLeaf>,
+}
+
+impl<TBridge, TLeaf> PreparedTcpRelayOperation
+    for TransportBridgeTcpRelayOperation<'_, TBridge, TLeaf>
+where
+    TBridge: Send + Sync + ProtocolTcpTransportBridgeOps<TLeaf>,
+    TLeaf: Send + Sync,
+{
+    fn execute<'a>(
+        self: Box<Self>,
+        _ctx: OutboundAdapterContext<'a>,
+        stream: TcpRelayStream,
+        session: &'a Session,
+    ) -> Pin<Box<dyn Future<Output = Result<TcpRelayStream, EngineError>> + Send + 'a>>
+    where
+        Self: 'a,
+    {
+        Box::pin(async move {
+            open_prepared_tcp_transport_bridge_relay_hop(
+                self.bridge,
+                stream,
+                session,
+                &self.prepared,
+            )
+            .await
+        })
+    }
+}
+
+pub(crate) fn prepare_transport_bridge_tcp_connect<'a, TBridge>(
+    bridge: &'a TBridge,
+    source_dir: Option<&std::path::Path>,
+    leaf: &'a ResolvedLeafOutbound<'a>,
+) -> Result<Box<dyn PreparedTcpConnectOperation + 'a>, TcpOutboundFailure>
+where
+    TBridge: Send
+        + Sync
+        + ProtocolTransportLeafResolver<'a>
+        + ProtocolTcpTransportBridgeMetadata
+        + ProtocolTcpTransportBridgeOps<<TBridge as ProtocolTransportLeafResolver<'a>>::TransportLeaf>,
+    <TBridge as ProtocolTransportLeafResolver<'a>>::TransportLeaf:
+        ProtocolTransportLeaf + Send + Sync,
+    <TBridge as ProtocolTransportLeafResolver<'a>>::ResolveError: std::fmt::Display,
+    TBridge::Opened: ProtocolTcpTransportOpenResult,
+{
+    let prepared = prepare_transport_bridge_leaf(bridge, source_dir, leaf)
+        .map_err(|error| connect_prepare_failure::<TBridge>(leaf, error))?;
+    Ok(Box::new(TransportBridgeTcpConnectOperation {
+        bridge,
+        prepared,
+    }))
+}
+
+pub(crate) fn prepare_transport_bridge_tcp_relay<'a, TBridge>(
+    bridge: &'a TBridge,
+    source_dir: Option<&std::path::Path>,
+    leaf: &'a ResolvedLeafOutbound<'a>,
+) -> Result<Box<dyn PreparedTcpRelayOperation + 'a>, EngineError>
+where
+    TBridge: Send
+        + Sync
+        + ProtocolTransportLeafResolver<'a>
+        + ProtocolTcpTransportBridgeMetadata
+        + ProtocolTcpTransportBridgeOps<<TBridge as ProtocolTransportLeafResolver<'a>>::TransportLeaf>,
+    <TBridge as ProtocolTransportLeafResolver<'a>>::TransportLeaf: Send + Sync,
+    <TBridge as ProtocolTransportLeafResolver<'a>>::ResolveError: std::fmt::Display,
+{
+    let prepared = prepare_transport_bridge_leaf(bridge, source_dir, leaf)
+        .map_err(|error| relay_prepare_error::<TBridge, _>(error))?;
+    Ok(Box::new(TransportBridgeTcpRelayOperation {
+        bridge,
+        prepared,
+    }))
+}
+
+fn connect_prepare_failure<TBridge>(
+    leaf: &ResolvedLeafOutbound<'_>,
+    error: ResolveTransportLeafError<impl std::fmt::Display>,
+) -> TcpOutboundFailure
+where
+    TBridge: ProtocolTcpTransportBridgeMetadata,
+{
+    let (stage, error, upstream_endpoint) = match error {
+        ResolveTransportLeafError::InvalidConfig(error) => (
+            TBridge::TCP_CONNECT_STAGE,
+            invalid_input(TBridge::TCP_INVALID_CONNECT_CONFIG, error),
+            leaf.proxy_endpoint()
+                .map(|(server, port)| (server.to_owned(), port)),
+        ),
+        ResolveTransportLeafError::MissingLeaf => (
+            TBridge::TCP_CONNECT_STAGE,
+            invalid_input(
+                TBridge::TCP_INVALID_CONNECT_LEAF_STAGE,
+                TBridge::EXPECTED_OUTBOUND_LEAF,
+            ),
+            None,
+        ),
+    };
+    TcpOutboundFailure {
+        stage,
+        error,
+        upstream_endpoint,
+    }
+}
+
+fn relay_prepare_error<TBridge, E>(error: ResolveTransportLeafError<E>) -> EngineError
+where
+    TBridge: ProtocolTcpTransportBridgeMetadata,
+    E: std::fmt::Display,
+{
+    match error {
+        ResolveTransportLeafError::InvalidConfig(error) => {
+            invalid_input(TBridge::TCP_INVALID_RELAY_CONFIG, error)
+        }
+        ResolveTransportLeafError::MissingLeaf => invalid_input(
+            TBridge::TCP_INVALID_RELAY_LEAF_STAGE,
+            TBridge::EXPECTED_OUTBOUND_LEAF,
+        ),
+    }
+}
+
+fn invalid_input(stage: &'static str, error: impl std::fmt::Display) -> EngineError {
+    EngineError::Io(std::io::Error::new(
+        std::io::ErrorKind::InvalidInput,
+        format!("{stage}: {error}"),
+    ))
+}
 
 pub(crate) enum PreparedTcpOperation<'a, 'leaf> {
     Direct {
         tag: &'a str,
     },
-    Connect {
-        leaf: &'leaf ResolvedLeafOutbound<'a>,
-    },
-    RelayHop {
-        stream: TcpRelayStream,
-        leaf: &'leaf ResolvedLeafOutbound<'a>,
-    },
+    #[doc(hidden)]
+    _Lifetime(std::marker::PhantomData<&'leaf ()>),
 }
 
 pub(crate) struct PreparedSocketTcpOperation<'leaf, T> {
@@ -333,7 +421,7 @@ pub(crate) async fn execute_direct_tcp_operation(
     operation: PreparedTcpOperation<'_, '_>,
 ) -> Result<EstablishedTcpOutbound, TcpOutboundFailure> {
     let PreparedTcpOperation::Direct { tag } = operation else {
-        unreachable!("direct TCP executor received a protocol operation")
+        unreachable!("direct TCP executor received an invalid operation")
     };
     let proxy = ctx.proxy();
     match proxy
@@ -349,49 +437,4 @@ pub(crate) async fn execute_direct_tcp_operation(
             upstream_endpoint: None,
         }),
     }
-}
-
-pub(crate) async fn execute_tcp_connect_operation<'a, TBridge>(
-    bridge: &TBridge,
-    ctx: OutboundAdapterContext<'_>,
-    session: &Session,
-    operation: PreparedTcpOperation<'a, '_>,
-) -> Result<EstablishedTcpOutbound, TcpOutboundFailure>
-where
-    TBridge: Send
-        + Sync
-        + ProtocolTransportLeafResolver<'a>
-        + ProtocolTcpTransportBridgeMetadata
-        + ProtocolTcpTransportBridgeOps<<TBridge as ProtocolTransportLeafResolver<'a>>::TransportLeaf>,
-    <TBridge as ProtocolTransportLeafResolver<'a>>::TransportLeaf: ProtocolTransportLeaf,
-    <TBridge as ProtocolTransportLeafResolver<'a>>::ResolveError: std::fmt::Display,
-    <TBridge as ProtocolTcpTransportBridgeOps<
-        <TBridge as ProtocolTransportLeafResolver<'a>>::TransportLeaf,
-    >>::Opened: ProtocolTcpTransportOpenResult,
-{
-    let PreparedTcpOperation::Connect { leaf } = operation else {
-        unreachable!("TCP connect executor received a relay-hop operation")
-    };
-    connect_protocol_transport_bridge_tcp(bridge, ctx, session, leaf, |_| {}).await
-}
-
-pub(crate) async fn execute_tcp_relay_hop_operation<'a, TBridge>(
-    bridge: &TBridge,
-    ctx: OutboundAdapterContext<'_>,
-    session: &Session,
-    operation: PreparedTcpOperation<'a, '_>,
-) -> Result<TcpRelayStream, EngineError>
-where
-    TBridge: Send
-        + Sync
-        + ProtocolTransportLeafResolver<'a>
-        + ProtocolTcpTransportBridgeMetadata
-        + ProtocolTcpTransportBridgeOps<<TBridge as ProtocolTransportLeafResolver<'a>>::TransportLeaf>,
-    <TBridge as ProtocolTransportLeafResolver<'a>>::TransportLeaf: Sync,
-    <TBridge as ProtocolTransportLeafResolver<'a>>::ResolveError: std::fmt::Display,
-{
-    let PreparedTcpOperation::RelayHop { stream, leaf } = operation else {
-        unreachable!("TCP relay executor received a connect operation")
-    };
-    apply_protocol_transport_bridge_relay_hop(bridge, ctx, stream, session, leaf).await
 }

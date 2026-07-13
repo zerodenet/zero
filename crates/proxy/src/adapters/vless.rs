@@ -25,13 +25,13 @@ use crate::protocol_registry::{
 use crate::runtime::path::TcpPathCategory;
 #[cfg(feature = "vless")]
 use crate::runtime::tcp_dispatch::operation::{
-    PreparedTcpConnectOperation, PreparedTcpRelayOperation, VlessTcpConnectOperation,
-    VlessTcpRelayOperation,
+    prepare_transport_bridge_tcp_connect, prepare_transport_bridge_tcp_relay,
+    PreparedTcpConnectOperation, PreparedTcpRelayOperation,
 };
 #[cfg(feature = "vless")]
 use crate::runtime::udp_dispatch::operation::{
-    PreparedTransportUdpOperation, PreparedUdpFlowOperation, VlessRelayTwoStreamUdpOperation,
-    VlessTransportUdpOperation,
+    PreparedTransportUdpOperation, PreparedUdpFlowOperation, RelayTwoStreamUdpOperation,
+    TransportBridgeUdpOperation,
 };
 #[cfg(feature = "vless")]
 use crate::runtime::udp_dispatch::FlowFailure;
@@ -142,21 +142,17 @@ impl TcpOutboundCapability for VlessAdapter {
     fn prepare_tcp_connect<'a>(
         &'a self,
         leaf: &'a ResolvedLeafOutbound<'a>,
+        source_dir: Option<&std::path::Path>,
     ) -> Result<Box<dyn PreparedTcpConnectOperation + 'a>, TcpOutboundFailure> {
-        Ok(Box::new(VlessTcpConnectOperation {
-            bridge: self.bridge(),
-            leaf,
-        }))
+        prepare_transport_bridge_tcp_connect(self.bridge(), source_dir, leaf)
     }
 
     fn prepare_tcp_relay_hop<'a>(
         &'a self,
         leaf: &'a ResolvedLeafOutbound<'a>,
+        source_dir: Option<&std::path::Path>,
     ) -> Result<Box<dyn PreparedTcpRelayOperation + 'a>, EngineError> {
-        Ok(Box::new(VlessTcpRelayOperation {
-            bridge: self.bridge(),
-            leaf,
-        }))
+        prepare_transport_bridge_tcp_relay(self.bridge(), source_dir, leaf)
     }
 }
 
@@ -167,7 +163,7 @@ impl UdpFlowCapability for VlessAdapter {
         &'a self,
         leaf: &'a ResolvedLeafOutbound<'a>,
     ) -> Result<Box<dyn PreparedUdpFlowOperation + 'a>, FlowFailure> {
-        Ok(Box::new(VlessTransportUdpOperation {
+        Ok(Box::new(TransportBridgeUdpOperation {
             bridge: self.bridge(),
             operation: PreparedTransportUdpOperation::Direct { leaf },
         }))
@@ -181,7 +177,7 @@ impl UdpFlowCapability for VlessAdapter {
         &'a self,
         chain: Vec<ResolvedLeafOutbound<'a>>,
     ) -> Result<Box<dyn PreparedUdpFlowOperation + 'a>, FlowFailure> {
-        Ok(Box::new(VlessRelayTwoStreamUdpOperation {
+        Ok(Box::new(RelayTwoStreamUdpOperation {
             bridge: self.bridge(),
             chain,
         }))
@@ -192,7 +188,7 @@ impl UdpFlowCapability for VlessAdapter {
         carrier: crate::transport::RelayCarrier,
         leaf: &'a ResolvedLeafOutbound<'a>,
     ) -> Result<Box<dyn PreparedUdpFlowOperation + 'a>, FlowFailure> {
-        Ok(Box::new(VlessTransportUdpOperation {
+        Ok(Box::new(TransportBridgeUdpOperation {
             bridge: self.bridge(),
             operation: PreparedTransportUdpOperation::RelayFinalHop { carrier, leaf },
         }))

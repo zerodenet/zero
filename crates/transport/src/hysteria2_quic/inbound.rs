@@ -10,7 +10,10 @@ use zero_core::InboundClientResponse;
 use zero_traits::AsyncSocket;
 
 #[cfg(feature = "hysteria2")]
-use super::{OwnedHysteria2InboundProfile, OwnedHysteria2InboundTcpResponseProtocol};
+use super::{
+    Hysteria2AuthenticatedQuicConnection, Hysteria2Stream, OwnedHysteria2InboundProfile,
+    OwnedHysteria2InboundTcpResponseProtocol,
+};
 
 #[derive(Debug, Clone)]
 pub struct OwnedHysteria2InboundBindPlan {
@@ -131,5 +134,54 @@ where
 
     async fn send_upstream_failure(&self, client: &mut S) -> Result<(), zero_core::Error> {
         self.protocol.send_upstream_failure(client).await
+    }
+}
+
+#[cfg(feature = "hysteria2")]
+#[async_trait::async_trait]
+impl crate::inbound_quic::AuthenticatedQuicInboundProfile for OwnedHysteria2InboundProfile {
+    type Connection = Hysteria2AuthenticatedQuicConnection;
+
+    async fn accept_authenticated_connection(
+        &self,
+        connection: quinn::Connection,
+    ) -> Result<Self::Connection, EngineError> {
+        let protocol = self
+            .protocol
+            .accept_authenticated_quic_session(connection, Hysteria2Stream::new)
+            .await
+            .map_err(EngineError::from)?;
+        Ok(Hysteria2AuthenticatedQuicConnection { protocol })
+    }
+}
+
+#[cfg(feature = "hysteria2")]
+#[async_trait::async_trait]
+impl crate::inbound_quic::AuthenticatedQuicInboundConnection
+    for Hysteria2AuthenticatedQuicConnection
+{
+    type Stream = Hysteria2Stream;
+    type ResponseProtocol = OwnedHysteria2InboundTcpResponseProtocol;
+    type UdpRelay = hysteria2::udp::Hysteria2InboundUdpRelay;
+
+    fn datagram_source(&self) -> std::sync::Arc<quinn::Connection> {
+        self.protocol.connection()
+    }
+
+    fn udp_relay(&self) -> Self::UdpRelay {
+        self.protocol.accept_udp_session()
+    }
+
+    fn response_protocol(&self) -> Self::ResponseProtocol {
+        inbound_tcp_acceptor()
+    }
+
+    async fn accept_next_tcp_stream(
+        &self,
+    ) -> Result<Option<(zero_core::Session, Self::Stream)>, EngineError> {
+        self.protocol
+            .accept_next_tcp_stream(Hysteria2Stream::new)
+            .await
+            .map_err(EngineError::from)
     }
 }

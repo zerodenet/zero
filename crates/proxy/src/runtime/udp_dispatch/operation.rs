@@ -4,9 +4,7 @@ use std::pin::Pin;
 use zero_core::Session;
 use zero_engine::ResolvedLeafOutbound;
 use zero_transport::managed_udp::ProtocolManagedStreamUdpBridgeOps;
-#[cfg(feature = "vless")]
 use zero_transport::managed_udp::ProtocolRelayTwoStreamManagedUdpBridgeOps;
-#[cfg(feature = "vless")]
 use zero_transport::outbound_leaf::{
     ProtocolRelayTwoStreamTransportLeaf, ProtocolRelayTwoStreamUdpTransportBridgeMetadata,
 };
@@ -275,69 +273,73 @@ pub(crate) enum PreparedManagedStreamPacketOperation<'a, T> {
     },
 }
 
-macro_rules! transport_bridge_udp_operation {
-    ($name:ident, $bridge:path) => {
-        pub(crate) struct $name<'a> {
-            pub(crate) bridge: &'a $bridge,
-            pub(crate) operation: PreparedTransportUdpOperation<'a, 'a>,
-        }
-
-        impl<'leaf> PreparedUdpFlowOperation for $name<'leaf> {
-            fn execute<'a>(
-                self: Box<Self>,
-                dispatch: &'a mut UdpDispatch,
-                ctx: UdpAdapterContext<'a>,
-                session: &'a Session,
-                payload: &'a [u8],
-            ) -> Pin<Box<dyn Future<Output = Result<FlowStartResult, FlowFailure>> + Send + 'a>>
-            where
-                Self: 'a,
-            {
-                Box::pin(async move {
-                    execute_transport_udp_operation(
-                        self.bridge,
-                        dispatch,
-                        ctx.proxy(),
-                        session,
-                        payload,
-                        self.operation,
-                    )
-                    .await
-                })
-            }
-        }
-    };
+pub(crate) struct TransportBridgeUdpOperation<'a, TBridge> {
+    pub(crate) bridge: &'a TBridge,
+    pub(crate) operation: PreparedTransportUdpOperation<'a, 'a>,
 }
 
-#[cfg(feature = "vless")]
-transport_bridge_udp_operation!(
-    VlessTransportUdpOperation,
-    zero_transport::vless_transport::VlessStreamBridge
-);
-#[cfg(feature = "vmess")]
-transport_bridge_udp_operation!(
-    VmessTransportUdpOperation,
-    zero_transport::vmess_transport::VmessStreamBridge
-);
-#[cfg(feature = "trojan")]
-transport_bridge_udp_operation!(
-    TrojanTransportUdpOperation,
-    zero_transport::trojan_transport::TrojanTlsBridge
-);
+impl<'leaf, TBridge> PreparedUdpFlowOperation for TransportBridgeUdpOperation<'leaf, TBridge>
+where
+    TBridge: Send
+        + Sync
+        + ProtocolUdpTransportBridgeMetadata
+        + for<'resolve> ProtocolTransportLeafResolver<'resolve>,
+    for<'resolve> TBridge: ProtocolManagedStreamUdpBridgeOps<
+        <TBridge as ProtocolTransportLeafResolver<'resolve>>::TransportLeaf,
+    >,
+    for<'resolve> <TBridge as ProtocolTransportLeafResolver<'resolve>>::TransportLeaf:
+        ProtocolTransportLeaf + Send,
+    for<'resolve> <TBridge as ProtocolTransportLeafResolver<'resolve>>::ResolveError:
+        std::fmt::Display,
+{
+    fn execute<'a>(
+        self: Box<Self>,
+        dispatch: &'a mut UdpDispatch,
+        ctx: UdpAdapterContext<'a>,
+        session: &'a Session,
+        payload: &'a [u8],
+    ) -> Pin<Box<dyn Future<Output = Result<FlowStartResult, FlowFailure>> + Send + 'a>>
+    where
+        Self: 'a,
+    {
+        Box::pin(async move {
+            execute_transport_udp_operation(
+                self.bridge,
+                dispatch,
+                ctx.proxy(),
+                session,
+                payload,
+                self.operation,
+            )
+            .await
+        })
+    }
+}
 
 #[cfg(feature = "vless")]
 pub(crate) struct PreparedRelayTwoStreamUdpOperation<'a> {
     pub(crate) chain: Vec<ResolvedLeafOutbound<'a>>,
 }
 
-#[cfg(feature = "vless")]
-pub(crate) struct VlessRelayTwoStreamUdpOperation<'a> {
-    pub(crate) bridge: &'a zero_transport::vless_transport::VlessStreamBridge,
+pub(crate) struct RelayTwoStreamUdpOperation<'a, TBridge> {
+    pub(crate) bridge: &'a TBridge,
     pub(crate) chain: Vec<ResolvedLeafOutbound<'a>>,
 }
 
-#[cfg(feature = "vless")]
-impl PreparedUdpFlowOperation for VlessRelayTwoStreamUdpOperation<'_> {
+impl<'leaf, TBridge> PreparedUdpFlowOperation for RelayTwoStreamUdpOperation<'leaf, TBridge>
+where
+    TBridge: Send
+        + Sync
+        + ProtocolRelayTwoStreamUdpTransportBridgeMetadata
+        + for<'resolve> ProtocolTransportLeafResolver<'resolve>,
+    for<'resolve> TBridge: ProtocolRelayTwoStreamManagedUdpBridgeOps<
+        <TBridge as ProtocolTransportLeafResolver<'resolve>>::TransportLeaf,
+    >,
+    for<'resolve> <TBridge as ProtocolTransportLeafResolver<'resolve>>::TransportLeaf:
+        ProtocolRelayTwoStreamTransportLeaf + Send + Sync,
+    for<'resolve> <TBridge as ProtocolTransportLeafResolver<'resolve>>::ResolveError:
+        std::fmt::Display,
+{
     fn execute<'a>(
         self: Box<Self>,
         dispatch: &'a mut UdpDispatch,

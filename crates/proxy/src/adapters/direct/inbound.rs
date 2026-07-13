@@ -2,9 +2,7 @@ use zero_config::{InboundConfig, InboundProtocolConfig};
 use zero_engine::EngineError;
 
 use crate::adapters::direct::DirectAdapter;
-use crate::runtime::inbound_operation::{
-    InboundListenerOperation, PreparedInboundListenerOperation,
-};
+use crate::runtime::inbound_operation::PreparedInboundListenerOperation;
 
 impl DirectAdapter {
     pub(super) fn prepare_inbound_listener_impl(
@@ -20,20 +18,19 @@ impl DirectAdapter {
                 )));
             }
         };
-        Ok(Box::new(InboundListenerOperation::new(
-            move |proxy, bound: crate::protocol_registry::BoundInbound, shutdown_rx| async move {
-                crate::inbound::run_direct_listener_with_bound(
-                    &proxy,
-                    crate::inbound::direct::DirectInboundRequest {
-                        inbound,
-                        target,
-                        port,
-                    },
-                    bound.into_tcp(),
-                    shutdown_rx,
-                )
-                .await
-            },
-        )))
+        let target = target.map(|value| {
+            if let Ok(address) = value.parse::<std::net::Ipv4Addr>() {
+                zero_core::Address::Ipv4(address.octets())
+            } else if let Ok(address) = value.parse::<std::net::Ipv6Addr>() {
+                zero_core::Address::Ipv6(address.octets())
+            } else {
+                zero_core::Address::Domain(value)
+            }
+        });
+        Ok(Box::new(crate::inbound::DirectInboundListenerOperation {
+            inbound_tag: inbound.tag,
+            target,
+            port,
+        }))
     }
 }

@@ -12,7 +12,6 @@ use crate::runtime::udp_flow::packet_path::{
     packet_path_carrier_descriptor_from_build, udp_datagram_source_from_build, PacketPathCarrier,
     PacketPathCarrierDescriptor, UdpDatagramSource,
 };
-use crate::runtime::Proxy;
 use zero_transport::shadowsocks_transport::ShadowsocksTransportLeaf;
 use zero_transport::shadowsocks_transport::{
     ShadowsocksManagedUdpPacketPathCarrierDescriptor,
@@ -52,16 +51,12 @@ fn packet_path_carrier_descriptor(
 }
 
 async fn build_packet_path(
-    proxy: &Proxy,
+    services: crate::protocol_registry::UdpRuntimeServices,
     plan: ShadowsocksManagedUdpPacketPathPlan<'_>,
 ) -> Result<std::sync::Arc<dyn PacketPathCarrier>, EngineError> {
-    crate::runtime::udp_flow::packet_path_chain::carriers::udp_socket_carrier::build(
-        proxy,
-        plan.server(),
-        plan.port(),
-        plan.carrier_codec(),
-    )
-    .await
+    services
+        .build_udp_socket_carrier(plan.server(), plan.port(), plan.carrier_codec())
+        .await
 }
 
 fn packet_path_datagram_source(plan: ShadowsocksManagedUdpPacketPathPlan<'_>) -> UdpDatagramSource {
@@ -95,7 +90,7 @@ impl PreparedUdpPacketPathOperation for ShadowsocksPacketPathOperation<'_> {
     where
         Self: 'a,
     {
-        Box::pin(async move { build_packet_path(ctx.proxy(), self.plan).await })
+        Box::pin(async move { build_packet_path(ctx.runtime_services(), self.plan).await })
     }
 }
 

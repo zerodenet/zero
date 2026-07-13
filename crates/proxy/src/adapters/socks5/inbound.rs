@@ -4,10 +4,11 @@ use zero_config::InboundConfig;
 use zero_engine::EngineError;
 
 use crate::adapters::socks5::Socks5Adapter;
+use crate::runtime::inbound_operation::{InboundConnectionContext, TcpInboundListenerOperation};
+use crate::transport::{MeteredStream, TcpRelayStream};
 
 #[cfg(feature = "mixed")]
 pub(crate) use listener::handle_socks5_connection;
-pub(crate) use listener::run_socks5_listener_with_bound;
 
 impl Socks5Adapter {
     pub(super) fn prepare_inbound_listener_impl(
@@ -19,19 +20,21 @@ impl Socks5Adapter {
     > {
         let acceptor =
             zero_transport::socks5_transport::inbound_acceptor_from_protocol(&inbound.protocol)?;
-        Ok(Box::new(
-            crate::runtime::inbound_operation::InboundListenerOperation::new(
-                move |proxy, bound: crate::protocol_registry::BoundInbound, shutdown_rx| async move {
-                    run_socks5_listener_with_bound(
-                        &proxy,
-                        inbound,
-                        acceptor,
-                        bound.into_tcp(),
-                        shutdown_rx,
-                    )
-                    .await
-                },
-            ),
-        ))
+        Ok(Box::new(TcpInboundListenerOperation {
+            inbound_tag: inbound.tag,
+            protocol_name: "socks5",
+            error_protocol_name: "socks5",
+            request: acceptor,
+            dispatch: |acceptor: zero_transport::socks5_transport::OwnedSocks5InboundAcceptor,
+                       socket,
+                       context: InboundConnectionContext| async move {
+                listener::handle_socks5_connection(
+                    context,
+                    MeteredStream::new(TcpRelayStream::from(socket)),
+                    &acceptor,
+                )
+                .await
+            },
+        }))
     }
 }

@@ -101,6 +101,7 @@ impl TcpOutboundCapability for Socks5Adapter {
     fn prepare_tcp_connect<'a>(
         &'a self,
         leaf: &'a ResolvedLeafOutbound<'a>,
+        _source_dir: Option<&std::path::Path>,
     ) -> Result<
         Box<dyn crate::runtime::tcp_dispatch::operation::PreparedTcpConnectOperation + 'a>,
         TcpOutboundFailure,
@@ -111,6 +112,7 @@ impl TcpOutboundCapability for Socks5Adapter {
     fn prepare_tcp_relay_hop<'a>(
         &'a self,
         leaf: &'a ResolvedLeafOutbound<'a>,
+        _source_dir: Option<&std::path::Path>,
     ) -> Result<
         Box<dyn crate::runtime::tcp_dispatch::operation::PreparedTcpRelayOperation + 'a>,
         EngineError,

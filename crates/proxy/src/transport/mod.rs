@@ -10,10 +10,6 @@ mod tcp_outbound;
 mod tcp_relay;
 
 pub(crate) use direct::DirectConnector;
-#[cfg(any(feature = "vless", feature = "vmess", feature = "trojan"))]
-pub(crate) use tcp_outbound::{
-    apply_protocol_transport_bridge_relay_hop, connect_protocol_transport_bridge_tcp,
-};
 pub(crate) use tcp_outbound::{
     extract_tcp_stream, is_block_error, EstablishedTcpOutbound, TcpOutboundFailure, TcpRouteResult,
 };

@@ -96,7 +96,6 @@ where
     Ok(())
 }
 
-#[cfg(any(feature = "vless", feature = "vmess", feature = "trojan"))]
 pub(crate) struct LoggedTcpSocketListenerRequest<'a, R, D> {
     pub(crate) proxy: &'a Proxy,
     pub(crate) inbound_tag: String,
@@ -108,7 +107,6 @@ pub(crate) struct LoggedTcpSocketListenerRequest<'a, R, D> {
     pub(crate) dispatch: D,
 }
 
-#[cfg(any(feature = "vless", feature = "vmess", feature = "trojan"))]
 pub(crate) async fn run_logged_tcp_socket_listener_loop<R, D, Fut>(
     request: LoggedTcpSocketListenerRequest<'_, R, D>,
 ) -> Result<(), EngineError>
