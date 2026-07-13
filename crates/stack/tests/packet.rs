@@ -110,3 +110,47 @@ fn checksum_ip_header_known() {
     let c = checksum(&hdr);
     assert_ne!(c, 0);
 }
+
+#[test]
+fn rejects_truncated_and_inconsistent_ip_lengths() {
+    assert!(parse_tcp(&[0x45; 19]).is_none());
+
+    let mut tcp = build_tcp(
+        IpAddr::V4(Ipv4Addr::LOCALHOST),
+        IpAddr::V4(Ipv4Addr::LOCALHOST),
+        1,
+        80,
+        0,
+        0,
+        tcp_flags::SYN,
+        b"",
+    );
+    tcp[2..4].copy_from_slice(&u16::MAX.to_be_bytes());
+    assert!(parse_tcp(&tcp).is_none());
+}
+
+#[test]
+fn rejects_invalid_transport_header_lengths() {
+    let mut tcp = build_tcp(
+        IpAddr::V4(Ipv4Addr::LOCALHOST),
+        IpAddr::V4(Ipv4Addr::LOCALHOST),
+        1,
+        80,
+        0,
+        0,
+        tcp_flags::SYN,
+        b"",
+    );
+    tcp[32] = 0x40;
+    assert!(parse_tcp(&tcp).is_none());
+
+    let mut udp = build_udp(
+        IpAddr::V4(Ipv4Addr::LOCALHOST),
+        IpAddr::V4(Ipv4Addr::LOCALHOST),
+        1,
+        53,
+        b"payload",
+    );
+    udp[24..26].copy_from_slice(&7u16.to_be_bytes());
+    assert!(parse_udp(&udp).is_none());
+}

@@ -417,6 +417,12 @@ UDP datagram 由内核 UDP 分发路径处理。分发层拥有路由决策、fa
 - `transport` -> `config`, `core`, `engine`, `ztls`
 - `engine` -> `config`, `router`, `core`, `api`
 - `stack` -> `traits`
+
+The root binary is an outer application adapter, not another domain layer. `src/main.rs` owns process startup, tracing initialization, fatal error reporting, and delegation only. `src/application/` executes commands by responsibility: `run` owns daemon invocation, `inspect` owns status/validation/build information, `control` owns generic control-plane IPC commands, and `tun` owns TUN IPC commands. Control request construction must not regrow in the process entrypoint.
+
+`zero-engine::runtime` is a facade over explicit state domains. Configuration reload/persistence, policy selection/probes, observability snapshots, diagnostics, and session/flow lifecycle live in dedicated runtime submodules. The facade retains construction, mode, and route/target resolution; workspace architecture tests prevent domain methods from moving back into the root implementation.
+
+`zero-stack` keeps byte-level packet parsing and building pure and independent from async lifecycle. `packet.rs` validates declared IP and transport header lengths before exposing borrowed payloads. TCP/UDP state machines consume this parser boundary and own connection state, channels, and timers. Boundary tests lock both the dependency direction (`stack -> traits`) and the parsing/lifecycle separation.
 - `tun` -> `traits`
 - `protocols/*` -> `core`, `traits`
 - `core` -> `traits`

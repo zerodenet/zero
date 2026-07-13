@@ -56,8 +56,9 @@ pub fn ip_protocol(packet: &[u8]) -> Option<u8> {
 
 /// Parse an IPv4/IPv6 + TCP packet.
 pub fn parse_tcp(packet: &[u8]) -> Option<ParsedTcp<'_>> {
-    let (src_ip, dst_ip, ip_hdr_len, _total_len) = parse_ip(packet)?;
-    if packet.len() < ip_hdr_len + 20 {
+    let (src_ip, dst_ip, ip_hdr_len, total_len) = parse_ip(packet)?;
+    let transport_end = total_len.unwrap_or(packet.len()).min(packet.len());
+    if (src_ip.is_ipv4() && packet[9] != IPPROTO_TCP) || transport_end < ip_hdr_len + 20 {
         return None;
     }
     let h = &packet[ip_hdr_len..];
@@ -68,13 +69,12 @@ pub fn parse_tcp(packet: &[u8]) -> Option<ParsedTcp<'_>> {
     let ack = u16::from_be_bytes([h[8], h[9]]);
     let ack = (ack as u32) << 16 | u16::from_be_bytes([h[10], h[11]]) as u32;
     let data_off = ((h[12] >> 4) & 0x0f) as u16 * 4;
+    if data_off < 20 || ip_hdr_len + data_off as usize > transport_end {
+        return None;
+    }
     let flags = h[13];
     let payload_start = ip_hdr_len + data_off as usize;
-    let payload = if packet.len() > payload_start {
-        &packet[payload_start..]
-    } else {
-        &[]
-    };
+    let payload = &packet[payload_start..transport_end];
 
     Some(ParsedTcp {
         src: Endpoint {
@@ -121,14 +121,14 @@ pub fn parse_udp(packet: &[u8]) -> Option<ParsedUdp<'_>> {
     let h = &packet[udp_off..];
     let src_port = u16::from_be_bytes([h[0], h[1]]);
     let dst_port = u16::from_be_bytes([h[2], h[3]]);
+    let udp_len = u16::from_be_bytes([h[4], h[5]]) as usize;
+    if udp_len < 8 || udp_off + udp_len > packet.len() {
+        return None;
+    }
     let payload_start = udp_off + 8;
     let payload_end = total_len.unwrap_or(packet.len());
-    let payload_end = payload_end.min(packet.len());
-    let payload = if payload_end > payload_start {
-        &packet[payload_start..payload_end]
-    } else {
-        &[]
-    };
+    let payload_end = payload_end.min(udp_off + udp_len).min(packet.len());
+    let payload = &packet[payload_start..payload_end];
 
     Some(ParsedUdp {
         src: Endpoint {
@@ -154,13 +154,16 @@ fn parse_ip(packet: &[u8]) -> Option<(IpAddr, IpAddr, usize, Option<usize>)> {
                 return None;
             }
             let ihl = (packet[0] & 0x0f) as usize * 4;
+            let total = u16::from_be_bytes([packet[2], packet[3]]) as usize;
+            if ihl < 20 || ihl > packet.len() || total < ihl || total > packet.len() {
+                return None;
+            }
             let src = IpAddr::V4(Ipv4Addr::new(
                 packet[12], packet[13], packet[14], packet[15],
             ));
             let dst = IpAddr::V4(Ipv4Addr::new(
                 packet[16], packet[17], packet[18], packet[19],
             ));
-            let total = u16::from_be_bytes([packet[2], packet[3]]) as usize;
             Some((src, dst, ihl, Some(total)))
         }
         6 => {
@@ -174,6 +177,9 @@ fn parse_ip(packet: &[u8]) -> Option<(IpAddr, IpAddr, usize, Option<usize>)> {
             let src = IpAddr::V6(Ipv6Addr::from(s));
             let dst = IpAddr::V6(Ipv6Addr::from(d));
             let payload_len = u16::from_be_bytes([packet[4], packet[5]]) as usize;
+            if 40 + payload_len > packet.len() {
+                return None;
+            }
             Some((src, dst, 40, Some(40 + payload_len)))
         }
         _ => None,

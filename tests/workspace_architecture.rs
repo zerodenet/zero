@@ -175,16 +175,105 @@ fn engine_runtime_domains_do_not_regrow_in_the_facade() {
         "pub fn update_urltest_state",
         "pub fn events_snapshot",
         "pub fn update_sink_status",
+        "pub fn dns_lookup",
+        "pub fn probe_target",
+        "pub fn prepare_session",
+        "pub fn finish_session",
     ] {
         assert!(
             !runtime.contains(implementation),
             "engine runtime facade must not re-own `{implementation}`"
         );
     }
-    for domain in ["configuration", "policy", "observability"] {
+    for domain in [
+        "configuration",
+        "diagnostics",
+        "observability",
+        "policy",
+        "session",
+    ] {
         assert!(
             runtime.contains(&format!("mod {domain};")),
             "engine runtime must delegate the `{domain}` domain"
+        );
+    }
+}
+
+#[test]
+fn generic_transport_carriers_do_not_depend_on_protocol_crates() {
+    let transport = workspace_root().join("crates/transport/src");
+    let integration_roots = [
+        "hysteria2_quic.rs",
+        "mieru_transport.rs",
+        "shadowsocks_transport.rs",
+        "socks5_transport.rs",
+        "trojan_transport.rs",
+        "vless_transport.rs",
+        "vmess_transport.rs",
+    ];
+    for path in rust_sources(&transport) {
+        let relative = path
+            .strip_prefix(&transport)
+            .expect("transport-relative path");
+        let relative = relative.to_string_lossy().replace('\\', "/");
+        if integration_roots
+            .iter()
+            .any(|root| relative.starts_with(root.trim_end_matches(".rs")))
+        {
+            continue;
+        }
+        let source = read(&path);
+        for protocol in [
+            "hysteria2",
+            "mieru",
+            "shadowsocks",
+            "socks5",
+            "trojan",
+            "vless",
+            "vmess",
+        ] {
+            assert!(
+                !source.contains(&format!("use {protocol}::")),
+                "generic carrier {} must not import protocol crate `{protocol}`",
+                path.display()
+            );
+        }
+    }
+}
+
+#[test]
+fn stack_keeps_packet_parsing_separate_from_connection_lifecycle() {
+    let stack = workspace_root().join("crates/stack/src");
+    let packet = read(&stack.join("packet.rs"));
+    for forbidden in ["tokio::", "TcpState", "UserTcpStack", "mpsc::"] {
+        assert!(
+            !packet.contains(forbidden),
+            "packet parser must not own `{forbidden}` lifecycle state"
+        );
+    }
+    let tcp = read(&stack.join("tcp.rs"));
+    assert!(
+        tcp.contains("crate::packet"),
+        "TCP lifecycle must consume the packet parser boundary"
+    );
+    assert!(
+        !tcp.contains("fn parse_ip("),
+        "TCP lifecycle must not recreate IP parsing"
+    );
+}
+
+#[test]
+fn root_process_entrypoint_delegates_command_execution() {
+    let main = read(&workspace_root().join("src/main.rs"));
+    assert!(main.contains("application::execute"));
+    for request in [
+        "method: \"mode.set\"",
+        "method: \"tun.start\"",
+        "method: \"tun.stop\"",
+    ] {
+        assert!(
+            !main.contains(request),
+            "process entrypoint must not construct `{request}` requests"
         );
     }
 }
