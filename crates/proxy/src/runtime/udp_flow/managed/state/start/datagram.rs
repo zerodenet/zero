@@ -1,8 +1,8 @@
 use super::super::error::flow_mismatch;
 use super::super::model::ManagedUdpState;
-use crate::runtime::udp_dispatch::FlowFailure;
 use crate::runtime::udp_flow::managed::flow::ManagedDatagramFlow;
 use crate::runtime::udp_flow::packet_path::ChainTask;
+use crate::runtime::udp_flow::result::FlowFailure;
 use tokio::task::JoinSet;
 
 impl ManagedUdpState {

@@ -1,4 +1,4 @@
-use crate::runtime::orchestration::{OutboundEndpoint, TcpPathCategory};
+use crate::runtime::path::{OutboundEndpoint, TcpPathCategory};
 
 /// Runtime-neutral facts about one resolved outbound leaf.
 ///
@@ -8,8 +8,26 @@ use crate::runtime::orchestration::{OutboundEndpoint, TcpPathCategory};
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct OutboundLeafRuntime<'a> {
     pub(crate) tcp_path: TcpPathCategory,
+    #[cfg(any(
+        feature = "socks5",
+        feature = "vless",
+        feature = "hysteria2",
+        feature = "shadowsocks",
+        feature = "trojan",
+        feature = "vmess",
+        feature = "mieru"
+    ))]
     pub(crate) health_tag: Option<&'a str>,
     pub(crate) endpoint: Option<OutboundEndpoint<'a>>,
     pub(crate) kernel_tag: Option<&'a str>,
+    #[cfg(any(
+        feature = "socks5",
+        feature = "vless",
+        feature = "hysteria2",
+        feature = "shadowsocks",
+        feature = "trojan",
+        feature = "vmess",
+        feature = "mieru"
+    ))]
     pub(crate) udp_policy_tag: Option<&'a str>,
 }

@@ -6,7 +6,7 @@ use zero_engine::EngineError;
 use zero_transport::managed_udp::ProtocolManagedStreamConnectorParts;
 
 use super::super::super::connection::SharedManagedUdpConnection;
-use crate::runtime::orchestration::OutboundEndpoint;
+use crate::runtime::path::OutboundEndpoint;
 use crate::runtime::Proxy;
 use crate::transport::TcpRelayStream;
 

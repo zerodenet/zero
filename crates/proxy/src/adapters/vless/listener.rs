@@ -3,7 +3,6 @@ use zero_engine::EngineError;
 use zero_transport::vless_transport::VlessInboundListenerRequest;
 
 use crate::protocol_registry::BoundInbound;
-use crate::runtime::inbound_protocol::ClientResponseInboundProtocol;
 use crate::runtime::inbound_route::{
     dispatch_recorded_protocol_mux_stream_request_with_defaults,
     dispatch_recorded_protocol_mux_tcp_request_with_defaults, RecordedProtocolMuxRouteDefaults,
@@ -12,6 +11,7 @@ use crate::runtime::listener_loop::{
     run_logged_quic_stream_listener_loop, run_logged_tcp_socket_listener_loop,
     LoggedQuicStreamListenerRequest, LoggedTcpSocketListenerRequest,
 };
+use crate::runtime::tcp_ingress::ClientResponseInboundProtocol;
 use crate::runtime::Proxy;
 
 pub(super) fn spawn(

@@ -1,11 +1,11 @@
 //! Concrete protocol capability bridges for each compiled-in protocol.
 
-mod common;
 mod direct;
 #[cfg(feature = "http_connect")]
 mod http_connect;
 #[cfg(feature = "hysteria2")]
 mod hysteria2;
+mod identity;
 #[cfg(feature = "mieru")]
 mod mieru;
 #[cfg(feature = "mixed")]

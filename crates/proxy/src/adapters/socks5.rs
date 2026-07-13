@@ -7,16 +7,16 @@ use zero_core::Session;
 use zero_engine::{EngineError, ResolvedLeafOutbound};
 use zero_traits::{ProtocolCapabilityDescriptor, ProtocolMetadata};
 
-use crate::adapters::common::{
+use crate::adapters::identity::{
     named_protocol_claims_runtime_leaf, named_protocol_supports_inbound,
     named_protocol_supports_outbound, NamedProtocolAdapter,
 };
 use crate::protocol_registry::{
     proxy_leaf_runtime, BoundInbound, InboundAdapterContext, InboundListenerCapability,
     OutboundAdapterContext, OutboundLeafRuntime, ProtocolSupportCapability, TcpOutboundCapability,
-    UdpAdapterContext, UdpFlowCapability, UdpPacketPathCapability,
+    UdpAdapterContext, UdpFlowCapability, UdpPacketPathCapability, UpstreamUdpHandlerProvider,
 };
-use crate::runtime::orchestration::TcpPathCategory;
+use crate::runtime::path::TcpPathCategory;
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
 use crate::runtime::udp_flow::registered::UpstreamAssociationHandler;
 use crate::transport::{EstablishedTcpOutbound, TcpOutboundFailure};
@@ -61,10 +61,6 @@ impl UdpPacketPathCapability for Socks5Adapter {
 #[cfg(feature = "socks5")]
 #[async_trait]
 impl UdpFlowCapability for Socks5Adapter {
-    fn upstream_association_handler(&self) -> Option<Box<dyn UpstreamAssociationHandler>> {
-        Some(udp::upstream_association_handler())
-    }
-
     async fn start_udp_flow(
         &self,
         dispatch: &mut UdpDispatch,
@@ -75,6 +71,13 @@ impl UdpFlowCapability for Socks5Adapter {
     ) -> Result<FlowStartResult, FlowFailure> {
         self.start_udp_flow_impl(dispatch, ctx.proxy(), session, leaf, payload)
             .await
+    }
+}
+
+#[cfg(feature = "socks5")]
+impl UpstreamUdpHandlerProvider for Socks5Adapter {
+    fn upstream_association_handler(&self) -> Box<dyn UpstreamAssociationHandler> {
+        udp::upstream_association_handler()
     }
 }
 

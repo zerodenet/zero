@@ -7,7 +7,7 @@ use zero_transport::managed_udp::ProtocolManagedDatagramSocketUdpResumeConnectio
 use super::super::super::connection::SharedManagedDatagramUdpConnection;
 use super::super::super::datagram::managed_datagram_connection_from_ops;
 use super::super::manager::ManagedDatagramSocketFlowManager;
-use crate::runtime::orchestration::OutboundEndpoint;
+use crate::runtime::path::OutboundEndpoint;
 use crate::runtime::udp_flow::packet_path::UdpPacketRef;
 use crate::runtime::Proxy;
 

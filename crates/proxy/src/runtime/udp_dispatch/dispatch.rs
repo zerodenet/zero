@@ -5,8 +5,8 @@ use zero_engine::{EngineError, ResolvedOutbound, SessionOutcome};
 
 use super::{FlowStartResult, UdpCandidate, UdpDispatch};
 use crate::logging::{log_session_accepted, log_session_failed, log_session_finished};
-use crate::runtime::inbound_protocol::apply_kernel_rate_limits;
 use crate::runtime::pipe::UdpPipeInput;
+use crate::runtime::tcp_ingress::apply_kernel_rate_limits;
 use crate::runtime::Proxy;
 
 impl UdpDispatch {

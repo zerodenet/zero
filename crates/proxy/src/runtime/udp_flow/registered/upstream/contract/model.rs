@@ -1,5 +1,18 @@
 use super::handler::UpstreamAssociationHandler;
+use crate::runtime::udp_flow::managed::ManagedUdpFlowResume;
+use crate::runtime::Proxy;
+use zero_core::Session;
 
+pub(crate) struct UpstreamAssociationSend<'a> {
+    pub(crate) proxy: Option<&'a Proxy>,
+    pub(crate) session: &'a Session,
+    pub(crate) server: &'a str,
+    pub(crate) port: u16,
+    pub(crate) resume: ManagedUdpFlowResume,
+    pub(crate) payload: &'a [u8],
+}
+
+#[cfg(feature = "socks5")]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum UpstreamAssociationCloseReason {
     Closed,
@@ -7,6 +20,7 @@ pub(crate) enum UpstreamAssociationCloseReason {
     Dropped,
 }
 
+#[cfg(feature = "socks5")]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct UpstreamAssociationStages {
     pub(crate) proxy_stage: &'static str,
@@ -14,6 +28,7 @@ pub(crate) struct UpstreamAssociationStages {
     pub(crate) resume_message: &'static str,
 }
 
+#[cfg(feature = "socks5")]
 impl UpstreamAssociationStages {
     pub(crate) const fn new(
         proxy_stage: &'static str,

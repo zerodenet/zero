@@ -1,14 +1,13 @@
 use super::ProtocolRegistry;
-use crate::protocol_capability::{protocol_capability, protocol_descriptor};
-use crate::protocol_registry::ProtocolSupportCapability;
+use crate::protocol_catalog::{protocol_capability, protocol_descriptor};
 
 impl ProtocolRegistry {
     /// Names of all compiled-in inbound protocols.
     pub(crate) fn inbound_names(&self) -> Vec<&'static str> {
-        self.adapters
+        self.entries
             .iter()
-            .filter(|a| ProtocolSupportCapability::has_inbound(a.as_ref()))
-            .map(|a| ProtocolSupportCapability::name(a.as_ref()))
+            .filter(|entry| entry.support.has_inbound())
+            .map(|entry| entry.support.name())
             .collect::<Vec<_>>()
     }
 
@@ -16,19 +15,19 @@ impl ProtocolRegistry {
     pub(crate) fn outbound_names(&self) -> Vec<&'static str> {
         let mut names: Vec<&'static str> = vec!["direct", "block"];
         names.extend(
-            self.adapters
+            self.entries
                 .iter()
-                .filter(|a| ProtocolSupportCapability::has_outbound(a.as_ref()))
-                .map(|a| ProtocolSupportCapability::name(a.as_ref())),
+                .filter(|entry| entry.support.has_outbound())
+                .map(|entry| entry.support.name()),
         );
         names
     }
 
     pub(crate) fn capabilities(&self) -> Vec<zero_api::ProtocolCapability> {
         let mut descriptors = self
-            .adapters
+            .entries
             .iter()
-            .map(|adapter| adapter.descriptor())
+            .map(|entry| entry.support.descriptor())
             .collect::<Vec<_>>();
 
         if !descriptors

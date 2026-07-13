@@ -1,7 +1,8 @@
 use zero_engine::{EngineError, ResolvedLeafOutbound};
 use zero_transport::outbound_leaf::ResolveTransportLeafError;
 
-use crate::runtime::udp_dispatch::FlowFailure;
+use crate::runtime::udp_flow::result::FlowFailure;
+#[cfg(feature = "vless")]
 use crate::transport::TcpOutboundFailure;
 
 pub(super) fn invalid_input_error(
@@ -33,6 +34,7 @@ pub(super) fn udp_flow_failure(
     }
 }
 
+#[cfg(feature = "vless")]
 pub(super) fn relay_chain_flow_failure(failure: TcpOutboundFailure) -> FlowFailure {
     FlowFailure {
         stage: failure.stage,
@@ -62,6 +64,7 @@ where
     }
 }
 
+#[cfg(feature = "vless")]
 pub(super) fn last_udp_prepare_failure<E>(
     chain: &[ResolvedLeafOutbound<'_>],
     error: ResolveTransportLeafError<E>,

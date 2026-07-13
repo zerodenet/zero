@@ -1,13 +1,44 @@
-use super::super::model::ManagedStreamFlowHandler;
+use super::super::model::ManagedRelayFlowHandler;
+#[cfg(any(
+    feature = "vless",
+    feature = "vmess",
+    feature = "trojan",
+    feature = "mieru"
+))]
+use super::super::model::ManagedStreamPacketFlowHandler;
 
 pub(in crate::runtime::udp_flow::managed) struct ManagedStreamState {
-    pub(in crate::runtime::udp_flow::managed) handlers: Vec<Box<dyn ManagedStreamFlowHandler>>,
+    #[cfg(any(
+        feature = "vless",
+        feature = "vmess",
+        feature = "trojan",
+        feature = "mieru"
+    ))]
+    pub(in crate::runtime::udp_flow::managed) stream_packet_handlers:
+        Vec<Box<dyn ManagedStreamPacketFlowHandler>>,
+    pub(in crate::runtime::udp_flow::managed) relay_handlers: Vec<Box<dyn ManagedRelayFlowHandler>>,
 }
 
 impl ManagedStreamState {
     pub(in crate::runtime::udp_flow::managed) fn new(
-        handlers: Vec<Box<dyn ManagedStreamFlowHandler>>,
+        #[cfg(any(
+            feature = "vless",
+            feature = "vmess",
+            feature = "trojan",
+            feature = "mieru"
+        ))]
+        stream_packet_handlers: Vec<Box<dyn ManagedStreamPacketFlowHandler>>,
+        relay_handlers: Vec<Box<dyn ManagedRelayFlowHandler>>,
     ) -> Self {
-        Self { handlers }
+        Self {
+            #[cfg(any(
+                feature = "vless",
+                feature = "vmess",
+                feature = "trojan",
+                feature = "mieru"
+            ))]
+            stream_packet_handlers,
+            relay_handlers,
+        }
     }
 }

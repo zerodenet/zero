@@ -5,21 +5,49 @@ use zero_core::Session;
 use zero_engine::{EngineError, ResolvedLeafOutbound};
 use zero_traits::{ProtocolCapabilityDescriptor, ProtocolMetadata};
 
-use crate::adapters::common::{
+use crate::adapters::identity::{
     named_protocol_claims_runtime_leaf, named_protocol_supports_inbound,
     named_protocol_supports_outbound, NamedProtocolAdapter,
 };
-use crate::protocol_capability::protocol_descriptor;
+use crate::protocol_catalog::protocol_descriptor;
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
+use crate::protocol_registry::UdpAdapterContext;
 use crate::protocol_registry::{
     direct_leaf_runtime, BoundInbound, InboundAdapterContext, InboundListenerCapability,
     OutboundAdapterContext, OutboundLeafRuntime, ProtocolSupportCapability, TcpOutboundCapability,
-    UdpAdapterContext, UdpFlowCapability, UdpPacketPathCapability,
+    UdpFlowCapability, UdpPacketPathCapability,
 };
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
 use crate::transport::{EstablishedTcpOutbound, TcpOutboundFailure};
 
 mod inbound;
 mod tcp;
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
 mod udp;
 
 // Direct inbound is always available (no feature gate).
@@ -33,6 +61,15 @@ impl NamedProtocolAdapter for DirectAdapter {
 }
 
 #[async_trait]
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
 impl UdpFlowCapability for DirectAdapter {
     async fn start_udp_flow(
         &self,
@@ -46,6 +83,17 @@ impl UdpFlowCapability for DirectAdapter {
             .await
     }
 }
+
+#[cfg(not(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+)))]
+impl UdpFlowCapability for DirectAdapter {}
 
 impl UdpPacketPathCapability for DirectAdapter {}
 

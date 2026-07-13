@@ -1,13 +1,12 @@
 use zero_config::{InboundProtocolConfig, OutboundProtocolConfig};
 
 use super::ProtocolRegistry;
-use crate::protocol_registry::ProtocolSupportCapability;
 
 impl ProtocolRegistry {
     pub(crate) fn supports_inbound(&self, config: &InboundProtocolConfig) -> bool {
-        self.adapters
+        self.entries
             .iter()
-            .any(|adapter| ProtocolSupportCapability::supports_inbound(adapter.as_ref(), config))
+            .any(|entry| entry.support.supports_inbound(config))
     }
 
     pub(crate) fn supports_outbound(&self, config: &OutboundProtocolConfig) -> bool {
@@ -15,19 +14,19 @@ impl ProtocolRegistry {
             config,
             OutboundProtocolConfig::Direct | OutboundProtocolConfig::Block
         ) || self
-            .adapters
+            .entries
             .iter()
-            .any(|adapter| ProtocolSupportCapability::supports_outbound(adapter.as_ref(), config))
+            .any(|entry| entry.support.supports_outbound(config))
     }
 
     /// Human-readable label for an inbound protocol config.
     pub(crate) fn inbound_protocol_label(&self, config: &InboundProtocolConfig) -> &'static str {
-        for adapter in &self.adapters {
-            if ProtocolSupportCapability::supports_inbound(adapter.as_ref(), config) {
-                return ProtocolSupportCapability::name(adapter.as_ref());
+        for entry in &self.entries {
+            if entry.support.supports_inbound(config) {
+                return entry.support.name();
             }
         }
-        "unknown"
+        config.protocol_name()
     }
 
     /// Cargo feature name needed to compile this inbound protocol.
@@ -35,26 +34,27 @@ impl ProtocolRegistry {
         &self,
         config: &InboundProtocolConfig,
     ) -> &'static str {
-        for adapter in &self.adapters {
-            if ProtocolSupportCapability::supports_inbound(adapter.as_ref(), config) {
-                return ProtocolSupportCapability::feature_name(adapter.as_ref());
+        for entry in &self.entries {
+            if entry.support.supports_inbound(config) {
+                return entry.support.feature_name();
             }
         }
-        "protocol_not_compiled"
+        let protocol = config.protocol_name();
+        if protocol == "direct" {
+            "core"
+        } else {
+            protocol
+        }
     }
 
     /// Human-readable label for an outbound protocol config.
     pub(crate) fn outbound_protocol_label(&self, config: &OutboundProtocolConfig) -> &'static str {
-        for adapter in &self.adapters {
-            if ProtocolSupportCapability::supports_outbound(adapter.as_ref(), config) {
-                return ProtocolSupportCapability::name(adapter.as_ref());
+        for entry in &self.entries {
+            if entry.support.supports_outbound(config) {
+                return entry.support.name();
             }
         }
-        match config {
-            OutboundProtocolConfig::Direct => "direct",
-            OutboundProtocolConfig::Block => "block",
-            _ => "unknown",
-        }
+        config.protocol_name()
     }
 
     /// Cargo feature name needed to compile this outbound protocol.
@@ -62,14 +62,16 @@ impl ProtocolRegistry {
         &self,
         config: &OutboundProtocolConfig,
     ) -> &'static str {
-        for adapter in &self.adapters {
-            if ProtocolSupportCapability::supports_outbound(adapter.as_ref(), config) {
-                return ProtocolSupportCapability::feature_name(adapter.as_ref());
+        for entry in &self.entries {
+            if entry.support.supports_outbound(config) {
+                return entry.support.feature_name();
             }
         }
-        match config {
-            OutboundProtocolConfig::Direct | OutboundProtocolConfig::Block => "core",
-            _ => "protocol_not_compiled",
+        let protocol = config.protocol_name();
+        if matches!(protocol, "direct" | "block") {
+            "core"
+        } else {
+            protocol
         }
     }
 }

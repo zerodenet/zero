@@ -1,7 +1,6 @@
 use zero_engine::ResolvedLeafOutbound;
 
-use crate::protocol_registry::TcpOutboundCapability;
-use crate::runtime::orchestration::TcpPathCategory;
+use crate::runtime::path::TcpPathCategory;
 
 use super::fixtures::{compiled_in_outbound_leaves, outbound_leaf_name};
 
@@ -11,9 +10,9 @@ fn compiled_in_outbound_leaf_variants_have_expected_adapter_claims() {
 
     for (leaf, expected_claims) in compiled_in_outbound_leaves() {
         let claim_count = registry
-            .adapters
+            .entries
             .iter()
-            .filter(|adapter| TcpOutboundCapability::claims_outbound_leaf(adapter.as_ref(), &leaf))
+            .filter(|entry| entry.tcp.claims_outbound_leaf(&leaf))
             .count();
         assert_eq!(
             claim_count,
@@ -40,9 +39,9 @@ fn block_outbound_leaf_is_kernel_fact_not_adapter_protocol() {
     };
 
     let claim_count = registry
-        .adapters
+        .entries
         .iter()
-        .filter(|adapter| TcpOutboundCapability::claims_outbound_leaf(adapter.as_ref(), &leaf))
+        .filter(|entry| entry.tcp.claims_outbound_leaf(&leaf))
         .count();
     assert_eq!(claim_count, 0, "block should not be claimed by adapters");
     assert!(

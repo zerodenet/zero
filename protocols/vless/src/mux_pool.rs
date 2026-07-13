@@ -17,6 +17,9 @@ use zero_core::{Address, Error};
 
 use crate::mux_crypto::MuxCrypto;
 
+#[cfg(test)]
+mod tests;
+
 // ── Pool key types ──
 
 /// Identifies a unique upstream endpoint including transport.

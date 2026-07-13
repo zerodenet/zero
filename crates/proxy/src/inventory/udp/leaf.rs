@@ -15,7 +15,7 @@ impl ProtocolInventory {
         crate::runtime::udp_dispatch::FlowStartResult,
         crate::runtime::udp_dispatch::FlowFailure,
     > {
-        let adapter = self.registry.find_outbound_leaf(leaf).map_err(|error| {
+        let adapter = self.registry.find_udp_flow_leaf(leaf).map_err(|error| {
             crate::runtime::udp_dispatch::FlowFailure {
                 stage: "find_outbound_leaf",
                 error,

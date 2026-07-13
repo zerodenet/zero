@@ -23,6 +23,15 @@ pub(super) enum EstablishedTcpOutboundKind {
         upstream: TcpRelayStream,
     },
     Block,
+    #[cfg(any(
+        feature = "socks5",
+        feature = "vless",
+        feature = "hysteria2",
+        feature = "shadowsocks",
+        feature = "trojan",
+        feature = "vmess",
+        feature = "mieru"
+    ))]
     Proxied {
         tag: String,
         server: String,
@@ -50,6 +59,15 @@ impl EstablishedTcpOutbound {
         }
     }
 
+    #[cfg(any(
+        feature = "socks5",
+        feature = "vless",
+        feature = "hysteria2",
+        feature = "shadowsocks",
+        feature = "trojan",
+        feature = "vmess",
+        feature = "mieru"
+    ))]
     pub(crate) fn proxied(
         tag: impl Into<String>,
         server: impl Into<String>,
@@ -74,9 +92,18 @@ impl EstablishedTcpOutbound {
 
     pub(crate) fn into_relay_stream(self) -> Result<TcpRelayStream, EngineError> {
         match self.kind {
-            EstablishedTcpOutboundKind::Direct { upstream, .. }
-            | EstablishedTcpOutboundKind::Proxied { upstream, .. }
-            | EstablishedTcpOutboundKind::Relay { upstream } => Ok(upstream),
+            EstablishedTcpOutboundKind::Direct { upstream, .. } => Ok(upstream),
+            #[cfg(any(
+                feature = "socks5",
+                feature = "vless",
+                feature = "hysteria2",
+                feature = "shadowsocks",
+                feature = "trojan",
+                feature = "vmess",
+                feature = "mieru"
+            ))]
+            EstablishedTcpOutboundKind::Proxied { upstream, .. } => Ok(upstream),
+            EstablishedTcpOutboundKind::Relay { upstream } => Ok(upstream),
             EstablishedTcpOutboundKind::Block => Err(EngineError::Io(io::Error::new(
                 io::ErrorKind::InvalidInput,
                 "first relay hop resolved to block",
@@ -86,9 +113,7 @@ impl EstablishedTcpOutbound {
 }
 
 pub(crate) struct TcpOutboundFailure {
-    #[allow(dead_code)]
     pub stage: &'static str,
     pub error: EngineError,
-    #[allow(dead_code)]
     pub upstream_endpoint: Option<(String, u16)>,
 }

@@ -5,18 +5,19 @@ use zero_core::Session;
 use zero_engine::{EngineError, ResolvedLeafOutbound};
 use zero_traits::{ProtocolCapabilityDescriptor, ProtocolMetadata};
 
-use crate::adapters::common::{
+use crate::adapters::identity::{
     named_protocol_claims_runtime_leaf, named_protocol_supports_inbound,
     named_protocol_supports_outbound, NamedProtocolAdapter,
 };
 use crate::protocol_registry::{
     proxy_leaf_runtime, BoundInbound, InboundAdapterContext, InboundListenerCapability,
-    OutboundAdapterContext, OutboundLeafRuntime, ProtocolSupportCapability, TcpOutboundCapability,
-    UdpAdapterContext, UdpFlowCapability, UdpPacketPathCapability,
+    ManagedUdpHandlerProvider, OutboundAdapterContext, OutboundLeafRuntime,
+    ProtocolSupportCapability, TcpOutboundCapability, UdpAdapterContext, UdpFlowCapability,
+    UdpPacketPathCapability,
 };
-use crate::runtime::orchestration::TcpPathCategory;
+use crate::runtime::path::TcpPathCategory;
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
-use crate::runtime::udp_flow::managed::ManagedStreamFlowHandler;
+use crate::runtime::udp_flow::managed::ManagedStreamHandlerPair;
 use crate::transport::{EstablishedTcpOutbound, TcpOutboundFailure};
 
 #[cfg(feature = "mieru")]
@@ -39,10 +40,6 @@ impl NamedProtocolAdapter for MieruAdapter {
 #[cfg(feature = "mieru")]
 #[async_trait]
 impl UdpFlowCapability for MieruAdapter {
-    fn managed_stream_udp_handler(&self) -> Option<Box<dyn ManagedStreamFlowHandler>> {
-        Some(udp::managed_stream_handler())
-    }
-
     async fn start_udp_flow(
         &self,
         dispatch: &mut UdpDispatch,
@@ -65,6 +62,13 @@ impl UdpFlowCapability for MieruAdapter {
     ) -> Result<FlowStartResult, FlowFailure> {
         self.start_udp_relay_final_hop_impl(dispatch, session, carrier, leaf, payload)
             .await
+    }
+}
+
+#[cfg(feature = "mieru")]
+impl ManagedUdpHandlerProvider for MieruAdapter {
+    fn managed_stream_udp_handlers(&self) -> Option<ManagedStreamHandlerPair> {
+        Some(udp::managed_stream_handler())
     }
 }
 

@@ -10,7 +10,7 @@ impl ProtocolInventory {
         &self,
         leaf: &zero_engine::ResolvedLeafOutbound<'_>,
     ) -> Result<bool, EngineError> {
-        let adapter = self.registry.find_outbound_leaf(leaf)?;
+        let adapter = self.registry.find_udp_flow_leaf(leaf)?;
         Ok(UdpFlowCapability::udp_relay_needs_two_streams(
             adapter.as_ref(),
             leaf,
@@ -32,7 +32,7 @@ impl ProtocolInventory {
         let final_hop = chain.last().expect("relay chain has at least 2 hops");
         let adapter = self
             .registry
-            .find_outbound_leaf(final_hop)
+            .find_udp_flow_leaf(final_hop)
             .map_err(|error| crate::runtime::udp_dispatch::FlowFailure {
                 stage: "find_outbound_leaf",
                 error,
@@ -62,7 +62,7 @@ impl ProtocolInventory {
         crate::runtime::udp_dispatch::FlowStartResult,
         crate::runtime::udp_dispatch::FlowFailure,
     > {
-        let adapter = self.registry.find_outbound_leaf(leaf).map_err(|error| {
+        let adapter = self.registry.find_udp_flow_leaf(leaf).map_err(|error| {
             crate::runtime::udp_dispatch::FlowFailure {
                 stage: "find_outbound_leaf",
                 error,

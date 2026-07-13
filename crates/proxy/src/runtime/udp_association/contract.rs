@@ -9,12 +9,12 @@ use zero_engine::EngineError;
 use zero_platform_tokio::TokioDatagramSocket;
 use zero_traits::DnsResolver;
 
-use crate::runtime::udp_dispatch::UdpDispatch;
-use crate::runtime::udp_flow::helpers::{
+use crate::runtime::udp_delivery::write_direct_response as write_direct_udp_response;
+use crate::runtime::udp_delivery::{
     record_direct_udp_response_parts, UdpChainResponseParts, UdpUpstreamResponseParts,
 };
-use crate::runtime::udp_inbound_dispatch::dispatch_inbound_udp_packet;
-use crate::runtime::udp_response::write_direct_response as write_direct_udp_response;
+use crate::runtime::udp_dispatch::UdpDispatch;
+use crate::runtime::udp_ingress::dispatch_inbound_udp_packet;
 use crate::runtime::Proxy;
 use crate::transport::{MeteredStream, StreamTraffic};
 

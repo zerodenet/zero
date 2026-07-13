@@ -1,14 +1,13 @@
-use zero_engine::EngineError;
-
 use super::super::contract::{UpstreamAssociationTarget, UpstreamAssociationTransport};
 use super::association::UpstreamAssociationRuntime;
-use crate::runtime::udp_dispatch::FlowFailure;
-use crate::runtime::udp_flow::managed::ManagedUdpFlowRequest;
+use super::upstream_flow_mismatch;
+use crate::runtime::udp_flow::registered::upstream::UpstreamAssociationSend;
+use crate::runtime::udp_flow::result::FlowFailure;
 
 pub(crate) async fn start_registered_upstream_flow<T, A>(
     runtime: &mut UpstreamAssociationRuntime<T, A>,
     inbound_tag: &str,
-    request: ManagedUdpFlowRequest<'_>,
+    request: UpstreamAssociationSend<'_>,
     proxy_stage: &'static str,
     resume_stage: &'static str,
     resume_message: &'static str,
@@ -76,17 +75,4 @@ where
 {
     let (outbound_tag, server, port) = target.log_parts();
     (outbound_tag.to_owned(), server.to_owned(), port)
-}
-
-pub(crate) fn upstream_flow_mismatch(
-    stage: &'static str,
-    server: &str,
-    port: u16,
-    message: &'static str,
-) -> FlowFailure {
-    FlowFailure {
-        stage,
-        error: EngineError::Io(std::io::Error::other(message)),
-        upstream: Some((server.to_string(), port)),
-    }
 }

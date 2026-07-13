@@ -11,7 +11,7 @@ pub mod http_upgrade;
 #[cfg(feature = "quic")]
 pub mod hysteria2_quic;
 pub mod inbound_route;
-#[cfg(any(feature = "vless", feature = "vmess"))]
+#[cfg(any(feature = "vless", feature = "vmess", feature = "trojan"))]
 pub mod inbound_stack;
 pub mod managed_udp;
 pub mod metered;

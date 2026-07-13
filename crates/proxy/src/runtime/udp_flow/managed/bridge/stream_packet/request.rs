@@ -3,7 +3,12 @@ use zero_core::Session;
 use crate::runtime::Proxy;
 use crate::transport::RelayCarrier;
 
-pub(super) struct ManagedStreamPacketStartBridge<'a, T> {
+pub(crate) struct ManagedStreamPacketRelay<'a> {
+    pub(crate) carrier: RelayCarrier,
+    pub(crate) tls_server_name: Option<&'a str>,
+}
+
+pub(crate) struct ManagedStreamPacketStartBridge<'a, T> {
     pub(super) proxy: Option<&'a Proxy>,
     pub(super) tag: &'a str,
     pub(super) session: &'a Session,
@@ -17,15 +22,15 @@ pub(super) struct ManagedStreamPacketStartBridge<'a, T> {
 }
 
 impl<'a, T> ManagedStreamPacketStartBridge<'a, T> {
-    pub(super) fn direct(
+    pub(crate) fn direct(
         proxy: &'a Proxy,
         tag: &'a str,
         session: &'a Session,
-        server: &'a str,
-        port: u16,
+        endpoint: (&'a str, u16),
         resume: T,
         payload: &'a [u8],
     ) -> Self {
+        let (server, port) = endpoint;
         Self {
             proxy: Some(proxy),
             tag,
@@ -40,24 +45,22 @@ impl<'a, T> ManagedStreamPacketStartBridge<'a, T> {
         }
     }
 
-    #[allow(clippy::too_many_arguments)]
-    pub(super) fn relay(
+    pub(crate) fn relay(
         proxy: Option<&'a Proxy>,
         tag: &'a str,
         session: &'a Session,
-        carrier: RelayCarrier,
-        tls_server_name: Option<&'a str>,
-        server: &'a str,
-        port: u16,
+        relay: ManagedStreamPacketRelay<'a>,
+        endpoint: (&'a str, u16),
         resume: T,
         payload: &'a [u8],
     ) -> Self {
+        let (server, port) = endpoint;
         Self {
             proxy,
             tag,
             session,
-            carrier: Some(carrier),
-            tls_server_name,
+            carrier: Some(relay.carrier),
+            tls_server_name: relay.tls_server_name,
             server,
             port,
             resume,

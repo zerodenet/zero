@@ -3,13 +3,13 @@ use std::any::Any;
 use async_trait::async_trait;
 
 use super::super::super::flow::ManagedUdpFlowResume;
-use super::super::super::model::{ManagedDatagramFlowHandler, ManagedExistingSend};
+use super::super::super::model::{ManagedDatagramExistingSend, ManagedDatagramFlowHandler};
 use super::super::connector::ManagedDatagramSocketFlowConnector;
 use super::mismatch::managed_mismatch;
 use super::model::ManagedDatagramSocketFlowManager;
-use crate::runtime::orchestration::OutboundEndpoint;
-use crate::runtime::udp_dispatch::FlowFailure;
+use crate::runtime::path::OutboundEndpoint;
 use crate::runtime::udp_flow::packet_path::{UdpFlowContext, UdpPacketRef};
+use crate::runtime::udp_flow::result::FlowFailure;
 use crate::runtime::Proxy;
 
 impl<T, C> ManagedDatagramSocketFlowManager<T, C>
@@ -65,7 +65,7 @@ where
 
     async fn send_managed_existing(
         &mut self,
-        request: ManagedExistingSend<'_>,
+        request: ManagedDatagramExistingSend<'_>,
     ) -> Result<usize, FlowFailure> {
         let Some(resume) = request.resume.cloned::<T>() else {
             return Err(managed_mismatch(
@@ -108,7 +108,7 @@ where
 
     async fn send_managed_existing(
         &mut self,
-        request: ManagedExistingSend<'_>,
+        request: ManagedDatagramExistingSend<'_>,
     ) -> Result<usize, FlowFailure> {
         ManagedDatagramSocketFlowManager::send_managed_existing(self, request).await
     }

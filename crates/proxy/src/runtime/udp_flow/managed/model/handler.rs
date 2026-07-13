@@ -1,31 +1,79 @@
-use crate::runtime::udp_dispatch::FlowFailure;
 use crate::runtime::udp_flow::managed::flow::ManagedUdpFlowResume;
+use crate::runtime::udp_flow::result::FlowFailure;
 
-use super::send::{ManagedExistingSend, ManagedRelaySend};
+#[cfg(any(feature = "hysteria2", feature = "shadowsocks"))]
+use super::send::ManagedDatagramExistingSend;
+#[cfg(any(
+    feature = "vless",
+    feature = "vmess",
+    feature = "trojan",
+    feature = "mieru"
+))]
+use super::send::ManagedRelayExistingSend;
+#[cfg(any(
+    feature = "vless",
+    feature = "vmess",
+    feature = "trojan",
+    feature = "mieru"
+))]
+use super::send::ManagedStreamExistingSend;
 
+#[cfg(any(feature = "hysteria2", feature = "shadowsocks"))]
 #[async_trait::async_trait]
 pub(crate) trait ManagedDatagramFlowHandler: Send + Sync {
     fn supports_managed_existing(&self, resume: &ManagedUdpFlowResume) -> bool;
 
     async fn send_managed_existing(
         &mut self,
-        request: ManagedExistingSend<'_>,
+        request: ManagedDatagramExistingSend<'_>,
     ) -> Result<usize, FlowFailure>;
 }
 
+#[cfg(any(
+    feature = "vless",
+    feature = "vmess",
+    feature = "trojan",
+    feature = "mieru"
+))]
 #[async_trait::async_trait]
-pub(crate) trait ManagedStreamFlowHandler: Send + Sync {
+pub(crate) trait ManagedStreamPacketFlowHandler: Send + Sync {
     fn supports_managed_existing(&self, resume: &ManagedUdpFlowResume) -> bool;
-
-    fn supports_managed_relay_existing(&self, resume: &ManagedUdpFlowResume) -> bool;
 
     async fn send_managed_existing(
         &mut self,
-        request: ManagedExistingSend<'_>,
+        request: ManagedStreamExistingSend<'_>,
     ) -> Result<usize, FlowFailure>;
+}
+
+#[cfg(any(
+    feature = "vless",
+    feature = "vmess",
+    feature = "trojan",
+    feature = "mieru"
+))]
+#[async_trait::async_trait]
+pub(crate) trait ManagedRelayFlowHandler: Send + Sync {
+    fn supports_managed_relay_existing(&self, resume: &ManagedUdpFlowResume) -> bool;
 
     async fn send_managed_relay_existing(
         &mut self,
-        request: ManagedRelaySend<'_>,
+        request: ManagedRelayExistingSend<'_>,
     ) -> Result<usize, FlowFailure>;
+}
+
+#[cfg(any(
+    feature = "vless",
+    feature = "vmess",
+    feature = "trojan",
+    feature = "mieru"
+))]
+pub(crate) struct ManagedStreamHandlerPair {
+    #[cfg(any(
+        feature = "vless",
+        feature = "vmess",
+        feature = "trojan",
+        feature = "mieru"
+    ))]
+    pub(crate) stream_packet: Box<dyn ManagedStreamPacketFlowHandler>,
+    pub(crate) relay: Box<dyn ManagedRelayFlowHandler>,
 }

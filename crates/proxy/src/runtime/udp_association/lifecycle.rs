@@ -7,17 +7,17 @@ use super::contract::{UdpAssociationHandler, UdpAssociationLoopRequest};
 use crate::logging::{
     log_udp_upstream_association_dropped, log_udp_upstream_association_idle_timeout,
 };
-use crate::runtime::udp_dispatch::UdpDispatch;
-use crate::runtime::udp_flow::helpers::{
+use crate::runtime::udp_delivery::{
     log_completed_udp_flow, record_chain_udp_response_parts, record_upstream_udp_response_received,
     wait_for_upstream_idle,
 };
-use crate::runtime::udp_flow::packet_path::ChainTask;
-use crate::runtime::udp_flow::response::UpstreamUdpResponse;
-use crate::runtime::udp_response::{
+use crate::runtime::udp_delivery::{
     write_chain_response as write_chain_udp_response,
     write_upstream_response as write_upstream_udp_response,
 };
+use crate::runtime::udp_dispatch::UdpDispatch;
+use crate::runtime::udp_flow::packet_path::ChainTask;
+use crate::runtime::udp_flow::response::UpstreamUdpResponse;
 use crate::runtime::Proxy;
 use crate::transport::ClientStream;
 
@@ -37,7 +37,7 @@ where
         mut handler,
     } = request;
 
-    let mut dispatch = UdpDispatch::new(inbound_tag).await?;
+    let mut dispatch = UdpDispatch::new(inbound_tag, &proxy.protocols).await?;
     let mut control_probe = [0_u8; 1];
     let mut packet = vec![0_u8; 64 * 1024];
     let mut direct_buf = vec![0_u8; 64 * 1024];

@@ -8,7 +8,7 @@ use super::super::super::connection::{
     managed_tuple_udp_connection_from_ops, SharedManagedUdpConnection,
 };
 use super::super::manager::ManagedDatagramFlowManager;
-use crate::runtime::orchestration::OutboundEndpoint;
+use crate::runtime::path::OutboundEndpoint;
 use crate::runtime::udp_flow::packet_path::UdpPacketRef;
 use crate::runtime::Proxy;
 

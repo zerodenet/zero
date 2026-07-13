@@ -10,25 +10,20 @@ use zero_engine::EngineError;
 
 use super::dispatch::dispatch_protocol_mux_route;
 use super::model::{MuxRouteBridge, NoClientMuxRouteDefaults};
-use crate::runtime::inbound_protocol::NoClientResponseInboundProtocol;
 use crate::runtime::mux_session::{run_protocol_mux_session, MuxSessionLoop};
 use crate::runtime::mux_tcp::run_protocol_mux_tcp_task;
 use crate::runtime::mux_udp::run_protocol_mux_udp_task;
 use crate::runtime::stream_udp::run_mapped_protocol_stream_udp_relay;
+use crate::runtime::tcp_ingress::NoClientResponseInboundProtocol;
 use crate::runtime::Proxy;
 use crate::transport::TcpRelayStream;
 
-#[allow(clippy::too_many_arguments)]
 pub(crate) async fn dispatch_no_client_mux_route<R, FTcp, FTcpFut, FUdp, FUdpFut>(
     route: R,
     proxy: Proxy,
     inbound_tag: String,
     source_addr: Option<std::net::SocketAddr>,
-    udp_protocol: &'static str,
-    mux_protocol: &'static str,
-    panic_message: &'static str,
-    abort_on_end: bool,
-    read_error_log: &'static str,
+    defaults: NoClientMuxRouteDefaults,
     spawn_tcp: FTcp,
     spawn_udp: FUdp,
 ) -> Result<(), EngineError>
@@ -71,7 +66,7 @@ where
                     &session,
                     relay,
                     &inbound_tag,
-                    udp_protocol,
+                    defaults.udp_protocol,
                     TcpRelayStream::new,
                     None,
                 )
@@ -87,9 +82,9 @@ where
                     mux_server,
                     MuxSessionLoop {
                         inbound_tag: &inbound_tag,
-                        protocol: mux_protocol,
-                        panic_message,
-                        abort_on_end,
+                        protocol: defaults.mux_protocol,
+                        panic_message: defaults.panic_message,
+                        abort_on_end: defaults.abort_on_end,
                     },
                     spawn_tcp,
                     spawn_udp,
@@ -98,7 +93,7 @@ where
                 {
                     Ok(()) => Ok(()),
                     Err(error) => {
-                        warn!(error = %error, "{read_error_log}");
+                        warn!(error = %error, "{}", defaults.read_error_log);
                         Ok(())
                     }
                 }
@@ -144,11 +139,7 @@ where
         proxy,
         inbound_tag,
         source_addr,
-        defaults.udp_protocol,
-        defaults.mux_protocol,
-        defaults.panic_message,
-        defaults.abort_on_end,
-        defaults.read_error_log,
+        defaults,
         spawn_tcp,
         spawn_udp,
     )

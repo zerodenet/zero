@@ -21,6 +21,15 @@ pub(crate) fn extract_tcp_stream(
             io::ErrorKind::ConnectionRefused,
             "blocked",
         ))),
+        #[cfg(any(
+            feature = "socks5",
+            feature = "vless",
+            feature = "hysteria2",
+            feature = "shadowsocks",
+            feature = "trojan",
+            feature = "vmess",
+            feature = "mieru"
+        ))]
         EstablishedTcpOutboundKind::Proxied {
             tag,
             server,

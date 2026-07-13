@@ -116,6 +116,7 @@ impl<W: AsyncWrite + Unpin> AsyncWrite for RateLimitedWriter<W> {
 
 // ── Bidirectional relay ───────────────────────────────────────────────
 
+#[cfg(feature = "vless")]
 pub(crate) async fn relay_bidirectional_metered<L, R, F1, F2>(
     left: L,
     right: R,
@@ -132,7 +133,7 @@ where
         .await
 }
 
-/// Like [`relay_bidirectional_metered`] but with optional rate limiting.
+/// Bidirectional metered relay with optional rate limiting.
 ///
 /// `up_bps` limits left→right (client upload).
 /// `down_bps` limits right→left (client download).

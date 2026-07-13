@@ -2,8 +2,8 @@ use std::collections::HashMap;
 
 use super::key::PathKey;
 use super::model::Entry;
-use crate::runtime::udp_dispatch::FlowFailure;
 use crate::runtime::udp_flow::packet_path::PacketPathLookupKey;
+use crate::runtime::udp_flow::result::FlowFailure;
 use zero_engine::EngineError;
 
 pub(super) struct SnapshotLookup {

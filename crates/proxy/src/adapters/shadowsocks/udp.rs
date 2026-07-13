@@ -5,16 +5,19 @@ use crate::adapters::shadowsocks::ShadowsocksAdapter;
 use crate::protocol_registry::ProtocolSupportCapability;
 use crate::protocol_registry::{unreachable_leaf, unreachable_udp_leaf};
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
-use crate::runtime::udp_flow::managed::ManagedDatagramFlowHandler;
+use crate::runtime::udp_flow::managed::{
+    datagram_manager::managed_datagram_socket_handler_box, ManagedDatagramFlowHandler,
+};
 use crate::runtime::Proxy;
 use zero_transport::shadowsocks_transport::ShadowsocksTransportLeaf;
 
 mod flow;
-mod managed;
 mod packet_path;
 
 pub(crate) fn managed_datagram_handler() -> Box<dyn ManagedDatagramFlowHandler> {
-    managed::handler()
+    managed_datagram_socket_handler_box::<
+        zero_transport::shadowsocks_transport::ShadowsocksManagedDatagramFlowResume,
+    >()
 }
 
 impl ShadowsocksAdapter {

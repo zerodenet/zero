@@ -5,15 +5,17 @@ use crate::adapters::hysteria2::Hysteria2Adapter;
 use crate::protocol_registry::ProtocolSupportCapability;
 use crate::protocol_registry::{unreachable_leaf, unreachable_udp_leaf};
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
-use crate::runtime::udp_flow::managed::ManagedDatagramFlowHandler;
+use crate::runtime::udp_flow::managed::{
+    datagram_manager::managed_datagram_handler_box, ManagedDatagramFlowHandler,
+};
 use zero_transport::hysteria2_quic::Hysteria2TransportLeaf;
 
 mod flow;
-mod managed;
 mod packet_path;
 
 pub(crate) fn managed_datagram_handler() -> Box<dyn ManagedDatagramFlowHandler> {
-    managed::handler()
+    managed_datagram_handler_box::<zero_transport::hysteria2_quic::Hysteria2ManagedDatagramFlowResume>(
+    )
 }
 
 impl Hysteria2Adapter {

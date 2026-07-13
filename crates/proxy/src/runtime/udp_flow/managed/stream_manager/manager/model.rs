@@ -1,9 +1,10 @@
 use std::marker::PhantomData;
+use std::sync::Arc;
 
 use zero_core::Session;
 
 use super::super::super::cache::ManagedUdpConnectionCache;
-use crate::runtime::orchestration::OutboundEndpoint;
+use crate::runtime::path::OutboundEndpoint;
 use crate::runtime::udp_flow::packet_path::{UdpFlowContext, UdpPacketRef};
 use crate::runtime::Proxy;
 use crate::transport::TcpRelayStream;
@@ -17,6 +18,16 @@ pub(crate) struct ManagedStreamFlowManager<T> {
     pub(super) mismatch_stage: &'static str,
     pub(super) mismatch_message: &'static str,
     _resume: PhantomData<T>,
+}
+
+pub(crate) struct SharedManagedStreamFlowManager<T>(
+    pub(super) Arc<tokio::sync::Mutex<ManagedStreamFlowManager<T>>>,
+);
+
+impl<T> Clone for SharedManagedStreamFlowManager<T> {
+    fn clone(&self) -> Self {
+        Self(self.0.clone())
+    }
 }
 
 pub(super) struct ManagedStreamRelayRequest<'a, T> {
@@ -49,5 +60,11 @@ impl<T> ManagedStreamFlowManager<T> {
             mismatch_message,
             _resume: PhantomData,
         }
+    }
+}
+
+impl<T> SharedManagedStreamFlowManager<T> {
+    pub(crate) fn new(manager: ManagedStreamFlowManager<T>) -> Self {
+        Self(Arc::new(tokio::sync::Mutex::new(manager)))
     }
 }

@@ -51,3 +51,5 @@ mod relays_tcp_through_socks5_to_shadowsocks_to_socks5_relay_chain;
 mod relays_tcp_through_urltest_group_after_probe_selects_direct;
 #[path = "socks5/relays_tcp_through_urltest_group_with_nested_group_member.rs"]
 mod relays_tcp_through_urltest_group_with_nested_group_member;
+#[path = "socks5/reports_upstream_connection_failure.rs"]
+mod reports_upstream_connection_failure;

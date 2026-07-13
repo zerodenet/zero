@@ -1,8 +1,10 @@
-use crate::runtime::udp_dispatch::FlowFailure;
 use crate::runtime::udp_flow::managed::flow::{ManagedDatagramFlow, ManagedUdpFlowResume};
-use crate::runtime::udp_flow::managed::model::{ManagedDatagramFlowHandler, ManagedExistingSend};
+use crate::runtime::udp_flow::managed::model::{
+    ManagedDatagramExistingSend, ManagedDatagramFlowHandler,
+};
 use crate::runtime::udp_flow::packet_path::ChainTask;
-use crate::runtime::udp_flow::sessions::UdpFlowSnapshot;
+use crate::runtime::udp_flow::result::FlowFailure;
+use crate::runtime::udp_flow::snapshot::UdpFlowSnapshot;
 use crate::runtime::Proxy;
 use tokio::task::JoinSet;
 
@@ -28,7 +30,10 @@ impl ManagedDatagramState {
             }
             return Some(
                 handler
-                    .send_managed_existing(ManagedExistingSend::datagram(chain_tasks, &flow))
+                    .send_managed_existing(ManagedDatagramExistingSend::datagram(
+                        chain_tasks,
+                        &flow,
+                    ))
                     .await,
             );
         }
@@ -53,7 +58,7 @@ impl ManagedDatagramState {
             }
             return Some(
                 handler
-                    .send_managed_existing(ManagedExistingSend::forwarded(
+                    .send_managed_existing(ManagedDatagramExistingSend::forwarded(
                         chain_tasks,
                         proxy,
                         flow,

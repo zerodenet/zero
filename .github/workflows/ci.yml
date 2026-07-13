@@ -69,3 +69,65 @@ jobs:
 
       - name: Architecture boundary tests
         run: cargo test -p zero-proxy --test runtime_boundary --all-features
+
+  proxy-feature-matrix:
+    name: Proxy feature (${{ matrix.name }})
+    runs-on: ubuntu-22.04
+    needs: static
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: core-only
+            args: ""
+          - name: simple-tcp
+            args: "--features http_connect"
+          - name: registered-association
+            args: "--features socks5"
+          - name: socket-datagram-packet-path
+            args: "--features shadowsocks"
+          - name: quic-flow-datagram
+            args: "--features hysteria2"
+          - name: packet-stream
+            args: "--features trojan"
+          - name: tuple-two-stream
+            args: "--features vless"
+          - name: generic-tuple-stream
+            args: "--features mieru"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install protoc
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+
+      - name: Check representative proxy feature family
+        run: cargo check -p zero-proxy --no-default-features ${{ matrix.args }}
+
+  optional-surface-matrix:
+    name: Optional surface (${{ matrix.feature }})
+    runs-on: ubuntu-22.04
+    needs: static
+    strategy:
+      fail-fast: false
+      matrix:
+        feature:
+          - status_api
+          - event_dispatcher
+          - panel_connector
+          - grpc_api
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install protoc
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+
+      - name: Check optional surface independently
+        run: cargo check --no-default-features --features ${{ matrix.feature }}

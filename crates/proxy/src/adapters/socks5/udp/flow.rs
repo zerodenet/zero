@@ -1,7 +1,9 @@
 use zero_core::Session;
 use zero_transport::socks5_transport::Socks5ManagedUdpFlowPlan;
 
-use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, ManagedRelayStart, UdpDispatch};
+use crate::runtime::udp_dispatch::{
+    FlowFailure, FlowStartResult, UdpDispatch, UpstreamTrackedStart,
+};
 use crate::runtime::udp_flow::registered::{
     boxed_registered_upstream_handler, UpstreamAssociationHandler, UpstreamAssociationStages,
     UpstreamAssociationTarget,
@@ -40,12 +42,10 @@ pub(super) async fn start(
 ) -> Result<FlowStartResult, FlowFailure> {
     let (tag, server, port, association_target) = plan.into_parts();
     dispatch
-        .start_tracked_managed_relay(ManagedRelayStart {
+        .start_tracked_upstream(UpstreamTrackedStart {
             proxy: Some(proxy),
             tag,
             session,
-            carrier: None,
-            tls_server_name: None,
             server,
             port,
             resume: association_target,

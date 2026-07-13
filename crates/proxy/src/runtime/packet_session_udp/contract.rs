@@ -11,11 +11,13 @@ pub(crate) struct PacketSessionUdpRelayRequest<'a, H> {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum PacketSessionUdpFailurePolicy {
     ReturnError,
+    #[cfg(any(feature = "vless", feature = "vmess"))]
     LogAndBreak,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum PacketSessionUdpReadFailureAction {
+    #[cfg(any(feature = "vless", feature = "vmess"))]
     Continue,
     End,
 }

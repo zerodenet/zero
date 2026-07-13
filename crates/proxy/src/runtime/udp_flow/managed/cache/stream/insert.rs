@@ -8,6 +8,7 @@ use crate::runtime::udp_flow::managed::connection::SharedManagedUdpConnection;
 use crate::runtime::udp_flow::packet_path::{ChainTask, UdpPacketRef};
 
 impl ManagedUdpConnectionCache {
+    #[cfg(any(feature = "hysteria2", feature = "shadowsocks"))]
     async fn send_or_insert_pre_sent<Fut>(
         &mut self,
         key: super::super::key::ManagedUdpConnectionCacheKey,
@@ -33,6 +34,7 @@ impl ManagedUdpConnectionCache {
         Ok(sent)
     }
 
+    #[cfg(any(feature = "hysteria2", feature = "shadowsocks"))]
     pub(crate) async fn send_or_insert_pre_sent_key<Fut>(
         &mut self,
         key: impl Into<String>,
@@ -97,6 +99,12 @@ impl ManagedUdpConnectionCache {
         .await
     }
 
+    #[cfg(any(
+        feature = "vless",
+        feature = "vmess",
+        feature = "trojan",
+        feature = "mieru"
+    ))]
     async fn insert_and_send(
         &mut self,
         key: super::super::key::ManagedUdpConnectionCacheKey,
@@ -111,6 +119,12 @@ impl ManagedUdpConnectionCache {
         Ok(sent)
     }
 
+    #[cfg(any(
+        feature = "vless",
+        feature = "vmess",
+        feature = "trojan",
+        feature = "mieru"
+    ))]
     pub(crate) async fn insert_and_send_key(
         &mut self,
         key: impl Into<String>,

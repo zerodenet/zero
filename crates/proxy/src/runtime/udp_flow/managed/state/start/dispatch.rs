@@ -1,10 +1,23 @@
 use super::super::error::flow_mismatch;
 use super::super::model::ManagedUdpState;
-use crate::runtime::udp_dispatch::FlowFailure;
-use crate::runtime::udp_flow::managed::flow::{
-    ManagedDatagramFlow, ManagedRelayStreamFlow, ManagedStreamPacketFlow, ManagedUdpFlowKind,
-    ManagedUdpFlowRequest,
-};
+#[cfg(any(feature = "hysteria2", feature = "shadowsocks"))]
+use crate::runtime::udp_flow::managed::flow::ManagedDatagramFlow;
+#[cfg(any(
+    feature = "vless",
+    feature = "vmess",
+    feature = "trojan",
+    feature = "mieru"
+))]
+use crate::runtime::udp_flow::managed::flow::ManagedRelayStreamFlow;
+#[cfg(any(
+    feature = "vless",
+    feature = "vmess",
+    feature = "trojan",
+    feature = "mieru"
+))]
+use crate::runtime::udp_flow::managed::flow::ManagedStreamPacketFlow;
+use crate::runtime::udp_flow::managed::flow::{ManagedUdpFlowKind, ManagedUdpFlowRequest};
+use crate::runtime::udp_flow::result::FlowFailure;
 
 impl ManagedUdpState {
     pub(crate) async fn start_flow(
@@ -12,6 +25,7 @@ impl ManagedUdpState {
         request: ManagedUdpFlowRequest<'_>,
     ) -> Result<Option<usize>, FlowFailure> {
         match request.kind {
+            #[cfg(any(feature = "hysteria2", feature = "shadowsocks"))]
             ManagedUdpFlowKind::Datagram => {
                 let Some(chain_tasks) = request.chain_tasks else {
                     return Err(flow_mismatch(
@@ -35,6 +49,12 @@ impl ManagedUdpState {
                 .await
                 .map(Some)
             }
+            #[cfg(any(
+                feature = "vless",
+                feature = "vmess",
+                feature = "trojan",
+                feature = "mieru"
+            ))]
             ManagedUdpFlowKind::StreamPacket => {
                 let Some(chain_tasks) = request.chain_tasks else {
                     return Err(flow_mismatch(
@@ -64,6 +84,12 @@ impl ManagedUdpState {
                 .await
                 .map(Some)
             }
+            #[cfg(any(
+                feature = "vless",
+                feature = "vmess",
+                feature = "trojan",
+                feature = "mieru"
+            ))]
             ManagedUdpFlowKind::RelayStream => {
                 let Some(carrier) = request.carrier else {
                     return Ok(None);

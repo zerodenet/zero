@@ -45,6 +45,14 @@ impl DirectConnector {
         .await
     }
 
+    #[cfg(any(
+        feature = "socks5",
+        feature = "vless",
+        feature = "vmess",
+        feature = "trojan",
+        feature = "mieru",
+        feature = "shadowsocks"
+    ))]
     pub(crate) async fn connect_host(
         &self,
         host: &str,

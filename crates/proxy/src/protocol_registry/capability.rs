@@ -9,35 +9,20 @@ use super::{
     BoundInbound, InboundAdapterContext, OutboundAdapterContext, OutboundLeafRuntime,
     UdpAdapterContext,
 };
-use crate::runtime::udp_flow::managed::{ManagedDatagramFlowHandler, ManagedStreamFlowHandler};
+#[cfg(any(feature = "hysteria2", feature = "shadowsocks"))]
+use crate::runtime::udp_flow::managed::model::ManagedDatagramFlowHandler;
+#[cfg(any(
+    feature = "vless",
+    feature = "vmess",
+    feature = "trojan",
+    feature = "mieru"
+))]
+use crate::runtime::udp_flow::managed::ManagedStreamHandlerPair;
+#[cfg(feature = "socks5")]
 use crate::runtime::udp_flow::registered::UpstreamAssociationHandler;
 use crate::transport::{EstablishedTcpOutbound, TcpOutboundFailure, TcpRelayStream};
 
-pub(crate) trait RegisteredProtocolCapability:
-    ProtocolSupportCapability
-    + InboundListenerCapability
-    + TcpOutboundCapability
-    + UdpFlowCapability
-    + UdpPacketPathCapability
-    + Send
-    + Sync
-    + std::fmt::Debug
-{
-}
-
-impl<T> RegisteredProtocolCapability for T where
-    T: ProtocolSupportCapability
-        + InboundListenerCapability
-        + TcpOutboundCapability
-        + UdpFlowCapability
-        + UdpPacketPathCapability
-        + Send
-        + Sync
-        + std::fmt::Debug
-{
-}
-
-pub(crate) trait ProtocolSupportCapability: ProtocolMetadata {
+pub(crate) trait ProtocolSupportCapability: ProtocolMetadata + Send + Sync {
     fn name(&self) -> &'static str;
     fn feature_name(&self) -> &'static str;
     fn supports_inbound(&self, config: &InboundProtocolConfig) -> bool;
@@ -49,7 +34,7 @@ pub(crate) trait ProtocolSupportCapability: ProtocolMetadata {
 }
 
 #[async_trait]
-pub(crate) trait InboundListenerCapability {
+pub(crate) trait InboundListenerCapability: Send + Sync {
     /// Bind the listener socket eagerly so port-in-use errors surface before
     /// the proxy announces "started".
     async fn bind_inbound(
@@ -73,7 +58,7 @@ pub(crate) trait InboundListenerCapability {
 }
 
 #[async_trait]
-pub(crate) trait TcpOutboundCapability {
+pub(crate) trait TcpOutboundCapability: Send + Sync {
     fn claims_outbound_leaf(&self, _leaf: &ResolvedLeafOutbound<'_>) -> bool {
         false
     }
@@ -107,19 +92,7 @@ pub(crate) trait TcpOutboundCapability {
 }
 
 #[async_trait]
-pub(crate) trait UdpFlowCapability {
-    fn managed_datagram_udp_handler(&self) -> Option<Box<dyn ManagedDatagramFlowHandler>> {
-        None
-    }
-
-    fn managed_stream_udp_handler(&self) -> Option<Box<dyn ManagedStreamFlowHandler>> {
-        None
-    }
-
-    fn upstream_association_handler(&self) -> Option<Box<dyn UpstreamAssociationHandler>> {
-        None
-    }
-
+pub(crate) trait UdpFlowCapability: Send + Sync {
     async fn start_udp_flow(
         &self,
         _dispatch: &mut crate::runtime::udp_dispatch::UdpDispatch,
@@ -169,8 +142,38 @@ pub(crate) trait UdpFlowCapability {
     }
 }
 
+#[cfg(feature = "socks5")]
+pub(crate) trait UpstreamUdpHandlerProvider: Send + Sync {
+    fn upstream_association_handler(&self) -> Box<dyn UpstreamAssociationHandler>;
+}
+
+#[cfg(any(
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "vless",
+    feature = "vmess",
+    feature = "trojan",
+    feature = "mieru"
+))]
+pub(crate) trait ManagedUdpHandlerProvider: Send + Sync {
+    #[cfg(any(feature = "hysteria2", feature = "shadowsocks"))]
+    fn managed_datagram_udp_handler(&self) -> Option<Box<dyn ManagedDatagramFlowHandler>> {
+        None
+    }
+
+    #[cfg(any(
+        feature = "vless",
+        feature = "vmess",
+        feature = "trojan",
+        feature = "mieru"
+    ))]
+    fn managed_stream_udp_handlers(&self) -> Option<ManagedStreamHandlerPair> {
+        None
+    }
+}
+
 #[async_trait]
-pub(crate) trait UdpPacketPathCapability {
+pub(crate) trait UdpPacketPathCapability: Send + Sync {
     fn udp_packet_path_carrier_descriptor(
         &self,
         _leaf: &ResolvedLeafOutbound<'_>,

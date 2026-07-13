@@ -1,4 +1,4 @@
-mod transport;
+mod listener;
 
 use zero_config::InboundConfig;
 use zero_engine::EngineError;
@@ -7,7 +7,7 @@ use crate::adapters::mieru::MieruAdapter;
 use crate::protocol_registry::BoundInbound;
 use crate::runtime::Proxy;
 
-pub(crate) use transport::run_mieru_listener_with_bound;
+pub(crate) use listener::run_mieru_listener_with_bound;
 
 impl MieruAdapter {
     pub(super) fn spawn_inbound_impl(

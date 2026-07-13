@@ -7,10 +7,10 @@ use zero_core::Address;
 use zero_engine::EngineError;
 
 use super::Entry;
-use crate::runtime::udp_dispatch::FlowFailure;
 use crate::runtime::udp_flow::packet_path::{
     DatagramCodec, PacketPathCarrier, UdpFlowContext, UdpPacketRef,
 };
+use crate::runtime::udp_flow::result::FlowFailure;
 
 type RecvItem = (Address, u16, Vec<u8>);
 

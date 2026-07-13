@@ -3,15 +3,16 @@ use zero_core::{DatagramUdpResponder, InboundDatagramUdpRelay, InboundUdpDispatc
 use zero_engine::EngineError;
 
 use super::contract::DatagramUdpRelayRequest;
-use crate::runtime::udp_dispatch::UdpDispatch;
-use crate::runtime::udp_flow::helpers::{
+#[cfg(feature = "socks5")]
+use crate::runtime::udp_delivery::write_optional_upstream_response;
+use crate::runtime::udp_delivery::{
     log_completed_udp_flow, record_chain_udp_response_parts, record_direct_udp_response_parts,
-    record_upstream_udp_response_received, wait_for_upstream_idle,
 };
-use crate::runtime::udp_inbound_dispatch::dispatch_inbound_udp_packet;
-use crate::runtime::udp_response::{
-    write_optional_chain_response, write_optional_direct_response, write_optional_upstream_response,
-};
+#[cfg(feature = "socks5")]
+use crate::runtime::udp_delivery::{record_upstream_udp_response_received, wait_for_upstream_idle};
+use crate::runtime::udp_delivery::{write_optional_chain_response, write_optional_direct_response};
+use crate::runtime::udp_dispatch::UdpDispatch;
+use crate::runtime::udp_ingress::dispatch_inbound_udp_packet;
 use crate::runtime::Proxy;
 
 type ChainUdpResponseResult = Result<
@@ -59,11 +60,15 @@ where
         poll_upstream,
         auth,
     } = request;
-    let mut dispatch = UdpDispatch::new(inbound_tag).await?;
+    let mut dispatch = UdpDispatch::new(inbound_tag, &proxy.protocols).await?;
     let mut direct_buf = vec![0_u8; 64 * 1024];
+    #[cfg(feature = "socks5")]
     let mut upstream_buf = vec![0_u8; 64 * 1024];
+    #[cfg(not(feature = "socks5"))]
+    let _ = poll_upstream;
 
     loop {
+        #[cfg(feature = "socks5")]
         if poll_upstream {
             let (direct_sock, upstream_udp, upstream_idle_deadline, chain_tasks) =
                 dispatch.poll_refs();
@@ -121,6 +126,37 @@ where
                 }
             }
         } else {
+            let (direct_sock, chain_tasks) = dispatch.poll_sockets();
+            select! {
+                read = responder.read_inbound_dispatch(&source) => {
+                    if !process_datagram_read(proxy, &mut dispatch, &mut responder, auth.as_ref(), read).await {
+                        break;
+                    }
+                }
+                recv = direct_sock.recv_from_addr(&mut direct_buf) => {
+                    let (n, sender) = recv?;
+                    let response =
+                        record_direct_udp_response_parts(proxy, &dispatch, sender, &direct_buf[..n]);
+                    let _ = write_optional_direct_response(&response, || async {
+                        responder
+                            .write_response_for_session(
+                                &source,
+                                response.accounting.session_id(),
+                                &response.target,
+                                response.port,
+                                response.payload,
+                            )
+                            .await
+                    })
+                    .await;
+                }
+                Some(chain_result) = chain_tasks.join_next() => {
+                    handle_chain_result(proxy, &source, &mut responder, chain_result).await;
+                }
+            }
+        }
+        #[cfg(not(feature = "socks5"))]
+        {
             let (direct_sock, chain_tasks) = dispatch.poll_sockets();
             select! {
                 read = responder.read_inbound_dispatch(&source) => {

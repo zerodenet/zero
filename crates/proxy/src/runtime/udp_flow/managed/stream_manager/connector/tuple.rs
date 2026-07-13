@@ -12,7 +12,7 @@ use super::flow::{
     managed_stream_connector_flow_from_build, ManagedStreamConnectorFlow,
     ManagedStreamFlowConnector,
 };
-use crate::runtime::orchestration::OutboundEndpoint;
+use crate::runtime::path::OutboundEndpoint;
 use crate::runtime::Proxy;
 use crate::transport::TcpRelayStream;
 

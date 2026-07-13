@@ -11,14 +11,47 @@ mod defaults;
 mod model;
 mod registry;
 
+#[cfg(any(
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "vless",
+    feature = "vmess",
+    feature = "trojan",
+    feature = "mieru"
+))]
+pub(crate) use capability::ManagedUdpHandlerProvider;
+#[cfg(feature = "socks5")]
+pub(crate) use capability::UpstreamUdpHandlerProvider;
 pub(crate) use capability::{
-    InboundListenerCapability, ProtocolSupportCapability, RegisteredProtocolCapability,
-    TcpOutboundCapability, UdpFlowCapability, UdpPacketPathCapability,
+    InboundListenerCapability, ProtocolSupportCapability, TcpOutboundCapability, UdpFlowCapability,
+    UdpPacketPathCapability,
 };
 pub(crate) use context::{InboundAdapterContext, OutboundAdapterContext, UdpAdapterContext};
 #[cfg(feature = "transport_quic")]
 pub(crate) use defaults::bind_transport_inbound;
-pub(crate) use defaults::{unreachable_leaf, unreachable_udp_leaf};
+pub(crate) use defaults::unreachable_leaf;
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
+pub(crate) use defaults::unreachable_udp_leaf;
 pub(crate) use model::{BoundInbound, OutboundLeafRuntime};
+pub(crate) use registry::direct_leaf_runtime;
+#[cfg(test)]
+pub(crate) use registry::fake_direct_leaf;
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
+pub(crate) use registry::proxy_leaf_runtime;
 pub(crate) use registry::ProtocolRegistry;
-pub(crate) use registry::{direct_leaf_runtime, proxy_leaf_runtime};

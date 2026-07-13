@@ -1,86 +1,81 @@
 use std::any::Any;
 
-use zero_core::Session;
-
 use super::request::ManagedStreamPacketStartBridge;
-use crate::runtime::udp_dispatch::{
-    FlowFailure, FlowStartResult, ManagedStreamPacketStart, UdpDispatch,
+use crate::runtime::udp_flow::managed::{
+    ManagedUdpFlowKind, ManagedUdpFlowRequest, ManagedUdpFlowResume,
 };
-use crate::runtime::Proxy;
-use crate::transport::RelayCarrier;
+use crate::runtime::udp_flow::outbound::UdpFlowOutbound;
+use crate::runtime::udp_flow::result::{FlowFailure, FlowStartResult};
+use crate::runtime::udp_flow::state::UdpFlowStartContext;
 
 async fn start_managed_stream_packet<T>(
-    dispatch: &mut UdpDispatch,
+    context: &mut UdpFlowStartContext<'_>,
     request: ManagedStreamPacketStartBridge<'_, T>,
 ) -> Result<FlowStartResult, FlowFailure>
 where
     T: Any + Send + Sync + std::fmt::Debug,
 {
-    dispatch
-        .start_tracked_managed_stream_packet(ManagedStreamPacketStart {
+    let resume = ManagedUdpFlowResume::new(request.resume);
+    let tag = request.tag.to_owned();
+    let server = request.server.to_owned();
+    let port = request.port;
+    let relay_chain = request.relay_chain;
+    let sent = context
+        .start_managed_flow(ManagedUdpFlowRequest {
+            chain_tasks: None,
             proxy: request.proxy,
-            tag: request.tag,
+            kind: if relay_chain {
+                ManagedUdpFlowKind::RelayStream
+            } else {
+                ManagedUdpFlowKind::StreamPacket
+            },
             session: request.session,
             carrier: request.carrier,
             tls_server_name: request.tls_server_name,
             server: request.server,
             port: request.port,
-            resume: request.resume,
+            resume: resume.clone(),
             payload: request.payload,
-            relay_chain: request.relay_chain,
         })
-        .await
+        .await?;
+    let managed = context.register_managed_flow(resume);
+    let outbound = if relay_chain {
+        UdpFlowOutbound::Relay {
+            tag,
+            server,
+            port,
+            managed,
+        }
+    } else {
+        UdpFlowOutbound::StreamPacket {
+            tag,
+            server,
+            port,
+            managed,
+        }
+    };
+    Ok(FlowStartResult::Flow {
+        outbound: Box::new(outbound),
+        tx_bytes: sent as u64,
+    })
 }
 
 pub(crate) async fn start_direct_managed_stream_packet<T>(
-    dispatch: &mut UdpDispatch,
-    proxy: &Proxy,
-    tag: &str,
-    session: &Session,
-    server: &str,
-    port: u16,
-    resume: T,
-    payload: &[u8],
+    context: &mut UdpFlowStartContext<'_>,
+    request: ManagedStreamPacketStartBridge<'_, T>,
 ) -> Result<FlowStartResult, FlowFailure>
 where
     T: Any + Send + Sync + std::fmt::Debug,
 {
-    start_managed_stream_packet(
-        dispatch,
-        ManagedStreamPacketStartBridge::direct(proxy, tag, session, server, port, resume, payload),
-    )
-    .await
+    start_managed_stream_packet(context, request).await
 }
 
-#[allow(clippy::too_many_arguments)]
 pub(crate) async fn start_relay_managed_stream_packet<T>(
-    dispatch: &mut UdpDispatch,
-    proxy: Option<&Proxy>,
-    tag: &str,
-    session: &Session,
-    carrier: RelayCarrier,
-    tls_server_name: Option<&str>,
-    server: &str,
-    port: u16,
-    resume: T,
-    payload: &[u8],
+    context: &mut UdpFlowStartContext<'_>,
+    request: ManagedStreamPacketStartBridge<'_, T>,
 ) -> Result<FlowStartResult, FlowFailure>
 where
     T: Any + Send + Sync + std::fmt::Debug,
 {
-    start_managed_stream_packet(
-        dispatch,
-        ManagedStreamPacketStartBridge::relay(
-            proxy,
-            tag,
-            session,
-            carrier,
-            tls_server_name,
-            server,
-            port,
-            resume,
-            payload,
-        ),
-    )
-    .await
+    start_managed_stream_packet(context, request).await
 }

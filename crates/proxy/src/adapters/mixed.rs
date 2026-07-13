@@ -2,10 +2,10 @@ use zero_config::{InboundConfig, InboundProtocolConfig, OutboundProtocolConfig};
 use zero_engine::EngineError;
 use zero_traits::{ProtocolCapabilityDescriptor, ProtocolMetadata};
 
-use crate::adapters::common::{
+use crate::adapters::identity::{
     named_protocol_supports_inbound, named_protocol_supports_outbound, NamedProtocolAdapter,
 };
-use crate::protocol_capability::protocol_descriptor;
+use crate::protocol_catalog::protocol_descriptor;
 use crate::protocol_registry::{
     BoundInbound, InboundAdapterContext, InboundListenerCapability, ProtocolSupportCapability,
     TcpOutboundCapability, UdpFlowCapability, UdpPacketPathCapability,

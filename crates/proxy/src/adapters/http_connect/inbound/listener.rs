@@ -6,8 +6,8 @@ use zero_engine::EngineError;
 
 use crate::logging::log_listener_connection_error;
 use crate::runtime::http_redirect::select_redirect_target;
-use crate::runtime::inbound_protocol::{serve_inbound, InboundProtocol};
 use crate::runtime::listener_loop::{run_tcp_listener_loop, TcpListenerLoopRequest};
+use crate::runtime::tcp_ingress::{serve_inbound, InboundProtocol};
 use crate::runtime::Proxy;
 use crate::transport::{MeteredStream, TcpRelayStream};
 
@@ -117,6 +117,7 @@ pub(crate) async fn run_http_connect_listener_with_bound(
                         }
                         let engine_error = EngineError::from(error);
                         log_listener_connection_error(
+                            crate::logging::INBOUND_ACCEPT_ROUTE_STAGE,
                             "http_connect",
                             &tag,
                             &source_addr,

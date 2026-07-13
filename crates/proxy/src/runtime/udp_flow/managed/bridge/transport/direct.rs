@@ -7,13 +7,16 @@ use zero_transport::outbound_leaf::{
 };
 
 use super::super::error::udp_prepare_failure;
-use super::super::stream_packet::start_direct_managed_stream_packet;
-use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
+use super::super::stream_packet::{
+    start_direct_managed_stream_packet, ManagedStreamPacketStartBridge,
+};
+use crate::runtime::udp_flow::result::{FlowFailure, FlowStartResult};
+use crate::runtime::udp_flow::state::UdpFlowStartContext;
 use crate::runtime::Proxy;
 
 pub(crate) async fn start_protocol_transport_bridge_udp_flow<'a, TBridge>(
     bridge: &TBridge,
-    dispatch: &mut UdpDispatch,
+    mut context: UdpFlowStartContext<'_>,
     proxy: &Proxy,
     session: &Session,
     leaf: &ResolvedLeafOutbound<'a>,
@@ -41,14 +44,15 @@ where
     )?;
     let endpoint = prepared.endpoint();
     start_direct_managed_stream_packet(
-        dispatch,
-        proxy,
-        endpoint.tag,
-        session,
-        endpoint.server,
-        endpoint.port,
-        prepared_direct_udp_resume(bridge, &prepared),
-        payload,
+        &mut context,
+        ManagedStreamPacketStartBridge::direct(
+            proxy,
+            endpoint.tag,
+            session,
+            (endpoint.server, endpoint.port),
+            prepared_direct_udp_resume(bridge, &prepared),
+            payload,
+        ),
     )
     .await
 }

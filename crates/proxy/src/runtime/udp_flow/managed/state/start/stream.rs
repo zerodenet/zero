@@ -1,8 +1,21 @@
 use super::super::model::ManagedUdpState;
-use crate::runtime::udp_dispatch::FlowFailure;
-use crate::runtime::udp_flow::managed::flow::{ManagedRelayStreamFlow, ManagedStreamPacketFlow};
+use crate::runtime::udp_flow::managed::flow::ManagedRelayStreamFlow;
+#[cfg(any(
+    feature = "vless",
+    feature = "vmess",
+    feature = "trojan",
+    feature = "mieru"
+))]
+use crate::runtime::udp_flow::managed::flow::ManagedStreamPacketFlow;
+use crate::runtime::udp_flow::result::FlowFailure;
 
 impl ManagedUdpState {
+    #[cfg(any(
+        feature = "vless",
+        feature = "vmess",
+        feature = "trojan",
+        feature = "mieru"
+    ))]
     pub(crate) async fn start_stream_packet_flow(
         &mut self,
         request: ManagedStreamPacketFlow<'_>,

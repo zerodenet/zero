@@ -60,6 +60,15 @@ pub(crate) fn unreachable_leaf(
     }
 }
 
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
 pub(crate) fn unreachable_udp_leaf(
     adapter: &'static str,
     _leaf: &ResolvedLeafOutbound<'_>,

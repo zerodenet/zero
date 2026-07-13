@@ -6,7 +6,7 @@ use zero_core::{Address, Session};
 use zero_engine::{CompletedSessionRecord, SessionHandle, SessionOutcome};
 
 use super::outbound::UdpFlowOutbound;
-pub(crate) use crate::runtime::orchestration::UdpPathCategory;
+use super::snapshot::UdpFlowSnapshot;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct UdpFlowKey {
@@ -48,14 +48,6 @@ impl UdpUpstreamResponseKey {
     }
 }
 
-#[derive(Debug, Clone)]
-pub(crate) struct UdpFlowSnapshot {
-    pub(crate) session: Session,
-    pub(crate) outbound: UdpFlowOutbound,
-    /// Client session isolation key (SIP022 3.2.4).
-    pub(crate) client_session_id: Option<u64>,
-}
-
 #[derive(Debug)]
 pub(crate) struct CompletedUdpFlow {
     pub(crate) record: CompletedSessionRecord,
@@ -85,6 +77,7 @@ impl UdpSessionFlows {
     ///
     /// Used for chain-outbound response metering where the outbound tag
     /// may not be known at the call site.
+    #[cfg(feature = "socks5")]
     pub(crate) fn session_id_by_target(
         &self,
         target: &Address,
@@ -147,6 +140,7 @@ impl UdpSessionFlows {
             .or_else(|| self.single_direct_flow_session_id())
     }
 
+    #[cfg(feature = "socks5")]
     pub(crate) fn upstream_response_session_id(
         &self,
         outbound_tag: &str,
@@ -199,6 +193,7 @@ impl UdpSessionFlows {
         direct_flows.next().is_none().then_some(flow.session.id)
     }
 
+    #[cfg(feature = "socks5")]
     fn single_tagged_upstream_flow_session_id(&self, outbound_tag: &str) -> Option<u64> {
         let mut upstream_flows = self
             .flows

@@ -14,17 +14,17 @@ use zero_traits::{ProtocolCapabilityDescriptor, ProtocolMetadata};
 use zero_transport::vless_transport::OwnedVlessInboundBindPlan;
 use zero_transport::vless_transport::VlessStreamBridge;
 
-use crate::adapters::common::{
+use crate::adapters::identity::{
     named_protocol_claims_runtime_leaf, named_protocol_supports_inbound,
     named_protocol_supports_outbound, NamedProtocolAdapter, ProtocolTransportBridgeAdapter,
 };
 use crate::protocol_registry::{
     bind_transport_inbound, proxy_leaf_runtime, BoundInbound, InboundAdapterContext,
-    InboundListenerCapability, OutboundAdapterContext, OutboundLeafRuntime,
-    ProtocolSupportCapability, TcpOutboundCapability, UdpAdapterContext, UdpFlowCapability,
-    UdpPacketPathCapability,
+    InboundListenerCapability, ManagedUdpHandlerProvider, OutboundAdapterContext,
+    OutboundLeafRuntime, ProtocolSupportCapability, TcpOutboundCapability, UdpAdapterContext,
+    UdpFlowCapability, UdpPacketPathCapability,
 };
-use crate::runtime::orchestration::TcpPathCategory;
+use crate::runtime::path::TcpPathCategory;
 #[cfg(feature = "vless")]
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
 #[cfg(feature = "vless")]
@@ -36,7 +36,7 @@ use crate::runtime::udp_flow::managed::{
         start_protocol_transport_bridge_udp_relay_final_hop,
         start_protocol_transport_bridge_udp_relay_two_stream,
     },
-    ManagedStreamFlowHandler,
+    ManagedStreamHandlerPair,
 };
 #[cfg(feature = "vless")]
 use crate::transport::{
@@ -160,10 +160,6 @@ impl TcpOutboundCapability for VlessAdapter {
 #[cfg(feature = "vless")]
 #[async_trait]
 impl UdpFlowCapability for VlessAdapter {
-    fn managed_stream_udp_handler(&self) -> Option<Box<dyn ManagedStreamFlowHandler>> {
-        Some(managed_stream_udp_handler_for_bridge::<VlessStreamBridge>())
-    }
-
     async fn start_udp_flow(
         &self,
         dispatch: &mut UdpDispatch,
@@ -174,7 +170,7 @@ impl UdpFlowCapability for VlessAdapter {
     ) -> Result<FlowStartResult, FlowFailure> {
         start_protocol_transport_bridge_udp_flow(
             self.bridge(),
-            dispatch,
+            dispatch.flow_start_context(),
             ctx.proxy(),
             session,
             leaf,
@@ -197,7 +193,7 @@ impl UdpFlowCapability for VlessAdapter {
     ) -> Result<FlowStartResult, FlowFailure> {
         start_protocol_transport_bridge_udp_relay_two_stream(
             self.bridge(),
-            dispatch,
+            dispatch.flow_start_context(),
             ctx.proxy(),
             session,
             &chain,
@@ -217,7 +213,7 @@ impl UdpFlowCapability for VlessAdapter {
     ) -> Result<FlowStartResult, FlowFailure> {
         start_protocol_transport_bridge_udp_relay_final_hop(
             self.bridge(),
-            dispatch,
+            dispatch.flow_start_context(),
             ctx.proxy(),
             session,
             carrier,
@@ -225,6 +221,13 @@ impl UdpFlowCapability for VlessAdapter {
             payload,
         )
         .await
+    }
+}
+
+#[cfg(feature = "vless")]
+impl ManagedUdpHandlerProvider for VlessAdapter {
+    fn managed_stream_udp_handlers(&self) -> Option<ManagedStreamHandlerPair> {
+        Some(managed_stream_udp_handler_for_bridge::<VlessStreamBridge>())
     }
 }
 

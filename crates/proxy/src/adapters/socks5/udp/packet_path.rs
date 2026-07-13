@@ -3,7 +3,7 @@ use zero_transport::socks5_transport::{
     Socks5ManagedUdpPacketPathPlan, Socks5UpstreamUdpAssociation,
 };
 
-use super::active::establish_packet_path_association;
+use super::upstream_association::establish_packet_path_association;
 use crate::runtime::Proxy;
 
 impl crate::runtime::udp_flow::packet_path::PacketPathCarrierDescriptorBuild

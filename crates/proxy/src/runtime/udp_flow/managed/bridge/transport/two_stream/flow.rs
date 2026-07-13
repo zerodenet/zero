@@ -5,30 +5,45 @@ use zero_core::Session;
 use zero_engine::{EngineError, ResolvedLeafOutbound};
 
 use super::super::super::error::relay_chain_flow_failure;
-use super::super::super::stream_packet::start_relay_managed_stream_packet;
-use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
+use super::super::super::stream_packet::{
+    start_relay_managed_stream_packet, ManagedStreamPacketRelay, ManagedStreamPacketStartBridge,
+};
+use crate::runtime::udp_flow::result::{FlowFailure, FlowStartResult};
+use crate::runtime::udp_flow::state::UdpFlowStartContext;
 use crate::runtime::Proxy;
 use crate::transport::{RelayCarrier, TcpRelayStream};
 
-#[allow(clippy::too_many_arguments)]
+pub(super) struct RelayTwoStreamManagedFlowRequest<'a, 'chain, 'leaf, T> {
+    pub(super) proxy: &'a Proxy,
+    pub(super) session: &'a Session,
+    pub(super) chain: &'chain [ResolvedLeafOutbound<'leaf>],
+    pub(super) tag: &'a str,
+    pub(super) endpoint: (&'a str, u16),
+    pub(super) paired_stage: &'static str,
+    pub(super) resume: T,
+    pub(super) payload: &'a [u8],
+}
+
 pub(super) async fn start_relay_two_stream_managed_flow<T, FBuild, FBuildFut>(
-    dispatch: &mut UdpDispatch,
-    proxy: &Proxy,
-    session: &Session,
-    chain: &[ResolvedLeafOutbound<'_>],
-    tag: &str,
-    server: &str,
-    port: u16,
-    paired_stage: &'static str,
+    context: &mut UdpFlowStartContext<'_>,
+    request: RelayTwoStreamManagedFlowRequest<'_, '_, '_, T>,
     build_transport: FBuild,
-    resume: T,
-    payload: &[u8],
 ) -> Result<FlowStartResult, FlowFailure>
 where
     T: Any + Send + Sync + std::fmt::Debug,
     FBuild: FnOnce(TcpRelayStream, TcpRelayStream) -> FBuildFut,
     FBuildFut: Future<Output = Result<TcpRelayStream, EngineError>>,
 {
+    let RelayTwoStreamManagedFlowRequest {
+        proxy,
+        session,
+        chain,
+        tag,
+        endpoint: (server, port),
+        paired_stage,
+        resume,
+        payload,
+    } = request;
     let chain_post = chain.to_vec();
     let chain_get = chain.to_vec();
     let (post_carrier, _) = proxy
@@ -48,20 +63,23 @@ where
         })?;
 
     start_relay_managed_stream_packet(
-        dispatch,
-        Some(proxy),
-        tag,
-        session,
-        RelayCarrier {
-            stream: paired_stream,
-            server: server.to_string(),
-            port,
-        },
-        None,
-        server,
-        port,
-        resume,
-        payload,
+        context,
+        ManagedStreamPacketStartBridge::relay(
+            Some(proxy),
+            tag,
+            session,
+            ManagedStreamPacketRelay {
+                carrier: RelayCarrier {
+                    stream: paired_stream,
+                    server: server.to_string(),
+                    port,
+                },
+                tls_server_name: None,
+            },
+            (server, port),
+            resume,
+            payload,
+        ),
     )
     .await
 }

@@ -1,8 +1,23 @@
-use zero_engine::{EngineError, ResolvedLeafOutbound};
+use zero_engine::EngineError;
+#[cfg(any(feature = "vless", feature = "vmess", feature = "trojan"))]
+use zero_engine::ResolvedLeafOutbound;
+#[cfg(any(feature = "vless", feature = "vmess", feature = "trojan"))]
 use zero_transport::outbound_leaf::ResolveTransportLeafError;
 
+#[cfg(any(feature = "vless", feature = "vmess", feature = "trojan"))]
 use super::model::TcpOutboundFailure;
 
+/// Detect the synthetic blocked result normalized by TCP outbound dispatch.
+pub(crate) fn is_block_error(error: &EngineError) -> bool {
+    matches!(
+        error,
+        EngineError::Io(error)
+            if error.kind() == std::io::ErrorKind::ConnectionRefused
+                && error.to_string() == "blocked"
+    )
+}
+
+#[cfg(any(feature = "vless", feature = "vmess", feature = "trojan"))]
 pub(super) fn invalid_input_error(
     stage: &'static str,
     error: impl std::fmt::Display,
@@ -13,6 +28,7 @@ pub(super) fn invalid_input_error(
     ))
 }
 
+#[cfg(any(feature = "vless", feature = "vmess", feature = "trojan"))]
 pub(super) fn prefixed_expected_outbound_leaf_error(
     stage: &'static str,
     message: &'static str,
@@ -20,6 +36,7 @@ pub(super) fn prefixed_expected_outbound_leaf_error(
     invalid_input_error(stage, message)
 }
 
+#[cfg(any(feature = "vless", feature = "vmess", feature = "trojan"))]
 pub(super) fn tcp_failure(
     stage: &'static str,
     error: EngineError,
@@ -32,6 +49,7 @@ pub(super) fn tcp_failure(
     }
 }
 
+#[cfg(any(feature = "vless", feature = "vmess", feature = "trojan"))]
 pub(super) fn tcp_connect_prepare_failure<E>(
     leaf: &ResolvedLeafOutbound<'_>,
     error: ResolveTransportLeafError<E>,
@@ -56,6 +74,7 @@ where
     }
 }
 
+#[cfg(any(feature = "vless", feature = "vmess", feature = "trojan"))]
 pub(super) fn tcp_relay_prepare_error<E>(
     error: ResolveTransportLeafError<E>,
     invalid_config: &'static str,

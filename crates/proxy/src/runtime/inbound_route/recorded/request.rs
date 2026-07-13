@@ -6,10 +6,10 @@ use super::dispatch::{
     dispatch_optional_recorded_protocol_mux_route_accept_result,
     dispatch_recorded_protocol_mux_route_accept_result,
 };
-use super::model::RecordedProtocolMuxRouteDefaults;
-use crate::runtime::inbound_protocol::InboundProtocol;
+use super::model::{RecordedProtocolMuxDispatch, RecordedProtocolMuxRouteDefaults};
 use crate::runtime::mux_tcp::run_protocol_mux_tcp_task;
 use crate::runtime::mux_udp::run_protocol_mux_udp_task_with_accept_log;
+use crate::runtime::tcp_ingress::InboundProtocol;
 use crate::runtime::Proxy;
 use crate::transport::{ClientStream, MeteredStream, RecordingStream, TcpRelayStream};
 
@@ -24,11 +24,7 @@ pub(crate) async fn dispatch_recorded_protocol_mux_tcp_request_result<
     FUdpFut,
 >(
     accept_result: Result<Option<RouteAcceptResult<R, FR>>, EngineError>,
-    proxy: Proxy,
-    inbound_tag: String,
-    source_addr: Option<std::net::SocketAddr>,
-    protocol: P,
-    defaults: RecordedProtocolMuxRouteDefaults,
+    request: RecordedProtocolMuxDispatch<P>,
     spawn_tcp: FTcp,
     spawn_udp: FUdp,
 ) -> Result<(), EngineError>
@@ -63,11 +59,7 @@ where
 {
     dispatch_optional_recorded_protocol_mux_route_accept_result(
         accept_result?,
-        proxy,
-        inbound_tag,
-        source_addr,
-        protocol,
-        defaults,
+        request,
         spawn_tcp,
         spawn_udp,
     )
@@ -85,11 +77,7 @@ pub(crate) async fn dispatch_recorded_protocol_mux_stream_request_result<
     FUdpFut,
 >(
     accept_result: Result<RouteAcceptResult<R, FR>, EngineError>,
-    proxy: Proxy,
-    inbound_tag: String,
-    source_addr: Option<std::net::SocketAddr>,
-    protocol: P,
-    defaults: RecordedProtocolMuxRouteDefaults,
+    request: RecordedProtocolMuxDispatch<P>,
     spawn_tcp: FTcp,
     spawn_udp: FUdp,
 ) -> Result<(), EngineError>
@@ -124,11 +112,7 @@ where
 {
     dispatch_recorded_protocol_mux_route_accept_result(
         accept_result?,
-        proxy,
-        inbound_tag,
-        source_addr,
-        protocol,
-        defaults,
+        request,
         spawn_tcp,
         spawn_udp,
     )
@@ -161,11 +145,13 @@ where
 {
     dispatch_recorded_protocol_mux_tcp_request_result(
         accept_result,
-        proxy,
-        inbound_tag,
-        source_addr,
-        protocol,
-        defaults,
+        RecordedProtocolMuxDispatch {
+            proxy,
+            inbound_tag,
+            source_addr,
+            protocol,
+            defaults,
+        },
         move |proxy, session, relay, inbound_tag| {
             run_protocol_mux_tcp_task(proxy, session, relay, inbound_tag, defaults.mux_protocol)
         },
@@ -208,11 +194,13 @@ where
 {
     dispatch_recorded_protocol_mux_stream_request_result(
         accept_result,
-        proxy,
-        inbound_tag,
-        source_addr,
-        protocol,
-        defaults,
+        RecordedProtocolMuxDispatch {
+            proxy,
+            inbound_tag,
+            source_addr,
+            protocol,
+            defaults,
+        },
         move |proxy, session, relay, inbound_tag| {
             run_protocol_mux_tcp_task(proxy, session, relay, inbound_tag, defaults.mux_protocol)
         },

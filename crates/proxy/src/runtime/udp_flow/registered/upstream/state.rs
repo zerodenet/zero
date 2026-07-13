@@ -1,7 +1,8 @@
 pub(super) mod handlers;
+#[cfg(feature = "socks5")]
 mod tracked;
 
-#[allow(unused_imports)]
-pub(super) use handlers::UpstreamAssociationState;
+#[cfg(feature = "socks5")]
 pub(super) use tracked::TrackedUpstreamAssociation;
+#[cfg(feature = "socks5")]
 pub(crate) use tracked::TrackedUpstreamAssociationState;

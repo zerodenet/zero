@@ -8,24 +8,16 @@ use super::helpers::{
     into_recorded_tcp_relay_stream, run_recorded_protocol_mux_session,
     run_recorded_protocol_stream_udp_relay,
 };
-use super::model::RecordedProtocolMuxRouteDefaults;
-use crate::runtime::inbound_protocol::InboundProtocol;
+use super::model::RecordedProtocolMuxDispatch;
+use crate::runtime::tcp_ingress::InboundProtocol;
 use crate::runtime::Proxy;
 use crate::transport::{ClientStream, MeteredStream, RecordingStream, TcpRelayStream};
 
 use super::super::mux::{dispatch_protocol_mux_route, MuxRouteBridge};
 
-#[allow(clippy::too_many_arguments)]
 pub(crate) async fn dispatch_recorded_protocol_mux_route<R, P, S, FTcp, FTcpFut, FUdp, FUdpFut>(
     route: R,
-    proxy: Proxy,
-    inbound_tag: String,
-    source_addr: Option<std::net::SocketAddr>,
-    protocol: P,
-    udp_protocol: &'static str,
-    mux_protocol: &'static str,
-    panic_message: &'static str,
-    abort_on_end: bool,
+    request: RecordedProtocolMuxDispatch<P>,
     spawn_tcp: FTcp,
     spawn_udp: FUdp,
 ) -> Result<(), EngineError>
@@ -57,6 +49,13 @@ where
         + Send,
     FUdpFut: Future<Output = ()> + Send + 'static,
 {
+    let RecordedProtocolMuxDispatch {
+        proxy,
+        inbound_tag,
+        source_addr,
+        protocol,
+        defaults,
+    } = request;
     dispatch_protocol_mux_route(
         route,
         MuxRouteBridge {
@@ -74,7 +73,7 @@ where
                     session,
                     relay,
                     inbound_tag,
-                    udp_protocol,
+                    defaults.udp_protocol,
                 )
             },
             run_mux: move |proxy: Proxy,
@@ -86,9 +85,7 @@ where
                     reader,
                     mux_server,
                     inbound_tag,
-                    mux_protocol,
-                    panic_message,
-                    abort_on_end,
+                    defaults,
                     spawn_tcp,
                     spawn_udp,
                 )
@@ -108,11 +105,7 @@ pub(crate) async fn dispatch_recorded_protocol_mux_route_with_udp_logger<
     FUdpFut,
 >(
     route: R,
-    proxy: Proxy,
-    inbound_tag: String,
-    source_addr: Option<std::net::SocketAddr>,
-    protocol: P,
-    defaults: RecordedProtocolMuxRouteDefaults,
+    request: RecordedProtocolMuxDispatch<P>,
     spawn_tcp: FTcp,
     spawn_udp: FUdp,
 ) -> Result<(), EngineError>
@@ -144,20 +137,7 @@ where
         + Send,
     FUdpFut: Future<Output = ()> + Send + 'static,
 {
-    dispatch_recorded_protocol_mux_route(
-        route,
-        proxy,
-        inbound_tag,
-        source_addr,
-        protocol,
-        defaults.udp_protocol,
-        defaults.mux_protocol,
-        defaults.panic_message,
-        defaults.abort_on_end,
-        spawn_tcp,
-        spawn_udp,
-    )
-    .await
+    dispatch_recorded_protocol_mux_route(route, request, spawn_tcp, spawn_udp).await
 }
 
 pub(crate) async fn dispatch_recorded_protocol_mux_route_accept_result<
@@ -171,11 +151,7 @@ pub(crate) async fn dispatch_recorded_protocol_mux_route_accept_result<
     FUdpFut,
 >(
     result: RouteAcceptResult<R, FR>,
-    proxy: Proxy,
-    inbound_tag: String,
-    source_addr: Option<std::net::SocketAddr>,
-    protocol: P,
-    defaults: RecordedProtocolMuxRouteDefaults,
+    request: RecordedProtocolMuxDispatch<P>,
     spawn_tcp: FTcp,
     spawn_udp: FUdp,
 ) -> Result<(), EngineError>
@@ -211,20 +187,13 @@ where
     match result {
         RouteAcceptResult::Route(route) => {
             dispatch_recorded_protocol_mux_route_with_udp_logger(
-                route,
-                proxy,
-                inbound_tag,
-                source_addr,
-                protocol,
-                defaults,
-                spawn_tcp,
-                spawn_udp,
+                route, request, spawn_tcp, spawn_udp,
             )
             .await
         }
         RouteAcceptResult::Fallback(fallback) => {
             crate::runtime::inbound_fallback::relay_recorded_fallback_replay(
-                proxy,
+                request.proxy,
                 fallback.config,
                 fallback.replay,
             )
@@ -244,11 +213,7 @@ pub(crate) async fn dispatch_optional_recorded_protocol_mux_route_accept_result<
     FUdpFut,
 >(
     result: Option<RouteAcceptResult<R, FR>>,
-    proxy: Proxy,
-    inbound_tag: String,
-    source_addr: Option<std::net::SocketAddr>,
-    protocol: P,
-    defaults: RecordedProtocolMuxRouteDefaults,
+    request: RecordedProtocolMuxDispatch<P>,
     spawn_tcp: FTcp,
     spawn_udp: FUdp,
 ) -> Result<(), EngineError>
@@ -284,15 +249,5 @@ where
     let Some(result) = result else {
         return Ok(());
     };
-    dispatch_recorded_protocol_mux_route_accept_result(
-        result,
-        proxy,
-        inbound_tag,
-        source_addr,
-        protocol,
-        defaults,
-        spawn_tcp,
-        spawn_udp,
-    )
-    .await
+    dispatch_recorded_protocol_mux_route_accept_result(result, request, spawn_tcp, spawn_udp).await
 }

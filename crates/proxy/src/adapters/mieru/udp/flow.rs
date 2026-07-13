@@ -4,6 +4,7 @@ use zero_transport::mieru_transport::MieruManagedUdpFlowPlan;
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
 use crate::runtime::udp_flow::managed::bridge::{
     start_direct_managed_stream_packet, start_relay_managed_stream_packet,
+    ManagedStreamPacketRelay, ManagedStreamPacketStartBridge,
 };
 use crate::runtime::Proxy;
 
@@ -15,8 +16,19 @@ pub(super) async fn start(
     plan: MieruManagedUdpFlowPlan<'_>,
 ) -> Result<FlowStartResult, FlowFailure> {
     let (tag, server, port, resume) = plan.into_parts();
-    start_direct_managed_stream_packet(dispatch, proxy, tag, session, server, port, resume, payload)
-        .await
+    let mut context = dispatch.flow_start_context();
+    start_direct_managed_stream_packet(
+        &mut context,
+        ManagedStreamPacketStartBridge::direct(
+            proxy,
+            tag,
+            session,
+            (server, port),
+            resume,
+            payload,
+        ),
+    )
+    .await
 }
 
 pub(super) async fn start_relay_final_hop(
@@ -27,8 +39,21 @@ pub(super) async fn start_relay_final_hop(
     plan: MieruManagedUdpFlowPlan<'_>,
 ) -> Result<FlowStartResult, FlowFailure> {
     let (tag, server, port, resume) = plan.into_parts();
+    let mut context = dispatch.flow_start_context();
     start_relay_managed_stream_packet(
-        dispatch, None, tag, session, carrier, None, server, port, resume, payload,
+        &mut context,
+        ManagedStreamPacketStartBridge::relay(
+            None,
+            tag,
+            session,
+            ManagedStreamPacketRelay {
+                carrier,
+                tls_server_name: None,
+            },
+            (server, port),
+            resume,
+            payload,
+        ),
     )
     .await
 }

@@ -1,7 +1,7 @@
 use zero_core::Session;
 use zero_engine::{EngineError, ResolvedLeafOutbound};
 
-use crate::runtime::orchestration::OutboundEndpoint;
+use crate::runtime::path::OutboundEndpoint;
 use crate::runtime::Proxy;
 use crate::transport::{EstablishedTcpOutbound, RelayCarrier, TcpOutboundFailure, TcpRelayStream};
 

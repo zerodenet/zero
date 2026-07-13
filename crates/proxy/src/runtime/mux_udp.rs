@@ -83,6 +83,7 @@ pub(crate) async fn run_protocol_mux_udp_relay<R>(
     .await;
 }
 
+#[cfg(feature = "vmess")]
 pub(crate) async fn run_protocol_mux_udp_task<R>(
     proxy: Proxy,
     relay: R,
@@ -94,6 +95,7 @@ pub(crate) async fn run_protocol_mux_udp_task<R>(
     run_protocol_mux_udp_relay(&proxy, relay, &inbound_tag, protocol).await;
 }
 
+#[cfg(feature = "vless")]
 pub(crate) async fn run_protocol_mux_udp_task_with_accept_log<R>(
     proxy: Proxy,
     relay: R,

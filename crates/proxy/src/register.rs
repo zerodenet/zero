@@ -21,68 +21,142 @@ use crate::adapters::TrojanAdapter;
 use crate::adapters::VlessAdapter;
 #[cfg(feature = "vmess")]
 use crate::adapters::VmessAdapter;
-use crate::protocol_registry::{ProtocolRegistry, RegisteredProtocolCapability};
+use crate::protocol_registry::ProtocolRegistry;
+#[cfg(any(
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
 use crate::runtime::udp_flow::managed::ManagedUdpHandlers;
-use crate::runtime::udp_flow::registered::{RegisteredUdpHandlers, UpstreamUdpHandlers};
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
+use crate::runtime::udp_flow::registered::RegisteredUdpHandlers;
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
+#[cfg(feature = "socks5")]
+use crate::runtime::udp_flow::registered::UpstreamUdpHandlers;
 
-fn capability<T>(adapter: T) -> Arc<dyn RegisteredProtocolCapability>
-where
-    T: RegisteredProtocolCapability + 'static,
-{
-    Arc::new(adapter)
-}
-
-fn compiled_protocol_adapters() -> Vec<Arc<dyn RegisteredProtocolCapability>> {
-    vec![
-        #[cfg(feature = "socks5")]
-        capability(Socks5Adapter),
-        #[cfg(feature = "http_connect")]
-        capability(HttpConnectAdapter),
-        #[cfg(feature = "vless")]
-        capability(VlessAdapter::default()),
-        #[cfg(feature = "hysteria2")]
-        capability(Hysteria2Adapter),
-        #[cfg(feature = "shadowsocks")]
-        capability(ShadowsocksAdapter),
-        #[cfg(feature = "trojan")]
-        capability(TrojanAdapter::default()),
-        #[cfg(feature = "vmess")]
-        capability(VmessAdapter::default()),
-        #[cfg(feature = "mieru")]
-        capability(MieruAdapter),
-        #[cfg(feature = "mixed")]
-        capability(MixedAdapter),
-        capability(DirectAdapter),
-    ]
-}
-
-pub(crate) fn protocol_registry() -> ProtocolRegistry {
+fn compiled_protocol_registry() -> ProtocolRegistry {
     let mut registry = ProtocolRegistry::default();
-    for adapter in compiled_protocol_adapters() {
-        registry.register_capability(adapter);
-    }
-
+    #[cfg(feature = "socks5")]
+    registry.register_upstream_capability(Arc::new(Socks5Adapter));
+    #[cfg(feature = "http_connect")]
+    registry.register_core_capability(Arc::new(HttpConnectAdapter));
+    #[cfg(feature = "vless")]
+    registry.register_managed_capability(Arc::new(VlessAdapter::default()));
+    #[cfg(feature = "hysteria2")]
+    registry.register_managed_capability(Arc::new(Hysteria2Adapter));
+    #[cfg(feature = "shadowsocks")]
+    registry.register_managed_capability(Arc::new(ShadowsocksAdapter));
+    #[cfg(feature = "trojan")]
+    registry.register_managed_capability(Arc::new(TrojanAdapter::default()));
+    #[cfg(feature = "vmess")]
+    registry.register_managed_capability(Arc::new(VmessAdapter::default()));
+    #[cfg(feature = "mieru")]
+    registry.register_managed_capability(Arc::new(MieruAdapter));
+    #[cfg(feature = "mixed")]
+    registry.register_core_capability(Arc::new(MixedAdapter));
+    #[cfg(any(
+        feature = "socks5",
+        feature = "vless",
+        feature = "hysteria2",
+        feature = "shadowsocks",
+        feature = "trojan",
+        feature = "vmess",
+        feature = "mieru"
+    ))]
+    registry.register_capability(Arc::new(DirectAdapter));
+    #[cfg(not(any(
+        feature = "socks5",
+        feature = "vless",
+        feature = "hysteria2",
+        feature = "shadowsocks",
+        feature = "trojan",
+        feature = "vmess",
+        feature = "mieru"
+    )))]
+    registry.register_core_capability(Arc::new(DirectAdapter));
     registry
 }
 
-pub(crate) fn registered_udp_handlers() -> RegisteredUdpHandlers {
-    let adapters = compiled_protocol_adapters();
+pub(crate) fn protocol_registry() -> ProtocolRegistry {
+    compiled_protocol_registry()
+}
+
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
+pub(crate) fn registered_udp_handlers(registry: &ProtocolRegistry) -> RegisteredUdpHandlers {
+    #[cfg(any(
+        feature = "vless",
+        feature = "vmess",
+        feature = "trojan",
+        feature = "mieru"
+    ))]
+    let (stream_packet, relay) = registry
+        .managed_udp_handler_providers()
+        .filter_map(|capability| capability.managed_stream_udp_handlers())
+        .map(|handlers| (handlers.stream_packet, handlers.relay))
+        .unzip();
 
     RegisteredUdpHandlers {
+        #[cfg(any(
+            feature = "vless",
+            feature = "hysteria2",
+            feature = "shadowsocks",
+            feature = "trojan",
+            feature = "vmess",
+            feature = "mieru"
+        ))]
         managed: ManagedUdpHandlers {
-            datagram: adapters
-                .iter()
-                .filter_map(|adapter| adapter.managed_datagram_udp_handler())
+            #[cfg(any(feature = "hysteria2", feature = "shadowsocks"))]
+            datagram: registry
+                .managed_udp_handler_providers()
+                .filter_map(|capability| capability.managed_datagram_udp_handler())
                 .collect(),
-            stream: adapters
-                .iter()
-                .filter_map(|adapter| adapter.managed_stream_udp_handler())
-                .collect(),
+            #[cfg(any(
+                feature = "vless",
+                feature = "vmess",
+                feature = "trojan",
+                feature = "mieru"
+            ))]
+            stream_packet,
+            #[cfg(any(
+                feature = "vless",
+                feature = "vmess",
+                feature = "trojan",
+                feature = "mieru"
+            ))]
+            relay,
         },
+        #[cfg(feature = "socks5")]
         upstream: UpstreamUdpHandlers {
-            upstream: adapters
-                .into_iter()
-                .filter_map(|adapter| adapter.upstream_association_handler())
+            upstream: registry
+                .upstream_udp_handler_providers()
+                .map(|provider| provider.upstream_association_handler())
                 .collect(),
         },
     }

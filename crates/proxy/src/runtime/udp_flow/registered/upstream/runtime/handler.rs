@@ -12,7 +12,8 @@ use super::control::{
     close_registered_dropped_upstream, close_registered_idle_upstream,
     start_registered_upstream_flow,
 };
-use crate::runtime::udp_flow::managed::{ManagedUdpFlowRequest, ManagedUdpFlowResume};
+use crate::runtime::udp_flow::managed::ManagedUdpFlowResume;
+use crate::runtime::udp_flow::registered::upstream::UpstreamAssociationSend;
 use crate::runtime::udp_flow::response::UpstreamUdpResponse;
 use zero_engine::EngineError;
 
@@ -43,8 +44,8 @@ where
     async fn send_upstream(
         &mut self,
         inbound_tag: &str,
-        request: ManagedUdpFlowRequest<'_>,
-    ) -> Result<usize, crate::runtime::udp_dispatch::FlowFailure> {
+        request: UpstreamAssociationSend<'_>,
+    ) -> Result<usize, crate::runtime::udp_flow::result::FlowFailure> {
         start_registered_upstream_flow(
             &mut self.runtime,
             inbound_tag,

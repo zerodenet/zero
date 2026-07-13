@@ -5,9 +5,28 @@
 //! concrete protocols plug into those pipes through protocol traits and
 //! dispatch categories.
 
-use zero_core::{Address, InboundUdpDispatch, ProtocolType, Session, SessionAuth};
+use zero_core::Session;
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
+use zero_core::{Address, InboundUdpDispatch, ProtocolType, SessionAuth};
 use zero_engine::EngineError;
 
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
 use crate::runtime::udp_dispatch::UdpDispatch;
 use crate::runtime::Proxy;
 use crate::transport::TcpRouteResult;
@@ -48,6 +67,15 @@ impl KernelPipe for TcpPipe<'_> {
 }
 
 /// Input for one UDP packet dispatch within an inbound UDP association.
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
 pub(crate) struct UdpPipeInput<'a> {
     pub(crate) target: Address,
     pub(crate) port: u16,
@@ -64,17 +92,44 @@ pub(crate) struct UdpPipeInput<'a> {
 }
 
 /// UDP datagram pipe.
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
 pub(crate) struct UdpPipe<'a> {
     proxy: &'a Proxy,
     dispatch: &'a mut UdpDispatch,
 }
 
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
 impl<'a> UdpPipe<'a> {
     pub(crate) fn new(proxy: &'a Proxy, dispatch: &'a mut UdpDispatch) -> Self {
         Self { proxy, dispatch }
     }
 }
 
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
 impl KernelPipe for UdpPipe<'_> {
     type Input<'a> = UdpPipeInput<'a>;
     type Output = u64;
@@ -85,6 +140,15 @@ impl KernelPipe for UdpPipe<'_> {
     }
 }
 
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
 impl<'a> UdpPipeInput<'a> {
     pub(crate) fn from_inbound_dispatch(
         dispatch: &'a InboundUdpDispatch,

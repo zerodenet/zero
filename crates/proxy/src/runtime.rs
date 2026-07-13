@@ -1,45 +1,87 @@
-use std::collections::HashMap;
 use std::future::Future;
-use std::io;
 use std::ops::Deref;
 use std::path::Path;
 use std::sync::Arc;
 
-use tokio::sync::{oneshot, watch};
-use tokio::task::JoinSet;
+use tokio::sync::oneshot;
 use tracing::{info, warn};
 use zero_config::RuntimeConfig;
 use zero_dns::DnsSystem;
 use zero_engine::{Engine, EngineError};
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "vmess",
+    feature = "trojan",
+    feature = "mieru"
+))]
 use zero_platform_tokio::TokioSocket;
 
 use crate::inventory::ProtocolInventory;
 
+#[cfg(any(feature = "shadowsocks", feature = "hysteria2"))]
 pub(crate) mod datagram_udp;
 mod engine_facade;
 mod handle;
+#[cfg(feature = "http_connect")]
 pub(crate) mod http_redirect;
+#[cfg(feature = "vless")]
 pub(crate) mod inbound_fallback;
-pub(crate) mod inbound_protocol;
 pub(crate) mod inbound_route;
 pub(crate) mod listener_loop;
 mod listeners;
+#[cfg(any(feature = "vless", feature = "vmess"))]
 pub(crate) mod mux_session;
+#[cfg(any(feature = "vless", feature = "vmess"))]
 pub(crate) mod mux_tcp;
+#[cfg(any(feature = "vless", feature = "vmess"))]
 pub(crate) mod mux_udp;
 pub(crate) mod orchestration;
+#[cfg(any(
+    feature = "vless",
+    feature = "vmess",
+    feature = "trojan",
+    feature = "mieru"
+))]
 pub(crate) mod packet_session_udp;
+pub(crate) mod path;
 pub(crate) mod pipe;
 mod reload;
 mod running;
+#[cfg(any(
+    feature = "vless",
+    feature = "vmess",
+    feature = "trojan",
+    feature = "mieru"
+))]
 pub(crate) mod stream_udp;
 mod tcp_dispatch;
+pub(crate) mod tcp_ingress;
+#[cfg(feature = "socks5")]
 pub(crate) mod udp_association;
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
+pub(crate) mod udp_delivery;
 pub(crate) mod udp_dispatch;
 pub(crate) mod udp_flow;
-pub(crate) mod udp_helpers;
-pub(crate) mod udp_inbound_dispatch;
-pub(crate) mod udp_response;
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
+pub(crate) mod udp_ingress;
+pub(crate) mod udp_socket;
 
 pub use handle::ProxyHandle;
 pub use running::RunningProxy;
@@ -55,7 +97,6 @@ pub struct Proxy {
 }
 
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 pub(crate) struct TunInfo {
     pub name: String,
     pub addr: String,
@@ -91,6 +132,13 @@ impl Proxy {
         &self.engine
     }
 
+    #[cfg(any(
+        feature = "socks5",
+        feature = "vless",
+        feature = "vmess",
+        feature = "trojan",
+        feature = "mieru"
+    ))]
     pub(crate) async fn connect_upstream_host(
         &self,
         server: &str,
@@ -103,6 +151,13 @@ impl Proxy {
             .map_err(Into::into)
     }
 
+    #[cfg(any(
+        feature = "socks5",
+        feature = "vless",
+        feature = "vmess",
+        feature = "trojan",
+        feature = "mieru"
+    ))]
     pub(crate) async fn connect_upstream_host_owned(
         &self,
         server: String,
@@ -152,127 +207,7 @@ impl Proxy {
     where
         F: Future<Output = ()> + Send,
     {
-        if self.config.inbounds.is_empty() {
-            return Err(EngineError::NoInbounds);
-        }
-
-        let (shutdown_tx, shutdown_rx) = watch::channel(false);
-        let mut listeners: JoinSet<Result<(), EngineError>> = JoinSet::new();
-        // Per-listener shutdown channels, keyed by inbound tag.
-        let mut listener_stops: HashMap<String, watch::Sender<bool>> = HashMap::new();
-        let mut urltests: JoinSet<Result<(), EngineError>> = JoinSet::new();
-
-        let mut reload_async_rx = reload::subscribe_reload_bridge(self.engine.subscribe_reload());
-
-        // Initial listener / urltest population.
-        for inbound in &self.config.inbounds {
-            let (tx, rx) = watch::channel(false);
-            listener_stops.insert(inbound.tag.clone(), tx);
-            let bound = listeners::bind_inbound_listener(self, inbound).await?;
-            listeners::spawn_inbound_listener(self, inbound, bound, rx, &mut listeners);
-        }
-        for &group_id in self.engine.plan().urltest_groups() {
-            let proxy = self.clone();
-            let shutdown = shutdown_rx.clone();
-            urltests.spawn(async move { proxy.run_urltest_group(group_id, shutdown).await });
-        }
-
-        info!(
-            inbound_count = self.config.inbounds.len(),
-            outbound_count = self.config.outbounds.len(),
-            outbound_group_count = self.config.outbound_groups.len(),
-            rule_count = self.config.route.rules.len(),
-            mode = %self.config.mode.kind(),
-            udp_upstream_idle_timeout_seconds = self.engine.udp_upstream_idle_timeout().as_secs(),
-            supported_inbounds = ?self.protocols.supported_inbounds(),
-            supported_outbounds = ?self.protocols.supported_outbounds(),
-            "zero-proxy started"
-        );
-
-        tokio::pin!(shutdown);
-        let mut shutting_down = false;
-
-        loop {
-            if shutting_down && listeners.is_empty() && urltests.is_empty() {
-                let stats = self.engine.stats_snapshot();
-                info!(
-                    total_started = stats.total_started,
-                    completed_sessions = stats.completed_sessions,
-                    failed_sessions = stats.failed_sessions,
-                    blocked_sessions = stats.blocked_sessions,
-                    direct_sessions = stats.direct_sessions,
-                    chained_sessions = stats.chained_sessions,
-                    udp_upstream_active_associations = stats.udp_upstream.active_associations,
-                    udp_upstream_created_associations = stats.udp_upstream.created_associations,
-                    udp_upstream_reused_associations = stats.udp_upstream.reused_associations,
-                    udp_upstream_closed_associations = stats.udp_upstream.closed_associations,
-                    udp_upstream_idle_timeouts = stats.udp_upstream.idle_timeouts,
-                    udp_upstream_dropped_associations = stats.udp_upstream.dropped_associations,
-                    "zero-proxy stopped"
-                );
-                return Ok(());
-            }
-
-            tokio::select! {
-                _ = &mut shutdown, if !shutting_down => {
-                    shutting_down = true;
-                    // Notify the original channel (used by urltest groups).
-                    let _ = shutdown_tx.send(true);
-                    // Notify each per-listener channel (used by inbound listeners).
-                    for tx in listener_stops.values() {
-                        let _ = tx.send(true);
-                    }
-                    info!("propagated proxy shutdown to background tasks");
-                }
-                Some(()) = reload_async_rx.recv() => {
-                    if shutting_down {
-                        continue;
-                    }
-                    let new_config = self.engine.config();
-                    // Reload DNS if config changed.
-                    if let Err(e) = self.resolver.reload(new_config.runtime.dns.as_ref()) {
-                        warn!(error = %e, "failed to reload dns config");
-                    }
-                    listeners::reconcile_inbounds(
-                        self,
-                        &new_config,
-                        &mut listener_stops,
-                        &mut listeners,
-                    ).await;
-                    // Remove old urltest groups --they detect config
-                    // changes via the plan swap and exit cleanly next cycle.
-                    // Spawn new ones.
-                    listeners::reconcile_urltests(self, &new_config, &shutdown_rx, &mut urltests);
-                    self.protocols.on_config_reloaded();
-                    info!(
-                        inbound_count = new_config.inbounds.len(),
-                        outbound_count = new_config.outbounds.len(),
-                        outbound_group_count = new_config.outbound_groups.len(),
-                        "config reload reconciled"
-                    );
-                }
-                result = listeners.join_next(), if !listeners.is_empty() => {
-                    match result {
-                        Some(Ok(Ok(()))) if shutting_down => {}
-                        Some(Ok(Ok(()))) => return Err(EngineError::InboundTaskExited),
-                        Some(Ok(Err(error))) => return Err(error),
-                        Some(Err(error)) => return Err(io::Error::other(error).into()),
-                        None if shutting_down => return Ok(()),
-                        None => return Err(EngineError::InboundTaskExited),
-                    }
-                }
-                result = urltests.join_next(), if !urltests.is_empty() => {
-                    match result {
-                        Some(Ok(Ok(()))) if shutting_down => {}
-                        Some(Ok(Ok(()))) => return Err(EngineError::UrlTestTaskExited),
-                        Some(Ok(Err(error))) => return Err(error),
-                        Some(Err(error)) => return Err(io::Error::other(error).into()),
-                        None if shutting_down => {}
-                        None => return Err(EngineError::UrlTestTaskExited),
-                    }
-                }
-            }
-        }
+        orchestration::run_until(self, shutdown).await
     }
 }
 

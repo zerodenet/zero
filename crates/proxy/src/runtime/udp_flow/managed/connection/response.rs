@@ -23,6 +23,12 @@ pub(crate) fn spawn_response_bridge<T, F>(
     });
 }
 
+#[cfg(any(
+    feature = "vless",
+    feature = "vmess",
+    feature = "mieru",
+    feature = "hysteria2"
+))]
 pub(crate) fn spawn_tuple_response_bridge(
     chain_tasks: &mut JoinSet<ChainTask>,
     response_rx: tokio::sync::broadcast::Receiver<(Address, u16, Vec<u8>)>,

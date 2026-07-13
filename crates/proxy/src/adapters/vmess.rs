@@ -12,16 +12,17 @@ use zero_engine::{EngineError, ResolvedLeafOutbound};
 use zero_traits::{ProtocolCapabilityDescriptor, ProtocolMetadata};
 use zero_transport::vmess_transport::VmessStreamBridge;
 
-use crate::adapters::common::{
+use crate::adapters::identity::{
     named_protocol_claims_runtime_leaf, named_protocol_supports_inbound,
     named_protocol_supports_outbound, NamedProtocolAdapter, ProtocolTransportBridgeAdapter,
 };
 use crate::protocol_registry::{
     proxy_leaf_runtime, BoundInbound, InboundAdapterContext, InboundListenerCapability,
-    OutboundAdapterContext, OutboundLeafRuntime, ProtocolSupportCapability, TcpOutboundCapability,
-    UdpAdapterContext, UdpFlowCapability, UdpPacketPathCapability,
+    ManagedUdpHandlerProvider, OutboundAdapterContext, OutboundLeafRuntime,
+    ProtocolSupportCapability, TcpOutboundCapability, UdpAdapterContext, UdpFlowCapability,
+    UdpPacketPathCapability,
 };
-use crate::runtime::orchestration::TcpPathCategory;
+use crate::runtime::path::TcpPathCategory;
 #[cfg(feature = "vmess")]
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
 #[cfg(feature = "vmess")]
@@ -30,7 +31,7 @@ use crate::runtime::udp_flow::managed::{
         managed_stream_udp_handler_for_bridge, start_protocol_transport_bridge_udp_flow,
         start_protocol_transport_bridge_udp_relay_final_hop,
     },
-    ManagedStreamFlowHandler,
+    ManagedStreamHandlerPair,
 };
 #[cfg(feature = "vmess")]
 use crate::transport::{
@@ -145,10 +146,6 @@ impl TcpOutboundCapability for VmessAdapter {
 #[cfg(feature = "vmess")]
 #[async_trait]
 impl UdpFlowCapability for VmessAdapter {
-    fn managed_stream_udp_handler(&self) -> Option<Box<dyn ManagedStreamFlowHandler>> {
-        Some(managed_stream_udp_handler_for_bridge::<VmessStreamBridge>())
-    }
-
     async fn start_udp_flow(
         &self,
         dispatch: &mut UdpDispatch,
@@ -159,7 +156,7 @@ impl UdpFlowCapability for VmessAdapter {
     ) -> Result<FlowStartResult, FlowFailure> {
         start_protocol_transport_bridge_udp_flow(
             self.bridge(),
-            dispatch,
+            dispatch.flow_start_context(),
             ctx.proxy(),
             session,
             leaf,
@@ -179,7 +176,7 @@ impl UdpFlowCapability for VmessAdapter {
     ) -> Result<FlowStartResult, FlowFailure> {
         start_protocol_transport_bridge_udp_relay_final_hop(
             self.bridge(),
-            dispatch,
+            dispatch.flow_start_context(),
             ctx.proxy(),
             session,
             carrier,
@@ -187,6 +184,13 @@ impl UdpFlowCapability for VmessAdapter {
             payload,
         )
         .await
+    }
+}
+
+#[cfg(feature = "vmess")]
+impl ManagedUdpHandlerProvider for VmessAdapter {
+    fn managed_stream_udp_handlers(&self) -> Option<ManagedStreamHandlerPair> {
+        Some(managed_stream_udp_handler_for_bridge::<VmessStreamBridge>())
     }
 }
 

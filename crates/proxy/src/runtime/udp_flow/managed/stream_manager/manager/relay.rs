@@ -1,13 +1,22 @@
 use async_trait::async_trait;
 
 use super::super::super::flow::ManagedUdpFlowResume;
-use super::super::super::model::{ManagedRelaySend, ManagedStreamFlowHandler};
+#[cfg(any(
+    feature = "vless",
+    feature = "vmess",
+    feature = "trojan",
+    feature = "mieru"
+))]
+use super::super::super::model::ManagedStreamPacketFlowHandler;
+use super::super::super::model::{ManagedRelayExistingSend, ManagedRelayFlowHandler};
 use super::super::connector::ManagedStreamFlowConnector;
 use super::mismatch::managed_mismatch;
-use super::model::{ManagedStreamFlowManager, ManagedStreamRelayRequest};
-use crate::runtime::orchestration::OutboundEndpoint;
-use crate::runtime::udp_dispatch::FlowFailure;
+use super::model::{
+    ManagedStreamFlowManager, ManagedStreamRelayRequest, SharedManagedStreamFlowManager,
+};
+use crate::runtime::path::OutboundEndpoint;
 use crate::runtime::udp_flow::packet_path::{UdpFlowContext, UdpPacketRef};
+use crate::runtime::udp_flow::result::FlowFailure;
 
 impl<T> ManagedStreamFlowManager<T>
 where
@@ -57,7 +66,7 @@ where
 
     async fn send_managed_relay_existing(
         &mut self,
-        request: ManagedRelaySend<'_>,
+        request: ManagedRelayExistingSend<'_>,
     ) -> Result<usize, FlowFailure> {
         let Some(resume) = request.resume.cloned::<T>() else {
             return Err(managed_mismatch(
@@ -91,30 +100,46 @@ where
     }
 }
 
+#[cfg(any(
+    feature = "vless",
+    feature = "vmess",
+    feature = "trojan",
+    feature = "mieru"
+))]
 #[async_trait]
-impl<T> ManagedStreamFlowHandler for ManagedStreamFlowManager<T>
+impl<T> ManagedStreamPacketFlowHandler for SharedManagedStreamFlowManager<T>
 where
     T: ManagedStreamFlowConnector,
 {
     fn supports_managed_existing(&self, resume: &ManagedUdpFlowResume) -> bool {
-        ManagedStreamFlowManager::supports_managed_existing(self, resume)
-    }
-
-    fn supports_managed_relay_existing(&self, resume: &ManagedUdpFlowResume) -> bool {
-        ManagedStreamFlowManager::supports_managed_existing(self, resume)
+        resume.as_ref::<T>().is_some()
     }
 
     async fn send_managed_existing(
         &mut self,
-        request: super::super::super::model::ManagedExistingSend<'_>,
+        request: super::super::super::model::ManagedStreamExistingSend<'_>,
     ) -> Result<usize, FlowFailure> {
-        ManagedStreamFlowManager::send_managed_existing(self, request).await
+        self.0.lock().await.send_managed_existing(request).await
+    }
+}
+
+#[async_trait]
+impl<T> ManagedRelayFlowHandler for SharedManagedStreamFlowManager<T>
+where
+    T: ManagedStreamFlowConnector,
+{
+    fn supports_managed_relay_existing(&self, resume: &ManagedUdpFlowResume) -> bool {
+        resume.as_ref::<T>().is_some()
     }
 
     async fn send_managed_relay_existing(
         &mut self,
-        request: ManagedRelaySend<'_>,
+        request: ManagedRelayExistingSend<'_>,
     ) -> Result<usize, FlowFailure> {
-        ManagedStreamFlowManager::send_managed_relay_existing(self, request).await
+        self.0
+            .lock()
+            .await
+            .send_managed_relay_existing(request)
+            .await
     }
 }

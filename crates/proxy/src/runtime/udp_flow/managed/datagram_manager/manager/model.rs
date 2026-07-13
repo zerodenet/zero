@@ -1,7 +1,11 @@
 use std::marker::PhantomData;
 
-use super::super::super::cache::{ManagedDatagramConnectionCache, ManagedUdpConnectionCache};
+#[cfg(feature = "shadowsocks")]
+use super::super::super::cache::ManagedDatagramConnectionCache;
+#[cfg(feature = "hysteria2")]
+use super::super::super::cache::ManagedUdpConnectionCache;
 
+#[cfg(feature = "hysteria2")]
 pub(crate) struct ManagedDatagramFlowManager<T, C> {
     pub(super) upstreams: ManagedUdpConnectionCache,
     pub(super) connector: C,
@@ -11,6 +15,7 @@ pub(crate) struct ManagedDatagramFlowManager<T, C> {
     _resume: PhantomData<T>,
 }
 
+#[cfg(feature = "shadowsocks")]
 pub(crate) struct ManagedDatagramSocketFlowManager<T, C> {
     pub(super) upstreams: ManagedDatagramConnectionCache,
     pub(super) connector: C,
@@ -21,6 +26,7 @@ pub(crate) struct ManagedDatagramSocketFlowManager<T, C> {
     _resume: PhantomData<T>,
 }
 
+#[cfg(feature = "hysteria2")]
 impl<T, C> ManagedDatagramFlowManager<T, C> {
     pub(crate) fn new(
         connector: C,
@@ -39,6 +45,7 @@ impl<T, C> ManagedDatagramFlowManager<T, C> {
     }
 }
 
+#[cfg(feature = "shadowsocks")]
 impl<T, C> ManagedDatagramSocketFlowManager<T, C> {
     pub(crate) fn new(
         connector: C,

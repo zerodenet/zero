@@ -1,6 +1,6 @@
 //! Resolve local process identity from a source socket address.
 //!
-//! On Linux this reads `/proc/net/tcp` to map (local_ip, local_port) → inode,
+//! On Linux this reads `/proc/net/tcp` to map (local_ip, local_port) to inode,
 //! then scans `/proc/<pid>/fd` to find the owning process.
 //! Other platforms return `None` (process_id and process_name stay empty).
 
@@ -102,7 +102,7 @@ fn find_process_by_inode(target_inode: u64) -> Option<ProcessInfo> {
             };
             let link_str = link.to_string_lossy();
             if link_str.starts_with("socket:[") && link_str.contains(&format!("{}", target_inode)) {
-                // Found the process — read its name from /proc/<pid>/comm
+                // Found the process; read its name from /proc/<pid>/comm.
                 let name = std::fs::read_to_string(format!("/proc/{pid}/comm"))
                     .map(|s| s.trim().to_owned())
                     .unwrap_or_else(|_| "unknown".to_owned());

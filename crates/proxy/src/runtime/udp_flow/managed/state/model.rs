@@ -1,18 +1,49 @@
+#[cfg(any(feature = "hysteria2", feature = "shadowsocks"))]
 use super::super::datagram::ManagedDatagramState;
-use super::super::flow::ManagedUdpFlowResume;
-use super::super::model::{ManagedDatagramFlowHandler, ManagedStreamFlowHandler};
+#[cfg(any(feature = "hysteria2", feature = "shadowsocks"))]
+use super::super::model::ManagedDatagramFlowHandler;
+#[cfg(any(
+    feature = "vless",
+    feature = "vmess",
+    feature = "trojan",
+    feature = "mieru"
+))]
+use super::super::model::{ManagedRelayFlowHandler, ManagedStreamPacketFlowHandler};
+#[cfg(any(
+    feature = "vless",
+    feature = "vmess",
+    feature = "trojan",
+    feature = "mieru"
+))]
 use super::super::stream::ManagedStreamState;
-use crate::runtime::udp_flow::outbound::ManagedUdpFlowRef;
-use std::collections::HashMap;
 
 pub(crate) struct ManagedUdpHandlers {
+    #[cfg(any(feature = "hysteria2", feature = "shadowsocks"))]
     pub(crate) datagram: Vec<Box<dyn ManagedDatagramFlowHandler>>,
-    pub(crate) stream: Vec<Box<dyn ManagedStreamFlowHandler>>,
+    #[cfg(any(
+        feature = "vless",
+        feature = "vmess",
+        feature = "trojan",
+        feature = "mieru"
+    ))]
+    pub(crate) stream_packet: Vec<Box<dyn ManagedStreamPacketFlowHandler>>,
+    #[cfg(any(
+        feature = "vless",
+        feature = "vmess",
+        feature = "trojan",
+        feature = "mieru"
+    ))]
+    pub(crate) relay: Vec<Box<dyn ManagedRelayFlowHandler>>,
 }
 
 pub(crate) struct ManagedUdpState {
+    #[cfg(any(feature = "hysteria2", feature = "shadowsocks"))]
     pub(super) datagram: ManagedDatagramState,
+    #[cfg(any(
+        feature = "vless",
+        feature = "vmess",
+        feature = "trojan",
+        feature = "mieru"
+    ))]
     pub(super) stream: ManagedStreamState,
-    pub(super) flows: HashMap<ManagedUdpFlowRef, ManagedUdpFlowResume>,
-    pub(super) next_flow_id: u64,
 }

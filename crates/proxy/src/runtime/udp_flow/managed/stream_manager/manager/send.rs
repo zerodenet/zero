@@ -1,23 +1,18 @@
 use zero_engine::EngineError;
 
-use super::super::super::flow::ManagedUdpFlowResume;
-use super::super::super::model::ManagedExistingSend;
+use super::super::super::model::ManagedStreamExistingSend;
 use super::super::connector::ManagedStreamFlowConnector;
 use super::mismatch::managed_mismatch;
 use super::model::ManagedStreamFlowManager;
-use crate::runtime::orchestration::OutboundEndpoint;
-use crate::runtime::udp_dispatch::FlowFailure;
+use crate::runtime::path::OutboundEndpoint;
 use crate::runtime::udp_flow::packet_path::{UdpFlowContext, UdpPacketRef};
+use crate::runtime::udp_flow::result::FlowFailure;
 use crate::runtime::Proxy;
 
 impl<T> ManagedStreamFlowManager<T>
 where
     T: ManagedStreamFlowConnector,
 {
-    pub(super) fn supports_managed_existing(&self, resume: &ManagedUdpFlowResume) -> bool {
-        resume.as_ref::<T>().is_some()
-    }
-
     pub(super) async fn send(
         &mut self,
         ctx: UdpFlowContext<'_>,
@@ -71,7 +66,7 @@ where
 
     pub(super) async fn send_managed_existing(
         &mut self,
-        request: ManagedExistingSend<'_>,
+        request: ManagedStreamExistingSend<'_>,
     ) -> Result<usize, FlowFailure> {
         let Some(resume) = request.resume.cloned::<T>() else {
             return Err(managed_mismatch(
@@ -81,20 +76,12 @@ where
                 self.mismatch_message,
             ));
         };
-        let Some(proxy) = request.proxy else {
-            return Err(managed_mismatch(
-                self.mismatch_stage,
-                request.server,
-                request.port,
-                "expected proxy context for managed stream UDP flow",
-            ));
-        };
         self.send(
             UdpFlowContext {
                 chain_tasks: request.chain_tasks,
                 session_id: request.session_id,
             },
-            proxy,
+            request.proxy,
             request.session,
             OutboundEndpoint {
                 server: request.server,

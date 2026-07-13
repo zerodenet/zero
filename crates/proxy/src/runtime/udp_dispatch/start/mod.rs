@@ -49,7 +49,7 @@ impl UdpDispatch {
         }
         if matches!(
             runtime.tcp_path,
-            crate::runtime::orchestration::TcpPathCategory::Block
+            crate::runtime::path::TcpPathCategory::Block
         ) {
             return Ok(FlowStartResult::Blocked {
                 tag: runtime.kernel_tag.unwrap_or("block").to_string(),

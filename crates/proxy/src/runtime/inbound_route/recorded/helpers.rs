@@ -3,6 +3,7 @@ use core::future::Future;
 use zero_core::{InboundMuxServer, Session, StreamUdpResponder};
 use zero_engine::EngineError;
 
+use super::model::RecordedProtocolMuxRouteDefaults;
 use crate::runtime::mux_session::{run_protocol_mux_session, MuxSessionLoop};
 use crate::runtime::stream_udp::run_mapped_protocol_stream_udp_relay;
 use crate::runtime::Proxy;
@@ -56,15 +57,12 @@ where
     .await
 }
 
-#[allow(clippy::too_many_arguments)]
 pub(crate) async fn run_recorded_protocol_mux_session<S, M, FTcp, FTcpFut, FUdp, FUdpFut>(
     proxy: Proxy,
     mut reader: MeteredStream<RecordingStream<S>>,
     mux_server: M,
     inbound_tag: String,
-    mux_protocol: &'static str,
-    panic_message: &'static str,
-    abort_on_end: bool,
+    defaults: RecordedProtocolMuxRouteDefaults,
     spawn_tcp: FTcp,
     spawn_udp: FUdp,
 ) -> Result<(), EngineError>
@@ -84,9 +82,9 @@ where
         mux_server,
         MuxSessionLoop {
             inbound_tag: &inbound_tag,
-            protocol: mux_protocol,
-            panic_message,
-            abort_on_end,
+            protocol: defaults.mux_protocol,
+            panic_message: defaults.panic_message,
+            abort_on_end: defaults.abort_on_end,
         },
         spawn_tcp,
         spawn_udp,

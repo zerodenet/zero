@@ -12,8 +12,11 @@ impl ProtocolInventory {
         carrier_leaf: &zero_engine::ResolvedLeafOutbound<'_>,
         datagram_leaf: &zero_engine::ResolvedLeafOutbound<'_>,
     ) -> Option<crate::runtime::udp_flow::packet_path::PacketPathFlowBinding> {
-        let carrier_adapter = self.registry.find_outbound_leaf(carrier_leaf).ok()?;
-        let datagram_adapter = self.registry.find_outbound_leaf(datagram_leaf).ok()?;
+        let carrier_adapter = self.registry.find_udp_packet_path_leaf(carrier_leaf).ok()?;
+        let datagram_adapter = self
+            .registry
+            .find_udp_packet_path_leaf(datagram_leaf)
+            .ok()?;
 
         let carrier_desc = UdpPacketPathCapability::udp_packet_path_carrier_descriptor(
             carrier_adapter.as_ref(),
@@ -42,8 +45,8 @@ impl ProtocolInventory {
         ),
         EngineError,
     > {
-        let carrier_adapter = self.registry.find_outbound_leaf(carrier_leaf)?;
-        let datagram_adapter = self.registry.find_outbound_leaf(datagram_leaf)?;
+        let carrier_adapter = self.registry.find_udp_packet_path_leaf(carrier_leaf)?;
+        let datagram_adapter = self.registry.find_udp_packet_path_leaf(datagram_leaf)?;
         let carrier_desc = UdpPacketPathCapability::udp_packet_path_carrier_descriptor(
             carrier_adapter.as_ref(),
             carrier_leaf,
@@ -74,7 +77,7 @@ impl ProtocolInventory {
         std::sync::Arc<dyn crate::runtime::udp_flow::packet_path::PacketPathCarrier>,
         EngineError,
     > {
-        let carrier_adapter = self.registry.find_outbound_leaf(carrier_leaf)?;
+        let carrier_adapter = self.registry.find_udp_packet_path_leaf(carrier_leaf)?;
         UdpPacketPathCapability::build_udp_packet_path(
             carrier_adapter.as_ref(),
             UdpAdapterContext::new(proxy),

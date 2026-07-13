@@ -27,7 +27,7 @@ use zero_stack::{UserNetworkStack, UserTcpStream};
 use zero_traits::{NetworkStack, SocketAddress as TraitsSocketAddr, TcpStack, UdpStack};
 use zero_tun::TunDevice;
 
-use crate::runtime::inbound_protocol::{serve_inbound, InboundProtocol};
+use crate::runtime::tcp_ingress::{serve_inbound, InboundProtocol};
 use crate::runtime::{Proxy, TunInfo};
 
 // 鈹€鈹€ Protocol handler 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
@@ -273,10 +273,5 @@ impl Proxy {
                 "TUN is not running",
             )))
         }
-    }
-
-    #[allow(dead_code)]
-    pub(crate) fn tun_status(&self) -> Option<TunInfo> {
-        self.tun_info.lock().unwrap().clone()
     }
 }

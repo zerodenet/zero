@@ -155,33 +155,6 @@ pub fn write_address(buf: &mut Vec<u8>, address: &Address) -> Result<(), Error> 
     Ok(())
 }
 
-#[allow(dead_code)]
-pub async fn read_address<S: AsyncSocket>(stream: &mut S, atyp: u8) -> Result<Address, Error> {
-    match atyp {
-        ATYP_IPV4 => {
-            let mut addr = [0u8; 4];
-            read_exact(stream, &mut addr).await?;
-            Ok(Address::Ipv4(addr))
-        }
-        ATYP_DOMAIN => {
-            let mut len_buf = [0u8; 1];
-            read_exact(stream, &mut len_buf).await?;
-            let len = len_buf[0] as usize;
-            let mut domain = vec![0u8; len];
-            read_exact(stream, &mut domain).await?;
-            let s = String::from_utf8(domain)
-                .map_err(|_| Error::Protocol("vmess domain is not valid utf-8"))?;
-            Ok(Address::Domain(s))
-        }
-        ATYP_IPV6 => {
-            let mut addr = [0u8; 16];
-            read_exact(stream, &mut addr).await?;
-            Ok(Address::Ipv6(addr))
-        }
-        _ => Err(Error::Protocol("vmess unknown address type")),
-    }
-}
-
 pub fn parse_address_from_bytes(atyp: u8, bytes: &[u8]) -> Result<Address, Error> {
     match atyp {
         ATYP_IPV4 => {

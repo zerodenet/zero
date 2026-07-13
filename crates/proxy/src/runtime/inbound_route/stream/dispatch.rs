@@ -4,7 +4,7 @@ use zero_core::{InboundStreamRoute, Session};
 use zero_engine::EngineError;
 
 use super::model::StreamRouteBridge;
-use crate::runtime::inbound_protocol::{serve_inbound, InboundProtocol};
+use crate::runtime::tcp_ingress::{serve_inbound, InboundProtocol};
 use crate::runtime::Proxy;
 
 pub(crate) async fn dispatch_protocol_stream_route<R, P, FMapTcp, FRunUdp, FUdp>(

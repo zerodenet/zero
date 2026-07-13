@@ -1,8 +1,7 @@
-use zero_engine::ResolvedLeafOutbound;
-
 use super::{FlowFailure, UdpDispatch};
 use crate::runtime::udp_flow::outbound::UdpFlowOutbound;
-use crate::runtime::udp_flow::packet_path::{PacketPathFlowBinding, UdpPacketRef};
+use crate::runtime::udp_flow::packet_path::PacketPathFlowBinding;
+use crate::runtime::udp_flow::packet_path_chain::PacketPathStartRequest;
 use crate::runtime::Proxy;
 
 impl UdpDispatch {
@@ -25,14 +24,9 @@ impl UdpDispatch {
 
     pub(super) async fn send_packet_path_chain(
         &mut self,
-        session_id: u64,
         proxy: &Proxy,
-        carrier_leaf: &ResolvedLeafOutbound<'_>,
-        datagram_leaf: &ResolvedLeafOutbound<'_>,
-        packet: UdpPacketRef<'_>,
+        request: PacketPathStartRequest<'_>,
     ) -> Result<usize, FlowFailure> {
-        self.flow_state
-            .send_packet_path_chain(session_id, proxy, carrier_leaf, datagram_leaf, packet)
-            .await
+        self.flow_state.send_packet_path_chain(proxy, request).await
     }
 }

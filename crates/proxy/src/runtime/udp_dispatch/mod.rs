@@ -1,4 +1,4 @@
-//! Generic UDP dispatch: protocol-agnostic routing and outbound dispatch.
+//! Per-inbound-session UDP routing, flow selection, start, and forwarding.
 //!
 //! [`UdpDispatch`] is the UDP pipe state machine.
 //! Inbound protocols create one dispatcher per UDP association/session, submit
@@ -7,10 +7,12 @@
 //!
 //! # Module layout
 //!
-//! - [`forward`]: re-dispatch packets on existing outbound flows
-//! - [`start`]: establish new outbound flows (single-hop and relay chains)
-//! - [`crate::runtime::udp_flow::registered`]: registered protocol UDP handlers
-//! - [`packet_path_chain`]: generic datagram-over-packet-path manager for
+//! - [`forward`](self::forward): re-dispatch packets on existing outbound flows
+//! - [`start`](self::start): establish new outbound flows (single-hop and relay chains)
+//! - [`crate::runtime::udp_flow::registered`]: protocol handlers assembled by
+//!   `register.rs` and their neutral runtime state
+//! - [`crate::runtime::udp_flow::packet_path_chain`][]: generic
+//!   datagram-over-packet-path manager for
 //!   relay chains (Shadowsocks -> Shadowsocks, SOCKS5 -> Shadowsocks, etc.)
 //!
 //! # UDP relay chain model
@@ -28,7 +30,7 @@
 //! # Usage
 //!
 //! ```ignore
-//! let mut dispatch = UdpDispatch::new("inbound-tag").await?;
+//! let mut dispatch = UdpDispatch::new("inbound-tag", &proxy.protocols).await?;
 //!
 //! // For each incoming packet:
 //! UdpPipe::new(proxy, &mut dispatch).dispatch(input).await?;
@@ -46,47 +48,224 @@
 //! }
 //! ```
 
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
 use std::time::Instant;
 
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
 use crate::logging::log_session_failed;
-use crate::runtime::udp_flow::sessions::{UdpFlowSnapshot, UdpSessionFlows};
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
+use crate::runtime::udp_flow::sessions::UdpSessionFlows;
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
+use crate::runtime::udp_flow::snapshot::UdpFlowSnapshot;
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
 use crate::runtime::udp_flow::state::UdpFlowState;
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
 use zero_engine::{EngineError, SessionOutcome};
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
 use zero_platform_tokio::TokioDatagramSocket;
 
 // Sub-module declarations.
 
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
+mod candidate;
 mod dispatch;
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
 mod forward;
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
 mod lifecycle;
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
 mod managed;
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
 mod packet_path;
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
 mod start;
-mod types;
 
 // Re-exports.
 
-pub(crate) use managed::{ManagedDatagramStart, ManagedRelayStart, ManagedStreamPacketStart};
-pub(crate) use types::{FlowFailure, FlowStartResult, UdpCandidate};
+pub(crate) use crate::runtime::udp_flow::result::{FlowFailure, FlowStartResult};
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
+pub(crate) use candidate::UdpCandidate;
+#[cfg(any(feature = "hysteria2", feature = "shadowsocks"))]
+pub(crate) use managed::ManagedDatagramStart;
+#[cfg(feature = "socks5")]
+pub(crate) use managed::UpstreamTrackedStart;
 
 // UdpDispatch.
 
 /// Protocol-agnostic UDP dispatch state.
 ///
-/// Owns generic UDP dispatch state and a protocol runtime state bundle.
+/// Owns per-session flow bookkeeping plus neutral registered-handler,
+/// packet-path, and chain-task state.
 /// Created per inbound UDP session/association.
 pub(crate) struct UdpDispatch {
+    #[cfg(any(
+        feature = "socks5",
+        feature = "vless",
+        feature = "hysteria2",
+        feature = "shadowsocks",
+        feature = "trojan",
+        feature = "vmess",
+        feature = "mieru"
+    ))]
     inbound_tag: String,
+    #[cfg(any(
+        feature = "socks5",
+        feature = "vless",
+        feature = "hysteria2",
+        feature = "shadowsocks",
+        feature = "trojan",
+        feature = "vmess",
+        feature = "mieru"
+    ))]
     flows: UdpSessionFlows,
     /// Ephemeral UDP socket for direct outbound (sends to target, receives responses).
+    #[cfg(any(
+        feature = "socks5",
+        feature = "vless",
+        feature = "hysteria2",
+        feature = "shadowsocks",
+        feature = "trojan",
+        feature = "vmess",
+        feature = "mieru"
+    ))]
     direct_socket: TokioDatagramSocket,
     /// Managed protocol, packet-path, and chain response state for this UDP session.
+    #[cfg(any(
+        feature = "socks5",
+        feature = "vless",
+        feature = "hysteria2",
+        feature = "shadowsocks",
+        feature = "trojan",
+        feature = "vmess",
+        feature = "mieru"
+    ))]
     flow_state: UdpFlowState,
 }
 
 impl UdpDispatch {
     // Failure helpers.
 
+    #[cfg(any(
+        feature = "socks5",
+        feature = "vless",
+        feature = "hysteria2",
+        feature = "shadowsocks",
+        feature = "trojan",
+        feature = "vmess",
+        feature = "mieru"
+    ))]
     fn fail_flow(
         &mut self,
         flow: &UdpFlowSnapshot,

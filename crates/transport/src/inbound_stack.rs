@@ -6,9 +6,12 @@ use zero_config::{GrpcConfig, H2Config, TlsConfig, WebSocketConfig};
 use zero_engine::EngineError;
 use zero_platform_tokio::{TcpRelayStream, TokioSocket};
 
+#[cfg(feature = "grpc")]
+use crate::grpc;
 #[cfg(feature = "h2")]
 use crate::h2;
-use crate::{grpc, ws};
+#[cfg(feature = "ws")]
+use crate::ws;
 
 #[derive(Clone, Copy)]
 pub struct InboundStreamStack<'a> {
@@ -72,9 +75,11 @@ where
     }
 
     match (ws_config, grpc_config, h2_config) {
+        #[cfg(feature = "ws")]
         (Some(config), None, None) => Ok(TcpRelayStream::new(
             ws::accept_ws(stream, &config.path).await?,
         )),
+        #[cfg(feature = "grpc")]
         (None, Some(config), None) => Ok(TcpRelayStream::new(
             grpc::accept_grpc(stream, &config.service_names).await?,
         )),

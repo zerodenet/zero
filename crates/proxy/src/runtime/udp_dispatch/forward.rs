@@ -18,8 +18,9 @@ use std::time::Instant;
 use zero_engine::EngineError;
 
 use super::UdpDispatch;
-use crate::runtime::udp_flow::sessions::{UdpFlowSnapshot, UdpPathCategory};
-use crate::runtime::udp_helpers::send_direct_udp_packet;
+use crate::runtime::path::UdpPathCategory;
+use crate::runtime::udp_flow::snapshot::UdpFlowSnapshot;
+use crate::runtime::udp_socket::send_direct_udp_packet;
 use crate::runtime::Proxy;
 
 impl UdpDispatch {
@@ -54,6 +55,13 @@ impl UdpDispatch {
             }
 
             // Relay path.
+            #[cfg(any(
+                feature = "socks5",
+                feature = "vless",
+                feature = "vmess",
+                feature = "trojan",
+                feature = "mieru"
+            ))]
             UdpPathCategory::Relay => {
                 let Some(managed) = flow.outbound.relay_managed_flow() else {
                     unreachable!("Relay category maps to a managed relay flow");
@@ -72,14 +80,38 @@ impl UdpDispatch {
                 }
             }
 
-            UdpPathCategory::Datagram | UdpPathCategory::StreamPacket => {
+            #[cfg(any(feature = "hysteria2", feature = "shadowsocks"))]
+            UdpPathCategory::Datagram => {
                 let result = self
                     .flow_state
-                    .forward_existing_managed_flow(proxy, flow, payload)
+                    .forward_existing_managed_flow(proxy, (flow, payload))
                     .await;
                 self.record_or_fail(flow, proxy, started_at, result)?;
             }
 
+            #[cfg(any(
+                feature = "vless",
+                feature = "vmess",
+                feature = "trojan",
+                feature = "mieru"
+            ))]
+            UdpPathCategory::StreamPacket => {
+                let result = self
+                    .flow_state
+                    .forward_existing_managed_flow(proxy, (flow, payload))
+                    .await;
+                self.record_or_fail(flow, proxy, started_at, result)?;
+            }
+
+            #[cfg(any(
+                feature = "socks5",
+                feature = "vless",
+                feature = "hysteria2",
+                feature = "shadowsocks",
+                feature = "trojan",
+                feature = "vmess",
+                feature = "mieru"
+            ))]
             UdpPathCategory::PacketPathDatagram => {
                 let result = self
                     .flow_state

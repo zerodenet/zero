@@ -7,14 +7,17 @@ use zero_transport::outbound_leaf::{
 };
 
 use super::super::error::{udp_flow_failure, udp_prepare_failure};
-use super::super::stream_packet::start_relay_managed_stream_packet;
-use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
+use super::super::stream_packet::{
+    start_relay_managed_stream_packet, ManagedStreamPacketRelay, ManagedStreamPacketStartBridge,
+};
+use crate::runtime::udp_flow::result::{FlowFailure, FlowStartResult};
+use crate::runtime::udp_flow::state::UdpFlowStartContext;
 use crate::runtime::Proxy;
 use crate::transport::RelayCarrier;
 
 pub(crate) async fn start_protocol_transport_bridge_udp_relay_final_hop<'a, TBridge>(
     bridge: &TBridge,
-    dispatch: &mut UdpDispatch,
+    mut context: UdpFlowStartContext<'_>,
     proxy: &Proxy,
     session: &Session,
     carrier: RelayCarrier,
@@ -50,16 +53,19 @@ where
         )
     })?;
     start_relay_managed_stream_packet(
-        dispatch,
-        Some(proxy),
-        endpoint.tag,
-        session,
-        carrier,
-        None,
-        endpoint.server,
-        endpoint.port,
-        prepared_relay_final_hop_udp_resume(bridge, &prepared),
-        payload,
+        &mut context,
+        ManagedStreamPacketStartBridge::relay(
+            Some(proxy),
+            endpoint.tag,
+            session,
+            ManagedStreamPacketRelay {
+                carrier,
+                tls_server_name: None,
+            },
+            (endpoint.server, endpoint.port),
+            prepared_relay_final_hop_udp_resume(bridge, &prepared),
+            payload,
+        ),
     )
     .await
 }

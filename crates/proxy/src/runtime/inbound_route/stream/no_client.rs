@@ -4,8 +4,8 @@ use zero_engine::EngineError;
 
 use super::dispatch::dispatch_protocol_stream_route;
 use super::model::StreamRouteBridge;
-use crate::runtime::inbound_protocol::NoClientResponseInboundProtocol;
 use crate::runtime::stream_udp::run_mapped_protocol_stream_udp_relay;
+use crate::runtime::tcp_ingress::NoClientResponseInboundProtocol;
 use crate::runtime::Proxy;
 use crate::transport::TcpRelayStream;
 

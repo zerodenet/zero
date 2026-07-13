@@ -4,7 +4,7 @@ use zero_core::{InboundMuxStreamRoute, Session};
 use zero_engine::EngineError;
 
 use super::model::MuxRouteBridge;
-use crate::runtime::inbound_protocol::{serve_inbound, InboundProtocol};
+use crate::runtime::tcp_ingress::{serve_inbound, InboundProtocol};
 use crate::runtime::Proxy;
 
 pub(crate) async fn dispatch_protocol_mux_route<R, P, FMapTcp, FRunUdp, FUdp, FRunMux, FMux>(

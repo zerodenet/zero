@@ -3,6 +3,7 @@ use zero_engine::ResolvedLeafOutbound;
 
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
 use crate::runtime::udp_flow::packet_path::UdpPacketRef;
+use crate::runtime::udp_flow::packet_path_chain::PacketPathStartRequest;
 use crate::runtime::Proxy;
 
 impl UdpDispatch {
@@ -47,14 +48,16 @@ impl UdpDispatch {
             {
                 let sent = self
                     .send_packet_path_chain(
-                        session.id,
                         proxy,
-                        carrier_leaf,
-                        datagram_leaf,
-                        UdpPacketRef {
-                            target: &session.target,
-                            port: session.port,
-                            payload,
+                        PacketPathStartRequest {
+                            session_id: session.id,
+                            carrier_leaf,
+                            datagram_leaf,
+                            packet: UdpPacketRef {
+                                target: &session.target,
+                                port: session.port,
+                                payload,
+                            },
                         },
                     )
                     .await?;

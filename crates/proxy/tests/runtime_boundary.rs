@@ -29,10 +29,10 @@ fn virtual_repo_relative(relative: &str) -> Option<&'static str> {
             Some("crates/proxy/src/adapters/hysteria2/inbound/request.rs")
         }
         "crates/proxy/src/transport/hysteria2_inbound/listener.rs" => {
-            Some("crates/proxy/src/adapters/hysteria2/inbound/transport.rs")
+            Some("crates/proxy/src/adapters/hysteria2/inbound/listener.rs")
         }
         "crates/proxy/src/transport/hysteria2_inbound/listener/udp.rs" => {
-            Some("crates/proxy/src/adapters/hysteria2/inbound/udp.rs")
+            Some("crates/proxy/src/adapters/hysteria2/inbound/listener.rs")
         }
         "crates/proxy/src/transport/mieru_inbound.rs" => {
             Some("crates/proxy/src/adapters/mieru/inbound.rs")
@@ -41,10 +41,10 @@ fn virtual_repo_relative(relative: &str) -> Option<&'static str> {
             Some("crates/proxy/src/adapters/mieru/inbound/request.rs")
         }
         "crates/proxy/src/transport/mieru_inbound/listener.rs" => {
-            Some("crates/proxy/src/adapters/mieru/inbound/transport.rs")
+            Some("crates/proxy/src/adapters/mieru/inbound/listener.rs")
         }
         "crates/proxy/src/transport/mieru_inbound/listener/udp.rs" => {
-            Some("crates/proxy/src/adapters/mieru/inbound/udp.rs")
+            Some("crates/proxy/src/adapters/mieru/inbound/listener.rs")
         }
         "crates/proxy/src/transport/shadowsocks_inbound.rs" => {
             Some("crates/proxy/src/adapters/shadowsocks/inbound.rs")
@@ -53,10 +53,10 @@ fn virtual_repo_relative(relative: &str) -> Option<&'static str> {
             Some("crates/proxy/src/adapters/shadowsocks/inbound/request.rs")
         }
         "crates/proxy/src/transport/shadowsocks_inbound/listener.rs" => {
-            Some("crates/proxy/src/adapters/shadowsocks/inbound/transport.rs")
+            Some("crates/proxy/src/adapters/shadowsocks/inbound/listener.rs")
         }
         "crates/proxy/src/transport/shadowsocks_inbound/listener/udp.rs" => {
-            Some("crates/proxy/src/adapters/shadowsocks/inbound/udp.rs")
+            Some("crates/proxy/src/adapters/shadowsocks/inbound/listener.rs")
         }
         "crates/proxy/src/transport/socks5_inbound.rs" => {
             Some("crates/proxy/src/adapters/socks5/inbound.rs")
@@ -65,22 +65,22 @@ fn virtual_repo_relative(relative: &str) -> Option<&'static str> {
             Some("crates/proxy/src/adapters/socks5/inbound/request.rs")
         }
         "crates/proxy/src/transport/socks5_inbound/listener.rs" => {
-            Some("crates/proxy/src/adapters/socks5/inbound/transport.rs")
+            Some("crates/proxy/src/adapters/socks5/inbound/listener.rs")
         }
         "crates/proxy/src/transport/socks5_inbound/listener/udp_associate.rs" => {
-            Some("crates/proxy/src/adapters/socks5/inbound/udp_associate.rs")
+            Some("crates/proxy/src/adapters/socks5/inbound/client_association.rs")
         }
         "crates/proxy/src/transport/socks5_inbound/listener/udp_associate/direct_response.rs" => {
-            Some("crates/proxy/src/adapters/socks5/inbound/udp_associate.rs")
+            Some("crates/proxy/src/adapters/socks5/inbound/client_association.rs")
         }
         "crates/proxy/src/transport/socks5_inbound/listener/udp_associate/dispatch.rs" => {
-            Some("crates/proxy/src/adapters/socks5/inbound/udp_associate.rs")
+            Some("crates/proxy/src/adapters/socks5/inbound/client_association.rs")
         }
         "crates/proxy/src/transport/socks5_inbound/listener/udp_associate/relay_socket.rs" => {
-            Some("crates/proxy/src/adapters/socks5/inbound/udp_associate.rs")
+            Some("crates/proxy/src/adapters/socks5/inbound/client_association.rs")
         }
         "crates/proxy/src/transport/socks5_inbound/listener/udp_associate/setup.rs" => {
-            Some("crates/proxy/src/adapters/socks5/inbound/udp_associate.rs")
+            Some("crates/proxy/src/adapters/socks5/inbound/client_association.rs")
         }
         _ => None,
     }
@@ -97,82 +97,74 @@ fn virtual_manifest_relative(relative: &str) -> Option<&'static str> {
             Some("src/adapters/hysteria2/inbound/request.rs")
         }
         "src/transport/hysteria2_inbound/listener.rs" => {
-            Some("src/adapters/hysteria2/inbound/transport.rs")
+            Some("src/adapters/hysteria2/inbound/listener.rs")
         }
         "src/transport/hysteria2_inbound/listener/udp.rs" => {
-            Some("src/adapters/hysteria2/inbound/udp.rs")
+            Some("src/adapters/hysteria2/inbound/listener.rs")
         }
         "src/transport/mieru_inbound.rs" => Some("src/adapters/mieru/inbound.rs"),
         "src/transport/mieru_inbound/request.rs" => Some("src/adapters/mieru/inbound/request.rs"),
-        "src/transport/mieru_inbound/listener.rs" => {
-            Some("src/adapters/mieru/inbound/transport.rs")
+        "src/transport/mieru_inbound/listener.rs" => Some("src/adapters/mieru/inbound/listener.rs"),
+        "src/transport/mieru_inbound/listener/udp.rs" => {
+            Some("src/adapters/mieru/inbound/listener.rs")
         }
-        "src/transport/mieru_inbound/listener/udp.rs" => Some("src/adapters/mieru/inbound/udp.rs"),
         "src/transport/shadowsocks_inbound.rs" => Some("src/adapters/shadowsocks/inbound.rs"),
         "src/transport/shadowsocks_inbound/request.rs" => {
             Some("src/adapters/shadowsocks/inbound/request.rs")
         }
         "src/transport/shadowsocks_inbound/listener.rs" => {
-            Some("src/adapters/shadowsocks/inbound/transport.rs")
+            Some("src/adapters/shadowsocks/inbound/listener.rs")
         }
         "src/transport/shadowsocks_inbound/listener/udp.rs" => {
-            Some("src/adapters/shadowsocks/inbound/udp.rs")
+            Some("src/adapters/shadowsocks/inbound/listener.rs")
         }
         "src/transport/socks5_inbound.rs" => Some("src/adapters/socks5/inbound.rs"),
         "src/transport/socks5_inbound/request.rs" => Some("src/adapters/socks5/inbound/request.rs"),
         "src/transport/socks5_inbound/listener.rs" => {
-            Some("src/adapters/socks5/inbound/transport.rs")
+            Some("src/adapters/socks5/inbound/listener.rs")
         }
         "src/transport/socks5_inbound/listener/udp_associate.rs" => {
-            Some("src/adapters/socks5/inbound/udp_associate.rs")
+            Some("src/adapters/socks5/inbound/client_association.rs")
         }
         "src/transport/socks5_inbound/listener/udp_associate/direct_response.rs" => {
-            Some("src/adapters/socks5/inbound/udp_associate.rs")
+            Some("src/adapters/socks5/inbound/client_association.rs")
         }
         "src/transport/socks5_inbound/listener/udp_associate/dispatch.rs" => {
-            Some("src/adapters/socks5/inbound/udp_associate.rs")
+            Some("src/adapters/socks5/inbound/client_association.rs")
         }
         "src/transport/socks5_inbound/listener/udp_associate/relay_socket.rs" => {
-            Some("src/adapters/socks5/inbound/udp_associate.rs")
+            Some("src/adapters/socks5/inbound/client_association.rs")
         }
         "src/transport/socks5_inbound/listener/udp_associate/setup.rs" => {
-            Some("src/adapters/socks5/inbound/udp_associate.rs")
+            Some("src/adapters/socks5/inbound/client_association.rs")
         }
         "src/transport/hysteria2_inbound/listener" => Some("src/adapters/hysteria2/inbound"),
         "src/transport/mieru_inbound/listener" => Some("src/adapters/mieru/inbound"),
         "src/transport/shadowsocks_inbound/listener" => Some("src/adapters/shadowsocks/inbound"),
         "src/transport/socks5_inbound/listener" => Some("src/adapters/socks5/inbound"),
-        "src/adapters/hysteria2/inbound/listener.rs" => {
-            Some("src/adapters/hysteria2/inbound/transport.rs")
-        }
         "src/adapters/hysteria2/inbound/listener/udp.rs" => {
-            Some("src/adapters/hysteria2/inbound/udp.rs")
+            Some("src/adapters/hysteria2/inbound/listener.rs")
         }
-        "src/adapters/mieru/inbound/listener.rs" => Some("src/adapters/mieru/inbound/transport.rs"),
-        "src/adapters/mieru/inbound/listener/udp.rs" => Some("src/adapters/mieru/inbound/udp.rs"),
-        "src/adapters/shadowsocks/inbound/listener.rs" => {
-            Some("src/adapters/shadowsocks/inbound/transport.rs")
+        "src/adapters/mieru/inbound/listener/udp.rs" => {
+            Some("src/adapters/mieru/inbound/listener.rs")
         }
         "src/adapters/shadowsocks/inbound/listener/udp.rs" => {
-            Some("src/adapters/shadowsocks/inbound/udp.rs")
-        }
-        "src/adapters/socks5/inbound/listener.rs" => {
-            Some("src/adapters/socks5/inbound/transport.rs")
+            Some("src/adapters/shadowsocks/inbound/listener.rs")
         }
         "src/adapters/socks5/inbound/listener/udp_associate.rs" => {
-            Some("src/adapters/socks5/inbound/udp_associate.rs")
+            Some("src/adapters/socks5/inbound/client_association.rs")
         }
         "src/adapters/socks5/inbound/listener/udp_associate/direct_response.rs" => {
-            Some("src/adapters/socks5/inbound/udp_associate.rs")
+            Some("src/adapters/socks5/inbound/client_association.rs")
         }
         "src/adapters/socks5/inbound/listener/udp_associate/dispatch.rs" => {
-            Some("src/adapters/socks5/inbound/udp_associate.rs")
+            Some("src/adapters/socks5/inbound/client_association.rs")
         }
         "src/adapters/socks5/inbound/listener/udp_associate/relay_socket.rs" => {
-            Some("src/adapters/socks5/inbound/udp_associate.rs")
+            Some("src/adapters/socks5/inbound/client_association.rs")
         }
         "src/adapters/socks5/inbound/listener/udp_associate/setup.rs" => {
-            Some("src/adapters/socks5/inbound/udp_associate.rs")
+            Some("src/adapters/socks5/inbound/client_association.rs")
         }
         _ => None,
     }
@@ -387,6 +379,26 @@ fn rust_sources_under(relative: &str) -> Vec<PathBuf> {
     files
 }
 
+fn repo_rust_sources_under(relative: &str) -> Vec<PathBuf> {
+    let mut pending = vec![repo_root().join(relative)];
+    let mut files = Vec::new();
+
+    while let Some(path) = pending.pop() {
+        for entry in fs::read_dir(&path).unwrap_or_else(|error| {
+            panic!("read dir {}: {error}", path.display());
+        }) {
+            let path = entry.expect("read dir entry").path();
+            if path.is_dir() {
+                pending.push(path);
+            } else if path.extension().and_then(|ext| ext.to_str()) == Some("rs") {
+                files.push(path);
+            }
+        }
+    }
+
+    files
+}
+
 fn protocol_inbound_sources() -> Vec<PathBuf> {
     [
         "src/transport/http_connect_inbound.rs",
@@ -520,11 +532,10 @@ fn runtime_engine_facade_keeps_traffic_and_udp_upstream_accounting_protocol_neut
             && engine_facade.contains("pub(crate) fn record_udp_upstream_packet_sent")
             && engine_facade.contains("pub(crate) fn record_udp_upstream_packet_received")
             && engine_facade.contains("pub(crate) fn udp_upstream_idle_timeout")
-            && !engine_facade.contains("#[cfg(feature = \"socks5\")]")
-            && !engine_facade.contains("#[cfg(any(feature = \"socks5\", feature = \"vless\"))]")
+            && engine_facade.contains("#[cfg(feature = \"socks5\")]\n    pub(crate) fn record_udp_upstream")
             && !engine_facade.contains("Socks5")
             && !engine_facade.contains("Vless"),
-        "runtime engine facade should expose generic traffic and UDP upstream accounting without protocol feature gates"
+        "runtime engine facade should keep neutral accounting names while feature-owning SOCKS5 upstream execution"
     );
 }
 
@@ -601,24 +612,249 @@ fn mux_session_task_lifecycle_lives_in_runtime() {
 }
 
 #[test]
-fn neutral_udp_dispatch_and_response_glue_lives_in_runtime() {
+fn neutral_udp_ingress_and_delivery_glue_lives_in_runtime() {
     assert!(
         !manifest_dir().join("src/inbound/udp_dispatch.rs").exists()
             && !manifest_dir().join("src/inbound/udp_response.rs").exists(),
         "neutral inbound UDP dispatch/response accounting glue should live under src/runtime"
     );
 
-    let udp_dispatch = read("src/runtime/udp_inbound_dispatch.rs");
-    let udp_response = read("src/runtime/udp_response.rs");
+    let udp_ingress = read("src/runtime/udp_ingress.rs");
+    let udp_delivery = read("src/runtime/udp_delivery.rs");
     assert!(
-        udp_dispatch.contains("pub(crate) async fn dispatch_inbound_udp_packet")
-            && udp_dispatch.contains("UdpPipe::new(proxy, dispatch)")
-            && udp_dispatch.contains("UdpPipeInput::from_inbound_dispatch")
-            && udp_response.contains("fn write_direct_response")
-            && udp_response.contains("fn write_upstream_response")
-            && udp_response.contains("fn write_chain_response"),
-        "runtime should own neutral inbound UDP pipe submission and response accounting"
+        udp_ingress.contains("pub(crate) async fn dispatch_inbound_udp_packet")
+            && udp_ingress.contains("UdpPipe::new(proxy, dispatch)")
+            && udp_ingress.contains("UdpPipeInput::from_inbound_dispatch")
+            && udp_delivery.contains("fn write_direct_response")
+            && udp_delivery.contains("fn write_upstream_response")
+            && udp_delivery.contains("fn write_chain_response"),
+        "runtime should own neutral UDP ingress and response delivery accounting"
     );
+}
+
+#[test]
+fn udp_pipe_execution_follows_external_udp_features() {
+    let runtime = read("src/runtime.rs");
+    let pipe = read("src/runtime/pipe.rs");
+    let dispatch = read("src/runtime/udp_dispatch/mod.rs");
+    let dispatch_lifecycle = read("src/runtime/udp_dispatch/lifecycle.rs");
+    let register = read("src/register.rs");
+    let state = read("src/runtime/udp_flow/state.rs");
+    let tcp_ingress = read("src/runtime/tcp_ingress.rs");
+    let udp_socket = read("src/runtime/udp_socket.rs");
+
+    let udp_features = [
+        "feature = \"socks5\"",
+        "feature = \"vless\"",
+        "feature = \"hysteria2\"",
+        "feature = \"shadowsocks\"",
+        "feature = \"trojan\"",
+        "feature = \"vmess\"",
+        "feature = \"mieru\"",
+    ];
+    for feature in udp_features {
+        assert!(runtime.contains(feature));
+        assert!(pipe.contains(feature));
+        assert!(dispatch.contains(feature));
+        assert!(register.contains(feature));
+        assert!(state.contains(feature));
+    }
+    assert!(
+        pipe.matches("#[cfg(any(").count() >= 6
+            && pipe.contains("pub(crate) struct UdpPipeInput<'a>")
+            && pipe.contains("pub(crate) struct UdpPipe<'a>")
+            && dispatch.contains("mod dispatch;")
+            && dispatch.contains("mod lifecycle;")
+            && dispatch.contains("mod forward;")
+            && dispatch.contains("mod managed;")
+            && dispatch.contains("mod packet_path;")
+            && dispatch.contains("mod start;")
+            && register.contains(
+                "pub(crate) fn registered_udp_handlers(registry: &ProtocolRegistry)"
+            )
+            && dispatch_lifecycle.contains("protocols.registered_udp_handlers()")
+            && !state.contains("pub(crate) fn default_registered()")
+            && tcp_ingress.contains("pub(crate) use lifecycle::apply_kernel_rate_limits;")
+            && udp_socket.contains("pub(crate) async fn send_direct_udp_packet("),
+        "UDP pipe input/state and first-level dispatch should share the external UDP feature family"
+    );
+}
+
+#[test]
+fn udp_runtime_taxonomy_stays_responsibility_based() {
+    let dispatch = read("src/runtime/udp_dispatch/mod.rs");
+    let flow = read("src/runtime/udp_flow.rs");
+    let managed = read("src/runtime/udp_flow/managed/mod.rs");
+    let registered = read("src/runtime/udp_flow/registered/mod.rs");
+    let architecture = fs::read_to_string(repo_root().join("docs/project/architecture.md"))
+        .expect("read docs/project/architecture.md");
+
+    assert!(
+        dispatch.contains("Per-inbound-session UDP routing, flow selection, start, and forwarding")
+            && flow.contains("Neutral UDP flow models, persistent state")
+            && managed.contains("execution machinery for resumable managed UDP flows")
+            && registered.contains("handlers registered at proxy assembly time"),
+        "UDP runtime modules should state their distinct dispatch, flow-state, managed-execution, and registered-handler responsibilities"
+    );
+    assert!(
+        architecture.contains("`runtime::udp_dispatch` is the per-inbound-session")
+            && architecture.contains("`runtime::udp_flow::managed` owns reusable execution machinery")
+            && architecture.contains("`runtime::udp_flow::registered` owns the handler set assembled by `register.rs`")
+            && architecture.contains("`runtime::udp_association` is an inbound relay-loop shape")
+            && !architecture.contains("runtime::udp_flow::protocol_state")
+            && !architecture.contains("ProtocolUdpState")
+            && !architecture.contains("ProtocolUdpFlowSnapshot"),
+        "architecture docs should describe the current UDP taxonomy without stale protocol-state facade names"
+    );
+}
+
+#[test]
+fn persistent_udp_flow_models_do_not_belong_to_session_dispatch() {
+    let result = read("src/runtime/udp_flow/result.rs");
+    let dispatch_candidate = read("src/runtime/udp_dispatch/candidate.rs");
+
+    for model in [
+        "pub(crate) enum FlowStartResult",
+        "pub(crate) struct FlowFailure",
+    ] {
+        assert!(
+            result.contains(model),
+            "persistent UDP flow result model `{model}` should live in udp_flow/result.rs"
+        );
+        assert!(
+            !dispatch_candidate.contains(model),
+            "per-session udp_dispatch candidate should not own persistent model `{model}`"
+        );
+    }
+
+    for path in rust_sources_under("src/runtime/udp_flow") {
+        let source = relative(&path);
+        let content = fs::read_to_string(&path).expect("read UDP flow source");
+        for forbidden in [
+            "runtime::udp_dispatch::UdpDispatch",
+            "use crate::runtime::udp_dispatch",
+            "udp_dispatch::FlowFailure",
+            "udp_dispatch::FlowStartResult",
+            "udp_dispatch::{FlowFailure",
+        ] {
+            assert!(
+                !content.contains(forbidden),
+                "{source} should use udp_flow-owned result models; found `{forbidden}`"
+            );
+        }
+    }
+
+    assert!(
+        !Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("src/runtime/udp_flow/helpers.rs")
+            .exists(),
+        "response delivery helpers must not return to persistent udp_flow"
+    );
+    assert!(
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("src/runtime/udp_delivery/helpers.rs")
+            .exists(),
+        "udp_delivery should own response accounting and delivery helpers"
+    );
+}
+
+#[test]
+fn proxy_module_taxonomy_uses_current_responsibility_names() {
+    for removed in [
+        "src/protocol_capability.rs",
+        "src/runtime/inbound_protocol.rs",
+        "src/runtime/udp_inbound_dispatch.rs",
+        "src/runtime/udp_helpers.rs",
+        "src/runtime/udp_response.rs",
+        "src/transport/tcp_flow.rs",
+        "src/adapters/socks5/udp/active.rs",
+        "src/adapters/socks5/inbound/transport.rs",
+        "src/adapters/shadowsocks/inbound/transport.rs",
+        "src/adapters/mieru/inbound/transport.rs",
+        "src/adapters/hysteria2/inbound/transport.rs",
+        "src/adapters/shadowsocks/udp/managed.rs",
+        "src/adapters/mieru/udp/managed.rs",
+        "src/adapters/hysteria2/udp/managed.rs",
+        "src/adapters/shadowsocks/udp/handler.rs",
+        "src/adapters/mieru/udp/handler.rs",
+        "src/adapters/hysteria2/udp/handler.rs",
+        "src/adapters/shadowsocks/inbound/udp.rs",
+        "src/adapters/mieru/inbound/udp.rs",
+        "src/adapters/hysteria2/inbound/udp.rs",
+    ] {
+        assert!(
+            !manifest_dir().join(removed).exists(),
+            "historical proxy taxonomy path should stay removed: {removed}"
+        );
+    }
+
+    for current in [
+        "src/protocol_catalog.rs",
+        "src/runtime/tcp_ingress.rs",
+        "src/runtime/udp_ingress.rs",
+        "src/runtime/udp_socket.rs",
+        "src/runtime/udp_delivery.rs",
+        "src/adapters/socks5/udp/upstream_association.rs",
+        "src/adapters/socks5/inbound/listener.rs",
+        "src/adapters/shadowsocks/inbound/listener.rs",
+        "src/adapters/mieru/inbound/listener.rs",
+        "src/adapters/hysteria2/inbound/listener.rs",
+        "src/adapters/shadowsocks/udp.rs",
+        "src/adapters/mieru/udp.rs",
+        "src/adapters/hysteria2/udp.rs",
+    ] {
+        assert!(
+            manifest_dir().join(current).is_file(),
+            "responsibility-named proxy module should exist: {current}"
+        );
+    }
+}
+
+#[test]
+fn production_sources_do_not_hide_dead_code_or_unused_facades() {
+    let mut roots = rust_sources_under("src");
+    roots.extend(repo_rust_sources_under("crates/transport/src"));
+    for protocol in [
+        "hysteria2",
+        "http-connect",
+        "mieru",
+        "shadowsocks",
+        "socks5",
+        "trojan",
+        "vless",
+        "vmess",
+    ] {
+        roots.extend(repo_rust_sources_under(&format!(
+            "protocols/{protocol}/src"
+        )));
+    }
+
+    for path in roots {
+        let source = path.to_string_lossy();
+        let content = fs::read_to_string(&path).expect("read production Rust source");
+        for forbidden in [
+            "allow(dead_code)",
+            "allow(unused_imports)",
+            "allow(dead_code, unused_imports",
+        ] {
+            assert!(
+                !content.contains(forbidden),
+                "{source} should use precise ownership/cfg or remove residue instead of `{forbidden}`"
+            );
+        }
+    }
+}
+
+#[test]
+fn proxy_operations_do_not_hide_repeated_inputs_with_argument_lint_allows() {
+    for path in rust_sources_under("src") {
+        let source = path.to_string_lossy();
+        let content = fs::read_to_string(&path).expect("read proxy Rust source");
+        assert!(
+            !content.contains("allow(clippy::too_many_arguments)"),
+            "{source} should use an operation-specific request/default model instead of suppressing repeated inputs"
+        );
+    }
 }
 
 #[test]
@@ -703,16 +939,16 @@ fn udp_inbound_runtime_converges_to_three_neutral_loop_templates() {
 
 #[test]
 fn ordinary_udp_inbounds_submit_packets_through_udp_pipe() {
-    let udp_dispatch = read("src/runtime/udp_inbound_dispatch.rs");
+    let udp_ingress = read("src/runtime/udp_ingress.rs");
     let datagram_udp = read_proxy_module_tree("src/runtime/datagram_udp.rs");
     let stream_udp = read("src/runtime/stream_udp.rs");
     let mux_udp = read("src/runtime/mux_udp.rs");
     let packet_session_udp = read_proxy_module_tree("src/runtime/packet_session_udp.rs");
     assert!(
-        udp_dispatch.contains("pub(crate) async fn dispatch_inbound_udp_packet")
-            && udp_dispatch.contains("UdpPipe::new(proxy, dispatch)")
-            && udp_dispatch.contains("UdpPipeInput::from_inbound_dispatch"),
-        "shared inbound UDP dispatch helper should own UdpPipe submission"
+        udp_ingress.contains("pub(crate) async fn dispatch_inbound_udp_packet")
+            && udp_ingress.contains("UdpPipe::new(proxy, dispatch)")
+            && udp_ingress.contains("UdpPipeInput::from_inbound_dispatch"),
+        "shared UDP ingress should own UdpPipe submission"
     );
     assert!(
         stream_udp.contains("run_packet_session_udp_relay")
@@ -918,7 +1154,7 @@ fn ordinary_udp_inbounds_submit_packets_through_udp_pipe() {
 
 #[test]
 fn custom_tcp_inbound_relays_use_runtime_metering_helpers() {
-    let runtime = read_proxy_module_tree("src/runtime/inbound_protocol.rs");
+    let runtime = read_proxy_module_tree("src/runtime/tcp_ingress.rs");
     assert!(
         runtime.contains("fn record_tcp_upload(")
             && runtime.contains("fn record_tcp_download(")
@@ -972,8 +1208,8 @@ fn inbound_udp_glue_does_not_name_protocol_private_packet_models() {
 
 #[test]
 fn inbound_udp_response_accounting_uses_runtime_helpers() {
-    let helper = read("src/runtime/udp_flow/helpers.rs");
-    let inbound_response = read("src/runtime/udp_response.rs");
+    let helper = read("src/runtime/udp_delivery/helpers.rs");
+    let inbound_response = read("src/runtime/udp_delivery.rs");
     let datagram_udp = read_proxy_module_tree("src/runtime/datagram_udp.rs");
     let stream_udp = read("src/runtime/stream_udp.rs");
     let mux_udp = read("src/runtime/mux_udp.rs");
@@ -1003,7 +1239,7 @@ fn inbound_udp_response_accounting_uses_runtime_helpers() {
             && helper.contains("record_session_outbound_rx")
             && helper.contains("record_session_inbound_tx")
             && helper.contains("session_id_by_target"),
-        "neutral UDP inbound response accounting should live in runtime/udp_flow helpers"
+        "neutral UDP inbound response accounting should live under runtime/udp_delivery"
     );
     assert!(
         inbound_response.contains("fn write_direct_response")
@@ -1205,7 +1441,7 @@ fn udp_dispatch_entry_is_only_called_by_udp_pipe() {
 
 #[test]
 fn ordinary_tcp_inbounds_use_tcp_pipe_for_route_execution() {
-    let lifecycle = read_proxy_module_tree("src/runtime/inbound_protocol.rs");
+    let lifecycle = read_proxy_module_tree("src/runtime/tcp_ingress.rs");
     assert!(
         lifecycle.contains("TcpPipe::new") && lifecycle.contains("TcpPipeInput"),
         "serve_inbound should route ordinary TCP sessions through TcpPipe"
@@ -1615,7 +1851,7 @@ fn outbound_config_variant_matching_is_confined_to_adapters_and_registry() {
 }
 
 #[test]
-fn direct_udp_helpers_do_not_live_in_outbound_facade() {
+fn direct_udp_socket_operations_do_not_live_in_outbound_facade() {
     assert!(
         !manifest_dir().join("src/outbound").exists(),
         "src/outbound should not remain as an empty compatibility facade"
@@ -1625,19 +1861,22 @@ fn direct_udp_helpers_do_not_live_in_outbound_facade() {
         "src/outbound/direct.rs should not be kept as an empty compatibility facade"
     );
 
-    let helpers = read("src/runtime/udp_helpers.rs");
+    let socket = read("src/runtime/udp_socket.rs");
     let adapter = read("src/adapters/direct/udp.rs");
     assert!(
-        helpers.contains("resolve_udp_target") && helpers.contains("send_direct_udp_packet"),
-        "direct UDP target resolution and sending should live in runtime::udp_helpers"
+        !socket.contains("resolve_udp_target")
+            && socket.contains("send_direct_udp_packet")
+            && socket.contains("resolve_udp_peer_endpoint"),
+        "runtime::udp_socket should own neutral socket operations without duplicating direct target resolution"
     );
     assert!(
-        !helpers.contains("outbound/direct.rs"),
-        "runtime::udp_helpers should not keep historical references to removed outbound direct facades"
+        !socket.contains("outbound/direct.rs"),
+        "runtime::udp_socket should not keep historical references to removed outbound direct facades"
     );
     assert!(
-        adapter.contains("resolve_udp_target") && adapter.contains("send_direct_packet"),
-        "direct adapter UDP module should call runtime helpers through UdpDispatch"
+        adapter.contains("resolve_target_addr(session, proxy.resolver.as_ref())")
+            && adapter.contains("send_direct_packet"),
+        "direct adapter should resolve its direct target through DirectConnector and send through UdpDispatch"
     );
 }
 
@@ -2435,6 +2674,7 @@ fn running_proxy_handle_lives_outside_runtime_root() {
 #[test]
 fn runtime_reload_bridge_lives_outside_runtime_root() {
     let runtime = read("src/runtime.rs");
+    let orchestration = read("src/runtime/orchestration.rs");
     let reload = read("src/runtime/reload.rs");
 
     for forbidden in [
@@ -2455,8 +2695,52 @@ fn runtime_reload_bridge_lives_outside_runtime_root() {
 
     assert!(
         runtime.contains("mod reload;")
-            && runtime.contains("reload::subscribe_reload_bridge(self.engine.subscribe_reload())"),
-        "src/runtime.rs should subscribe to reloads through runtime/reload.rs"
+            && !runtime.contains("subscribe_reload_bridge(")
+            && orchestration
+                .contains("reload::subscribe_reload_bridge(proxy.engine.subscribe_reload())"),
+        "runtime orchestration should subscribe to reloads through runtime/reload.rs"
+    );
+}
+
+#[test]
+fn runtime_listeners_root_is_facade_only() {
+    let root = read("src/runtime/listeners.rs");
+    let inbound = read("src/runtime/listeners/inbound.rs");
+    let urltest = read("src/runtime/listeners/urltest.rs");
+
+    for expected in [
+        "mod inbound;",
+        "mod urltest;",
+        "pub(super) use inbound::{",
+        "pub(super) use urltest::reconcile_urltests;",
+    ] {
+        assert!(
+            root.contains(expected),
+            "runtime/listeners.rs should remain a facade containing `{expected}`"
+        );
+    }
+
+    for implementation in [
+        "async fn bind_inbound_listener(",
+        "fn spawn_inbound_listener(",
+        "async fn reconcile_inbounds(",
+        "fn reconcile_urltests(",
+    ] {
+        assert!(
+            !root.contains(implementation),
+            "runtime/listeners.rs should not regrow implementation `{implementation}`"
+        );
+    }
+
+    assert!(
+        inbound.contains("async fn bind_inbound_listener(")
+            && inbound.contains("fn spawn_inbound_listener(")
+            && inbound.contains("async fn reconcile_inbounds("),
+        "runtime/listeners/inbound.rs should own inbound listener lifecycle"
+    );
+    assert!(
+        urltest.contains("fn reconcile_urltests("),
+        "runtime/listeners/urltest.rs should own urltest task reconciliation"
     );
 }
 
@@ -2624,7 +2908,7 @@ fn block_outbound_leaf_is_registry_kernel_exception_not_adapter_protocol() {
 
 #[test]
 fn runtime_uses_registry_for_outbound_leaf_runtime_facts() {
-    let orchestration = read("src/runtime/orchestration.rs");
+    let path = read("src/runtime/path.rs");
     for forbidden in [
         "ResolvedLeafOutbound::",
         "fn health_tag",
@@ -2633,8 +2917,8 @@ fn runtime_uses_registry_for_outbound_leaf_runtime_facts() {
         "fn tcp_path_category",
     ] {
         assert!(
-            !orchestration.contains(forbidden),
-            "runtime/orchestration.rs should only define neutral fact types, not classify outbound leaf variants; found `{forbidden}`"
+            !path.contains(forbidden),
+            "runtime/path.rs should only define neutral path facts, not classify outbound leaf variants; found `{forbidden}`"
         );
     }
 
@@ -2644,6 +2928,27 @@ fn runtime_uses_registry_for_outbound_leaf_runtime_facts() {
         assert!(
             !content.contains("ResolvedLeafOutbound::"),
             "{source} should use ProtocolRegistry::outbound_leaf_runtime instead of matching outbound leaf variants"
+        );
+    }
+}
+
+#[test]
+fn proxy_run_loop_lives_in_runtime_orchestration() {
+    let root = read("src/runtime.rs");
+    let orchestration = read("src/runtime/orchestration.rs");
+
+    assert!(
+        root.contains("orchestration::run_until(self, shutdown).await"),
+        "runtime.rs should expose a narrow Proxy::run_until boundary"
+    );
+    for implementation_marker in ["tokio::select!", "listener_stops", "reload_async_rx"] {
+        assert!(
+            !root.contains(implementation_marker),
+            "runtime.rs should not own run-loop implementation marker `{implementation_marker}`"
+        );
+        assert!(
+            orchestration.contains(implementation_marker),
+            "runtime/orchestration.rs should own run-loop marker `{implementation_marker}`"
         );
     }
 }
@@ -2694,7 +2999,7 @@ fn socks5_inbound_uses_adapter_request_model() {
             && inbound.contains("OwnedSocks5InboundAcceptor")
             && inbound.contains("accept_and_dispatch_command(")
             && inbound.contains("serve_inbound_with_client_response(")
-            && inbound.contains("udp_associate::run_socks5_udp_associate(")
+            && inbound.contains("client_association::run_client_udp_association(")
             && !inbound.contains("Socks5InboundListenerRequest")
             && !inbound.contains("InboundProtocolConfig::Socks5"),
         "SOCKS5 inbound acceptor construction should live in zero-transport plus adapter spawn glue while the listener stays protocol/runtime bridge-only"
@@ -2718,16 +3023,16 @@ fn socks5_inbound_uses_adapter_request_model() {
             && transport.contains("pub async fn setup_inbound_udp_association")
             && inbound.contains("accept_and_dispatch_command(")
             && inbound.contains("serve_inbound_with_client_response(")
-            && inbound.contains("udp_associate::run_socks5_udp_associate("),
+            && inbound.contains("client_association::run_client_udp_association("),
         "SOCKS5 inbound should keep TCP accept, UDP association setup, and response semantics behind protocol or zero-transport helpers"
     );
 }
 
 #[test]
 fn mieru_inbound_uses_adapter_request_model() {
-    let inbound = read("src/adapters/mieru/inbound/transport.rs");
+    let inbound = read("src/adapters/mieru/inbound/listener.rs");
     let adapter = read("src/adapters/mieru/inbound.rs");
-    let udp = read("src/adapters/mieru/inbound/udp.rs");
+    let udp = read("src/adapters/mieru/inbound/listener.rs");
     let transport = read_repo_module_tree("crates/transport/src/mieru_transport.rs");
     let protocol_inbound = fs::read_to_string(repo_root().join("protocols/mieru/src/inbound.rs"))
         .expect("read mieru protocol inbound source");
@@ -2816,8 +3121,9 @@ fn shadowsocks_inbound_uses_adapter_request_model() {
         "Shadowsocks inbound listener should stay small enough without a too_many_lines allowance"
     );
     assert!(
-        udp.contains("async fn ss_udp_relay_loop")
-            && udp.contains("run_protocol_datagram_udp_relay")
+        udp.contains("run_protocol_datagram_udp_relay")
+            && udp.contains("let response_already_sent = false;")
+            && !udp.contains("async fn ss_udp_relay_loop")
             && !udp.contains("dispatch_inbound_udp_packet")
             && protocol_udp.contains("pub struct ShadowsocksInboundUdpRelay")
             && protocol_udp.contains("impl InboundDatagramUdpRelay<std::sync::Arc<tokio::net::UdpSocket>>"),
@@ -2842,13 +3148,13 @@ fn inbound_auth_identity_stays_in_protocol_crates() {
 
     {
         let (source_name, source, required) = (
-            "src/transport/shadowsocks_inbound/listener/udp.rs",
+            "src/adapters/shadowsocks/inbound/listener.rs",
             shadowsocks_udp.as_str(),
             "run_protocol_datagram_udp_relay(",
         );
         assert!(
             source.contains(required)
-                && source.contains("InboundDatagramUdpRelay<Arc<UdpSocket>>")
+                && source.contains("let response_already_sent = false;")
                 && !source.contains("profile.inbound_auth()")
                 && !source.contains("profile.accept_udp_session_with_auth()")
                 && !source.contains("SessionAuth::new(\"shadowsocks\")")
@@ -3222,9 +3528,7 @@ fn hysteria2_inbound_uses_adapter_request_model() {
     let transport_route =
         fs::read_to_string(repo_root().join("crates/transport/src/inbound_route.rs"))
             .expect("read transport inbound_route source");
-    let transport_hysteria2 =
-        fs::read_to_string(repo_root().join("crates/transport/src/hysteria2_quic.rs"))
-            .expect("read transport hysteria2_quic source");
+    let transport_hysteria2 = read_repo_module_tree("crates/transport/src/hysteria2_quic.rs");
     let protocol_udp = fs::read_to_string(repo_root().join("protocols/hysteria2/src/udp.rs"))
         .expect("read hysteria2 protocol udp source");
     let _protocol_dispatch_parts = struct_block(&protocol_udp, "Hysteria2InboundUdpDispatchParts");
@@ -3274,7 +3578,9 @@ fn hysteria2_inbound_uses_adapter_request_model() {
     assert!(
         inbound.contains("accept_and_dispatch_authenticated_hysteria2_quic_session(")
             && inbound.contains("serve_inbound_with_client_response(")
-            && inbound.contains("udp::hysteria2_datagram_loop")
+            && inbound.contains("run_protocol_datagram_udp_relay(")
+            && inbound.contains("let response_already_sent = true;")
+            && !inbound.contains("hysteria2_datagram_loop")
             && transport_hysteria2.contains("pub async fn accept_and_dispatch_authenticated_hysteria2_quic_session")
             && protocol_inbound.contains("pub struct Hysteria2AcceptedQuicConnection")
             && protocol_inbound.contains("pub async fn accept_authenticated_quic_session")
@@ -3339,7 +3645,7 @@ fn vless_inbound_root_does_not_reexport_session_models() {
     let proxy_transport = root.clone();
     let transport_vless = read_repo_module_tree("crates/transport/src/vless_transport.rs");
     let _request_vless = read_if_exists("src/adapters/vless/inbound/request.rs");
-    let runtime_protocol = read_proxy_module_tree("src/runtime/inbound_protocol.rs");
+    let runtime_protocol = read_proxy_module_tree("src/runtime/tcp_ingress.rs");
     let core_inbound = fs::read_to_string(repo_root().join("crates/core/src/inbound.rs"))
         .expect("read crates/core/src/inbound.rs");
     let protocol_inbound = fs::read_to_string(repo_root().join("protocols/vless/src/inbound.rs"))
@@ -3408,7 +3714,7 @@ fn vless_inbound_root_does_not_reexport_session_models() {
 #[test]
 fn inbound_runtime_route_glue_stays_post_accept_only() {
     let runtime_route = read_proxy_module_tree("src/runtime/inbound_route.rs");
-    let runtime_protocol = read_proxy_module_tree("src/runtime/inbound_protocol.rs");
+    let runtime_protocol = read_proxy_module_tree("src/runtime/tcp_ingress.rs");
     let listener_loop = read_proxy_module_tree("src/runtime/listener_loop.rs");
     let vless_adapter = read("src/adapters/vless/listener.rs");
     let vmess_adapter = read("src/adapters/vmess/listener.rs");
@@ -3552,8 +3858,6 @@ fn inbound_route_stream_root_is_facade_only() {
         "mod dispatch;",
         "mod model;",
         "mod no_client;",
-        "pub(crate) use dispatch::dispatch_protocol_stream_route;",
-        "pub(crate) use model::StreamRouteBridge;",
         "pub(crate) use no_client::dispatch_no_client_stream_route;",
     ] {
         assert!(
@@ -3596,9 +3900,10 @@ fn inbound_route_mux_root_is_facade_only() {
         "mod dispatch;",
         "mod model;",
         "mod no_client;",
-        "pub(crate) use dispatch::dispatch_protocol_mux_route;",
-        "pub(crate) use model::{MuxRouteBridge, NoClientMuxRouteDefaults};",
-        "pub(crate) use no_client::{",
+        "pub(super) use dispatch::dispatch_protocol_mux_route;",
+        "pub(super) use model::MuxRouteBridge;",
+        "pub(crate) use model::NoClientMuxRouteDefaults;",
+        "pub(crate) use no_client::dispatch_no_client_mux_route_request_with_defaults;",
     ] {
         assert!(
             root.contains(required),
@@ -3644,8 +3949,6 @@ fn inbound_route_recorded_root_is_facade_only() {
         "mod helpers;",
         "mod model;",
         "mod request;",
-        "pub(crate) use dispatch::{",
-        "pub(crate) use helpers::{",
         "pub(crate) use model::RecordedProtocolMuxRouteDefaults;",
         "pub(crate) use request::{",
     ] {
@@ -3823,13 +4126,12 @@ fn shadowsocks_udp_root_delegates_packet_path_and_flow_building() {
 
     for required in [
         "mod flow;",
-        "mod managed;",
         "mod packet_path;",
         "packet_path::carrier_descriptor",
         "packet_path::build",
         "packet_path::datagram_source",
         "flow::start",
-        "managed::handler",
+        "managed_datagram_socket_handler_box::<",
         "ShadowsocksTransportLeaf::from_resolved_leaf(leaf)",
         "leaf.udp_packet_path_plan()",
         "leaf.udp_flow_plan()",
@@ -3915,12 +4217,11 @@ fn hysteria2_udp_root_delegates_packet_path_and_flow_building() {
 
     for required in [
         "mod flow;",
-        "mod managed;",
         "mod packet_path;",
         "packet_path::carrier_descriptor",
         "packet_path::build",
         "flow::start",
-        "managed::handler",
+        "managed_datagram_handler_box::<",
         "Hysteria2TransportLeaf::from_resolved_leaf(leaf)",
         "leaf.udp_packet_path_plan()",
         "leaf.udp_flow_plan()",
@@ -4047,7 +4348,7 @@ fn socks5_udp_root_delegates_packet_path_and_flow_building() {
     let _protocol_udp = read_repo_module_tree("protocols/socks5/src/udp.rs");
 
     for required in [
-        "mod active;",
+        "mod upstream_association;",
         "mod flow;",
         "mod packet_path;",
         "packet_path::carrier_descriptor",
@@ -4101,7 +4402,7 @@ fn adapter_root_is_facade_only() {
     let adapters = read("src/adapters/mod.rs");
 
     for expected in [
-        "mod common;",
+        "mod identity;",
         "mod direct;",
         "mod http_connect;",
         "mod hysteria2;",
@@ -4156,6 +4457,54 @@ fn adapter_root_is_facade_only() {
             "src/adapters/mod.rs should remain a facade over concrete adapter modules; found `{forbidden}`"
         );
     }
+}
+
+#[test]
+fn logging_root_is_facade_only() {
+    let root = read("src/logging.rs");
+    let session = read("src/logging/session.rs");
+    let group = read("src/logging/group.rs");
+    let listener = read("src/logging/listener.rs");
+    let udp_upstream = read("src/logging/udp_upstream.rs");
+
+    for required in [
+        "mod group;",
+        "mod listener;",
+        "mod session;",
+        "mod udp_upstream;",
+        "pub(crate) use group::log_urltest_group_target_changed;",
+        "pub(crate) use listener::{log_listener_connection_error, INBOUND_ACCEPT_ROUTE_STAGE};",
+        "pub(crate) use session::{log_session_accepted, log_session_failed, log_session_finished};",
+    ] {
+        assert!(
+            root.contains(required),
+            "logging facade should wire `{required}`"
+        );
+    }
+
+    for forbidden in [
+        "fn log_",
+        "tracing::",
+        "EngineError",
+        "CompletedSessionRecord",
+    ] {
+        assert!(
+            !root.contains(forbidden),
+            "logging facade should not contain implementation detail `{forbidden}`"
+        );
+    }
+
+    assert!(
+        session.contains("fn log_session_accepted")
+            && session.contains("fn log_session_finished")
+            && session.contains("fn log_session_failed")
+            && group.contains("fn log_urltest_group_target_changed")
+            && listener.contains("fn log_listener_connection_error")
+            && listener.contains("fn is_transient_disconnect")
+            && udp_upstream.contains("fn log_udp_upstream_association_created")
+            && udp_upstream.contains("fn log_udp_upstream_association_dropped"),
+        "logging implementations should remain grouped by event responsibility"
+    );
 }
 
 #[test]
@@ -4215,7 +4564,7 @@ fn adapter_roots_keep_tcp_runtime_details_in_tcp_modules() {
         ),
     ];
 
-    let common_source = read("src/adapters/common.rs");
+    let identity_source = read("src/adapters/identity.rs");
     let proxy_tcp_bridge = read_proxy_module_tree("src/transport/tcp_outbound.rs");
 
     for (adapter_name, forbidden_patterns, required_patterns) in cases {
@@ -4258,9 +4607,9 @@ fn adapter_roots_keep_tcp_runtime_details_in_tcp_modules() {
     }
 
     assert!(
-        !common_source.contains("EstablishedTcpOutbound::proxied")
+        !identity_source.contains("EstablishedTcpOutbound::proxied")
             && proxy_tcp_bridge.contains("EstablishedTcpOutbound::proxied"),
-        "generic proxied TCP outbound normalization should live in src/transport/tcp_outbound.rs, not adapters/common.rs"
+        "generic proxied TCP outbound normalization should live in src/transport/tcp_outbound.rs, not adapters/identity.rs"
     );
 }
 
@@ -4284,24 +4633,17 @@ fn outbound_tcp_helpers_are_called_only_by_adapter_tcp_modules() {
 }
 
 #[test]
-fn adapters_common_stays_named_bridge_only() {
-    let common = read("src/adapters/common.rs");
-    let named = read("src/adapters/common/named.rs");
+fn adapter_identity_stays_identity_and_bridge_only() {
+    let identity = read("src/adapters/identity.rs");
     let registry_outbound = read("src/protocol_registry/registry/outbound.rs");
     let registry_errors = read("src/protocol_registry/defaults/errors.rs");
 
     assert!(
-        !manifest_dir()
-            .join("src/adapters/common/runtime.rs")
-            .exists()
-            && !manifest_dir()
-                .join("src/adapters/common/errors.rs")
-                .exists()
-            && common.contains("mod named;")
-            && common.contains("pub(crate) use named::{")
-            && named.contains("pub(crate) trait NamedProtocolAdapter")
-            && named.contains("pub(crate) trait ProtocolTransportBridgeAdapter"),
-        "adapters/common should collapse to the named/bridge helper facade"
+        !manifest_dir().join("src/adapters/common.rs").exists()
+            && !manifest_dir().join("src/adapters/common").exists()
+            && identity.contains("pub(crate) trait NamedProtocolAdapter")
+            && identity.contains("pub(crate) trait ProtocolTransportBridgeAdapter"),
+        "adapter identity helpers should live in one responsibility-named module"
     );
 
     for forbidden in [
@@ -4315,20 +4657,20 @@ fn adapters_common_stays_named_bridge_only() {
         "OutboundEndpoint",
     ] {
         assert!(
-            !common.contains(forbidden) && !named.contains(forbidden),
-            "adapters/common should not own neutral runtime fact or mismatch helper `{forbidden}`"
+            !identity.contains(forbidden),
+            "adapters/identity should not own neutral runtime fact or mismatch helper `{forbidden}`"
         );
     }
 
     assert!(
-        named.contains("pub(crate) fn named_protocol_claims_runtime_leaf")
-            && named.contains("leaf: &ResolvedLeafOutbound<'_>"),
-        "adapters/common named helpers may still accept neutral runtime leaves when only claiming adapter ownership"
+        identity.contains("pub(crate) fn named_protocol_claims_runtime_leaf")
+            && identity.contains("leaf: &ResolvedLeafOutbound<'_>"),
+        "adapter identity helpers may accept neutral runtime leaves only to claim adapter ownership"
     );
 
     assert!(
-        named.contains("const TCP_PATH: TcpPathCategory;"),
-        "adapters/common bridge traits may still use neutral transport path categories when describing transport-owned bridge behavior"
+        identity.contains("const TCP_PATH: TcpPathCategory;"),
+        "adapter identity bridge traits may use neutral transport path categories when describing transport-owned bridge behavior"
     );
 
     assert!(
@@ -4347,7 +4689,7 @@ fn hysteria2_tcp_udp_connect_glue_lives_in_adapter_transport_modules() {
     let tcp = read("src/adapters/hysteria2/tcp.rs");
     let udp_root = read("src/adapters/hysteria2/udp.rs");
     let flow = read("src/adapters/hysteria2/udp/flow.rs");
-    let managed = read("src/adapters/hysteria2/udp/managed.rs");
+    let managed = read("src/adapters/hysteria2/udp.rs");
     let packet_path = read("src/adapters/hysteria2/udp/packet_path.rs");
     let udp_transport = read_repo_module_tree("crates/transport/src/hysteria2_quic.rs");
     let protocol_outbound =
@@ -4395,7 +4737,7 @@ fn hysteria2_tcp_udp_connect_glue_lives_in_adapter_transport_modules() {
 #[test]
 fn trojan_tcp_connect_uses_protocol_config() {
     let root = read("src/adapters/trojan.rs");
-    let common = read("src/adapters/common.rs");
+    let common = read("src/adapters/identity.rs");
     let proxy_transport = read_proxy_module_tree("src/transport/tcp_outbound.rs");
     let transport = read_repo_module_tree("crates/transport/src/trojan_transport.rs");
     let protocol_outbound =
@@ -4463,9 +4805,7 @@ fn trojan_tcp_connect_uses_protocol_config() {
 fn shadowsocks_tcp_connect_uses_request_model() {
     let outbound = manifest_dir().join("src/outbound/shadowsocks.rs");
     let adapter = read("src/adapters/shadowsocks/tcp.rs");
-    let transport =
-        fs::read_to_string(repo_root().join("crates/transport/src/shadowsocks_transport.rs"))
-            .expect("read shadowsocks transport source");
+    let transport = read_repo_module_tree("crates/transport/src/shadowsocks_transport.rs");
     let protocol_outbound =
         fs::read_to_string(repo_root().join("protocols/shadowsocks/src/outbound.rs"))
             .expect("read shadowsocks protocol outbound source");
@@ -4516,7 +4856,7 @@ fn shadowsocks_tcp_connect_uses_request_model() {
 #[test]
 fn vmess_tcp_connect_uses_protocol_config() {
     let root = read("src/adapters/vmess.rs");
-    let common = read("src/adapters/common.rs");
+    let common = read("src/adapters/identity.rs");
     let proxy_transport = read_proxy_module_tree("src/transport/tcp_outbound.rs");
     let transport = read_repo_module_tree("crates/transport/src/vmess_transport.rs");
     let protocol_outbound = fs::read_to_string(repo_root().join("protocols/vmess/src/outbound.rs"))
@@ -4589,7 +4929,7 @@ fn vmess_tcp_connect_uses_protocol_config() {
 #[test]
 fn vless_tcp_connect_uses_protocol_config() {
     let root = read("src/adapters/vless.rs");
-    let common = read("src/adapters/common.rs");
+    let common = read("src/adapters/identity.rs");
     let proxy_transport = read_proxy_module_tree("src/transport/tcp_outbound.rs");
     let transport = read_repo_module_tree("crates/transport/src/vless_transport.rs");
     let protocol_outbound = fs::read_to_string(repo_root().join("protocols/vless/src/outbound.rs"))
@@ -4618,7 +4958,7 @@ fn vless_tcp_connect_uses_protocol_config() {
         "adapter root/common helpers should stay on neutral TCP glue while zero-transport projects the VLESS leaf"
     );
     assert!(
-        transport.contains("pub(super) struct OwnedVlessOutboundTransportPlan")
+        transport.contains("struct OwnedVlessOutboundTransportPlan")
             && transport
                 .contains("fn owned_transport_plan(&self) -> OwnedVlessOutboundTransportPlan")
             && transport.contains("pub(super) async fn open_tcp_stream<OpenSocket, OpenSocketFut>(")
@@ -4670,9 +5010,7 @@ fn vless_tcp_connect_uses_protocol_config() {
 #[test]
 fn socks5_tcp_adapter_uses_protocol_target_model() {
     let adapter = read("src/adapters/socks5/tcp.rs");
-    let transport =
-        fs::read_to_string(repo_root().join("crates/transport/src/socks5_transport.rs"))
-            .expect("read socks5 transport source");
+    let transport = read_repo_module_tree("crates/transport/src/socks5_transport.rs");
     let protocol_lib = fs::read_to_string(repo_root().join("protocols/socks5/src/lib.rs"))
         .expect("read socks5 protocol lib source");
     let protocol_outbound =
@@ -5101,7 +5439,7 @@ fn tcp_inbound_source_address_conversion_lives_in_platform_layer() {
     }
 
     let hysteria2 =
-        read_repo_module_tree("crates/proxy/src/adapters/hysteria2/inbound/transport.rs");
+        read_repo_module_tree("crates/proxy/src/adapters/hysteria2/inbound/listener.rs");
     let vless_listener = read_proxy_module_tree("src/adapters/vless.rs");
     let vless_transport = read_repo_module_tree("crates/transport/src/vless_transport.rs");
     assert!(
@@ -5377,7 +5715,7 @@ fn mieru_inbound_stream_uses_protocol_codec_not_crypto_primitives() {
         }
     }
 
-    let inbound = read("src/adapters/mieru/inbound/transport.rs");
+    let inbound = read("src/adapters/mieru/inbound/listener.rs");
     let protocol_inbound = fs::read_to_string(repo_root().join("protocols/mieru/src/inbound.rs"))
         .expect("read mieru protocol inbound source");
     let protocol_tunnel = fs::read_to_string(repo_root().join("protocols/mieru/src/tunnel.rs"))
@@ -5458,8 +5796,8 @@ fn shadowsocks_udp_inbound_uses_protocol_codec_not_datagram_primitives() {
         }
     }
 
-    let udp = read("src/adapters/shadowsocks/inbound/udp.rs");
-    let transport = read("src/adapters/shadowsocks/inbound/transport.rs");
+    let udp = read("src/adapters/shadowsocks/inbound/listener.rs");
+    let transport = read("src/adapters/shadowsocks/inbound/listener.rs");
     let protocol_udp = read_repo_module_tree("protocols/shadowsocks/src/udp.rs");
     let protocol_shared =
         fs::read_to_string(repo_root().join("protocols/shadowsocks/src/shared.rs"))
@@ -5468,7 +5806,8 @@ fn shadowsocks_udp_inbound_uses_protocol_codec_not_datagram_primitives() {
         .expect("read shadowsocks protocol lib source");
     assert!(
         transport.contains("let (acceptor, udp_session) = profile.into_listener_bindings().into_parts()")
-            && transport.contains("udp::ss_udp_relay_loop(")
+            && transport.contains("run_protocol_datagram_udp_relay(")
+            && transport.contains("let response_already_sent = false;")
             && udp.contains("run_protocol_datagram_udp_relay(")
             && !udp.contains("ShadowsocksInboundUdpCodec")
             && !udp.contains("decode_udp_datagram_2022_session")
@@ -5549,7 +5888,7 @@ fn generic_udp_dispatch_does_not_encode_protocol_packets_directly() {
     let content = read("src/runtime/udp_dispatch/mod.rs");
     let dispatch = read("src/runtime/udp_dispatch/dispatch.rs");
     let lifecycle = read("src/runtime/udp_dispatch/lifecycle.rs");
-    let types = read("src/runtime/udp_dispatch/types.rs");
+    let types = read("src/runtime/udp_dispatch/candidate.rs");
 
     for forbidden in [
         "proxy.protocols.vless_outbound",
@@ -5719,7 +6058,7 @@ fn inventory_does_not_expose_concrete_protocol_accessors() {
 fn socks5_udp_association_runtime_state_stays_out_of_outbound_module() {
     let outbound = manifest_dir().join("src/outbound/socks5.rs");
     let adapter = read("src/adapters/socks5/udp.rs");
-    let active = read("src/adapters/socks5/udp/active.rs");
+    let active = read("src/adapters/socks5/udp/upstream_association.rs");
     let flow = read("src/adapters/socks5/udp/flow.rs");
     let model = manifest_dir().join("src/adapters/socks5/udp/model.rs");
     let protocol_udp = read_repo_module_tree("protocols/socks5/src/udp.rs");
@@ -5772,7 +6111,7 @@ fn socks5_udp_association_runtime_state_stays_out_of_outbound_module() {
     assert!(
         active.contains("struct ProxySocks5UdpAssociationRuntime")
             && active.contains("impl zero_transport::socks5_transport::Socks5UdpAssociationRuntime")
-            && active.contains("crate::runtime::udp_helpers::resolve_udp_peer_endpoint(")
+            && active.contains("crate::runtime::udp_socket::resolve_udp_peer_endpoint(")
             && active.contains("socket_addr_to_socket_address(relay_addr)")
             && active.contains("record_udp_upstream_association_closed")
             && active.contains("record_udp_upstream_association_idle_timeout")
@@ -5842,7 +6181,10 @@ fn socks5_udp_association_runtime_state_stays_out_of_outbound_module() {
     );
     for source in [
         ("src/adapters/socks5/udp.rs", adapter.as_str()),
-        ("src/adapters/socks5/udp/active.rs", active.as_str()),
+        (
+            "src/adapters/socks5/udp/upstream_association.rs",
+            active.as_str(),
+        ),
         (
             "src/adapters/socks5/udp/packet_path.rs",
             packet_path_source.as_str(),
@@ -6003,7 +6345,8 @@ fn vless_udp_state_model_lives_outside_runtime_root() {
             && transport.contains(".open_relay_udp_flow_with_transport(")
             && managed_bridge.contains("ManagedStreamFlowManager::<T>::new")
             && managed_bridge.contains("struct ManagedStreamPacketStartBridge")
-            && managed_bridge.contains(".start_tracked_managed_stream_packet(")
+            && managed_bridge.contains("UdpFlowStartContext")
+            && managed_bridge.contains(".start_managed_flow(")
             && managed_cache.contains("struct ManagedUdpConnectionCache"),
         "VLESS UDP managed state should stay out of runtime roots while tracked-flow glue lives in the shared managed bridge"
     );
@@ -6052,12 +6395,12 @@ fn vless_udp_transport_opening_lives_in_transport_crate() {
     );
 
     for required in [
-        "pub(super) struct VlessUdpTransportOptions",
+        "struct VlessUdpTransportOptions",
         "struct OwnedVlessUdpTransportOptions",
-        "pub(super) struct VlessUdpOutboundTransportRequest",
+        "struct VlessUdpOutboundTransportRequest",
         "pub(super) async fn build_vless_udp_outbound_transport",
         "quic::connect_quic",
-        "pub(super) struct VlessTransportOptions",
+        "struct VlessTransportOptions",
         "async fn build_vless_outbound_transport_over_stream",
     ] {
         assert!(
@@ -6287,7 +6630,8 @@ fn vmess_udp_state_model_lives_outside_runtime_root() {
             && transport.contains(".open_relay_udp_flow_with_transport(")
             && managed_bridge.contains("ManagedStreamFlowManager::<T>::new")
             && managed_bridge.contains("struct ManagedStreamPacketStartBridge")
-            && managed_bridge.contains(".start_tracked_managed_stream_packet(")
+            && managed_bridge.contains("UdpFlowStartContext")
+            && managed_bridge.contains(".start_managed_flow(")
             && managed_cache.contains("struct ManagedUdpConnectionCache"),
         "VMess UDP managed state should stay out of runtime roots while tracked-flow glue lives in the shared managed bridge"
     );
@@ -7114,8 +7458,9 @@ fn protocol_mux_pools_are_transport_bridge_owned_not_runtime_fields() {
             "Proxy runtime should not own protocol-named MUX pool field `{forbidden}`"
         );
     }
+    let orchestration = read("src/runtime/orchestration.rs");
     assert!(
-        runtime.contains("self.protocols.on_config_reloaded()"),
+        orchestration.contains("proxy.protocols.on_config_reloaded()"),
         "runtime reload should notify protocol inventory instead of clearing concrete protocol pools"
     );
     assert!(
@@ -7247,7 +7592,7 @@ fn runtime_registered_consumes_managed_flow_models_without_legacy_facade() {
 
 #[test]
 fn mieru_udp_stream_pump_uses_protocol_flow_io_boundary() {
-    let managed = read("src/adapters/mieru/udp/managed.rs");
+    let managed = read("src/adapters/mieru/udp.rs");
     let connector = read_repo_module_tree("crates/transport/src/mieru_transport/managed_udp.rs");
     let stream_manager = read_proxy_module_tree("src/runtime/udp_flow/managed/stream_manager.rs");
     let stream = manifest_dir().join("src/adapters/mieru/udp/manager/stream.rs");
@@ -7312,7 +7657,7 @@ fn mieru_udp_stream_pump_uses_protocol_flow_io_boundary() {
 
 #[test]
 fn h2_udp_stream_pump_uses_protocol_flow_resume_boundary() {
-    let managed = read("src/adapters/hysteria2/udp/managed.rs");
+    let managed = read("src/adapters/hysteria2/udp.rs");
     let protocol = manifest_dir()
         .parent()
         .and_then(std::path::Path::parent)
@@ -8318,20 +8663,21 @@ fn mieru_client_stream_model_lives_outside_inbound_root() {
 
 #[test]
 fn mieru_inbound_udp_packet_framing_stays_in_protocol_crate() {
-    let root = read("src/adapters/mieru/inbound/transport.rs");
+    let root = read("src/adapters/mieru/inbound/listener.rs");
     let _stream_udp = read("src/runtime/stream_udp.rs");
-    let inbound = read("src/adapters/mieru/inbound/udp.rs");
+    let inbound = read("src/adapters/mieru/inbound/listener.rs");
     let protocol_inbound = fs::read_to_string(repo_root().join("protocols/mieru/src/inbound.rs"))
         .expect("read mieru protocol inbound source");
     let protocol_udp = read_repo_module_tree("protocols/mieru/src/udp.rs");
 
     assert!(
-        root.contains("#[path = \"udp.rs\"]")
+        !root.contains("#[path = \"udp.rs\"]")
             && !root.contains("async fn run_mieru_udp_relay")
             && !root.contains("UdpPipe::new")
-            && inbound.contains("async fn run_mieru_udp_relay")
+            && inbound.contains("run_mapped_protocol_stream_udp_relay(")
+            && inbound.contains("\"mieru_udp\"")
             && !inbound.contains("impl Proxy"),
-        "Mieru inbound root should keep listener/session glue while UDP relay glue lives in adapters/mieru/inbound/udp.rs"
+        "Mieru listener should hand protocol-owned UDP relays directly to the neutral stream runtime without a forwarding shell"
     );
     assert!(
         inbound.contains("run_mapped_protocol_stream_udp_relay(")
@@ -8379,12 +8725,10 @@ fn socks5_udp_send_details_stay_out_of_udp_dispatch() {
         );
     }
     assert!(
-        managed.contains("send_managed_udp")
-            && managed.contains("start_tracked_managed_udp")
-            && managed.contains("start_tracked_managed_relay")
+        managed.contains("start_tracked_upstream")
             && managed.contains("forward_managed_relay_flow")
-            && socks5_flow.contains("ManagedRelayStart")
-            && socks5_flow.contains(".start_tracked_managed_relay(")
+            && socks5_flow.contains("UpstreamTrackedStart")
+            && socks5_flow.contains(".start_tracked_upstream(")
             && !socks5_flow.contains("ManagedUdpFlowKind::RelayStream")
             && !socks5_flow.contains("ManagedUdpFlowResume::new")
             && !managed.contains("Socks5UdpPacketSend")
@@ -8412,7 +8756,7 @@ fn socks5_udp_upstream_association_uses_outbound_tag_for_session_lookup() {
     let upstream_lifecycle =
         read("src/runtime/udp_flow/registered/upstream/runtime/association/lifecycle.rs");
     let upstream_control = read("src/runtime/udp_flow/registered/upstream/runtime/control.rs");
-    let response = read("src/runtime/udp_flow/helpers.rs");
+    let response = read("src/runtime/udp_delivery/helpers.rs");
 
     assert!(
         !send.exists()
@@ -8522,7 +8866,7 @@ fn socks5_udp_associate_loop_delegates_dispatch_and_direct_response_framing() {
         );
     }
 
-    let associate = read("src/adapters/socks5/inbound/udp_associate.rs");
+    let associate = read("src/adapters/socks5/inbound/client_association.rs");
     let association_runtime = read_proxy_module_tree("src/runtime/udp_association.rs");
     let transport = read_repo_module_tree("crates/transport/src/socks5_transport.rs");
 
@@ -8549,7 +8893,7 @@ fn socks5_udp_associate_loop_delegates_dispatch_and_direct_response_framing() {
             && associate.contains("relay: setup.relay")
             && associate.contains("pending_control_traffic: setup.pending_control_traffic")
             && associate.contains("handler: setup.handler")
-            && associate.contains("pub(crate) async fn run_socks5_udp_associate")
+            && associate.contains("pub(crate) async fn run_client_udp_association")
             && !associate.contains("impl Proxy")
             && !associate.contains("handle_socks5_udp_associate")
             && transport.contains("pub async fn setup_inbound_udp_association")
@@ -8590,7 +8934,7 @@ fn socks5_udp_associate_loop_delegates_dispatch_and_direct_response_framing() {
             read("src/transport/socks5_inbound/listener/udp_associate/direct_response.rs");
         let relay_socket = read("src/transport/socks5_inbound/listener/udp_associate/relay_socket.rs");
         let setup = read("src/transport/socks5_inbound/listener/udp_associate/setup.rs");
-        let adapter_active = read("src/adapters/socks5/udp/active.rs");
+        let adapter_active = read("src/adapters/socks5/udp/upstream_association.rs");
 
         for forbidden in [
             "UdpPipeInput",
@@ -8634,7 +8978,7 @@ fn socks5_udp_associate_loop_delegates_dispatch_and_direct_response_framing() {
             associate.contains("run_udp_association_loop")
                 && associate.contains("UdpAssociationLoopRequest")
                 && associate.contains("Socks5UdpAssociationHandler::new(request)")
-                && associate.contains("pub(crate) async fn run_socks5_udp_associate")
+                && associate.contains("pub(crate) async fn run_client_udp_association")
                 && !associate.contains("impl Proxy")
                 && !associate.contains("handle_socks5_udp_associate")
                 && setup.contains("pub(super) async fn setup_association")
@@ -9114,11 +9458,12 @@ fn generic_runtime_udp_state_uses_protocol_neutral_module_name() {
 
 #[test]
 fn udp_flow_helpers_do_not_depend_on_protocol_runtime() {
-    let content = read("src/runtime/udp_flow/helpers.rs");
+    let old_helpers = manifest_dir().join("src/runtime/udp_flow/helpers.rs");
+    let content = read("src/runtime/udp_delivery/helpers.rs");
 
     assert!(
-        !content.contains("protocol_runtime::"),
-        "src/runtime/udp_flow/helpers.rs should stay protocol-neutral"
+        !old_helpers.exists() && !content.contains("protocol_runtime::"),
+        "response helpers should live under protocol-neutral udp_delivery"
     );
 }
 
@@ -9175,6 +9520,7 @@ fn udp_flow_outbound_snapshot_uses_neutral_runtime_variants() {
     let snapshot = read_proxy_module_tree("src/runtime/udp_flow/managed/flow.rs");
     let state = read("src/runtime/udp_flow/registered/mod.rs");
     let managed_state = read_proxy_module_tree("src/runtime/udp_flow/managed/state.rs");
+    let registered_state = read_proxy_module_tree("src/runtime/udp_flow/registered/state.rs");
 
     for required in [
         "Direct {",
@@ -9248,8 +9594,10 @@ fn udp_flow_outbound_snapshot_uses_neutral_runtime_variants() {
     assert!(
         !snapshot.contains("ManagedUdpFlowSnapshot")
             && !managed_state.contains("ManagedUdpFlowSnapshot")
-            && managed_state.contains("flows: HashMap<ManagedUdpFlowRef, ManagedUdpFlowResume>"),
-        "managed UDP state should store opaque resumes directly instead of reintroducing a single-variant snapshot model"
+            && !managed_state.contains("HashMap<ManagedUdpFlowRef, ManagedUdpFlowResume>")
+            && registered_state.contains("managed_resumes:")
+            && registered_state.contains("HashMap<ManagedUdpFlowRef, ManagedUdpFlowResume>"),
+        "registered UDP state should own opaque resume identity outside managed execution state"
     );
     assert!(
         !snapshot.contains("PacketPathCarrierSnapshot")
@@ -9270,10 +9618,11 @@ fn udp_flow_outbound_snapshot_uses_neutral_runtime_variants() {
     assert!(
         !state.contains("HashMap<ManagedUdpFlowRef, ManagedUdpFlowSnapshot>")
             && !state.contains("fn next_managed_flow_ref")
-            && managed_state.contains("next_flow_id: u64")
-            && managed_state.contains("fn register_flow")
-            && managed_state.contains("fn flow_resume"),
-        "ManagedUdpState should own opaque protocol UDP resumes behind runtime managed flow refs"
+            && !managed_state.contains("next_flow_id: u64")
+            && registered_state.contains("next_managed_flow_id: u64")
+            && registered_state.contains("fn register_managed_flow")
+            && registered_state.contains("fn managed_flow_resume"),
+        "RegisteredUdpState should own opaque protocol UDP resumes behind runtime managed flow refs"
     );
 }
 
@@ -9373,7 +9722,7 @@ fn udp_dispatch_keeps_protocol_managers_behind_registered_udp_state() {
             && upstream_state_root.contains("mod handlers;")
             && upstream_state_root.contains("mod tracked;")
             && upstream_state.contains("handlers: UpstreamUdpHandlers")
-            && register.contains("adapter.upstream_association_handler()"),
+            && register.contains("provider.upstream_association_handler()"),
         "RegisteredUdpState should drive upstream UDP associations through registered neutral handlers"
     );
     for forbidden in [
@@ -9521,7 +9870,8 @@ fn managed_udp_root_is_facade_only() {
         "pub(crate) mod datagram_manager;",
         "mod flow;",
         "pub(crate) use flow::{",
-        "pub(crate) use model::{",
+        "pub(crate) use model::ManagedDatagramFlowHandler;",
+        "pub(crate) use model::ManagedStreamHandlerPair;",
         "pub(crate) use state::{",
     ] {
         assert!(
@@ -9532,7 +9882,8 @@ fn managed_udp_root_is_facade_only() {
     for required in [
         "mod request;",
         "mod resume;",
-        "pub(crate) use request::{",
+        "pub(crate) use request::ManagedExistingFlowForward;",
+        "pub(crate) use request::ManagedUdpFlowKind;",
         "pub(crate) use resume::ManagedUdpFlowResume;",
     ] {
         assert!(
@@ -9543,8 +9894,11 @@ fn managed_udp_root_is_facade_only() {
     for required in [
         "mod handler;",
         "mod send;",
-        "pub(crate) use handler::{",
-        "pub(crate) use send::{",
+        "pub(crate) use handler::ManagedDatagramFlowHandler;",
+        "pub(crate) use handler::ManagedStreamPacketFlowHandler;",
+        "pub(crate) use send::ManagedDatagramExistingSend;",
+        "pub(crate) use send::ManagedRelayExistingSend;",
+        "pub(crate) use send::ManagedStreamExistingSend;",
     ] {
         assert!(
             model_root.contains(required),
@@ -9582,10 +9936,12 @@ fn managed_udp_root_is_facade_only() {
         );
     }
     for forbidden in [
-        "struct ManagedExistingSend",
-        "struct ManagedRelaySend",
+        "struct ManagedDatagramExistingSend",
+        "struct ManagedStreamExistingSend",
+        "struct ManagedRelayExistingSend",
         "trait ManagedDatagramFlowHandler",
-        "trait ManagedStreamFlowHandler",
+        "trait ManagedStreamPacketFlowHandler",
+        "trait ManagedRelayFlowHandler",
     ] {
         assert!(
             !model_root.contains(forbidden),
@@ -9607,10 +9963,12 @@ fn managed_udp_root_is_facade_only() {
         "managed UDP connection wrappers and flow models should live in explicit submodules, not the facade root"
     );
     assert!(
-        model_tree.contains("struct ManagedExistingSend")
-            && model_tree.contains("struct ManagedRelaySend")
+        model_tree.contains("struct ManagedDatagramExistingSend")
+            && model_tree.contains("struct ManagedStreamExistingSend")
+            && model_tree.contains("struct ManagedRelayExistingSend")
             && model_tree.contains("trait ManagedDatagramFlowHandler")
-            && model_tree.contains("trait ManagedStreamFlowHandler"),
+            && model_tree.contains("trait ManagedStreamPacketFlowHandler")
+            && model_tree.contains("trait ManagedRelayFlowHandler"),
         "managed UDP handler traits and neutral send requests should live in explicit model submodules"
     );
 }
@@ -9652,8 +10010,6 @@ fn managed_udp_state_root_is_facade_only() {
     for forbidden in [
         "pub(crate) struct ManagedUdpHandlers",
         "pub(crate) struct ManagedUdpState",
-        "pub(crate) fn register_flow",
-        "pub(crate) fn flow_resume",
         "fn flow_mismatch(",
     ] {
         assert!(
@@ -9723,7 +10079,8 @@ fn udp_dispatch_managed_root_is_facade_only() {
         "mod forward;",
         "mod model;",
         "mod start;",
-        "pub(crate) use model::{ManagedDatagramStart, ManagedRelayStart, ManagedStreamPacketStart};",
+        "pub(crate) use model::ManagedDatagramStart;",
+        "pub(crate) use model::UpstreamTrackedStart;",
     ] {
         assert!(
             root.contains(required),
@@ -9731,12 +10088,7 @@ fn udp_dispatch_managed_root_is_facade_only() {
         );
     }
 
-    for forbidden in [
-        "enum ManagedUdpOutboundKind",
-        "struct ManagedDatagramStart",
-        "struct ManagedRelayStart",
-        "struct ManagedStreamPacketStart",
-    ] {
+    for forbidden in ["struct ManagedDatagramStart", "struct UpstreamTrackedStart"] {
         assert!(
             !root.contains(forbidden),
             "runtime::udp_dispatch::managed root should remain a facade and not own `{forbidden}`"
@@ -9995,7 +10347,8 @@ fn managed_udp_stream_root_is_facade_only() {
 
     for forbidden in [
         "struct ManagedStreamState",
-        "handlers: Vec<Box<dyn ManagedStreamFlowHandler>>",
+        "stream_packet_handlers:",
+        "relay_handlers: Vec<Box<dyn ManagedRelayFlowHandler>>",
         "async fn start_stream_packet_flow(",
         "async fn start_relay_stream_flow(",
         "async fn forward_existing_flow(",
@@ -10029,7 +10382,7 @@ fn managed_udp_stream_manager_manager_root_is_facade_only() {
         "mod model;",
         "mod relay;",
         "mod send;",
-        "pub(crate) use model::ManagedStreamFlowManager;",
+        "pub(crate) use model::{ManagedStreamFlowManager, SharedManagedStreamFlowManager};",
     ] {
         assert!(
             root.contains(required),
@@ -10159,7 +10512,8 @@ fn managed_udp_datagram_manager_manager_root_is_facade_only() {
         "mod mismatch;",
         "mod model;",
         "mod socket;",
-        "pub(crate) use model::{ManagedDatagramFlowManager, ManagedDatagramSocketFlowManager};",
+        "pub(crate) use model::ManagedDatagramFlowManager;",
+        "pub(crate) use model::ManagedDatagramSocketFlowManager;",
     ] {
         assert!(
             root.contains(required),
@@ -10302,7 +10656,6 @@ fn managed_udp_bridge_stream_packet_root_is_facade_only() {
         "type ManagedStreamStages =",
         "struct ManagedStreamPacketStartBridge",
         "async fn start_managed_stream_packet",
-        "start_tracked_managed_stream_packet(",
     ] {
         assert!(
             !root.contains(forbidden),
@@ -10313,6 +10666,10 @@ fn managed_udp_bridge_stream_packet_root_is_facade_only() {
             "runtime::udp_flow::managed::bridge::stream_packet module tree should still own `{forbidden}`"
         );
     }
+    assert!(
+        tree.contains("UdpFlowStartContext") && !tree.contains("UdpDispatch"),
+        "managed stream bridge should receive narrow persistent-flow context instead of the session dispatcher"
+    );
 }
 
 #[test]
@@ -10574,7 +10931,8 @@ fn registered_upstream_association_root_is_facade_only() {
         "mod association;",
         "mod control;",
         "mod handler;",
-        "pub(crate) use control::upstream_flow_mismatch;",
+        "mod mismatch;",
+        "pub(crate) use mismatch::upstream_flow_mismatch;",
         "pub(crate) use handler::boxed_registered_upstream_handler;",
     ] {
         assert!(
@@ -10604,7 +10962,6 @@ fn registered_upstream_association_root_is_facade_only() {
     for required in [
         "mod handlers;",
         "mod tracked;",
-        "pub(super) use handlers::UpstreamAssociationState;",
         "pub(super) use tracked::TrackedUpstreamAssociation;",
     ] {
         assert!(
@@ -10837,12 +11194,12 @@ fn protocol_udp_datagram_start_keeps_trojan_and_mieru_in_protocol_modules() {
             && !managed_datagram.contains("SsChainManager")
             && !managed_datagram.contains("H2ChainManager")
             && managed_datagram.contains("for handler in &mut self.handlers")
-            && managed_datagram.contains("ManagedExistingSend::datagram"),
+            && managed_datagram.contains("ManagedDatagramExistingSend::datagram"),
         "managed datagram UDP flow kind should dispatch through registered datagram handlers"
     );
     assert!(
         register.contains("registered_udp_handlers")
-            && register.contains("adapter.managed_datagram_udp_handler()")
+            && register.contains("capability.managed_datagram_udp_handler()")
             && !register.contains("crate::protocol_runtime::udp::shadowsocks_datagram_handler")
             && !register.contains("crate::protocol_runtime::udp::hysteria2_datagram_handler"),
         "datagram UDP handler collection should live at the compiled registration boundary"
@@ -10875,14 +11232,15 @@ fn protocol_udp_upstream_start_dispatch_lives_behind_registered_handlers() {
     assert!(
         state.contains("ManagedUdpFlowKind::RelayStream")
             && state.contains("self.upstream")
-            && state.contains("start_upstream_flow(inbound_tag, request)")
+            && state.contains("start_upstream_flow(_inbound_tag, upstream_send(request))")
             && upstream_contract.contains("fn supports_upstream_resume")
             && upstream_contract.contains("async fn send_upstream")
-            && register.contains("adapter.upstream_association_handler()")
+            && register.contains("provider.upstream_association_handler()")
+            && socks5_adapter.contains("impl UpstreamUdpHandlerProvider for Socks5Adapter")
             && socks5_adapter.contains("fn upstream_association_handler(&self)")
             && socks5.contains("pub(crate) fn upstream_association_handler")
             && socks5_flow.contains("boxed_registered_upstream_handler::<")
-            && socks5_flow.contains("ManagedRelayStart")
+            && socks5_flow.contains("UpstreamTrackedStart")
             && upstream_handler
                 .contains("impl<T, A> UpstreamAssociationHandler for RegisteredUpstreamAssociationHandler<T, A>")
             && upstream_handler.contains("start_registered_upstream_flow(")
@@ -10930,7 +11288,7 @@ fn protocol_udp_stream_start_dispatch_lives_in_protocol_modules() {
             .exists()
             && !state.contains("ManagedUdpFlowKind::StreamPacket")
             && state.contains("ManagedUdpFlowKind::RelayStream")
-            && state.contains("start_upstream_flow(inbound_tag, request)")
+            && state.contains("start_upstream_flow(_inbound_tag, upstream_send(request))")
             && !state.contains("start_managed_stream_packet_flow")
             && !state.contains("start_managed_relay_stream_flow")
             && managed.contains("ManagedUdpFlowKind::StreamPacket")
@@ -10941,21 +11299,23 @@ fn protocol_udp_stream_start_dispatch_lives_in_protocol_modules() {
             && managed.contains("self.start_relay_stream_flow(")
             && managed.contains("ManagedStreamState")
             && managed.contains("ManagedUdpHandlers")
-            && managed_stream.contains("handlers: Vec<Box<dyn ManagedStreamFlowHandler>>")
+            && managed_stream.contains("stream_packet_handlers:")
+            && managed_stream.contains("relay_handlers: Vec<Box<dyn ManagedRelayFlowHandler>>")
             && !managed_stream.contains("TrojanChainManager")
             && !managed_stream.contains("MieruChainManager")
-            && managed_stream.contains("for handler in &mut self.handlers")
-            && managed_stream.contains("ManagedExistingSend::stream_packet")
-            && managed_stream.contains("ManagedRelaySend::relay_stream"),
+            && managed_stream.contains("for handler in &mut self.stream_packet_handlers")
+            && managed_stream.contains("for handler in &mut self.relay_handlers")
+            && managed_stream.contains("ManagedStreamExistingSend::stream_packet")
+            && managed_stream.contains("ManagedRelayExistingSend::relay_stream"),
         "stream-packet and relay-stream UDP flow kinds should dispatch through registered stream handlers"
     );
     assert!(
         register.contains("registered_udp_handlers")
-            && register.contains("adapter.managed_stream_udp_handler()")
-            && trojan_adapter.contains("fn managed_stream_udp_handler(&self)")
-            && vless_adapter.contains("fn managed_stream_udp_handler(&self)")
-            && vmess_adapter.contains("fn managed_stream_udp_handler(&self)")
-            && mieru_adapter.contains("fn managed_stream_udp_handler(&self)")
+            && register.contains("capability.managed_stream_udp_handlers()")
+            && trojan_adapter.contains("fn managed_stream_udp_handlers(&self)")
+            && vless_adapter.contains("fn managed_stream_udp_handlers(&self)")
+            && vmess_adapter.contains("fn managed_stream_udp_handlers(&self)")
+            && mieru_adapter.contains("fn managed_stream_udp_handlers(&self)")
             && !register.contains("crate::protocol_runtime::udp::trojan_stream_handler")
             && !register.contains("crate::protocol_runtime::udp::mieru_stream_handler"),
         "stream UDP handler collection should live at the compiled registration boundary"
@@ -10966,7 +11326,7 @@ fn protocol_udp_stream_start_dispatch_lives_in_protocol_modules() {
 fn udp_dispatch_does_not_keep_external_managed_flow_handles() {
     let dispatch = read("src/runtime/udp_dispatch/mod.rs");
     let lifecycle = read("src/runtime/udp_dispatch/lifecycle.rs");
-    let types = read("src/runtime/udp_dispatch/types.rs");
+    let types = read("src/runtime/udp_dispatch/candidate.rs");
 
     for source in [&dispatch, &lifecycle] {
         for forbidden in [
@@ -11125,7 +11485,12 @@ fn protocol_registry_struct_root_is_facade_only() {
         "mod support;",
         "mod validation;",
         "pub(crate) struct ProtocolRegistry",
-        "adapters: Vec<std::sync::Arc<dyn crate::protocol_registry::RegisteredProtocolCapability>>",
+        "entries: Vec<RegisteredProtocolEntry>",
+        "support: Arc<dyn ProtocolSupportCapability>",
+        "inbound: Arc<dyn InboundListenerCapability>",
+        "tcp: Arc<dyn TcpOutboundCapability>",
+        "udp: Option<Arc<dyn UdpFlowCapability>>",
+        "packet_path: Option<Arc<dyn UdpPacketPathCapability>>",
         "impl fmt::Debug for ProtocolRegistry",
     ] {
         assert!(
@@ -11228,15 +11593,14 @@ fn protocol_registry_register_helper_stays_in_build_module() {
         "src/protocol_registry/registry/mod.rs should keep register capability helper in src/protocol_registry/registry/build.rs"
     );
     assert!(
-        build.contains(
-            "pub(crate) fn register_capability(\n        &mut self,\n        adapter: std::sync::Arc<dyn RegisteredProtocolCapability>,\n    )"
-        ),
+        build.contains("pub(crate) fn register_capability<T>(&mut self, adapter: Arc<T>)"),
         "src/protocol_registry/registry/build.rs should own the capability register helper used by src/register.rs"
     );
     assert!(
-        build.contains("std::sync::Arc<dyn RegisteredProtocolCapability>")
-            && !build.contains("pub(crate) fn register<T>("),
-        "src/protocol_registry/registry/build.rs should register already-built capability objects directly"
+        build.contains("support: adapter.clone()")
+            && build.contains("udp: Some(adapter.clone())")
+            && build.contains("packet_path: Some(adapter)"),
+        "src/protocol_registry/registry/build.rs should build focused views from one adapter Arc"
     );
 }
 
@@ -11345,7 +11709,7 @@ fn protocol_registry_inbound_dispatch_lives_in_inbound_module() {
     for forbidden in [
         "pub(crate) fn find_inbound",
         "pub(crate) async fn bind_inbound",
-        "InboundListenerCapability::bind_inbound(",
+        "entry.inbound.bind_inbound(",
     ] {
         assert!(
             !registry.contains(forbidden),
@@ -11446,7 +11810,6 @@ fn protocol_registry_capabilities_are_split_by_responsibility() {
     let old_adapter = manifest_dir().join("src/protocol_registry/adapter.rs");
 
     for expected in [
-        "pub(crate) trait RegisteredProtocolCapability",
         "pub(crate) trait ProtocolSupportCapability",
         "pub(crate) trait InboundListenerCapability",
         "pub(crate) trait TcpOutboundCapability",
@@ -11485,8 +11848,8 @@ fn protocol_registry_capabilities_are_split_by_responsibility() {
         "protocol capability split should not retain a compatibility ProtocolAdapter marker"
     );
     assert!(
-        capability.contains("impl<T> RegisteredProtocolCapability for T"),
-        "src/protocol_registry/capability.rs should provide the registry collector blanket impl"
+        !capability.contains("RegisteredProtocolCapability"),
+        "focused capability traits should not be recombined into a five-trait registry collector"
     );
     assert!(
         !capability.contains("impl<T> TcpOutboundCapability for T"),
@@ -11765,8 +12128,14 @@ fn protocol_registry_stores_capability_objects() {
     let outbound = read("src/protocol_registry/registry/outbound.rs");
 
     assert!(
-        registry.contains("RegisteredProtocolCapability"),
-        "ProtocolRegistry should store registered capability objects"
+        registry.contains("entries: Vec<RegisteredProtocolEntry>")
+            && registry.contains("support: Arc<dyn ProtocolSupportCapability>")
+            && registry.contains("inbound: Arc<dyn InboundListenerCapability>")
+            && registry.contains("tcp: Arc<dyn TcpOutboundCapability>")
+            && registry.contains("udp: Option<Arc<dyn UdpFlowCapability>>")
+            && registry.contains("packet_path: Option<Arc<dyn UdpPacketPathCapability>>")
+            && !registry.contains("RegisteredProtocolCapability"),
+        "ProtocolRegistry should store focused capability views without a five-trait intersection"
     );
     for forbidden in [
         "Vec<std::sync::Arc<dyn crate::protocol_registry::ProtocolAdapter>>",
@@ -11827,7 +12196,7 @@ fn protocol_registry_models_live_outside_trait_root() {
 
     for forbidden in [
         "pub(crate) struct OutboundLeafRuntime",
-        "use crate::runtime::orchestration::{OutboundEndpoint, TcpPathCategory}",
+        "use crate::runtime::path::{OutboundEndpoint, TcpPathCategory}",
     ] {
         assert!(
             !root.contains(forbidden) && !model.contains(forbidden),
@@ -11843,7 +12212,7 @@ fn protocol_registry_models_live_outside_trait_root() {
         "pub(crate) enum BoundInbound",
         "pub(crate) struct OutboundLeafRuntime",
         "impl BoundInbound",
-        "use crate::runtime::orchestration::{OutboundEndpoint, TcpPathCategory}",
+        "use crate::runtime::path::{OutboundEndpoint, TcpPathCategory}",
     ] {
         assert!(
             !root.contains(forbidden),
@@ -12181,6 +12550,7 @@ fn inventory_inbound_adapter_dispatch_lives_in_inbound_module() {
 #[test]
 fn transport_facade_exports_are_explicit() {
     let content = read("src/transport/mod.rs");
+    let outbound_error = read("src/transport/tcp_outbound/error.rs");
 
     for forbidden in [
         "pub(crate) use direct::*;",
@@ -12195,6 +12565,13 @@ fn transport_facade_exports_are_explicit() {
             "transport facade should explicitly list exported items; found `{forbidden}`"
         );
     }
+    assert!(
+        content.contains("Proxy transport facade")
+            && content.contains("Concrete carrier implementations remain in the `zero-transport` crate")
+            && !manifest_dir().join("src/transport/tcp_flow.rs").exists()
+            && outbound_error.contains("pub(crate) fn is_block_error"),
+        "proxy transport should remain an explicit boundary facade and keep normalized TCP outbound errors with TCP outbound glue"
+    );
 }
 
 #[test]
@@ -12612,7 +12989,7 @@ fn stream_transport_leaf_models_own_variant_to_leaf_projection() {
     ) in [
         (
             "src/adapters/vless.rs",
-            "src/adapters/common.rs",
+            "src/adapters/identity.rs",
             "crates/transport/src/vless_transport.rs",
             "ResolvedLeafOutbound::Vless",
             "PreparedVlessOutboundRequestBundle::from_config_with_transport_hints(",
@@ -12620,7 +12997,7 @@ fn stream_transport_leaf_models_own_variant_to_leaf_projection() {
         ),
         (
             "src/adapters/vmess.rs",
-            "src/adapters/common.rs",
+            "src/adapters/identity.rs",
             "crates/transport/src/vmess_transport.rs",
             "ResolvedLeafOutbound::Vmess",
             "PreparedVmessOutboundRequestBundle::from_config_with_transport_hints(",
@@ -12628,7 +13005,7 @@ fn stream_transport_leaf_models_own_variant_to_leaf_projection() {
         ),
         (
             "src/adapters/trojan.rs",
-            "src/adapters/common.rs",
+            "src/adapters/identity.rs",
             "crates/transport/src/trojan_transport.rs",
             "ResolvedLeafOutbound::Trojan",
             "PreparedTrojanOutboundRequestBundle::from_config(",
@@ -12649,7 +13026,7 @@ fn stream_transport_leaf_models_own_variant_to_leaf_projection() {
                 && proxy_transport.contains("apply_protocol_transport_bridge_relay_hop")
                 && transport_leaf.contains("pub trait ProtocolTransportLeafResolver<'a>")
                 && transport_leaf.contains("pub fn prepare_transport_bridge_leaf"),
-            "transport-leaf projection should live in zero-transport plus the neutral proxy tcp bridge instead of adapters/common.rs"
+            "transport-leaf projection should live in zero-transport plus the neutral proxy tcp bridge instead of adapters/identity.rs"
         );
         assert!(
             !adapter.contains(variant)
@@ -12680,7 +13057,7 @@ fn stream_transport_leaf_models_own_bridge_failure_mapping() {
     ) in [
         (
             "src/adapters/vless.rs",
-            "src/adapters/common.rs",
+            "src/adapters/identity.rs",
             "crates/transport/src/vless_transport.rs",
             "ResolvedLeafOutbound::Vless",
             "PreparedVlessOutboundRequestBundle::from_config_with_transport_hints(",
@@ -12688,7 +13065,7 @@ fn stream_transport_leaf_models_own_bridge_failure_mapping() {
         ),
         (
             "src/adapters/vmess.rs",
-            "src/adapters/common.rs",
+            "src/adapters/identity.rs",
             "crates/transport/src/vmess_transport.rs",
             "ResolvedLeafOutbound::Vmess",
             "PreparedVmessOutboundRequestBundle::from_config_with_transport_hints(",
@@ -12696,7 +13073,7 @@ fn stream_transport_leaf_models_own_bridge_failure_mapping() {
         ),
         (
             "src/adapters/trojan.rs",
-            "src/adapters/common.rs",
+            "src/adapters/identity.rs",
             "crates/transport/src/trojan_transport.rs",
             "ResolvedLeafOutbound::Trojan",
             "PreparedTrojanOutboundRequestBundle::from_config(",
@@ -12720,7 +13097,7 @@ fn stream_transport_leaf_models_own_bridge_failure_mapping() {
                 && proxy_transport.contains("fn tcp_relay_prepare_error")
                 && proxy_transport.contains("connect_protocol_transport_bridge_tcp")
                 && proxy_transport.contains("apply_protocol_transport_bridge_relay_hop"),
-            "generic transport-bridge failure mapping should live in src/transport/tcp_outbound.rs instead of adapters/common.rs"
+            "generic transport-bridge failure mapping should live in src/transport/tcp_outbound.rs instead of adapters/identity.rs"
         );
         assert!(
             transport_leaf.contains(variant)
@@ -12863,8 +13240,11 @@ fn udp_dispatch_root_does_not_reexport_protocol_flow_requests() {
     }
 
     assert!(
-        content.contains("pub(crate) use types::{FlowFailure, FlowStartResult, UdpCandidate};"),
-        "src/runtime/udp_dispatch/mod.rs should keep only generic UDP dispatch result types in the root facade"
+        content.contains(
+            "pub(crate) use crate::runtime::udp_flow::result::{FlowFailure, FlowStartResult};"
+        )
+            && content.contains("pub(crate) use candidate::UdpCandidate;"),
+        "src/runtime/udp_dispatch/mod.rs should expose its candidate and narrowly re-export flow-owned result types"
     );
 
     let managed = read_proxy_module_tree("src/runtime/udp_dispatch/managed.rs");
@@ -12925,16 +13305,19 @@ fn protocol_udp_state_manager_fields_are_not_crate_public() {
             && managed.contains("struct ManagedUdpState")
             && managed.contains("datagram: ManagedDatagramState")
             && managed.contains("stream: ManagedStreamState")
-            && managed.contains("flows: HashMap<ManagedUdpFlowRef, ManagedUdpFlowResume>")
+            && content.contains("managed_resumes:")
+            && content.contains("HashMap<ManagedUdpFlowRef, ManagedUdpFlowResume>")
             && !content.contains("stream_senders: ManagedStreamSenderState")
             && !managed.contains("cached: ManagedCachedState")
             && !cached_start.exists()
             && stream_manager.contains("trait ManagedStreamFlowConnector")
             && stream_manager.contains("struct ManagedStreamFlowManager")
+            && stream_manager.contains("struct SharedManagedStreamFlowManager")
             && stream_manager.contains("ManagedUdpConnectionCache")
             && !managed.contains("ManagedCachedFlowSender")
             && datagram.contains("handlers: Vec<Box<dyn ManagedDatagramFlowHandler>>")
-            && stream.contains("handlers: Vec<Box<dyn ManagedStreamFlowHandler>>")
+            && stream.contains("stream_packet_handlers:")
+            && stream.contains("relay_handlers: Vec<Box<dyn ManagedRelayFlowHandler>>")
             && !managed.contains("pub(crate) vless:")
             && !managed.contains("pub(super) vless:")
             && !managed.contains("vless: VlessUdpOutboundManager")
@@ -12982,8 +13365,9 @@ fn protocol_udp_root_does_not_reexport_manager_internals() {
         "hysteria2_datagram_handler",
         "trojan_stream_handler",
         "mieru_stream_handler",
-        "ManagedExistingSend",
-        "ManagedRelaySend",
+        "ManagedDatagramExistingSend",
+        "ManagedStreamExistingSend",
+        "ManagedRelayExistingSend",
         "Box<dyn ManagedDatagramFlowHandler>",
         "Box<dyn ManagedStreamFlowHandler>",
     ] {
@@ -12998,9 +13382,11 @@ fn protocol_udp_root_does_not_reexport_manager_internals() {
             && !root.contains("ss_manager")
             && !root.contains("trojan_manager")
             && !old_root.exists()
-            && managed.contains("pub(crate) use model::{")
+            && managed.contains("pub(crate) use model::ManagedDatagramFlowHandler;")
+            && managed.contains("pub(crate) use model::ManagedStreamHandlerPair;")
             && managed_model.contains("ManagedDatagramFlowHandler")
-            && managed_model.contains("ManagedStreamFlowHandler"),
+            && managed_model.contains("ManagedStreamPacketFlowHandler")
+            && managed_model.contains("ManagedRelayFlowHandler"),
         "runtime registered should keep protocol UDP managers out of protocol_runtime::udp and expose managed handler traits from runtime::udp_flow::managed"
     );
 }
@@ -13009,10 +13395,10 @@ fn protocol_udp_root_does_not_reexport_manager_internals() {
 fn protocol_udp_manager_construction_is_adapter_registered() {
     let allowed = [
         "src/adapters/hysteria2/udp.rs",
-        "src/adapters/hysteria2/udp/managed.rs",
+        "src/adapters/hysteria2/udp.rs",
         "src/adapters/mieru/udp.rs",
-        "src/adapters/mieru/udp/managed.rs",
-        "src/adapters/shadowsocks/udp/managed.rs",
+        "src/adapters/mieru/udp.rs",
+        "src/adapters/shadowsocks/udp.rs",
         "src/adapters/shadowsocks/udp.rs",
         "src/adapters/trojan.rs",
     ];
@@ -13081,7 +13467,7 @@ fn protocol_udp_manager_request_models_are_manager_private() {
 
 #[test]
 fn stream_udp_managers_do_not_rebuild_protocol_cache_keys() {
-    let mieru_managed = read("src/adapters/mieru/udp/managed.rs");
+    let mieru_managed = read("src/adapters/mieru/udp.rs");
     let mieru_connector =
         read_repo_module_tree("crates/transport/src/mieru_transport/managed_udp.rs");
     let trojan_managed = read("src/adapters/trojan.rs");
@@ -13145,8 +13531,8 @@ fn stream_udp_managers_do_not_rebuild_protocol_cache_keys() {
 
 #[test]
 fn datagram_udp_managers_do_not_rebuild_protocol_cache_keys() {
-    let shadowsocks_managed = read("src/adapters/shadowsocks/udp/managed.rs");
-    let hysteria2_managed = read("src/adapters/hysteria2/udp/managed.rs");
+    let shadowsocks_managed = read("src/adapters/shadowsocks/udp.rs");
+    let hysteria2_managed = read("src/adapters/hysteria2/udp.rs");
     let shadowsocks_transport =
         read_repo_module_tree("crates/transport/src/shadowsocks_transport.rs");
     let hysteria2_transport = read_repo_module_tree("crates/transport/src/hysteria2_quic.rs");
@@ -13211,7 +13597,8 @@ fn udp_dispatch_cached_flow_fast_path_delegates_to_registered() {
     assert!(
         !dispatch.contains("send_existing_cached_flow")
             && !forward.contains("send_existing_cached_flow")
-            && forward.contains("UdpPathCategory::Datagram | UdpPathCategory::StreamPacket")
+            && forward.contains("UdpPathCategory::Datagram =>")
+            && forward.contains("UdpPathCategory::StreamPacket =>")
             && forward.contains("forward_existing_managed_flow")
             && !outbound.contains("Cached {")
             && !outbound.contains("UdpPathCategory::Cached"),
@@ -13360,27 +13747,27 @@ fn protocol_udp_existing_flow_handlers_live_outside_forward_dispatch() {
     assert!(
         normalized_forward
             .contains("self\n            .managed\n            .forward_existing_flow")
-            && forward.contains("self.upstream.handles_resume(resume)")
+            && forward.contains("self.upstream.handles_resume(&resume)")
             && upstream_state.contains("fn handles_resume")
             && upstream_state.contains("handler.supports_upstream_resume(resume)")
             && upstream_handler
                 .contains("fn supports_upstream_resume(&self, resume: &ManagedUdpFlowResume)")
             && upstream_handler.contains("handles_registered_resume::<T>(resume)")
             && managed.contains("fn forward_existing_flow")
-            && managed.contains("is_upstream_resume(&resume)")
             && !forward.contains("managed_flow_snapshot")
             && managed_model_root.contains("mod handler;")
             && managed_model_root.contains("mod send;")
             && managed_model.contains("trait ManagedDatagramFlowHandler")
-            && managed_model.contains("trait ManagedStreamFlowHandler")
+            && managed_model.contains("trait ManagedStreamPacketFlowHandler")
+            && managed_model.contains("trait ManagedRelayFlowHandler")
             && managed_model.contains("pub(crate) chain_tasks: &'a mut JoinSet<ChainTask>")
             && managed_model.contains("pub(crate) resume: ManagedUdpFlowResume")
-            && managed_datagram.contains("ManagedExistingSend")
+            && managed_datagram.contains("ManagedDatagramExistingSend")
             && managed_datagram.contains("send_managed_existing")
             && managed_datagram.contains("for handler in &mut self.handlers")
-            && managed_stream.contains("ManagedExistingSend")
+            && managed_stream.contains("ManagedStreamExistingSend")
             && managed_stream.contains("send_managed_existing")
-            && managed_stream.contains("for handler in &mut self.handlers"),
+            && managed_stream.contains("for handler in &mut self.stream_packet_handlers"),
         "existing UDP protocol-flow handling should dispatch neutral send requests through managed handlers"
     );
     for forbidden in [
@@ -13420,6 +13807,7 @@ fn protocol_udp_existing_flow_handlers_live_outside_forward_dispatch() {
 #[test]
 fn protocol_udp_cached_flow_fast_path_lives_outside_state_root() {
     let state = read("src/runtime/udp_flow/registered/mod.rs");
+    let registered_state = read_proxy_module_tree("src/runtime/udp_flow/registered/state.rs");
     let old_cached = manifest_dir().join("src/runtime/udp_flow/registered/cached.rs");
     let protocol_stream_sender =
         manifest_dir().join("src/runtime/udp_flow/registered/stream_sender.rs");
@@ -13432,7 +13820,6 @@ fn protocol_udp_cached_flow_fast_path_lives_outside_state_root() {
     let protocol_forward = read("src/runtime/udp_flow/registered/forward.rs");
     let vless_flow = manifest_dir().join("src/runtime/udp_flow/registered/vless_flow.rs");
     let vmess_flow = manifest_dir().join("src/runtime/udp_flow/registered/vmess_flow.rs");
-    let vless_adapter = read_proxy_module_tree("src/adapters/vless.rs");
     let vmess_adapter = read_proxy_module_tree("src/adapters/vmess.rs");
     let vless_transport = read_proxy_module_tree("src/adapters/vless.rs");
     let vmess_transport = read_proxy_module_tree("src/adapters/vmess.rs");
@@ -13461,8 +13848,9 @@ fn protocol_udp_cached_flow_fast_path_lives_outside_state_root() {
             && !managed.contains("cached: ManagedCachedState")
             && !managed.contains("vless: VlessUdpOutboundManager")
             && !managed.contains("vmess: VmessUdpOutboundManager")
-            && managed.contains("flows: HashMap<ManagedUdpFlowRef, ManagedUdpFlowResume>")
-            && stream_state.contains("handlers: Vec<Box<dyn ManagedStreamFlowHandler>>")
+            && registered_state.contains("managed_resumes:")
+            && stream_state.contains("stream_packet_handlers:")
+            && stream_state.contains("relay_handlers: Vec<Box<dyn ManagedRelayFlowHandler>>")
             && !cached_start.exists()
             && stream_manager.contains("struct ManagedStreamFlowManager")
             && stream_manager.contains("ManagedUdpConnectionCache")
@@ -13475,21 +13863,10 @@ fn protocol_udp_cached_flow_fast_path_lives_outside_state_root() {
             && !state.contains("cached_handler_mut")
             && !vless_flow.exists()
             && !vmess_flow.exists()
-            && !vless_adapter.contains("VlessUdpOutboundManager")
-            && vless_adapter.contains("start_protocol_transport_bridge_udp_flow(")
-            && !vless_adapter.contains("ManagedStreamPacketStartBridge")
-            && !vless_adapter.contains("start_tracked_managed_stream_packet(")
             && vless_transport.contains("start_protocol_transport_bridge_udp_flow(")
             && vless_transport
                 .contains("start_protocol_transport_bridge_udp_relay_final_hop(")
-            && !vless_transport.contains("ManagedStreamPacketStartBridge")
-            && !vless_transport.contains("start_tracked_managed_stream_packet(")
-            && !vless_adapter.contains("register_managed_stream_flow_sender")
-            && !vless_adapter.contains("register_managed_stream_packet_flow")
-            && !vless_adapter.contains("cached_handler_mut")
-            && !vmess_adapter.contains("VmessUdpOutboundManager")
             && vmess_adapter.contains("start_protocol_transport_bridge_udp_flow(")
-            && !vmess_adapter.contains("ManagedStreamPacketStartBridge")
             && !vmess_adapter.contains("start_tracked_managed_stream_packet(")
             && vmess_transport.contains("start_protocol_transport_bridge_udp_flow(")
             && vmess_transport
@@ -13500,7 +13877,7 @@ fn protocol_udp_cached_flow_fast_path_lives_outside_state_root() {
             && !vmess_adapter.contains("register_managed_stream_packet_flow")
             && !vmess_adapter.contains("cached_handler_mut")
             && !register.contains("ManagedStreamSenderHandlers")
-            && register.contains("adapter.managed_stream_udp_handler()")
+            && register.contains("capability.managed_stream_udp_handlers()")
             && !register.contains("vless_cached_handler")
             && !register.contains("vmess_cached_handler"),
         "managed stream UDP flow starts should use generic managed stream handlers while transport bridges own the shared tracked stream-packet glue"
@@ -13578,7 +13955,7 @@ fn adapters_do_not_construct_udp_dispatch_peer_helpers() {
         }
         let allow_neutral_managed_connector = matches!(
             source.as_str(),
-            "src/adapters/hysteria2/udp/managed.rs" | "src/adapters/shadowsocks/udp/managed.rs"
+            "src/adapters/hysteria2/udp.rs" | "src/adapters/shadowsocks/udp.rs"
         );
         let content = fs::read_to_string(&path).expect("read rust source");
         for forbidden in [
@@ -13624,10 +14001,10 @@ fn packet_path_traits_are_grouped_by_responsibility() {
     let protocol_udp_root = read("src/runtime/udp_flow/registered/mod.rs");
     let runtime_root = manifest_dir().join("src/runtime/udp_flow");
     let peer = manifest_dir().join("src/runtime/udp_flow/registered/peer.rs");
-    let ss_managed = read("src/adapters/shadowsocks/udp/managed.rs");
-    let h2_managed = read("src/adapters/hysteria2/udp/managed.rs");
+    let ss_managed = read("src/adapters/shadowsocks/udp.rs");
+    let h2_managed = read("src/adapters/hysteria2/udp.rs");
     let trojan_managed = read("src/adapters/trojan.rs");
-    let mieru_managed = read("src/adapters/mieru/udp/managed.rs");
+    let mieru_managed = read("src/adapters/mieru/udp.rs");
 
     for required in [
         "trait PacketPathCarrier",
@@ -14124,11 +14501,37 @@ fn packet_path_snapshot_send_uses_request_model() {
 }
 
 #[test]
+fn udp_start_and_managed_forward_use_narrow_operation_models() {
+    let packet_path_root = read("src/runtime/udp_flow/packet_path_chain.rs");
+    let packet_path_model = read("src/runtime/udp_flow/packet_path_chain/model.rs");
+    let flow_request = read("src/runtime/udp_flow/managed/flow/request.rs");
+    let flow_state = read("src/runtime/udp_flow/state.rs");
+    let dispatch_packet_path = read("src/runtime/udp_dispatch/packet_path.rs");
+
+    assert!(
+        packet_path_root.contains("pub(crate) use model::PacketPathStartRequest;")
+            && !packet_path_root.contains("struct PacketPathStartRequest")
+            && packet_path_model.contains("struct PacketPathStartRequest")
+            && packet_path_model.contains("session_id: u64")
+            && packet_path_model.contains("carrier_leaf: &'a ResolvedLeafOutbound<'a>")
+            && packet_path_model.contains("datagram_leaf: &'a ResolvedLeafOutbound<'a>")
+            && packet_path_model.contains("packet: UdpPacketRef<'a>")
+            && !packet_path_model.contains("Proxy"),
+        "packet-path start should use a narrow model submodule request without embedding Proxy"
+    );
+    assert!(
+        flow_state.contains("request: PacketPathStartRequest<'_>")
+            && dispatch_packet_path.contains("request: PacketPathStartRequest<'_>")
+            && flow_request.contains("type ManagedExistingFlowForward<'a>")
+            && flow_request.contains("(&'a UdpFlowSnapshot, &'a [u8])")
+            && flow_state.contains("request: ManagedExistingFlowForward<'_>"),
+        "UDP start and managed forward layers should pass named operation inputs intact"
+    );
+}
+
+#[test]
 fn feature_gated_udp_manager_modules_do_not_embed_disabled_stubs() {
-    for source in [
-        "src/adapters/mieru/udp/managed.rs",
-        "src/adapters/trojan.rs",
-    ] {
+    for source in ["src/adapters/mieru/udp.rs", "src/adapters/trojan.rs"] {
         let content = read(source);
         assert!(
             !content.contains("#[cfg(not(feature ="),
@@ -14440,7 +14843,7 @@ fn trojan_udp_packet_stream_tasks_live_outside_manager() {
 
 #[test]
 fn mieru_udp_managed_connector_is_thin_protocol_glue() {
-    let managed = read("src/adapters/mieru/udp/managed.rs");
+    let managed = read("src/adapters/mieru/udp.rs");
     let connector = read_repo_module_tree("crates/transport/src/mieru_transport/managed_udp.rs");
     let adapter = read("src/adapters/mieru/udp.rs");
     let adapter_flow = read("src/adapters/mieru/udp/flow.rs");
@@ -14537,7 +14940,7 @@ fn mieru_udp_managed_connector_is_thin_protocol_glue() {
 
 #[test]
 fn mieru_udp_response_bridge_uses_generic_managed_tuple_connection() {
-    let managed = read("src/adapters/mieru/udp/managed.rs");
+    let managed = read("src/adapters/mieru/udp.rs");
     let connector = read_repo_module_tree("crates/transport/src/mieru_transport/managed_udp.rs");
     let connection = read_proxy_module_tree("src/runtime/udp_flow/managed/connection.rs");
     let stream_manager = read_proxy_module_tree("src/runtime/udp_flow/managed/stream_manager.rs");
@@ -14571,7 +14974,7 @@ fn mieru_udp_response_bridge_uses_generic_managed_tuple_connection() {
 
 #[test]
 fn trojan_udp_managed_connector_is_thin_protocol_glue() {
-    let managed = read("src/adapters/common.rs");
+    let managed = read("src/adapters/identity.rs");
     let adapter = read_proxy_module_tree("src/adapters/trojan.rs");
     let proxy_transport = read_proxy_module_tree("src/adapters/trojan.rs");
     let _managed_bridge = read("src/runtime/udp_flow/managed/bridge.rs");
@@ -14682,7 +15085,7 @@ fn trojan_udp_managed_connector_is_thin_protocol_glue() {
 
 #[test]
 fn mieru_udp_packet_stream_tasks_live_outside_manager() {
-    let managed = read("src/adapters/mieru/udp/managed.rs");
+    let managed = read("src/adapters/mieru/udp.rs");
     let connector = read_repo_module_tree("crates/transport/src/mieru_transport/managed_udp.rs");
     let stream_manager = read_proxy_module_tree("src/runtime/udp_flow/managed/stream_manager.rs");
     let stream = manifest_dir().join("src/adapters/mieru/udp/manager/stream.rs");
@@ -14737,10 +15140,9 @@ fn mieru_udp_packet_stream_tasks_live_outside_manager() {
 
 #[test]
 fn h2_udp_datagram_codec_lives_outside_manager() {
-    let managed = read("src/adapters/hysteria2/udp/managed.rs");
+    let managed = read("src/adapters/hysteria2/udp.rs");
     let connector = read_repo_module_tree("crates/transport/src/hysteria2_quic.rs");
-    let transport = fs::read_to_string(repo_root().join("crates/transport/src/hysteria2_quic.rs"))
-        .expect("read zero-transport hysteria2_quic source");
+    let transport = read_repo_module_tree("crates/transport/src/hysteria2_quic.rs");
     let adapter = read("src/adapters/hysteria2/udp.rs");
     let snapshot = read_proxy_module_tree("src/runtime/udp_flow/managed/flow.rs");
     let managed_cache = read_proxy_module_tree("src/runtime/udp_flow/managed/cache.rs");
@@ -14946,8 +15348,8 @@ fn h2_udp_datagram_codec_lives_outside_manager() {
         "Hysteria2 protocol UDP flow state should carry only the unified opaque resume wrapper"
     );
     assert!(
-        forward.contains("ManagedExistingSend")
-            && forward.contains("ManagedExistingSend::forwarded")
+        forward.contains("ManagedDatagramExistingSend")
+            && forward.contains("ManagedDatagramExistingSend::forwarded")
             && !forward.contains("existing.resume.password()")
             && !forward.contains("existing.resume.client_fingerprint()")
             && !forward.contains("existing.resume.codec()")
@@ -15088,7 +15490,7 @@ fn h2_packet_path_carrier_uses_protocol_built_codec() {
 
 #[test]
 fn h2_udp_response_bridge_lives_outside_manager() {
-    let managed_adapter = read("src/adapters/hysteria2/udp/managed.rs");
+    let managed_adapter = read("src/adapters/hysteria2/udp.rs");
     let bridge = manifest_dir().join("src/adapters/hysteria2/udp/manager/bridge.rs");
 
     for forbidden in [
@@ -15121,7 +15523,7 @@ fn h2_udp_response_bridge_lives_outside_manager() {
 
 #[test]
 fn h2_udp_packet_stream_tasks_live_outside_manager() {
-    let managed = read("src/adapters/hysteria2/udp/managed.rs");
+    let managed = read("src/adapters/hysteria2/udp.rs");
     let stream_path = manifest_dir().join("src/adapters/hysteria2/udp/manager/stream.rs");
     let protocol_udp = fs::read_to_string(repo_root().join("protocols/hysteria2/src/udp.rs"))
         .expect("read hysteria2 protocol udp source");
@@ -15181,8 +15583,15 @@ fn h2_udp_packet_stream_tasks_live_outside_manager() {
 
 #[test]
 fn h2_transport_delegates_protocol_handshake_to_protocol_crate() {
-    let transport = fs::read_to_string(repo_root().join("crates/transport/src/hysteria2_quic.rs"))
-        .expect("read zero-transport hysteria2_quic source");
+    let transport = format!(
+        "{}\n{}\n{}\n{}\n{}\n{}",
+        read_repo_file("crates/transport/src/hysteria2_quic.rs"),
+        read_repo_file("crates/transport/src/hysteria2_quic/connection.rs"),
+        read_repo_file("crates/transport/src/hysteria2_quic/managed_udp.rs"),
+        read_repo_file("crates/transport/src/hysteria2_quic/model.rs"),
+        read_repo_file("crates/transport/src/hysteria2_quic/projection.rs"),
+        read_repo_file("crates/transport/src/hysteria2_quic/stream.rs")
+    );
     let adapter = read_proxy_module_tree("src/adapters/hysteria2.rs");
     let protocol_outbound =
         fs::read_to_string(repo_root().join("protocols/hysteria2/src/outbound.rs"))
@@ -15231,7 +15640,7 @@ fn h2_transport_delegates_protocol_handshake_to_protocol_crate() {
 
 #[test]
 fn h2_udp_state_model_lives_outside_manager() {
-    let managed = read("src/adapters/hysteria2/udp/managed.rs");
+    let managed = read("src/adapters/hysteria2/udp.rs");
     let generic_manager =
         read_proxy_module_tree("src/runtime/udp_flow/managed/datagram_manager.rs");
     let model = manifest_dir().join("src/adapters/hysteria2/udp/manager/model.rs");
@@ -15251,14 +15660,14 @@ fn h2_udp_state_model_lives_outside_manager() {
     assert!(
         !model.exists()
             && generic_manager.contains("pub(crate) struct ManagedDatagramFlowManager")
-            && generic_manager.contains("ManagedExistingSend<'_>"),
+            && generic_manager.contains("ManagedDatagramExistingSend<'_>"),
         "Hysteria2 UDP should use the generic managed datagram request model instead of h2_manager/model.rs"
     );
 }
 
 #[test]
 fn h2_udp_model_details_live_outside_manager_root() {
-    let managed = read("src/adapters/hysteria2/udp/managed.rs");
+    let managed = read("src/adapters/hysteria2/udp.rs");
     let generic_manager =
         read_proxy_module_tree("src/runtime/udp_flow/managed/datagram_manager.rs");
     let model = manifest_dir().join("src/adapters/hysteria2/udp/manager/model.rs");
@@ -15296,7 +15705,7 @@ fn h2_udp_model_details_live_outside_manager_root() {
 
 #[test]
 fn h2_udp_send_orchestration_lives_outside_manager() {
-    let managed = read("src/adapters/hysteria2/udp/managed.rs");
+    let managed = read("src/adapters/hysteria2/udp.rs");
     let send = manifest_dir().join("src/adapters/hysteria2/udp/manager/send.rs");
     let generic_manager =
         read_proxy_module_tree("src/runtime/udp_flow/managed/datagram_manager.rs");
@@ -15336,7 +15745,7 @@ fn h2_udp_send_orchestration_lives_outside_manager() {
 
 #[test]
 fn h2_udp_establish_logic_lives_outside_manager() {
-    let managed = read("src/adapters/hysteria2/udp/managed.rs");
+    let managed = read("src/adapters/hysteria2/udp.rs");
     let establish = manifest_dir().join("src/adapters/hysteria2/udp/manager/establish.rs");
 
     for forbidden in ["stream::establish", "spawn_response_bridge"] {
@@ -15356,16 +15765,18 @@ fn h2_udp_establish_logic_lives_outside_manager() {
 
 #[test]
 fn shadowsocks_udp_datagram_codec_lives_outside_manager() {
-    let managed = read("src/adapters/shadowsocks/udp/managed.rs");
+    let managed = read("src/adapters/shadowsocks/udp.rs");
     let outbound = manifest_dir().join("src/outbound/shadowsocks.rs");
     let adapter = read("src/adapters/shadowsocks/udp.rs");
     let _adapter_flow = read("src/adapters/shadowsocks/udp/flow.rs");
     let _adapter_packet_path = read("src/adapters/shadowsocks/udp/packet_path.rs");
     let generic_manager =
         read_proxy_module_tree("src/runtime/udp_flow/managed/datagram_manager.rs");
-    let transport =
-        fs::read_to_string(repo_root().join("crates/transport/src/shadowsocks_transport.rs"))
-            .expect("read shadowsocks transport source");
+    let transport = format!(
+        "{}\n{}",
+        read_repo_module_tree("crates/transport/src/shadowsocks_transport.rs"),
+        read_repo_file("crates/transport/src/shadowsocks_transport/udp_socket.rs")
+    );
     let _transport_manifest = fs::read_to_string(repo_root().join("crates/transport/Cargo.toml"))
         .expect("read zero-transport manifest");
     let protocol_outbound =
@@ -15459,7 +15870,7 @@ fn shadowsocks_udp_datagram_codec_lives_outside_manager() {
 
 #[test]
 fn shadowsocks_udp_response_bridge_lives_outside_manager() {
-    let managed = read("src/adapters/shadowsocks/udp/managed.rs");
+    let managed = read("src/adapters/shadowsocks/udp.rs");
     let generic_manager =
         read_proxy_module_tree("src/runtime/udp_flow/managed/datagram_manager.rs");
     let managed_datagram = read_proxy_module_tree("src/runtime/udp_flow/managed/datagram.rs");
@@ -15503,9 +15914,13 @@ fn shadowsocks_udp_response_bridge_lives_outside_manager() {
 
 #[test]
 fn shadowsocks_udp_socket_runtime_lives_outside_manager() {
-    let managed = read("src/adapters/shadowsocks/udp/managed.rs");
+    let managed = read("src/adapters/shadowsocks/udp.rs");
     let transport_path = repo_root().join("crates/transport/src/shadowsocks_transport.rs");
-    let transport = fs::read_to_string(&transport_path).expect("read shadowsocks transport source");
+    let transport = format!(
+        "{}\n{}",
+        read_repo_module_tree("crates/transport/src/shadowsocks_transport.rs"),
+        read_repo_file("crates/transport/src/shadowsocks_transport/udp_socket.rs")
+    );
 
     for forbidden in [
         "UdpSocket::bind",
@@ -15536,7 +15951,7 @@ fn shadowsocks_udp_socket_runtime_lives_outside_manager() {
 
 #[test]
 fn shadowsocks_udp_state_model_lives_outside_manager() {
-    let managed = read("src/adapters/shadowsocks/udp/managed.rs");
+    let managed = read("src/adapters/shadowsocks/udp.rs");
     let generic_manager =
         read_proxy_module_tree("src/runtime/udp_flow/managed/datagram_manager.rs");
     let model = manifest_dir().join("src/adapters/shadowsocks/udp/manager/model.rs");
@@ -15556,7 +15971,7 @@ fn shadowsocks_udp_state_model_lives_outside_manager() {
     assert!(
         !model.exists()
             && generic_manager.contains("pub(crate) struct ManagedDatagramSocketFlowManager")
-            && generic_manager.contains("ManagedExistingSend<'_>"),
+            && generic_manager.contains("ManagedDatagramExistingSend<'_>"),
         "Shadowsocks UDP should use the generic managed datagram socket request model instead of ss_manager/model.rs"
     );
 }
@@ -15566,7 +15981,7 @@ fn shadowsocks_udp_flow_cipher_is_protocol_parsed() {
     let adapter = read("src/adapters/shadowsocks/udp.rs");
     let adapter_flow = read("src/adapters/shadowsocks/udp/flow.rs");
     let flows = read_proxy_module_tree("src/runtime/udp_flow/managed/flow.rs");
-    let managed = read("src/adapters/shadowsocks/udp/managed.rs");
+    let managed = read("src/adapters/shadowsocks/udp.rs");
     let outbound = manifest_dir().join("src/outbound/shadowsocks.rs");
     let generic_manager =
         read_proxy_module_tree("src/runtime/udp_flow/managed/datagram_manager.rs");
@@ -15679,8 +16094,8 @@ fn shadowsocks_udp_flow_cipher_is_protocol_parsed() {
         "Shadowsocks protocol UDP flow snapshot should carry only the unified opaque resume wrapper"
     );
     assert!(
-        forward.contains("ManagedExistingSend")
-            && forward.contains("ManagedExistingSend::forwarded")
+        forward.contains("ManagedDatagramExistingSend")
+            && forward.contains("ManagedDatagramExistingSend::forwarded")
             && !forward.contains("existing.resume.cache_key()")
             && !forward.contains("existing.resume.codec()")
             && !forward.contains("shadowsocks::udp_flow_codec")
@@ -15692,7 +16107,7 @@ fn shadowsocks_udp_flow_cipher_is_protocol_parsed() {
     let start = read_proxy_module_tree("src/runtime/udp_flow/managed/datagram.rs");
     assert!(
         !start.contains("ManagedUdpFlowResume::Shadowsocks")
-            && start.contains("ManagedExistingSend::datagram")
+            && start.contains("ManagedDatagramExistingSend::datagram")
             && !start.contains("resume.cache_key()")
             && !start.contains("resume.codec()"),
         "new Shadowsocks UDP flow start should pass the unified resume descriptor without unpacking cache identity or codec state"
@@ -15926,7 +16341,7 @@ fn udp_build_traits_consume_protocol_parts() {
     let packet_path_key = read("src/runtime/udp_flow/packet_path_chain/key.rs");
     let socks5_packet_path = read("src/adapters/socks5/udp/packet_path.rs");
     let shadowsocks_packet_path = read("src/adapters/shadowsocks/udp/packet_path.rs");
-    let _shadowsocks_managed = read("src/adapters/shadowsocks/udp/managed.rs");
+    let _shadowsocks_managed = read("src/adapters/shadowsocks/udp.rs");
     let hysteria2_connector = read_repo_module_tree("crates/transport/src/hysteria2_quic.rs");
     let trojan_connector = read_repo_module_tree("crates/transport/src/trojan_transport.rs");
     let mieru_connector =
@@ -16345,7 +16760,7 @@ fn adapters_do_not_construct_udp_packet_path_snapshots_directly() {
 
 #[test]
 fn shadowsocks_udp_entry_cache_lives_outside_manager() {
-    let managed = read("src/adapters/shadowsocks/udp/managed.rs");
+    let managed = read("src/adapters/shadowsocks/udp.rs");
     let generic_manager =
         read_proxy_module_tree("src/runtime/udp_flow/managed/datagram_manager.rs");
     let entry = manifest_dir().join("src/adapters/shadowsocks/udp/manager/entry.rs");
@@ -16428,7 +16843,7 @@ fn udp_adapters_use_neutral_managed_bridge_for_registered() {
     }
 
     for (source, required) in [
-        ("src/adapters/socks5/udp/flow.rs", "ManagedRelayStart"),
+        ("src/adapters/socks5/udp/flow.rs", "UpstreamTrackedStart"),
         (
             "src/adapters/shadowsocks/udp/flow.rs",
             "ManagedDatagramStart",
@@ -16530,10 +16945,11 @@ fn udp_adapters_use_neutral_managed_bridge_for_registered() {
 
     let managed = read_proxy_module_tree("src/runtime/udp_dispatch/managed.rs");
     assert!(
-        managed.contains("pub(crate) async fn start_tracked_managed_stream_packet")
-            && managed.contains("ManagedStreamPacketStart")
+        managed.contains("pub(crate) fn flow_start_context")
+            && managed.contains("UdpFlowStartContext::new")
+            && !managed.contains("ManagedStreamPacketStart")
             && !managed.contains("protocol_udp_state_and_chain_tasks"),
-        "runtime UDP dispatch should expose only narrow managed stream-flow registration glue, not protocol flow bridges"
+        "runtime UDP dispatch should expose only the narrow persistent flow-start context boundary"
     );
     for forbidden in [
         "ManagedProtocolUdpSend",
@@ -17064,4 +17480,673 @@ fn protocol_inbound_accept_state_stays_protocol_private() {
             && !vmess_stream.contains("accept.download_nonce"),
         "VMess inbound accept state should stay crate-private and be consumed through a crate-local stream-state handoff"
     );
+}
+
+#[test]
+fn split_http_wire_details_live_outside_transport_root() {
+    let root = read_repo_file("crates/transport/src/split_http.rs");
+    let chunked = read_repo_file("crates/transport/src/split_http/chunked.rs");
+    let legacy = read_repo_file("crates/transport/src/split_http/legacy.rs");
+    let paired = read_repo_file("crates/transport/src/split_http/paired.rs");
+    let registry = read_repo_file("crates/transport/src/split_http/registry.rs");
+    let stream_one = read_repo_file("crates/transport/src/split_http/stream_one.rs");
+    let wire = read_repo_file("crates/transport/src/split_http/wire.rs");
+
+    assert!(root.contains("mod chunked;"));
+    for owned in [
+        "enum ChunkState {",
+        "enum DecodeStep {",
+        "struct ChunkedDecoder {",
+        "fn try_decode(&mut self, buf: &mut ReadBuf<'_>)",
+    ] {
+        assert!(
+            !root.contains(owned),
+            "split_http root should not own chunk decoder detail `{owned}`"
+        );
+        assert!(
+            chunked.contains(owned),
+            "split_http chunked module should own `{owned}`"
+        );
+    }
+
+    assert!(root.contains("mod paired;"));
+    assert!(root.contains("pub use paired::{SplitHttpPairedStream, SplitHttpStream};"));
+    for owned in [
+        "pub struct SplitHttpPairedStream<R, W> {",
+        "impl<R, W> AsyncRead for SplitHttpPairedStream<R, W>",
+        "impl<R, W> AsyncWrite for SplitHttpPairedStream<R, W>",
+        "impl<R, W> AsyncSocket for SplitHttpPairedStream<R, W>",
+        "impl<R, W> ClientStream for SplitHttpPairedStream<R, W>",
+    ] {
+        assert!(
+            !root.contains(owned),
+            "split_http root should not own paired-stream lifecycle `{owned}`"
+        );
+        assert!(
+            paired.contains(owned),
+            "split_http paired module should own `{owned}`"
+        );
+    }
+
+    assert!(root.contains("mod legacy;"));
+    assert!(root.contains("pub use legacy::{accept_split_http, connect_split_http};"));
+    for owned in [
+        "pub async fn connect_split_http<S>(",
+        "pub async fn accept_split_http<S>(",
+        "async fn accept_half<S>(",
+        "async fn read_headers<S>(",
+        "fn downcast<S>(",
+    ] {
+        assert!(
+            !root.contains(owned),
+            "split_http root should not own legacy paired lifecycle `{owned}`"
+        );
+        assert!(
+            legacy.contains(owned),
+            "split_http legacy module should own `{owned}`"
+        );
+    }
+
+    assert!(root.contains("mod stream_one;"));
+    for owned in [
+        "pub enum XhttpMode {",
+        "pub struct XhttpStreamOne<S> {",
+        "pub async fn connect_xhttp_stream_one<S>(",
+        "pub async fn accept_xhttp_stream_one<S>(",
+        "impl<S> AsyncRead for XhttpStreamOne<S>",
+        "impl<S> AsyncWrite for XhttpStreamOne<S>",
+        "impl<S> AsyncSocket for XhttpStreamOne<S>",
+        "impl<S> ClientStream for XhttpStreamOne<S>",
+    ] {
+        assert!(
+            !root.contains(owned),
+            "split_http root should not own stream-one lifecycle `{owned}`"
+        );
+        assert!(
+            stream_one.contains(owned),
+            "split_http stream_one module should own `{owned}`"
+        );
+    }
+
+    assert!(root.contains("mod registry;"));
+    assert!(root.contains("pub use registry::SplitHttpRegistry;"));
+    for owned in [
+        "struct SplitHttpPending {",
+        "pub struct SplitHttpRegistry {",
+        "impl SplitHttpRegistry {",
+        "fn generate_session_id()",
+    ] {
+        assert!(
+            !root.contains(owned),
+            "split_http root should not own registry detail `{owned}`"
+        );
+        assert!(
+            registry.contains(owned),
+            "split_http registry module should own `{owned}`"
+        );
+    }
+    assert!(root.contains("mod wire;"));
+    for helper in [
+        "fn find_header_end(",
+        "fn parse_status(",
+        "fn parse_method_and_session(",
+        "fn validate_path(",
+        "fn write_get_response<",
+        "fn write_http_request(",
+    ] {
+        assert!(
+            !root.contains(helper),
+            "split_http root should remain orchestration and not own `{helper}`"
+        );
+        assert!(
+            wire.contains(helper),
+            "split_http wire module should own `{helper}`"
+        );
+    }
+}
+
+#[test]
+fn tls_certificate_io_lives_outside_transport_root() {
+    let root = read_repo_file("crates/transport/src/tls.rs");
+    let certificates = read_repo_file("crates/transport/src/tls/certificates.rs");
+    let client_hello = read_repo_file("crates/transport/src/tls/client_hello.rs");
+    let fingerprint = read_repo_file("crates/transport/src/tls/fingerprint.rs");
+    let inbound_stream = read_repo_file("crates/transport/src/tls/inbound_stream.rs");
+
+    assert!(root.contains("mod certificates;"));
+    for helper in ["fn load_certs(", "fn load_private_key(", "fn resolve_path("] {
+        assert!(
+            !root.contains(helper),
+            "tls root should remain handshake orchestration and not own `{helper}`"
+        );
+        assert!(
+            certificates.contains(helper),
+            "tls certificates module should own `{helper}`"
+        );
+    }
+    for detail in [
+        "File::open(",
+        "rustls_pemfile::certs(",
+        "rustls_pemfile::private_key(",
+    ] {
+        assert!(
+            !root.contains(detail),
+            "tls root should not perform certificate I/O detail `{detail}`"
+        );
+        assert!(certificates.contains(detail));
+    }
+
+    assert!(root.contains("mod client_hello;"));
+    assert!(root.contains("pub async fn peek_client_hello<"));
+    for helper in [
+        "fn parse_extensions(",
+        "async fn read_exact<",
+        "async fn skip_exact<",
+    ] {
+        assert!(
+            !root.contains(helper),
+            "tls root should not own ClientHello detail `{helper}`"
+        );
+        assert!(client_hello.contains(helper));
+    }
+
+    assert!(root.contains("mod inbound_stream;"));
+    assert!(root.contains("pub use inbound_stream::InboundTlsStream;"));
+    for owned in [
+        "pub struct InboundTlsStream<",
+        "impl<IO> AsyncSocket for InboundTlsStream<IO>",
+        "impl<IO> AsyncRead for InboundTlsStream<IO>",
+        "impl<IO> AsyncWrite for InboundTlsStream<IO>",
+    ] {
+        assert!(
+            !root.contains(owned),
+            "tls root should not own inbound stream detail `{owned}`"
+        );
+        assert!(inbound_stream.contains(owned));
+    }
+
+    assert!(root.contains("mod fingerprint;"));
+    for detail in [
+        "fn tls13_config(",
+        "fn rustls_to_ztls_suite(",
+        "Tls13Stream::connect_async(",
+        "Tls13Stream::connect(",
+    ] {
+        assert!(
+            !root.contains(detail),
+            "tls root should not own fingerprint handshake detail `{detail}`"
+        );
+        assert!(fingerprint.contains(detail));
+    }
+}
+
+#[test]
+fn socks5_transport_models_live_outside_transport_root() {
+    let root = read_repo_file("crates/transport/src/socks5_transport.rs");
+    let inbound = read_repo_file("crates/transport/src/socks5_transport/inbound.rs");
+    let leaf = read_repo_file("crates/transport/src/socks5_transport/leaf.rs");
+    let model = read_repo_file("crates/transport/src/socks5_transport/model.rs");
+    let tcp = read_repo_file("crates/transport/src/socks5_transport/tcp.rs");
+    let upstream = read_repo_file("crates/transport/src/socks5_transport/upstream.rs");
+
+    assert!(root.contains("mod inbound;"));
+    assert!(root.contains("pub use inbound::{"));
+    for owned in [
+        "fn inbound_acceptor_from_users(",
+        "fn inbound_acceptor_from_protocol(",
+        "async fn setup_inbound_udp_association<",
+        "impl<S> InboundClientResponse<S> for OwnedSocks5InboundAcceptor",
+        "impl InboundUdpAssociation for Socks5InboundUdpAssociationHandler",
+        "impl InboundUdpAssociationResponder for Socks5InboundUdpAssociationHandler",
+    ] {
+        assert!(
+            !root.contains(owned),
+            "socks5 transport root should not own inbound behavior `{owned}`"
+        );
+        assert!(inbound.contains(owned));
+    }
+    assert!(root.contains("mod model;"));
+    assert!(root.contains("pub use model::{"));
+    for owned in [
+        "pub enum Socks5UpstreamAssociationCloseReason {",
+        "pub struct OwnedSocks5InboundAcceptor {",
+        "pub struct Socks5InboundUdpAssociationSetup {",
+        "pub struct Socks5ManagedUdpFlowPlan<'a> {",
+        "pub struct Socks5ManagedUdpPacketPathPlan {",
+        "pub struct Socks5TransportLeaf<'a> {",
+    ] {
+        assert!(
+            !root.contains(owned),
+            "socks5 transport root should not own model `{owned}`"
+        );
+        assert!(model.contains(owned));
+    }
+    for owned in [
+        "impl<'a> Socks5ManagedUdpFlowConfig<'a> {",
+        "impl Socks5ManagedUdpAssociationTarget {",
+        "impl Socks5ManagedUdpPacketPathCarrierBuild {",
+        "impl Socks5ManagedUdpPacketPathCarrierDescriptor {",
+        "impl<'a> Socks5ManagedUdpFlowPlan<'a> {",
+        "impl Socks5ManagedUdpPacketPathPlan {",
+        "fn into_protocol_target(",
+        "fn into_protocol_build(",
+    ] {
+        assert!(
+            !root.contains(owned),
+            "socks5 transport root should not own model behavior `{owned}`"
+        );
+        assert!(model.contains(owned));
+    }
+
+    assert!(root.contains("mod leaf;"));
+    for owned in [
+        "impl<'a> Socks5TransportLeaf<'a> {",
+        "pub fn from_resolved_leaf(",
+        "pub fn udp_flow_plan(",
+        "pub fn udp_packet_path_plan(",
+        "pub async fn open_tcp_stream<",
+        "pub async fn open_tcp_relay_hop(",
+    ] {
+        assert!(
+            !root.contains(owned),
+            "socks5 transport root should not own leaf behavior `{owned}`"
+        );
+        assert!(leaf.contains(owned));
+    }
+
+    assert!(root.contains("mod upstream;"));
+    assert!(root.contains("pub use upstream::{"));
+    for exported in [
+        "establish_packet_path_udp_association",
+        "establish_registered_udp_association",
+        "Socks5UdpAssociationRuntime",
+        "Socks5UpstreamUdpAssociation",
+    ] {
+        assert!(root.contains(exported));
+    }
+    for owned in [
+        "pub struct Socks5UpstreamUdpAssociation {",
+        "pub trait Socks5UdpAssociationRuntime:",
+        "pub async fn establish_registered_udp_association<",
+        "pub async fn establish_packet_path_udp_association<",
+        "impl Socks5UpstreamUdpAssociation {",
+        "pub async fn send_packet(",
+        "pub async fn recv_response_parts(",
+        "impl Drop for Socks5UpstreamUdpAssociation",
+    ] {
+        assert!(
+            !root.contains(owned),
+            "socks5 transport root should not own upstream lifecycle `{owned}`"
+        );
+        assert!(upstream.contains(owned));
+    }
+
+    assert!(root.contains("mod tcp;"));
+    assert!(
+        root.contains("pub use tcp::{apply_socks5_tcp_relay_hop, establish_socks5_tcp_connect};")
+    );
+    for owned in [
+        "pub async fn establish_socks5_tcp_connect(",
+        "pub async fn apply_socks5_tcp_relay_hop(",
+        "Socks5TcpOutboundProfile::from_config_parts(",
+    ] {
+        assert!(
+            !root.contains(owned),
+            "socks5 transport root should not own TCP bridge `{owned}`"
+        );
+        assert!(tcp.contains(owned));
+    }
+}
+
+#[test]
+fn shadowsocks_transport_models_live_outside_transport_root() {
+    let root = read_repo_file("crates/transport/src/shadowsocks_transport.rs");
+    let inbound = read_repo_file("crates/transport/src/shadowsocks_transport/inbound.rs");
+    let leaf = read_repo_file("crates/transport/src/shadowsocks_transport/leaf.rs");
+    let model = read_repo_file("crates/transport/src/shadowsocks_transport/model.rs");
+    let tcp = read_repo_file("crates/transport/src/shadowsocks_transport/tcp.rs");
+    let udp_socket = read_repo_file("crates/transport/src/shadowsocks_transport/udp_socket.rs");
+
+    assert!(root.contains("mod inbound;"));
+    assert!(root.contains("pub use inbound::inbound_profile_from_protocol;"));
+    for owned in [
+        "fn inbound_profile_from_protocol(",
+        "impl OwnedShadowsocksInboundProfile {",
+        "impl OwnedShadowsocksInboundTcpAcceptor {",
+        "pub async fn accept_and_dispatch_stream<",
+        "impl OwnedShadowsocksInboundBindings {",
+    ] {
+        assert!(
+            !root.contains(owned),
+            "shadowsocks transport root should not own inbound behavior `{owned}`"
+        );
+        assert!(inbound.contains(owned));
+    }
+    assert!(root.contains("mod model;"));
+    assert!(root.contains("pub use model::{"));
+    for owned in [
+        "pub type ShadowsocksUdpResponse =",
+        "pub struct ShadowsocksManagedDatagramFlowResume {",
+        "pub struct ShadowsocksManagedUdpFlowPlan<'a> {",
+        "pub struct ShadowsocksManagedUdpPacketPathPlan<'a> {",
+        "pub struct ShadowsocksManagedUdpFlowConfig<'a> {",
+        "pub struct ShadowsocksTransportLeaf<'a> {",
+        "pub struct OwnedShadowsocksInboundProfile {",
+        "pub struct OwnedShadowsocksInboundTcpAcceptor {",
+        "pub struct OwnedShadowsocksInboundBindings {",
+    ] {
+        assert!(
+            !root.contains(owned),
+            "shadowsocks transport root should not own model `{owned}`"
+        );
+        assert!(model.contains(owned));
+    }
+    for owned in [
+        "impl<'a> ShadowsocksManagedUdpFlowConfig<'a> {",
+        "impl ShadowsocksManagedDatagramFlowResume {",
+        "impl<'a> ShadowsocksManagedUdpFlowPlan<'a> {",
+        "impl<'a> ShadowsocksManagedUdpPacketPathPlan<'a> {",
+        "impl ShadowsocksManagedUdpPacketPathCarrierDescriptor {",
+        "impl ShadowsocksManagedUdpPacketPathDatagramSourceBuild {",
+        "fn protocol_config(",
+        "fn into_shared_managed_socket_flow_codec(",
+    ] {
+        assert!(
+            !root.contains(owned),
+            "shadowsocks transport root should not own model behavior `{owned}`"
+        );
+        assert!(model.contains(owned));
+    }
+    assert!(root.contains("mod leaf;"));
+    for owned in [
+        "impl<'a> ShadowsocksTransportLeaf<'a> {",
+        "pub fn from_resolved_leaf(",
+        "pub fn udp_flow_plan(",
+        "pub fn udp_packet_path_plan(",
+        "pub async fn open_tcp_stream<",
+        "pub async fn open_tcp_relay_hop(",
+        "fn flow_config(",
+    ] {
+        assert!(
+            !root.contains(owned),
+            "shadowsocks transport root should not own leaf behavior `{owned}`"
+        );
+        assert!(leaf.contains(owned));
+    }
+    assert!(root.contains("mod udp_socket;"));
+    for owned in [
+        "pub struct ShadowsocksUdpSocketFlow {",
+        "pub async fn establish_shadowsocks_udp_socket_flow(",
+        "impl ShadowsocksUdpSocketFlow {",
+        "impl ManagedDatagramConnectionOps for ShadowsocksUdpSocketFlow",
+        "async fn bind_for_endpoint(",
+        "fn spawn_recv_loop(",
+        "async fn recv_loop(",
+    ] {
+        assert!(
+            !root.contains(owned) && !model.contains(owned),
+            "socket-backed lifecycle `{owned}` should not live in root or pure model"
+        );
+        assert!(udp_socket.contains(owned));
+    }
+
+    assert!(root.contains("mod tcp;"));
+    for owned in [
+        "pub async fn establish_shadowsocks_tcp_connect(",
+        "pub async fn apply_shadowsocks_tcp_relay_hop(",
+        "fn shadowsocks_tcp_connect_config(",
+        "shadowsocks::tcp_connect_config_from_config(",
+    ] {
+        assert!(
+            !root.contains(owned),
+            "shadowsocks transport root should not own TCP bridge `{owned}`"
+        );
+        assert!(tcp.contains(owned));
+    }
+}
+
+#[test]
+fn vless_inbound_carrier_lives_outside_request_root() {
+    let root = read_repo_file("crates/transport/src/vless_transport/inbound.rs");
+    let bind = read_repo_file("crates/transport/src/vless_transport/inbound/bind.rs");
+    let carrier = read_repo_file("crates/transport/src/vless_transport/inbound/carrier.rs");
+    let plan = read_repo_file("crates/transport/src/vless_transport/inbound/plan.rs");
+
+    assert!(root.contains("mod bind;"));
+    assert!(root.contains("pub use bind::OwnedVlessInboundBindPlan;"));
+    for owned in [
+        "pub struct OwnedVlessInboundBindPlan {",
+        "impl OwnedVlessInboundBindPlan {",
+        "impl crate::inbound_route::ProtocolInboundBindPlan for OwnedVlessInboundBindPlan",
+        "quic::QuicInbound::bind(",
+    ] {
+        assert!(
+            !root.contains(owned),
+            "VLESS inbound request root should not own bind plan `{owned}`"
+        );
+        assert!(
+            bind.contains(owned),
+            "VLESS bind module should own `{owned}`"
+        );
+    }
+
+    assert!(root.contains("mod carrier;"));
+    for owned in [
+        "enum VlessInboundTransportResult {",
+        "enum VlessInboundTransportStream {",
+        "fn accept_vless_inbound_transport(",
+        "fn accept_vless_inbound_carrier(",
+        "impl zero_traits::AsyncSocket for VlessInboundTransportStream",
+        "impl AsyncRead for VlessInboundTransportStream",
+        "impl AsyncWrite for VlessInboundTransportStream",
+        "impl ClientStream for VlessInboundTransportStream",
+        "fn accept_vless_tls_inbound_transport(",
+    ] {
+        assert!(
+            !root.contains(owned),
+            "VLESS inbound request root should not own carrier lifecycle `{owned}`"
+        );
+        assert!(
+            carrier.contains(owned),
+            "VLESS inbound carrier module should own `{owned}`"
+        );
+    }
+
+    assert!(root.contains("mod plan;"));
+    for owned in [
+        "struct OwnedVlessInboundTransportPlan {",
+        "impl OwnedVlessInboundTransportPlan {",
+        "enum VlessTcpInboundAcceptResult {",
+        "fn accept_vless_stream_route<",
+        "accept_route_owned_with_sni_or_else(",
+        "VlessFallbackReplay::replay_to_upstream(",
+    ] {
+        assert!(
+            !root.contains(owned),
+            "VLESS inbound request root should not own transport plan/route `{owned}`"
+        );
+        assert!(
+            plan.contains(owned),
+            "VLESS inbound plan module should own `{owned}`"
+        );
+    }
+}
+
+#[test]
+fn vless_outbound_transport_plan_lives_outside_carrier_root() {
+    let root = read_repo_file("crates/transport/src/vless_transport/outbound.rs");
+    let direct = read_repo_file("crates/transport/src/vless_transport/outbound/direct.rs");
+    let plan = read_repo_file("crates/transport/src/vless_transport/outbound/plan.rs");
+    let relay = read_repo_file("crates/transport/src/vless_transport/outbound/relay.rs");
+
+    assert!(root.contains("mod plan;"));
+    for owned in [
+        "struct VlessTransportOptions<'a> {",
+        "struct VlessOutboundTransportRequest<'a> {",
+        "struct VlessDirectTransportRequest<'a> {",
+        "struct VlessFinalHopTransportRequest<'a> {",
+        "struct VlessUdpTransportOptions<'a> {",
+        "struct OwnedVlessUdpTransportOptions {",
+        "struct OwnedVlessOutboundTransportPlan {",
+        "impl TcpStreamTransportPlan for OwnedVlessOutboundTransportPlan",
+        "struct VlessUdpOutboundTransportRequest<'a> {",
+    ] {
+        assert!(
+            !root.contains(owned),
+            "VLESS outbound carrier root should not own transport plan `{owned}`"
+        );
+        assert!(
+            plan.contains(owned),
+            "VLESS outbound plan module should own `{owned}`"
+        );
+    }
+    assert!(
+        !plan.contains("pub(crate)") && !plan.contains("pub struct"),
+        "VLESS outbound plan visibility should stay confined to vless_transport"
+    );
+
+    assert!(root.contains("mod direct;") && root.contains("mod relay;"));
+    for owned in [
+        "fn open_vless_quic_transport(",
+        "fn build_vless_direct_outbound_transport(",
+        "fn build_vless_outbound_transport(",
+        "fn build_vless_udp_outbound_transport(",
+        "connect_socket_transport_stack(",
+    ] {
+        assert!(!root.contains(owned));
+        assert!(
+            direct.contains(owned),
+            "VLESS direct module should own `{owned}`"
+        );
+    }
+    for owned in [
+        "fn build_vless_outbound_transport_over_stream(",
+        "fn build_vless_split_http_over_relay(",
+        "connect_relay_transport_stack(",
+    ] {
+        assert!(!root.contains(owned));
+        assert!(
+            relay.contains(owned),
+            "VLESS relay module should own `{owned}`"
+        );
+    }
+}
+
+#[test]
+fn hysteria2_quic_stream_wrapper_lives_outside_transport_root() {
+    let root = read_repo_file("crates/transport/src/hysteria2_quic.rs");
+    let connection = read_repo_file("crates/transport/src/hysteria2_quic/connection.rs");
+    let inbound = read_repo_file("crates/transport/src/hysteria2_quic/inbound.rs");
+    let managed_udp = read_repo_file("crates/transport/src/hysteria2_quic/managed_udp.rs");
+    let model = read_repo_file("crates/transport/src/hysteria2_quic/model.rs");
+    let projection = read_repo_file("crates/transport/src/hysteria2_quic/projection.rs");
+    let stream = read_repo_file("crates/transport/src/hysteria2_quic/stream.rs");
+
+    assert!(root.contains("mod connection;"));
+    assert!(root.contains("pub use connection::open_quic_connection;"));
+    for owned in [
+        "impl Hysteria2QuicProfile {",
+        "pub async fn open_quic_connection(",
+        "struct SkipVerify;",
+        "impl rustls::client::danger::ServerCertVerifier for SkipVerify",
+        "quinn::TransportConfig::default()",
+        "quinn::Endpoint::new(",
+    ] {
+        assert!(
+            !root.contains(owned),
+            "hysteria2 QUIC root should not own connection setup `{owned}`"
+        );
+        assert!(
+            connection.contains(owned),
+            "hysteria2 connection module should own `{owned}`"
+        );
+    }
+
+    assert!(root.contains("mod inbound;"));
+    for owned in [
+        "pub struct OwnedHysteria2InboundBindPlan {",
+        "impl OwnedHysteria2InboundBindPlan {",
+        "impl crate::inbound_route::ProtocolInboundBindPlan",
+        "fn inbound_profile_from_protocol(",
+        "fn inbound_tcp_acceptor(",
+        "impl OwnedHysteria2InboundProfile {",
+        "impl<S> InboundClientResponse<S> for OwnedHysteria2InboundTcpResponseProtocol",
+    ] {
+        assert!(
+            !root.contains(owned),
+            "hysteria2 QUIC root should not own inbound behavior `{owned}`"
+        );
+        assert!(inbound.contains(owned));
+    }
+    assert!(root.contains("mod model;"));
+    assert!(root.contains("pub use model::{"));
+    for owned in [
+        "pub struct QuicConnectionOptions<'a> {",
+        "pub struct Hysteria2ManagedDatagramFlowResume {",
+        "pub struct OwnedHysteria2InboundProfile {",
+        "pub struct OwnedHysteria2InboundTcpResponseProtocol {",
+        "pub struct Hysteria2ManagedUdpFlowPlan<'a> {",
+        "pub struct Hysteria2ManagedUdpPacketPathPlan {",
+        "pub struct Hysteria2ManagedUdpFlowConfig<'a> {",
+        "pub struct Hysteria2TransportLeaf<'a> {",
+        "pub struct Hysteria2QuicProfile {",
+    ] {
+        assert!(
+            !root.contains(owned),
+            "hysteria2 QUIC root should not own model `{owned}`"
+        );
+        assert!(model.contains(owned));
+    }
+    assert!(root.contains("mod managed_udp;"));
+    for owned in [
+        "impl crate::managed_udp::ProtocolManagedDatagramUdpResumeMetadata",
+        "impl crate::managed_udp::ProtocolManagedDatagramUdpResumeConnectionOps",
+        "fn open_udp_profile_connection(",
+        "pub async fn open_hysteria2_udp_packet_path_build(",
+        "pub async fn establish_hysteria2_udp_flow_connection(",
+        "impl ManagedTupleUdpConnectionOps for hysteria2::udp::Hysteria2UdpFlowConnection",
+    ] {
+        assert!(
+            !root.contains(owned),
+            "hysteria2 QUIC root should not own managed UDP lifecycle `{owned}`"
+        );
+        assert!(
+            managed_udp.contains(owned),
+            "hysteria2 managed_udp module should own `{owned}`"
+        );
+    }
+    assert!(root.contains("mod projection;"));
+    for owned in [
+        "impl<'a> Hysteria2ManagedUdpFlowConfig<'a>",
+        "impl<'a> Hysteria2TransportLeaf<'a>",
+        "pub fn udp_flow_resume_from_config(",
+        "impl Hysteria2ManagedDatagramFlowResume {",
+        "impl<'a> Hysteria2ManagedUdpFlowPlan<'a>",
+        "impl Hysteria2ManagedUdpPacketPathPlan {",
+        "impl Hysteria2ManagedUdpPacketPathCarrierDescriptor {",
+        "impl Hysteria2ManagedUdpPacketPathCarrierBuild {",
+    ] {
+        assert!(
+            !root.contains(owned),
+            "hysteria2 QUIC root should not own projection behavior `{owned}`"
+        );
+        assert!(
+            projection.contains(owned),
+            "hysteria2 projection module should own `{owned}`"
+        );
+    }
+    assert!(root.contains("mod stream;"));
+    assert!(root.contains("pub use stream::Hysteria2Stream;"));
+    for owned in [
+        "pub struct Hysteria2Stream {",
+        "impl AsyncRead for Hysteria2Stream",
+        "impl AsyncWrite for Hysteria2Stream",
+        "impl AsyncSocket for Hysteria2Stream",
+    ] {
+        assert!(
+            !root.contains(owned),
+            "hysteria2 QUIC root should not own stream wrapper `{owned}`"
+        );
+        assert!(stream.contains(owned));
+    }
 }

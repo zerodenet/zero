@@ -6,7 +6,6 @@ use zero_engine::EngineError;
 use super::ProtocolRegistry;
 use crate::protocol_registry::{
     BoundInbound, InboundListenerCapability, ProtocolSupportCapability,
-    RegisteredProtocolCapability,
 };
 
 impl ProtocolRegistry {
@@ -17,10 +16,10 @@ impl ProtocolRegistry {
     pub(crate) fn find_inbound(
         &self,
         config: &InboundProtocolConfig,
-    ) -> Result<Arc<dyn RegisteredProtocolCapability>, EngineError> {
-        for adapter in &self.adapters {
-            if ProtocolSupportCapability::supports_inbound(adapter.as_ref(), config) {
-                return Ok(adapter.clone());
+    ) -> Result<Arc<dyn InboundListenerCapability>, EngineError> {
+        for entry in &self.entries {
+            if ProtocolSupportCapability::supports_inbound(entry.support.as_ref(), config) {
+                return Ok(entry.inbound.clone());
             }
         }
         let name = self.inbound_protocol_label(config);
@@ -42,14 +41,12 @@ impl ProtocolRegistry {
         inbound: &zero_config::InboundConfig,
         source_dir: Option<&std::path::Path>,
     ) -> Result<BoundInbound, EngineError> {
-        for adapter in &self.adapters {
-            if ProtocolSupportCapability::supports_inbound(adapter.as_ref(), &inbound.protocol) {
-                return InboundListenerCapability::bind_inbound(
-                    adapter.as_ref(),
-                    inbound,
-                    source_dir,
-                )
-                .await;
+        for entry in &self.entries {
+            if ProtocolSupportCapability::supports_inbound(
+                entry.support.as_ref(),
+                &inbound.protocol,
+            ) {
+                return entry.inbound.bind_inbound(inbound, source_dir).await;
             }
         }
         let name = self.inbound_protocol_label(&inbound.protocol);

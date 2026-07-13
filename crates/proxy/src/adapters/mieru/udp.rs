@@ -5,14 +5,20 @@ use zero_transport::mieru_transport::MieruTransportLeaf;
 use crate::adapters::mieru::MieruAdapter;
 use crate::protocol_registry::unreachable_udp_leaf;
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
-use crate::runtime::udp_flow::managed::ManagedStreamFlowHandler;
+use crate::runtime::udp_flow::managed::{
+    bridge::{managed_stream_handler_box, ManagedStreamStages},
+    ManagedStreamHandlerPair,
+};
 use crate::runtime::Proxy;
 
 mod flow;
-mod managed;
 
-pub(crate) fn managed_stream_handler() -> Box<dyn ManagedStreamFlowHandler> {
-    managed::handler()
+pub(crate) fn managed_stream_handler() -> ManagedStreamHandlerPair {
+    managed_stream_handler_box::<zero_transport::mieru_transport::MieruManagedStreamUdpResume>(
+        ManagedStreamStages::from_resume::<
+            zero_transport::mieru_transport::MieruManagedStreamUdpResume,
+        >(),
+    )
 }
 
 impl MieruAdapter {

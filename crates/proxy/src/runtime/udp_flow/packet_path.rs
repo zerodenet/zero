@@ -8,8 +8,26 @@
 
 use async_trait::async_trait;
 use std::sync::Arc;
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
 use std::vec::Vec;
 
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
 use tokio::task::JoinSet;
 use zero_core::Address;
 use zero_engine::EngineError;
@@ -18,15 +36,42 @@ use zero_engine::EngineError;
 ///
 /// Stored in a unified [`JoinSet`] so all chain outbound responses are
 /// polled from a single `select!` branch via UDP dispatch chain polling.
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
 pub(crate) type ChainTask = Result<(Address, u16, Vec<u8>, Option<u64>), EngineError>;
 
 /// Runtime context shared by UDP outbound managers for one send operation.
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
 pub(crate) struct UdpFlowContext<'a> {
     pub(crate) chain_tasks: &'a mut JoinSet<ChainTask>,
     pub(crate) session_id: u64,
 }
 
 /// Borrowed target payload for one UDP send operation.
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
 #[derive(Clone, Copy)]
 pub(crate) struct UdpPacketRef<'a> {
     pub(crate) target: &'a Address,
@@ -60,6 +105,7 @@ pub(crate) trait PacketPathCarrier: Send + Sync {
 /// Runtime wraps those transports into a neutral `PacketPathCarrier` so
 /// adapters do not need to define one-off carrier structs.
 #[async_trait]
+#[cfg(feature = "socks5")]
 pub(crate) trait PacketPathPayloadTransport: Send + Sync {
     async fn send_to(&self, target: &Address, port: u16, payload: &[u8])
         -> Result<(), EngineError>;
@@ -67,9 +113,11 @@ pub(crate) trait PacketPathPayloadTransport: Send + Sync {
     async fn recv_from(&self, buf: &mut [u8]) -> Result<usize, EngineError>;
 }
 
+#[cfg(feature = "socks5")]
 struct PacketPathPayloadCarrier(Arc<dyn PacketPathPayloadTransport>);
 
 #[async_trait]
+#[cfg(feature = "socks5")]
 impl PacketPathCarrier for PacketPathPayloadCarrier {
     async fn send_to(
         &self,
@@ -85,6 +133,7 @@ impl PacketPathCarrier for PacketPathPayloadCarrier {
     }
 }
 
+#[cfg(feature = "socks5")]
 pub(crate) fn packet_path_payload_carrier(
     transport: Arc<dyn PacketPathPayloadTransport>,
 ) -> Arc<dyn PacketPathCarrier> {
@@ -102,6 +151,7 @@ pub(crate) struct PacketPathCarrierDescriptor {
     pub(crate) port: u16,
 }
 
+#[cfg(any(feature = "socks5", feature = "shadowsocks", feature = "hysteria2"))]
 pub(crate) fn packet_path_carrier_descriptor(
     cache_key: String,
     server: &str,
@@ -114,10 +164,12 @@ pub(crate) fn packet_path_carrier_descriptor(
     }
 }
 
+#[cfg(any(feature = "socks5", feature = "shadowsocks", feature = "hysteria2"))]
 pub(crate) trait PacketPathCarrierDescriptorBuild {
     fn into_parts(self) -> (String, String, u16);
 }
 
+#[cfg(any(feature = "socks5", feature = "shadowsocks", feature = "hysteria2"))]
 pub(crate) fn packet_path_carrier_descriptor_from_build(
     build: impl PacketPathCarrierDescriptorBuild,
 ) -> PacketPathCarrierDescriptor {
@@ -137,6 +189,15 @@ pub(crate) struct UdpDatagramDescriptor {
     pub(crate) cache_key: String,
 }
 
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
 impl UdpDatagramDescriptor {
     pub(crate) fn key_part(&self) -> UdpDatagramKey {
         UdpDatagramKey {
@@ -164,6 +225,7 @@ pub(crate) struct UdpDatagramSource {
     pub(crate) codec: Arc<dyn DatagramCodec<Address, Error = zero_core::Error>>,
 }
 
+#[cfg(feature = "shadowsocks")]
 pub(crate) fn udp_datagram_source(
     tag: &str,
     server: &str,
@@ -182,6 +244,7 @@ pub(crate) fn udp_datagram_source(
     }
 }
 
+#[cfg(feature = "shadowsocks")]
 pub(crate) trait UdpDatagramSourceBuild {
     fn into_parts(
         self,
@@ -194,6 +257,7 @@ pub(crate) trait UdpDatagramSourceBuild {
     );
 }
 
+#[cfg(feature = "shadowsocks")]
 pub(crate) fn udp_datagram_source_from_build(
     build: impl UdpDatagramSourceBuild,
 ) -> UdpDatagramSource {
@@ -201,12 +265,30 @@ pub(crate) fn udp_datagram_source_from_build(
     udp_datagram_source(&tag, &server, port, cache_key, codec)
 }
 
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
 impl UdpDatagramSource {
     pub(crate) fn descriptor(&self) -> &UdpDatagramDescriptor {
         &self.descriptor
     }
 }
 
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) struct UdpDatagramKey {
     pub(crate) tag: String,
@@ -215,12 +297,30 @@ pub(crate) struct UdpDatagramKey {
     pub(crate) cache_key: String,
 }
 
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) struct UdpDatagramEndpoint {
     server: String,
     port: u16,
 }
 
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
 impl UdpDatagramEndpoint {
     pub(crate) fn target(&self) -> Address {
         Address::Domain(self.server.clone())
@@ -235,12 +335,30 @@ impl UdpDatagramEndpoint {
     }
 }
 
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct PacketPathLookupKey {
     carrier_cache_key: String,
     datagram: UdpDatagramKey,
 }
 
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
 impl PacketPathLookupKey {
     pub(crate) fn from_parts(
         carrier: &PacketPathCarrierDescriptor,
@@ -261,12 +379,30 @@ impl PacketPathLookupKey {
     }
 }
 
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct PacketPathFlowSnapshot {
     carrier_cache_key: String,
     datagram: UdpDatagramKey,
 }
 
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
 impl PacketPathFlowSnapshot {
     fn from_parts(datagram: &UdpDatagramDescriptor, carrier: &PacketPathCarrierDescriptor) -> Self {
         Self {
@@ -283,11 +419,29 @@ impl PacketPathFlowSnapshot {
     }
 }
 
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
 pub(crate) struct PacketPathFlowBinding {
     datagram: UdpDatagramSource,
     flow_snapshot: PacketPathFlowSnapshot,
 }
 
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
 impl PacketPathFlowBinding {
     pub(crate) fn new(
         datagram: UdpDatagramSource,

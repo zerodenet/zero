@@ -4,7 +4,7 @@ use std::sync::Arc;
 use zero_core::Session;
 use zero_engine::{EngineError, EnginePlan, ResolvedLeafOutbound, ResolvedOutbound};
 
-use crate::runtime::orchestration::{OutboundEndpoint, TcpPathCategory};
+use crate::runtime::path::{OutboundEndpoint, TcpPathCategory};
 use crate::runtime::Proxy;
 use crate::transport::{
     extract_tcp_stream, EstablishedTcpOutbound, TcpOutboundFailure, TcpRouteResult,
@@ -75,11 +75,14 @@ impl Proxy {
                 upstream_endpoint: None,
             })?;
         let path_category = runtime.tcp_path;
-        let chained_tag = match path_category {
+        let chained_tag: Option<String> = match path_category {
             TcpPathCategory::Direct | TcpPathCategory::Block => None,
-            TcpPathCategory::Tunnel
-            | TcpPathCategory::Session
-            | TcpPathCategory::TransportSession => runtime.health_tag.map(ToOwned::to_owned),
+            #[cfg(any(feature = "socks5", feature = "vless", feature = "trojan"))]
+            TcpPathCategory::Tunnel => runtime.health_tag.map(ToOwned::to_owned),
+            #[cfg(any(feature = "shadowsocks", feature = "vmess", feature = "mieru"))]
+            TcpPathCategory::Session => runtime.health_tag.map(ToOwned::to_owned),
+            #[cfg(feature = "hysteria2")]
+            TcpPathCategory::TransportSession => runtime.health_tag.map(ToOwned::to_owned),
         };
         if let Some(tag) = chained_tag.as_deref() {
             if let Err(e) = self.check_outbound_health(tag) {

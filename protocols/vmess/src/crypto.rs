@@ -351,22 +351,6 @@ impl BodyAead {
         Ok(out)
     }
 
-    #[allow(dead_code)]
-    pub fn open_chunk(&mut self, buf: &[u8]) -> Result<Vec<u8>, Error> {
-        if buf.len() < 2 {
-            return Err(Error::Protocol("vmess body chunk too short"));
-        }
-
-        let payload_len = self.open_length(&buf[..2])?;
-        let payload_start = 2;
-        let payload_end = payload_start + payload_len;
-        if buf.len() < payload_end {
-            return Err(Error::Protocol("vmess body chunk truncated"));
-        }
-
-        self.open_payload(payload_len, &buf[payload_start..payload_end])
-    }
-
     pub fn open_length(&mut self, encrypted_len: &[u8]) -> Result<usize, Error> {
         self.pending_padding_len = self.next_padding_len();
         let payload_len = if self.authenticated_length {

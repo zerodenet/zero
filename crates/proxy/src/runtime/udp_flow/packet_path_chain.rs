@@ -9,8 +9,8 @@
 
 use std::collections::HashMap;
 
-use crate::runtime::udp_dispatch::FlowFailure;
 use crate::runtime::udp_flow::packet_path::{PacketPathLookupKey, UdpFlowContext, UdpPacketRef};
+use crate::runtime::udp_flow::result::FlowFailure;
 use crate::runtime::Proxy;
 use zero_engine::{EngineError, ResolvedLeafOutbound};
 
@@ -26,6 +26,7 @@ use bridge::dispatch_via_entry;
 use entry::build_entry;
 use key::PathKey;
 use model::Entry;
+pub(crate) use model::PacketPathStartRequest;
 
 pub(crate) struct PacketPathManager {
     upstreams: HashMap<PathKey, Entry>,

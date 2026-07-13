@@ -1,21 +1,53 @@
+//! Proxy transport facade.
+//!
+//! This module re-exports neutral stream and QUIC contracts from
+//! `zero-transport` and owns proxy-specific direct connect, TCP outbound
+//! normalization, relay-chain handoff, metering, and rate-limited relay glue.
+//! Concrete carrier implementations remain in the `zero-transport` crate.
+
 mod direct;
-mod tcp_flow;
 mod tcp_outbound;
 mod tcp_relay;
 
 pub(crate) use direct::DirectConnector;
-pub(crate) use tcp_flow::is_block_error;
+#[cfg(any(feature = "vless", feature = "vmess", feature = "trojan"))]
 pub(crate) use tcp_outbound::{
     apply_protocol_transport_bridge_relay_hop, connect_protocol_transport_bridge_tcp,
-    extract_tcp_stream, EstablishedTcpOutbound, TcpOutboundFailure, TcpRouteResult,
 };
-pub(crate) use tcp_relay::{relay_bidirectional_metered, relay_bidirectional_metered_throttled};
-pub(crate) use zero_transport::{
-    ClientStream, MeteredStream, PrefixedSocket, RecordingStream, RelayCarrier, StreamTraffic,
-    TcpRelayStream,
+pub(crate) use tcp_outbound::{
+    extract_tcp_stream, is_block_error, EstablishedTcpOutbound, TcpOutboundFailure, TcpRouteResult,
 };
+#[cfg(feature = "vless")]
+pub(crate) use tcp_relay::relay_bidirectional_metered;
+pub(crate) use tcp_relay::relay_bidirectional_metered_throttled;
+#[cfg(any(feature = "socks5", feature = "vless"))]
+pub(crate) use zero_transport::ClientStream;
+#[cfg(any(
+    feature = "socks5",
+    feature = "http_connect",
+    feature = "mixed",
+    feature = "vless",
+    feature = "shadowsocks",
+    feature = "mieru"
+))]
+pub(crate) use zero_transport::MeteredStream;
+#[cfg(feature = "mixed")]
+pub(crate) use zero_transport::PrefixedSocket;
+#[cfg(feature = "vless")]
+pub(crate) use zero_transport::RecordingStream;
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "vmess",
+    feature = "trojan",
+    feature = "shadowsocks"
+))]
+pub(crate) use zero_transport::StreamTraffic;
+pub(crate) use zero_transport::{RelayCarrier, TcpRelayStream};
 
 // Re-export transport implementations from zero-transport.
 // Only items used directly by proxy code are listed.
-#[cfg(feature = "transport_quic")]
-pub(crate) use zero_transport::quic::{QuicInbound, QuicStream};
+#[cfg(any(feature = "hysteria2", feature = "vless"))]
+pub(crate) use zero_transport::quic::QuicInbound;
+#[cfg(feature = "vless")]
+pub(crate) use zero_transport::quic::QuicStream;

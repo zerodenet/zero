@@ -8,17 +8,17 @@ use zero_engine::{EngineError, ResolvedLeafOutbound};
 use zero_traits::{ProtocolCapabilityDescriptor, ProtocolMetadata};
 use zero_transport::hysteria2_quic::OwnedHysteria2InboundBindPlan;
 
-use crate::adapters::common::{
+use crate::adapters::identity::{
     named_protocol_claims_runtime_leaf, named_protocol_supports_inbound,
     named_protocol_supports_outbound, NamedProtocolAdapter,
 };
 use crate::protocol_registry::{
     bind_transport_inbound, proxy_leaf_runtime, BoundInbound, InboundAdapterContext,
-    InboundListenerCapability, OutboundAdapterContext, OutboundLeafRuntime,
-    ProtocolSupportCapability, TcpOutboundCapability, UdpAdapterContext, UdpFlowCapability,
-    UdpPacketPathCapability,
+    InboundListenerCapability, ManagedUdpHandlerProvider, OutboundAdapterContext,
+    OutboundLeafRuntime, ProtocolSupportCapability, TcpOutboundCapability, UdpAdapterContext,
+    UdpFlowCapability, UdpPacketPathCapability,
 };
-use crate::runtime::orchestration::TcpPathCategory;
+use crate::runtime::path::TcpPathCategory;
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
 use crate::runtime::udp_flow::managed::ManagedDatagramFlowHandler;
 use crate::transport::{EstablishedTcpOutbound, TcpOutboundFailure};
@@ -63,10 +63,6 @@ impl UdpPacketPathCapability for Hysteria2Adapter {
 #[cfg(feature = "hysteria2")]
 #[async_trait]
 impl UdpFlowCapability for Hysteria2Adapter {
-    fn managed_datagram_udp_handler(&self) -> Option<Box<dyn ManagedDatagramFlowHandler>> {
-        Some(udp::managed_datagram_handler())
-    }
-
     async fn start_udp_flow(
         &self,
         dispatch: &mut UdpDispatch,
@@ -77,6 +73,13 @@ impl UdpFlowCapability for Hysteria2Adapter {
     ) -> Result<FlowStartResult, FlowFailure> {
         self.start_udp_flow_impl(dispatch, session, leaf, payload)
             .await
+    }
+}
+
+#[cfg(feature = "hysteria2")]
+impl ManagedUdpHandlerProvider for Hysteria2Adapter {
+    fn managed_datagram_udp_handler(&self) -> Option<Box<dyn ManagedDatagramFlowHandler>> {
+        Some(udp::managed_datagram_handler())
     }
 }
 

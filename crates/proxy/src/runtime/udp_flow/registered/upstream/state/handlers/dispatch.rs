@@ -2,9 +2,10 @@ use zero_engine::EngineError;
 
 use super::super::super::runtime::upstream_flow_mismatch;
 use super::model::UpstreamAssociationState;
-use crate::runtime::udp_dispatch::FlowFailure;
-use crate::runtime::udp_flow::managed::{ManagedUdpFlowRequest, ManagedUdpFlowResume};
+use crate::runtime::udp_flow::managed::ManagedUdpFlowResume;
+use crate::runtime::udp_flow::registered::upstream::UpstreamAssociationSend;
 use crate::runtime::udp_flow::response::UpstreamUdpResponse;
+use crate::runtime::udp_flow::result::FlowFailure;
 
 impl UpstreamAssociationState {
     pub(in crate::runtime::udp_flow::registered) fn handles_resume(
@@ -20,7 +21,7 @@ impl UpstreamAssociationState {
     pub(in crate::runtime::udp_flow::registered) async fn start_upstream_flow(
         &mut self,
         inbound_tag: &str,
-        request: ManagedUdpFlowRequest<'_>,
+        request: UpstreamAssociationSend<'_>,
     ) -> Result<usize, FlowFailure> {
         for handler in &mut self.handlers.upstream {
             if !handler.supports_upstream_resume(&request.resume) {

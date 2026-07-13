@@ -17,6 +17,12 @@ pub(super) async fn send_managed_udp_connection(
 }
 
 impl ManagedUdpConnectionCache {
+    #[cfg(any(
+        feature = "vless",
+        feature = "vmess",
+        feature = "trojan",
+        feature = "mieru"
+    ))]
     pub(crate) async fn send_existing_key(
         &self,
         key: impl Into<String>,

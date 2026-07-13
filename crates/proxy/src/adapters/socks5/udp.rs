@@ -8,9 +8,9 @@ use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
 use crate::runtime::udp_flow::registered::UpstreamAssociationHandler;
 use crate::runtime::Proxy;
 
-mod active;
 mod flow;
 mod packet_path;
+mod upstream_association;
 
 pub(crate) fn upstream_association_handler() -> Box<dyn UpstreamAssociationHandler> {
     flow::upstream_association_handler()

@@ -19,6 +19,9 @@ use crate::shared::VmessCipher;
 use crate::shared::{parse_address_from_bytes, write_address};
 use crate::stream::VmessAeadStream;
 
+#[cfg(test)]
+mod tests;
+
 pub const MUX_MAX_META_LEN: usize = 512;
 pub const MUX_MAX_DATA_LEN: usize = 16 * 1024;
 pub const MUX_NETWORK_TCP: u8 = 0x01;

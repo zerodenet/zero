@@ -90,7 +90,7 @@ where
     Ok(())
 }
 
-#[cfg(feature = "transport_quic")]
+#[cfg(feature = "vless")]
 pub(crate) struct QuicStreamListenerLoopRequest<'a, H> {
     pub(crate) proxy: &'a Proxy,
     pub(crate) inbound_tag: String,
@@ -100,7 +100,7 @@ pub(crate) struct QuicStreamListenerLoopRequest<'a, H> {
     pub(crate) handler: H,
 }
 
-#[cfg(feature = "transport_quic")]
+#[cfg(feature = "vless")]
 pub(crate) async fn run_quic_stream_listener_loop<H, Fut>(
     request: QuicStreamListenerLoopRequest<'_, H>,
 ) -> Result<(), EngineError>
@@ -176,7 +176,7 @@ where
     Ok(())
 }
 
-#[cfg(feature = "transport_quic")]
+#[cfg(feature = "vless")]
 pub(crate) struct LoggedQuicStreamListenerRequest<'a, R, D> {
     pub(crate) proxy: &'a Proxy,
     pub(crate) inbound_tag: String,
@@ -188,7 +188,7 @@ pub(crate) struct LoggedQuicStreamListenerRequest<'a, R, D> {
     pub(crate) dispatch: D,
 }
 
-#[cfg(feature = "transport_quic")]
+#[cfg(feature = "vless")]
 pub(crate) async fn run_logged_quic_stream_listener_loop<R, D, Fut>(
     request: LoggedQuicStreamListenerRequest<'_, R, D>,
 ) -> Result<(), EngineError>
@@ -224,6 +224,7 @@ where
                 let result = dispatch(engine, request, inbound_tag, quic_stream).await;
                 if let Err(error) = &result {
                     crate::logging::log_listener_connection_error(
+                        crate::logging::INBOUND_ACCEPT_ROUTE_STAGE,
                         error_protocol_name,
                         log_tag.as_str(),
                         &"quic",

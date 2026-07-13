@@ -1,3 +1,13 @@
+use crate::runtime::Proxy;
+
+pub(super) struct RecordedProtocolMuxDispatch<P> {
+    pub(super) proxy: Proxy,
+    pub(super) inbound_tag: String,
+    pub(super) source_addr: Option<std::net::SocketAddr>,
+    pub(super) protocol: P,
+    pub(super) defaults: RecordedProtocolMuxRouteDefaults,
+}
+
 #[derive(Clone, Copy)]
 pub(crate) struct RecordedProtocolMuxRouteDefaults {
     pub(crate) udp_protocol: &'static str,

@@ -4,9 +4,10 @@ use async_trait::async_trait;
 use tokio::time::Instant as TokioInstant;
 use zero_engine::EngineError;
 
-use crate::runtime::udp_dispatch::FlowFailure;
-use crate::runtime::udp_flow::managed::{ManagedUdpFlowRequest, ManagedUdpFlowResume};
+use super::model::UpstreamAssociationSend;
+use crate::runtime::udp_flow::managed::ManagedUdpFlowResume;
 use crate::runtime::udp_flow::response::UpstreamUdpResponse;
+use crate::runtime::udp_flow::result::FlowFailure;
 
 #[async_trait]
 pub(crate) trait UpstreamAssociationHandler: Send + Sync {
@@ -15,7 +16,7 @@ pub(crate) trait UpstreamAssociationHandler: Send + Sync {
     async fn send_upstream(
         &mut self,
         inbound_tag: &str,
-        request: ManagedUdpFlowRequest<'_>,
+        request: UpstreamAssociationSend<'_>,
     ) -> Result<usize, FlowFailure>;
 
     async fn recv_upstream_response(
@@ -29,8 +30,10 @@ pub(crate) trait UpstreamAssociationHandler: Send + Sync {
 
     fn touch_upstream_idle(&mut self, timeout: Duration);
 
+    #[cfg(feature = "socks5")]
     fn drop_upstream_association(&mut self) -> Option<(String, String, u16)>;
 
+    #[cfg(feature = "socks5")]
     fn close_idle_upstream(&mut self) -> Option<(String, String, u16)>;
 
     fn close_all_upstreams(&mut self);

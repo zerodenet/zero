@@ -1,4 +1,4 @@
-mod transport;
+mod listener;
 
 use zero_config::InboundConfig;
 use zero_engine::EngineError;
@@ -7,7 +7,9 @@ use crate::adapters::socks5::Socks5Adapter;
 use crate::protocol_registry::BoundInbound;
 use crate::runtime::Proxy;
 
-pub(crate) use transport::{handle_socks5_connection, run_socks5_listener_with_bound};
+#[cfg(feature = "mixed")]
+pub(crate) use listener::handle_socks5_connection;
+pub(crate) use listener::run_socks5_listener_with_bound;
 
 impl Socks5Adapter {
     pub(super) fn spawn_inbound_impl(

@@ -1,25 +1,30 @@
-use std::fs::File;
-use std::io::{self, BufReader};
-use std::path::{Path, PathBuf};
-use std::pin::Pin;
+use std::io;
+use std::path::Path;
 use std::sync::Arc;
-use std::task::{Context, Poll};
 
-use rustls::pki_types::PrivateKeyDer;
 use rustls::{ClientConfig, RootCertStore};
-use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf};
-use tokio::net::TcpStream;
-use tokio_rustls::server::TlsStream;
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite};
 pub use tokio_rustls::TlsAcceptor;
 use tokio_rustls::TlsConnector;
 use zero_config::ClientTlsConfig;
 use zero_config::TlsConfig;
 use zero_platform_tokio::TokioSocket;
-use zero_traits::{AsyncSocket, ClientTlsProfile};
+use zero_traits::ClientTlsProfile;
 
 use zero_engine::EngineError;
-use zero_platform_tokio::ClientStream;
 use zero_platform_tokio::TcpRelayStream;
+
+mod certificates;
+mod client_hello;
+mod fingerprint;
+mod inbound_stream;
+
+use certificates::{load_certs, load_private_key, resolve_path};
+use client_hello::{parse_extensions, read_exact, skip_exact};
+use fingerprint::{
+    connect_stream as connect_tls13_stream, connect_upstream as connect_tls13_upstream,
+};
+pub use inbound_stream::InboundTlsStream;
 
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct InboundClientHello {
@@ -149,13 +154,13 @@ where
     consumed.extend_from_slice(&handshake_hdr);
 
     let mut fixed = [0u8; 35];
-    read_exact_client_hello(reader, &mut consumed, &mut fixed).await?;
+    read_exact(reader, &mut consumed, &mut fixed).await?;
     let session_id_len = fixed[34] as usize;
-    skip_exact_client_hello(reader, &mut consumed, session_id_len).await?;
+    skip_exact(reader, &mut consumed, session_id_len).await?;
 
     let mut cipher_suites_len = [0u8; 2];
-    read_exact_client_hello(reader, &mut consumed, &mut cipher_suites_len).await?;
-    skip_exact_client_hello(
+    read_exact(reader, &mut consumed, &mut cipher_suites_len).await?;
+    skip_exact(
         reader,
         &mut consumed,
         u16::from_be_bytes(cipher_suites_len) as usize,
@@ -163,8 +168,8 @@ where
     .await?;
 
     let mut compression_methods_len = [0u8; 1];
-    read_exact_client_hello(reader, &mut consumed, &mut compression_methods_len).await?;
-    skip_exact_client_hello(reader, &mut consumed, compression_methods_len[0] as usize).await?;
+    read_exact(reader, &mut consumed, &mut compression_methods_len).await?;
+    skip_exact(reader, &mut consumed, compression_methods_len[0] as usize).await?;
 
     let mut extensions_len = [0u8; 2];
     match reader.read_exact(&mut extensions_len).await {
@@ -180,9 +185,9 @@ where
 
     let extensions_len = u16::from_be_bytes(extensions_len).min(8192) as usize;
     let mut extensions = vec![0u8; extensions_len];
-    read_exact_client_hello(reader, &mut consumed, &mut extensions).await?;
+    read_exact(reader, &mut consumed, &mut extensions).await?;
 
-    Ok(Some(parse_client_hello_extensions(&extensions, consumed)))
+    Ok(Some(parse_extensions(&extensions, consumed)))
 }
 
 pub async fn connect_tls_upstream_with_profile<P>(
@@ -378,325 +383,4 @@ where
     S: AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static,
 {
     connect_tls_stream_with_profile(stream, tls, base_dir, default_server_name).await
-}
-
-/// Connect over a generic AsyncRead+AsyncWrite stream using our custom
-/// TLS 1.3 stack with the requested fingerprint's cipher suites and
-/// ClientHello control. Suitable for relay-stream TLS (where the stream
-/// is not a concrete TcpStream).
-async fn connect_tls13_stream<S>(
-    stream: S,
-    server_name: &str,
-    fp: &crate::fingerprint::TlsFingerprint,
-) -> Result<TcpRelayStream, EngineError>
-where
-    S: AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static,
-{
-    let cipher_suites: Vec<ztls::cipher::CipherSuite> = fp
-        .cipher_suites
-        .iter()
-        .filter_map(|s| rustls_to_ztls_suite(s.suite().as_str()?))
-        .collect();
-
-    let suites = if cipher_suites.is_empty() {
-        ztls::cipher::DEFAULT_CIPHER_SUITES.to_vec()
-    } else {
-        cipher_suites
-    };
-
-    let config = ztls::handshake::Tls13Config {
-        server_name: server_name.to_owned(),
-        cipher_suites: suites,
-        alpn_protocols: vec!["h2".to_owned(), "http/1.1".to_owned()],
-        handshake_timeout_ms: 15_000,
-    };
-
-    let tls_stream = ztls::stream::Tls13Stream::connect_async(stream, config)
-        .await
-        .map_err(|e| {
-            EngineError::Io(io::Error::other(format!(
-                "custom TLS handshake over relay stream: {e}"
-            )))
-        })?;
-
-    Ok(TcpRelayStream::new(tls_stream))
-}
-
-/// Connect using our custom TLS 1.3 stack with the requested
-/// fingerprint's cipher suites and ClientHello control.
-/// Fast path for fresh sockets (uses spawn_blocking + into_std).
-async fn connect_tls13_upstream(
-    socket: TokioSocket,
-    server_name: &str,
-    fp: &crate::fingerprint::TlsFingerprint,
-) -> Result<TcpRelayStream, EngineError> {
-    // Convert rustls cipher suite names to ztls CipherSuites.
-    // rustls uses "TLS13_AES_128_GCM_SHA256", ztls uses "TLS_AES_128_GCM_SHA256".
-    let cipher_suites: Vec<ztls::cipher::CipherSuite> = fp
-        .cipher_suites
-        .iter()
-        .filter_map(|s| rustls_to_ztls_suite(s.suite().as_str()?))
-        .collect();
-
-    let suites = if cipher_suites.is_empty() {
-        ztls::cipher::DEFAULT_CIPHER_SUITES.to_vec()
-    } else {
-        cipher_suites
-    };
-
-    let config = ztls::handshake::Tls13Config {
-        server_name: server_name.to_owned(),
-        cipher_suites: suites,
-        alpn_protocols: vec!["h2".to_owned(), "http/1.1".to_owned()],
-        handshake_timeout_ms: 15_000,
-    };
-
-    let inner = socket.into_inner();
-    let tls_stream = ztls::stream::Tls13Stream::connect(inner, config)
-        .await
-        .map_err(|e| EngineError::Io(io::Error::other(format!("custom TLS handshake: {e}"))))?;
-
-    Ok(TcpRelayStream::new(tls_stream))
-}
-
-/// Map a rustls cipher suite name to the equivalent ztls CipherSuite.
-fn rustls_to_ztls_suite(name: &str) -> Option<ztls::cipher::CipherSuite> {
-    let ztls_name = match name {
-        "TLS13_AES_128_GCM_SHA256" => "TLS_AES_128_GCM_SHA256",
-        "TLS13_AES_256_GCM_SHA384" => "TLS_AES_256_GCM_SHA384",
-        "TLS13_CHACHA20_POLY1305_SHA256" => "TLS_CHACHA20_POLY1305_SHA256",
-        // TLS 1.2 suites that also appear in some fingerprints
-        "TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256" => "TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256",
-        "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256" => "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256",
-        _ => return None,
-    };
-    ztls::cipher::CipherSuite::from_name(ztls_name)
-}
-
-fn load_certs(path: &Path) -> io::Result<Vec<rustls::pki_types::CertificateDer<'static>>> {
-    let file = File::open(path).map_err(|source| {
-        io::Error::new(
-            source.kind(),
-            format!(
-                "failed to read tls certificate `{}`: {source}",
-                path.display()
-            ),
-        )
-    })?;
-    let mut reader = BufReader::new(file);
-    let certs = rustls_pemfile::certs(&mut reader).collect::<Result<Vec<_>, _>>()?;
-    if certs.is_empty() {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            format!(
-                "tls certificate `{}` contains no certificates",
-                path.display()
-            ),
-        ));
-    }
-
-    Ok(certs)
-}
-
-fn load_private_key(path: &Path) -> io::Result<PrivateKeyDer<'static>> {
-    let file = File::open(path).map_err(|source| {
-        io::Error::new(
-            source.kind(),
-            format!(
-                "failed to read tls private key `{}`: {source}",
-                path.display()
-            ),
-        )
-    })?;
-    let mut reader = BufReader::new(file);
-    rustls_pemfile::private_key(&mut reader)?.ok_or_else(|| {
-        io::Error::new(
-            io::ErrorKind::InvalidInput,
-            format!(
-                "tls private key `{}` contains no private key",
-                path.display()
-            ),
-        )
-    })
-}
-
-fn resolve_path(base_dir: Option<&Path>, path: &str) -> PathBuf {
-    let path = PathBuf::from(path);
-    if path.is_absolute() {
-        return path;
-    }
-
-    base_dir
-        .map(|base_dir| base_dir.join(&path))
-        .unwrap_or(path)
-}
-
-fn parse_client_hello_extensions(ext_data: &[u8], consumed: Vec<u8>) -> InboundClientHello {
-    let mut sni = None;
-    let mut alpn = Vec::new();
-    let mut offset = 0;
-
-    while offset + 4 <= ext_data.len() {
-        let ext_type = u16::from_be_bytes([ext_data[offset], ext_data[offset + 1]]);
-        let ext_len = u16::from_be_bytes([ext_data[offset + 2], ext_data[offset + 3]]) as usize;
-        offset += 4;
-        if offset + ext_len > ext_data.len() {
-            break;
-        }
-        let ext_bytes = &ext_data[offset..offset + ext_len];
-        match ext_type {
-            0x0000 => {
-                if ext_bytes.len() >= 5 && ext_bytes[2] == 0x00 {
-                    let name_len = u16::from_be_bytes([ext_bytes[3], ext_bytes[4]]) as usize;
-                    if 5 + name_len <= ext_bytes.len() {
-                        if let Ok(name) = std::str::from_utf8(&ext_bytes[5..5 + name_len]) {
-                            sni = Some(name.to_owned());
-                        }
-                    }
-                }
-            }
-            0x0010 if ext_bytes.len() >= 4 => {
-                let list_len = u16::from_be_bytes([ext_bytes[2], ext_bytes[3]]) as usize;
-                let mut pos = 4;
-                while pos < ext_bytes.len() && pos < 4 + list_len {
-                    let proto_len = ext_bytes[pos] as usize;
-                    pos += 1;
-                    if pos + proto_len <= ext_bytes.len() {
-                        if let Ok(proto) = std::str::from_utf8(&ext_bytes[pos..pos + proto_len]) {
-                            alpn.push(proto.to_owned());
-                        }
-                        pos += proto_len;
-                    } else {
-                        break;
-                    }
-                }
-            }
-            _ => {}
-        }
-        offset += ext_len;
-    }
-
-    InboundClientHello {
-        sni,
-        alpn,
-        consumed,
-    }
-}
-
-async fn read_exact_client_hello<R>(
-    reader: &mut R,
-    consumed: &mut Vec<u8>,
-    dest: &mut [u8],
-) -> io::Result<()>
-where
-    R: AsyncRead + Unpin,
-{
-    reader.read_exact(dest).await?;
-    consumed.extend_from_slice(dest);
-    Ok(())
-}
-
-async fn skip_exact_client_hello<R>(
-    reader: &mut R,
-    consumed: &mut Vec<u8>,
-    len: usize,
-) -> io::Result<()>
-where
-    R: AsyncRead + Unpin,
-{
-    let mut chunk = vec![0u8; len.min(256)];
-    let mut remaining = len;
-    while remaining > 0 {
-        let to_read = remaining.min(chunk.len());
-        reader.read_exact(&mut chunk[..to_read]).await?;
-        consumed.extend_from_slice(&chunk[..to_read]);
-        remaining -= to_read;
-    }
-    Ok(())
-}
-
-pub struct InboundTlsStream<IO = TcpStream> {
-    inner: TlsStream<IO>,
-}
-
-impl InboundTlsStream {
-    pub fn new(inner: TlsStream<TcpStream>) -> Self {
-        Self { inner }
-    }
-}
-
-impl<IO> InboundTlsStream<IO> {
-    pub fn new_generic(inner: TlsStream<IO>) -> Self {
-        Self { inner }
-    }
-}
-
-impl<IO> ClientStream for InboundTlsStream<IO>
-where
-    IO: AsyncRead + AsyncWrite + Unpin + Send + Sync,
-{
-    fn local_addr(&self) -> io::Result<std::net::SocketAddr> {
-        Err(io::Error::new(io::ErrorKind::Unsupported, "not available"))
-    }
-}
-
-impl<IO> AsyncSocket for InboundTlsStream<IO>
-where
-    IO: AsyncRead + AsyncWrite + Unpin + Send + Sync,
-{
-    type Error = io::Error;
-
-    fn read<'a>(
-        &'a mut self,
-        buf: &'a mut [u8],
-    ) -> impl core::future::Future<Output = Result<usize, Self::Error>> + Send + 'a {
-        async move { AsyncReadExt::read(&mut self.inner, buf).await }
-    }
-
-    fn write_all<'a>(
-        &'a mut self,
-        buf: &'a [u8],
-    ) -> impl core::future::Future<Output = Result<(), Self::Error>> + Send + 'a {
-        async move { AsyncWriteExt::write_all(&mut self.inner, buf).await }
-    }
-
-    fn shutdown<'a>(
-        &'a mut self,
-    ) -> impl core::future::Future<Output = Result<(), Self::Error>> + Send + 'a {
-        async move { AsyncWriteExt::shutdown(&mut self.inner).await }
-    }
-}
-
-impl<IO> AsyncRead for InboundTlsStream<IO>
-where
-    IO: AsyncRead + AsyncWrite + Unpin,
-{
-    fn poll_read(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        buf: &mut ReadBuf<'_>,
-    ) -> Poll<io::Result<()>> {
-        Pin::new(&mut self.inner).poll_read(cx, buf)
-    }
-}
-
-impl<IO> AsyncWrite for InboundTlsStream<IO>
-where
-    IO: AsyncRead + AsyncWrite + Unpin,
-{
-    fn poll_write(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        buf: &[u8],
-    ) -> Poll<io::Result<usize>> {
-        Pin::new(&mut self.inner).poll_write(cx, buf)
-    }
-
-    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        Pin::new(&mut self.inner).poll_flush(cx)
-    }
-
-    fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        Pin::new(&mut self.inner).poll_shutdown(cx)
-    }
 }
