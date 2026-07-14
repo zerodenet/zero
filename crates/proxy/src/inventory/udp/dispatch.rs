@@ -6,7 +6,7 @@ use crate::protocol_registry::UdpAdapterContext;
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
 
 enum PreparedUdpOutbound<'a> {
-    Relay(super::relay::PreparedUdpRelayChain<'a>),
+    Relay(Box<super::relay::PreparedUdpRelayChain<'a>>),
     Single(super::leaf::PreparedUdpLeafCandidate<'a>),
     Fallback(Vec<super::leaf::PreparedUdpLeafCandidate<'a>>),
 }
@@ -84,10 +84,10 @@ impl ProtocolInventory {
                     Ok(PreparedUdpOutbound::Fallback(prepared))
                 }
             }
-            ResolvedOutbound::Relay { chain } => Ok(PreparedUdpOutbound::Relay(
+            ResolvedOutbound::Relay { chain } => Ok(PreparedUdpOutbound::Relay(Box::new(
                 self.prepare_udp_relay_chain(ctx, session, chain, payload)
                     .await?,
-            )),
+            ))),
         }
     }
 }

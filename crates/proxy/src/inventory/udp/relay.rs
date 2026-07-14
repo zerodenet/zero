@@ -12,7 +12,7 @@ use crate::transport::RelayCarrier;
 pub(super) enum PreparedUdpRelayChain<'a> {
     PacketPath {
         flow_binding: PacketPathFlowBinding,
-        request: PacketPathStartRequest<'a>,
+        request: Box<PacketPathStartRequest<'a>>,
     },
     Operation(Box<dyn PreparedUdpFlowOperation + 'a>),
 }
@@ -30,7 +30,7 @@ impl PreparedUdpRelayChain<'_> {
                 flow_binding,
                 request,
             } => {
-                let sent = dispatch.send_packet_path_chain(ctx, request).await?;
+                let sent = dispatch.send_packet_path_chain(ctx, *request).await?;
                 Ok(FlowStartResult::Flow {
                     outbound: Box::new(UdpDispatch::datagram_chain_flow_outbound(flow_binding)),
                     tx_bytes: sent as u64,
@@ -149,7 +149,7 @@ impl ProtocolInventory {
         chain: &'a [zero_engine::ResolvedLeafOutbound<'a>],
         payload: &'a [u8],
     ) -> Result<PreparedUdpRelayChain<'a>, FlowFailure> {
-        let claimed_chain = self.claim_udp_relay_chain(&chain)?;
+        let claimed_chain = self.claim_udp_relay_chain(chain)?;
         self.validate_udp_relay_chain(ctx.clone(), &claimed_chain)?;
         if chain.len() == 2 {
             if let Some((flow_binding, request)) = self.prepare_claimed_udp_packet_path_pair(
@@ -164,7 +164,7 @@ impl ProtocolInventory {
             ) {
                 return Ok(PreparedUdpRelayChain::PacketPath {
                     flow_binding,
-                    request,
+                    request: Box::new(request),
                 });
             }
         }
