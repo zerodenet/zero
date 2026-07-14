@@ -53,25 +53,14 @@ impl TcpRuntimeServices {
         self.proxy.record_outbound_success(tag);
     }
 
-    pub(crate) fn prepare_tcp_candidate<'a>(
+    pub(crate) fn prepare_tcp_outbound<'a>(
         &self,
-        leaf: &'a zero_engine::ResolvedLeafOutbound<'a>,
-    ) -> Result<crate::inventory::PreparedTcpCandidate<'a>, crate::transport::TcpOutboundFailure>
+        resolved: &'a zero_engine::ResolvedOutbound<'a>,
+    ) -> Result<crate::inventory::PreparedTcpOutbound<'a>, crate::transport::TcpOutboundFailure>
     {
-        self.proxy.protocols.prepare_tcp_candidate(
+        self.proxy.protocols.prepare_tcp_outbound(
             OutboundAdapterContext::new(self.proxy.config.source_dir()),
-            leaf,
-        )
-    }
-
-    pub(crate) fn prepare_tcp_relay_chain<'a>(
-        &self,
-        chain: &'a [zero_engine::ResolvedLeafOutbound<'a>],
-    ) -> Result<crate::inventory::PreparedTcpRelayChain<'a>, crate::transport::TcpOutboundFailure>
-    {
-        self.proxy.protocols.prepare_tcp_relay_chain(
-            OutboundAdapterContext::new(self.proxy.config.source_dir()),
-            chain,
+            resolved,
         )
     }
 
@@ -216,14 +205,6 @@ impl UdpRuntimeServices {
             .resolve_target_addr(session, self.proxy.resolver.as_ref())
             .await
             .map_err(Into::into)
-    }
-
-    pub(crate) fn prepare_tcp_relay_chain<'a>(
-        &self,
-        chain: &'a [zero_engine::ResolvedLeafOutbound<'a>],
-    ) -> Result<crate::inventory::PreparedTcpRelayChain<'a>, crate::transport::TcpOutboundFailure>
-    {
-        TcpRuntimeServices::from_proxy(&self.proxy).prepare_tcp_relay_chain(chain)
     }
 
     pub(crate) async fn dispatch_prepared_tcp_relay_carrier(

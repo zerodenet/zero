@@ -123,6 +123,31 @@ impl PreparedTcpRelayChain<'_> {
 }
 
 impl ProtocolInventory {
+    pub(crate) fn prepare_claimed_tcp_relay_chain<'a>(
+        &self,
+        ctx: OutboundAdapterContext,
+        claimed_chain: &ClaimedRelayChain<'a>,
+    ) -> Result<PreparedTcpRelayChain<'a>, TcpOutboundFailure> {
+        let first_prepared =
+            self.prepare_claimed_tcp_candidate(ctx.clone(), claimed_chain.first())?;
+        let mut prepared_hops = Vec::with_capacity(claimed_chain.relay_hops().len());
+        for next_hop in claimed_chain.relay_hops() {
+            let prepared = self
+                .prepare_claimed_tcp_relay_hop(ctx.clone(), next_hop)
+                .map_err(|error| TcpOutboundFailure {
+                    stage: "relay_prepare",
+                    error,
+                    upstream_endpoint: None,
+                })?;
+            prepared_hops.push(prepared);
+        }
+
+        Ok(PreparedTcpRelayChain {
+            first: first_prepared,
+            relay_hops: prepared_hops,
+        })
+    }
+
     pub(crate) fn prepare_tcp_relay_chain<'a>(
         &self,
         ctx: OutboundAdapterContext,
@@ -157,25 +182,7 @@ impl ProtocolInventory {
                 })
                 .collect::<Result<Vec<_>, _>>()?,
         );
-
-        let first_prepared =
-            self.prepare_claimed_tcp_candidate(ctx.clone(), claimed_chain.first())?;
-        let mut prepared_hops = Vec::with_capacity(relay_hops.len());
-        for next_hop in claimed_chain.relay_hops() {
-            let prepared = self
-                .prepare_claimed_tcp_relay_hop(ctx.clone(), next_hop)
-                .map_err(|error| TcpOutboundFailure {
-                    stage: "relay_prepare",
-                    error,
-                    upstream_endpoint: None,
-                })?;
-            prepared_hops.push(prepared);
-        }
-
-        Ok(PreparedTcpRelayChain {
-            first: first_prepared,
-            relay_hops: prepared_hops,
-        })
+        self.prepare_claimed_tcp_relay_chain(ctx, &claimed_chain)
     }
 }
 

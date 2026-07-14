@@ -3,7 +3,7 @@ use zero_engine::EngineError;
 #[cfg(test)]
 use super::super::ClaimedInventoryLeaf;
 use super::super::{ClaimedRelayChain, ProtocolInventory};
-use crate::protocol_registry::{ClaimedOutboundLeaf, UdpAdapterContext};
+use crate::protocol_registry::{ClaimedOutboundLeaf, OutboundAdapterContext, UdpAdapterContext};
 use crate::runtime::udp_dispatch::operation::PreparedUdpFlowOperation;
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
 use crate::runtime::udp_flow::packet_path::{PacketPathFlowBinding, UdpPacketRef};
@@ -182,15 +182,16 @@ impl ProtocolInventory {
 
         if needs_two_streams {
             let services = ctx.runtime_services();
-            let post_prepared = services
-                .prepare_tcp_relay_chain(&chain)
+            let outbound_ctx = OutboundAdapterContext::new(ctx.source_dir());
+            let post_prepared = self
+                .prepare_claimed_tcp_relay_chain(outbound_ctx.clone(), &claimed_chain)
                 .map_err(flow_failure_from_tcp_outbound)?;
             let post_carrier = services
                 .dispatch_prepared_tcp_relay_carrier(post_prepared)
                 .await
                 .map_err(flow_failure_from_tcp_outbound)?;
-            let get_prepared = services
-                .prepare_tcp_relay_chain(&chain)
+            let get_prepared = self
+                .prepare_claimed_tcp_relay_chain(outbound_ctx, &claimed_chain)
                 .map_err(flow_failure_from_tcp_outbound)?;
             let get_carrier = services
                 .dispatch_prepared_tcp_relay_carrier(get_prepared)
@@ -206,8 +207,11 @@ impl ProtocolInventory {
         }
 
         let services = ctx.runtime_services();
-        let prepared_prefix = services
-            .prepare_tcp_relay_chain(&chain)
+        let prepared_prefix = self
+            .prepare_claimed_tcp_relay_chain(
+                OutboundAdapterContext::new(ctx.source_dir()),
+                &claimed_chain,
+            )
             .map_err(|failure| FlowFailure {
                 stage: failure.stage,
                 error: failure.error,

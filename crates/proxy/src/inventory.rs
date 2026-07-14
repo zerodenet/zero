@@ -29,7 +29,17 @@ pub(crate) use runtime::{ClaimedInventoryLeaf, ClaimedRelayChain};
     feature = "mieru"
 ))]
 pub(crate) use tcp::dispatch_prepared_tcp_relay_carrier;
-pub(crate) use tcp::{dispatch_tcp_outbound, PreparedTcpCandidate, PreparedTcpRelayChain};
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
+pub(crate) use tcp::PreparedTcpRelayChain;
+pub(crate) use tcp::{dispatch_tcp_outbound, PreparedTcpOutbound};
 #[cfg(any(
     feature = "socks5",
     feature = "vless",

@@ -245,9 +245,11 @@ fn tcp_prepared_operations_do_not_borrow_inventory_or_runtime_services() {
     let context = read(&proxy_src().join("protocol_registry/context.rs"));
     assert!(tcp_leaf.contains("pub(crate) fn prepare_tcp_candidate<'a>(\n        &self,"));
     assert!(tcp_leaf.contains("pub(crate) fn prepare_tcp_relay_hop<'a>(\n        &self,"));
-    assert!(context.contains("pub(crate) fn prepare_tcp_candidate<'a>(\n        &self,"));
-    assert!(context.contains("pub(crate) fn prepare_tcp_relay_chain<'a>(\n        &self,"));
+    assert!(context.contains("pub(crate) fn prepare_tcp_outbound<'a>(\n        &self,"));
+    assert!(!context.contains("pub(crate) fn prepare_tcp_candidate<'a>(\n        &self,"));
+    assert!(!context.contains("pub(crate) fn prepare_tcp_relay_chain<'a>(\n        &self,"));
     assert!(!context.contains("pub(crate) fn prepare_tcp_relay_hop<'a>(\n        &self,"));
+    assert!(!context.contains("ResolvedLeafOutbound"));
 }
 
 #[test]
@@ -438,11 +440,12 @@ fn inventory_udp_relay_executes_final_hop_without_start_helper_roundtrip() {
 fn udp_two_stream_transport_bridge_uses_carrier_only_relay_prefix() {
     let relay = read(&proxy_src().join("inventory/udp/relay.rs"));
     let udp = read(&proxy_src().join("protocol_registry/transport_leaf/udp.rs"));
-    assert!(relay.contains("prepare_tcp_relay_chain(&chain)"));
+    assert!(relay.contains("prepare_claimed_tcp_relay_chain("));
     assert!(relay.contains("dispatch_prepared_tcp_relay_carrier(post_prepared)"));
     assert!(relay.contains("dispatch_prepared_tcp_relay_carrier(get_prepared)"));
     assert!(relay.contains("prepare_owned_udp_relay_two_stream"));
-    assert!(!udp.contains("prepare_tcp_relay_chain(&chain)"));
+    assert!(!relay.contains("prepare_tcp_relay_chain(&chain)"));
+    assert!(!udp.contains("prepare_claimed_tcp_relay_chain("));
     assert!(!udp.contains("dispatch_prepared_tcp_relay_carrier(post_prepared)"));
     assert!(!udp.contains("dispatch_prepared_tcp_relay_carrier(get_prepared)"));
 }
