@@ -1,7 +1,7 @@
 use zero_core::Session;
 use zero_engine::ResolvedLeafOutbound;
 
-use super::super::ProtocolInventory;
+use super::super::{ClaimedRelayChain, ProtocolInventory};
 use super::dispatch_prepared_tcp_candidate;
 use super::{PreparedTcpCandidate, PreparedTcpRelayHop};
 use crate::protocol_registry::{OutboundAdapterContext, TcpRuntimeServices};
@@ -136,11 +136,34 @@ impl ProtocolInventory {
             .first()
             .expect("relay chain must have at least 2 hops");
 
-        let first_prepared = self.prepare_tcp_candidate(ctx.clone(), first)?;
+        let first = self
+            .claim_outbound_leaf(first)
+            .map_err(|error| TcpOutboundFailure {
+                stage: "outbound_leaf_runtime",
+                error,
+                upstream_endpoint: None,
+            })?;
+        let claimed_chain = ClaimedRelayChain::new(
+            first,
+            relay_hops
+                .iter()
+                .map(|next_hop| {
+                    self.claim_outbound_leaf(next_hop)
+                        .map_err(|error| TcpOutboundFailure {
+                            stage: "relay_prepare",
+                            error,
+                            upstream_endpoint: None,
+                        })
+                })
+                .collect::<Result<Vec<_>, _>>()?,
+        );
+
+        let first_prepared =
+            self.prepare_claimed_tcp_candidate(ctx.clone(), claimed_chain.first())?;
         let mut prepared_hops = Vec::with_capacity(relay_hops.len());
-        for next_hop in relay_hops {
+        for next_hop in claimed_chain.relay_hops() {
             let prepared = self
-                .prepare_tcp_relay_hop(ctx.clone(), next_hop)
+                .prepare_claimed_tcp_relay_hop(ctx.clone(), next_hop)
                 .map_err(|error| TcpOutboundFailure {
                     stage: "relay_prepare",
                     error,

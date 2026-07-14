@@ -1,6 +1,8 @@
 use zero_engine::EngineError;
 
-use super::super::ProtocolInventory;
+#[cfg(test)]
+use super::super::ClaimedInventoryLeaf;
+use super::super::{ClaimedRelayChain, ProtocolInventory};
 use crate::protocol_registry::{ClaimedOutboundLeaf, UdpAdapterContext};
 use crate::runtime::udp_dispatch::operation::PreparedUdpFlowOperation;
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
@@ -41,11 +43,11 @@ impl ProtocolInventory {
         let carrier_operation = self
             .claim_outbound_leaf(carrier_leaf)
             .ok()?
-            .prepare_udp_packet_path(carrier_leaf)?;
+            .prepare_udp_packet_path()?;
         let datagram_operation = self
             .claim_outbound_leaf(datagram_leaf)
             .ok()?
-            .prepare_udp_packet_path(datagram_leaf)?;
+            .prepare_udp_packet_path()?;
 
         super::packet_path::build_udp_packet_path_pair(
             session_id,
@@ -56,6 +58,7 @@ impl ProtocolInventory {
     }
 
     /// Whether the UDP relay final hop needs the VLESS two-stream path.
+    #[cfg(test)]
     pub(crate) fn udp_relay_needs_two_streams(
         &self,
         ctx: UdpAdapterContext<'_>,
@@ -79,17 +82,11 @@ impl ProtocolInventory {
         crate::runtime::udp_dispatch::FlowFailure,
     > {
         let final_hop = chain.last().expect("relay chain has at least 2 hops");
-        let claimed = self.claim_outbound_leaf(final_hop).map_err(|error| {
-            crate::runtime::udp_dispatch::FlowFailure {
-                stage: "find_outbound_leaf",
-                error,
-                upstream: None,
-            }
-        })?;
+        let claimed = self.claim_udp_relay_final_hop(final_hop)?;
         let (post_stream, _post_peer) = tokio::io::duplex(64);
         let (get_stream, _get_peer) = tokio::io::duplex(64);
         let operation = self.prepare_udp_relay_two_stream_operation(
-            &claimed,
+            claimed.into_claimed(),
             ctx.clone(),
             RelayCarrier {
                 stream: crate::transport::TcpRelayStream::new(post_stream),
@@ -116,8 +113,12 @@ impl ProtocolInventory {
         leaf: &zero_engine::ResolvedLeafOutbound<'_>,
         payload: &[u8],
     ) -> Result<FlowStartResult, FlowFailure> {
-        let operation =
-            self.prepare_udp_relay_final_hop_operation(ctx.clone(), carrier, leaf.clone())?;
+        let claimed = self.claim_udp_relay_final_hop(leaf)?;
+        let operation = self.prepare_udp_relay_final_hop_operation(
+            claimed.into_claimed(),
+            ctx.clone(),
+            carrier,
+        )?;
         operation.execute(dispatch, ctx, session, payload).await
     }
 
@@ -129,8 +130,6 @@ impl ProtocolInventory {
         chain: Vec<zero_engine::ResolvedLeafOutbound<'_>>,
         payload: &[u8],
     ) -> Result<FlowStartResult, FlowFailure> {
-        self.validate_udp_relay_chain(ctx.clone(), &chain)?;
-
         if chain.len() == 2 {
             let carrier_leaf = &chain[0];
             let datagram_leaf = &chain[1];
@@ -163,22 +162,25 @@ impl ProtocolInventory {
         ctx: UdpAdapterContext<'a>,
         chain: Vec<zero_engine::ResolvedLeafOutbound<'a>>,
     ) -> Result<PreparedUdpRelayChain<'a>, FlowFailure> {
-        let final_hop = chain.last().expect("relay chain has at least 2 hops");
-        if self
-            .udp_relay_needs_two_streams(ctx.clone(), final_hop)
+        let claimed_chain = self.claim_udp_relay_chain(&chain)?;
+        self.validate_udp_relay_chain(ctx.clone(), &claimed_chain)?;
+        let needs_two_streams = claimed_chain
+            .final_hop()
+            .udp_relay_needs_two_streams(ctx.source_dir());
+        let final_hop = self
+            .claim_owned_outbound_leaf(
+                chain
+                    .last()
+                    .cloned()
+                    .expect("relay chain has at least 2 hops"),
+            )
             .map_err(|error| FlowFailure {
                 stage: "find_outbound_leaf",
                 error,
                 upstream: None,
-            })?
-        {
-            let claimed = self
-                .claim_outbound_leaf(final_hop)
-                .map_err(|error| FlowFailure {
-                    stage: "find_outbound_leaf",
-                    error,
-                    upstream: None,
-                })?;
+            })?;
+
+        if needs_two_streams {
             let services = ctx.runtime_services();
             let post_prepared = services
                 .prepare_tcp_relay_chain(&chain)
@@ -195,7 +197,7 @@ impl ProtocolInventory {
                 .await
                 .map_err(flow_failure_from_tcp_outbound)?;
             let operation = self.prepare_udp_relay_two_stream_operation(
-                &claimed,
+                final_hop,
                 ctx.clone(),
                 post_carrier,
                 get_carrier,
@@ -203,10 +205,6 @@ impl ProtocolInventory {
             return Ok(PreparedUdpRelayChain::Operation(operation));
         }
 
-        let final_hop = chain
-            .last()
-            .cloned()
-            .expect("relay chain has at least 2 hops");
         let services = ctx.runtime_services();
         let prepared_prefix = services
             .prepare_tcp_relay_chain(&chain)
@@ -224,24 +222,17 @@ impl ProtocolInventory {
                 upstream: failure.upstream_endpoint,
             })?;
         let operation =
-            self.prepare_udp_relay_final_hop_operation(ctx.clone(), carrier, final_hop)?;
+            self.prepare_udp_relay_final_hop_operation(final_hop, ctx.clone(), carrier)?;
         Ok(PreparedUdpRelayChain::Operation(operation))
     }
 
     fn validate_udp_relay_chain(
         &self,
         ctx: UdpAdapterContext<'_>,
-        chain: &[zero_engine::ResolvedLeafOutbound<'_>],
+        chain: &ClaimedRelayChain<'_>,
     ) -> Result<(), FlowFailure> {
-        for leaf in chain {
-            let runtime = self
-                .claim_outbound_leaf(leaf)
-                .map_err(|error| FlowFailure {
-                    stage: "outbound_leaf_runtime",
-                    error,
-                    upstream: None,
-                })?
-                .runtime;
+        for leaf in chain.leaves() {
+            let runtime = leaf.runtime();
             if !ctx.udp_enabled_for_outbound(runtime.udp_policy_tag) {
                 return Err(FlowFailure {
                     stage: "udp_policy",
@@ -259,7 +250,7 @@ impl ProtocolInventory {
 
     fn prepare_udp_relay_two_stream_operation<'a>(
         &self,
-        claimed: &ClaimedOutboundLeaf<'a>,
+        claimed: ClaimedOutboundLeaf<'a>,
         ctx: UdpAdapterContext<'a>,
         post_carrier: RelayCarrier,
         get_carrier: RelayCarrier,
@@ -269,19 +260,52 @@ impl ProtocolInventory {
 
     fn prepare_udp_relay_final_hop_operation<'a>(
         &self,
+        claimed: ClaimedOutboundLeaf<'a>,
         ctx: UdpAdapterContext<'a>,
         carrier: RelayCarrier,
-        leaf: zero_engine::ResolvedLeafOutbound<'a>,
     ) -> Result<Box<dyn PreparedUdpFlowOperation + 'a>, FlowFailure> {
-        let claimed = self
-            .claim_outbound_leaf(&leaf)
+        claimed.prepare_owned_udp_relay_final_hop(carrier, ctx.source_dir())
+    }
+
+    fn claim_udp_relay_chain<'a>(
+        &self,
+        chain: &'a [zero_engine::ResolvedLeafOutbound<'a>],
+    ) -> Result<ClaimedRelayChain<'a>, FlowFailure> {
+        let first = chain.first().expect("relay chain has at least 2 hops");
+        let relay_hops = &chain[1..];
+        relay_hops
+            .first()
+            .expect("relay chain must have at least 2 hops");
+        let first = self
+            .claim_outbound_leaf(first)
             .map_err(|error| FlowFailure {
-                stage: "find_outbound_leaf",
+                stage: "outbound_leaf_runtime",
                 error,
                 upstream: None,
             })?;
-        let _ = leaf;
-        claimed.prepare_owned_udp_relay_final_hop(carrier, ctx.source_dir())
+        let relay_hops = relay_hops
+            .iter()
+            .map(|leaf| {
+                self.claim_outbound_leaf(leaf).map_err(|error| FlowFailure {
+                    stage: "outbound_leaf_runtime",
+                    error,
+                    upstream: None,
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(ClaimedRelayChain::new(first, relay_hops))
+    }
+
+    #[cfg(test)]
+    fn claim_udp_relay_final_hop<'a>(
+        &self,
+        leaf: &'a zero_engine::ResolvedLeafOutbound<'a>,
+    ) -> Result<ClaimedInventoryLeaf<'a>, FlowFailure> {
+        self.claim_outbound_leaf(leaf).map_err(|error| FlowFailure {
+            stage: "find_outbound_leaf",
+            error,
+            upstream: None,
+        })
     }
 }
 

@@ -18,6 +18,7 @@ mod tests;
 ))]
 mod udp;
 
+pub(crate) use runtime::{ClaimedInventoryLeaf, ClaimedRelayChain};
 #[cfg(any(
     feature = "socks5",
     feature = "vless",
