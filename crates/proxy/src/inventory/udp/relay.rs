@@ -1,6 +1,5 @@
 use zero_engine::EngineError;
 
-#[cfg(test)]
 use super::super::ClaimedInventoryLeaf;
 use super::super::{ClaimedRelayChain, ProtocolInventory};
 use crate::protocol_registry::{ClaimedOutboundLeaf, OutboundAdapterContext, UdpAdapterContext};
@@ -10,12 +9,16 @@ use crate::runtime::udp_flow::packet_path::{PacketPathFlowBinding, UdpPacketRef}
 use crate::runtime::udp_flow::packet_path_chain::PacketPathStartRequest;
 use crate::transport::RelayCarrier;
 
-enum PreparedUdpRelayChain<'a> {
+pub(super) enum PreparedUdpRelayChain<'a> {
+    PacketPath {
+        flow_binding: PacketPathFlowBinding,
+        request: PacketPathStartRequest<'a>,
+    },
     Operation(Box<dyn PreparedUdpFlowOperation + 'a>),
 }
 
 impl PreparedUdpRelayChain<'_> {
-    async fn execute(
+    pub(super) async fn execute(
         self,
         dispatch: &mut UdpDispatch,
         ctx: UdpAdapterContext<'_>,
@@ -23,6 +26,16 @@ impl PreparedUdpRelayChain<'_> {
         payload: &[u8],
     ) -> Result<FlowStartResult, FlowFailure> {
         match self {
+            PreparedUdpRelayChain::PacketPath {
+                flow_binding,
+                request,
+            } => {
+                let sent = dispatch.send_packet_path_chain(ctx, request).await?;
+                Ok(FlowStartResult::Flow {
+                    outbound: Box::new(UdpDispatch::datagram_chain_flow_outbound(flow_binding)),
+                    tx_bytes: sent as u64,
+                })
+            }
             PreparedUdpRelayChain::Operation(operation) => {
                 operation.execute(dispatch, ctx, session, payload).await
             }
@@ -31,23 +44,15 @@ impl PreparedUdpRelayChain<'_> {
 }
 
 impl ProtocolInventory {
-    /// Prepare the packet-path carrier/datagram pair and lazy carrier builder
-    /// for a two-hop UDP relay chain.
-    pub(crate) fn prepare_udp_packet_path_pair<'a>(
+    pub(super) fn prepare_claimed_udp_packet_path_pair<'a>(
         &self,
         session_id: u64,
-        carrier_leaf: &'a zero_engine::ResolvedLeafOutbound<'a>,
-        datagram_leaf: &'a zero_engine::ResolvedLeafOutbound<'a>,
+        carrier_leaf: &ClaimedInventoryLeaf<'a>,
+        datagram_leaf: &ClaimedInventoryLeaf<'a>,
         packet: UdpPacketRef<'a>,
     ) -> Option<(PacketPathFlowBinding, PacketPathStartRequest<'a>)> {
-        let carrier_operation = self
-            .claim_outbound_leaf(carrier_leaf)
-            .ok()?
-            .prepare_udp_packet_path()?;
-        let datagram_operation = self
-            .claim_outbound_leaf(datagram_leaf)
-            .ok()?
-            .prepare_udp_packet_path()?;
+        let carrier_operation = carrier_leaf.prepare_udp_packet_path()?;
+        let datagram_operation = datagram_leaf.prepare_udp_packet_path()?;
 
         super::packet_path::build_udp_packet_path_pair(
             session_id,
@@ -55,6 +60,21 @@ impl ProtocolInventory {
             datagram_operation,
             packet,
         )
+    }
+
+    /// Prepare the packet-path carrier/datagram pair and lazy carrier builder
+    /// for a two-hop UDP relay chain.
+    #[cfg(test)]
+    pub(crate) fn prepare_udp_packet_path_pair<'a>(
+        &self,
+        session_id: u64,
+        carrier_leaf: &'a zero_engine::ResolvedLeafOutbound<'a>,
+        datagram_leaf: &'a zero_engine::ResolvedLeafOutbound<'a>,
+        packet: UdpPacketRef<'a>,
+    ) -> Option<(PacketPathFlowBinding, PacketPathStartRequest<'a>)> {
+        let carrier_leaf = self.claim_outbound_leaf(carrier_leaf).ok()?;
+        let datagram_leaf = self.claim_outbound_leaf(datagram_leaf).ok()?;
+        self.prepare_claimed_udp_packet_path_pair(session_id, &carrier_leaf, &datagram_leaf, packet)
     }
 
     /// Whether the UDP relay final hop needs the VLESS two-stream path.
@@ -122,48 +142,33 @@ impl ProtocolInventory {
         operation.execute(dispatch, ctx, session, payload).await
     }
 
-    pub(crate) async fn start_udp_relay_chain(
+    pub(super) async fn prepare_udp_relay_chain<'a>(
         &self,
-        dispatch: &mut UdpDispatch,
-        ctx: UdpAdapterContext<'_>,
-        session: &zero_core::Session,
-        chain: Vec<zero_engine::ResolvedLeafOutbound<'_>>,
-        payload: &[u8],
-    ) -> Result<FlowStartResult, FlowFailure> {
+        ctx: UdpAdapterContext<'a>,
+        session: &'a zero_core::Session,
+        chain: &'a [zero_engine::ResolvedLeafOutbound<'a>],
+        payload: &'a [u8],
+    ) -> Result<PreparedUdpRelayChain<'a>, FlowFailure> {
+        let claimed_chain = self.claim_udp_relay_chain(&chain)?;
+        self.validate_udp_relay_chain(ctx.clone(), &claimed_chain)?;
         if chain.len() == 2 {
-            let carrier_leaf = &chain[0];
-            let datagram_leaf = &chain[1];
-            if let Some((flow_binding, request)) = self.prepare_udp_packet_path_pair(
+            if let Some((flow_binding, request)) = self.prepare_claimed_udp_packet_path_pair(
                 session.id,
-                carrier_leaf,
-                datagram_leaf,
+                claimed_chain.first(),
+                claimed_chain.final_hop(),
                 UdpPacketRef {
                     target: &session.target,
                     port: session.port,
                     payload,
                 },
             ) {
-                let sent = dispatch.send_packet_path_chain(ctx, request).await?;
-                return Ok(FlowStartResult::Flow {
-                    outbound: Box::new(UdpDispatch::datagram_chain_flow_outbound(flow_binding)),
-                    tx_bytes: sent as u64,
+                return Ok(PreparedUdpRelayChain::PacketPath {
+                    flow_binding,
+                    request,
                 });
             }
         }
 
-        let prepared = self.prepare_udp_relay_chain(ctx.clone(), chain).await?;
-        prepared.execute(dispatch, ctx, session, payload).await
-    }
-}
-
-impl ProtocolInventory {
-    async fn prepare_udp_relay_chain<'a>(
-        &self,
-        ctx: UdpAdapterContext<'a>,
-        chain: Vec<zero_engine::ResolvedLeafOutbound<'a>>,
-    ) -> Result<PreparedUdpRelayChain<'a>, FlowFailure> {
-        let claimed_chain = self.claim_udp_relay_chain(&chain)?;
-        self.validate_udp_relay_chain(ctx.clone(), &claimed_chain)?;
         let needs_two_streams = claimed_chain
             .final_hop()
             .udp_relay_needs_two_streams(ctx.source_dir());

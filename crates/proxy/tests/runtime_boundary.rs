@@ -359,12 +359,15 @@ fn protocol_adapter_roots_do_not_construct_transport_plans_or_request_bundles_in
 #[test]
 fn inventory_udp_dispatch_keeps_relay_choreography_outside_candidate_root() {
     let dispatch = read(&proxy_src().join("inventory/udp/dispatch.rs"));
+    assert!(dispatch.contains("prepare_udp_outbound("));
     assert!(!dispatch.contains("dispatch_tcp_relay_prefix"));
     assert!(!dispatch.contains("prepare_udp_packet_path_pair"));
     assert!(!dispatch.contains("UdpPacketRef"));
     assert!(!dispatch.contains("ResolvedLeafOutbound"));
     assert!(!dispatch.contains("enum UdpCandidate"));
     assert!(!dispatch.contains("outbound_leaf_runtime"));
+    assert!(!dispatch.contains("start_udp_leaf_flow("));
+    assert!(!dispatch.contains("start_udp_relay_chain("));
 }
 
 #[test]
@@ -432,7 +435,7 @@ fn inventory_udp_relay_executes_final_hop_without_start_helper_roundtrip() {
         "udp relay chain should collapse the relay prefix into an opaque prepared operation before execution"
     );
     assert!(relay.contains("PreparedUdpRelayChain"));
-    assert!(relay.contains("prepare_udp_relay_chain("));
+    assert!(relay.contains("prepare_udp_relay_chain<'a>("));
     assert!(relay.contains("prepare_udp_relay_final_hop_operation"));
 }
 

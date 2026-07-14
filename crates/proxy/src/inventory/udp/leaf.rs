@@ -71,6 +71,7 @@ impl ProtocolInventory {
     }
 
     /// Start a single-hop UDP flow through the adapter that owns `leaf`.
+    #[cfg(test)]
     pub(crate) async fn start_udp_leaf_flow(
         &self,
         dispatch: &mut UdpDispatch,
