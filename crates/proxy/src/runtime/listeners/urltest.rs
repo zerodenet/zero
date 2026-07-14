@@ -5,12 +5,16 @@ use zero_engine::EngineError;
 
 use super::super::Proxy;
 
-pub(in crate::runtime) fn reconcile_urltests(
+pub(in crate::runtime) async fn reconcile_urltests(
     proxy: &Proxy,
     _new_config: &RuntimeConfig,
     shutdown_rx: &watch::Receiver<bool>,
     urltests: &mut JoinSet<Result<(), EngineError>>,
 ) {
+    urltests.abort_all();
+    while urltests.join_next().await.is_some() {}
+    proxy.engine().probe_trigger_registry().clear();
+
     let group_ids = proxy.engine.plan().urltest_groups().to_vec();
 
     for group_id in group_ids {

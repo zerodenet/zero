@@ -3,11 +3,14 @@ mod support;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::time::{sleep, timeout, Duration};
+use zero_api::{event_type, EventFilter, EventSource, RawApiEvent};
 use zero_config::RuntimeConfig;
+use zero_engine::{EngineHandle, EventSubscriber};
 use zero_proxy::Proxy as Engine;
 
 use support::{
-    free_port, spawn_engine, spawn_http_probe_server, wait_for_group_selection, wait_for_listener,
+    free_port, spawn_engine, spawn_http_probe_server, wait_for, wait_for_group_selection,
+    wait_for_listener,
 };
 
 #[path = "socks5/rejects_blocked_domain_via_route_rule.rs"]

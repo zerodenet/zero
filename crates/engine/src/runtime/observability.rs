@@ -1,9 +1,19 @@
+use std::sync::mpsc::SyncSender;
+
 use zero_api::{EventFilter, RawApiEvent};
 
 use super::Engine;
 use crate::{ActiveSession, CompletedSessionRecord, EventsSinceResult};
 
 impl Engine {
+    pub(crate) fn subscribe_events(&self, subscriber: SyncSender<RawApiEvent>) {
+        self.event_log.subscribe(subscriber);
+    }
+
+    pub(crate) fn emit_event(&self, event: RawApiEvent) {
+        self.event_log.push_external(event);
+    }
+
     pub fn stats_snapshot(&self) -> zero_api::StatsSnapshot {
         self.stats.snapshot()
     }

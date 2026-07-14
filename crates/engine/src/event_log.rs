@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, VecDeque};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{mpsc::SyncSender, Arc, Mutex};
 
 use serde_json::{json, Value};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -34,6 +34,7 @@ pub struct EngineEventLog {
     capacity: usize,
     next_sequence: AtomicU64,
     inner: Mutex<VecDeque<RawApiEvent>>,
+    subscribers: Mutex<Vec<SyncSender<RawApiEvent>>>,
 }
 
 impl Default for EngineEventLog {
@@ -42,6 +43,7 @@ impl Default for EngineEventLog {
             capacity: DEFAULT_EVENT_LOG_CAPACITY,
             next_sequence: AtomicU64::new(1),
             inner: Mutex::new(VecDeque::with_capacity(DEFAULT_EVENT_LOG_CAPACITY)),
+            subscribers: Mutex::new(Vec::new()),
         }
     }
 }
@@ -330,16 +332,34 @@ impl EngineEventLog {
             .unwrap_or(0)
     }
 
+    pub(crate) fn subscribe(&self, subscriber: SyncSender<RawApiEvent>) {
+        self.subscribers
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .push(subscriber);
+    }
+
+    pub(crate) fn push_external(&self, event: RawApiEvent) {
+        self.push(event);
+    }
+
     fn push(&self, mut event: RawApiEvent) {
         let sequence = self.next_sequence.fetch_add(1, Ordering::Relaxed);
         event.sequence = Some(sequence);
 
-        let mut events = self.inner.lock().unwrap_or_else(|e| e.into_inner());
-        events.push_back(event);
+        {
+            let mut events = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+            events.push_back(event.clone());
 
-        while events.len() > self.capacity {
-            events.pop_front();
+            while events.len() > self.capacity {
+                events.pop_front();
+            }
         }
+
+        self.subscribers
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .retain(|subscriber| subscriber.try_send(event.clone()).is_ok());
     }
 }
 

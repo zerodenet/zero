@@ -79,7 +79,7 @@ where
                     &mut listener_stops,
                     &mut listeners,
                 ).await;
-                listeners::reconcile_urltests(proxy, &new_config, &shutdown_rx, &mut urltests);
+                listeners::reconcile_urltests(proxy, &new_config, &shutdown_rx, &mut urltests).await;
                 proxy.protocols.on_config_reloaded();
                 info!(
                     inbound_count = new_config.inbounds.len(),

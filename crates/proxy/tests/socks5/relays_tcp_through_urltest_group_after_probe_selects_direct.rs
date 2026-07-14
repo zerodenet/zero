@@ -63,10 +63,37 @@ async fn relays_tcp_through_urltest_group_after_probe_selects_direct() {
     ))
     .expect("parse outer config");
     let outer_engine = Engine::new(outer_config).expect("build outer engine");
+    let event_handle = EngineHandle::new(outer_engine.engine().clone());
+    let subscriber = event_handle
+        .subscribe(EventFilter {
+            event_types: vec![event_type::POLICY_PROBE_COMPLETED.to_owned()],
+            ..EventFilter::default()
+        })
+        .expect("subscribe to urltest events");
     let outer_handle = spawn_engine(outer_engine);
 
     wait_for_listener(outer_port).await;
     wait_for_group_selection(&outer_handle, "proxy", "direct").await;
+
+    let startup_event = wait_for_probe_event(&subscriber, "startup").await;
+    assert_eq!(startup_event.payload["selected"], "direct");
+    assert_eq!(
+        startup_event.payload["members"].as_array().unwrap().len(),
+        2
+    );
+    assert!(startup_event.payload["completed_at_unix_ms"]
+        .as_u64()
+        .is_some());
+
+    let scheduled_event = wait_for_probe_event(&subscriber, "scheduled").await;
+    assert_eq!(scheduled_event.payload["selected"], "direct");
+
+    outer_handle
+        .engine()
+        .trigger_urltest_probe("proxy")
+        .expect("trigger manual urltest probe");
+    let manual_event = wait_for_probe_event(&subscriber, "manual").await;
+    assert_eq!(manual_event.payload["selected"], "direct");
 
     let status = outer_handle.export_status();
     let group = status
@@ -137,10 +164,51 @@ async fn relays_tcp_through_urltest_group_after_probe_selects_direct() {
     client.read_exact(&mut echoed).await.expect("read payload");
     assert_eq!(&echoed, b"fast");
 
+    let config_without_urltest = RuntimeConfig::parse(&format!(
+        r#"{{
+            "inbounds": [{{
+                "tag": "outer-socks-in",
+                "listen": {{ "address": "127.0.0.1", "port": {outer_port} }},
+                "protocol": {{ "type": "socks5" }}
+            }}],
+            "outbounds": [{{
+                "tag": "direct",
+                "protocol": {{ "type": "direct" }}
+            }}],
+            "mode": {{ "type": "global", "outbound": "direct" }},
+            "route": {{ "rules": [], "final": {{ "type": "direct" }} }}
+        }}"#
+    ))
+    .expect("parse config without urltest");
+    outer_handle
+        .engine()
+        .reload_config(config_without_urltest)
+        .expect("reload config without urltest");
+    wait_for("removed urltest trigger to be cleared", || {
+        outer_handle
+            .engine()
+            .trigger_urltest_probe("proxy")
+            .is_err()
+    })
+    .await;
+
     outer_handle
         .shutdown()
         .await
         .expect("shutdown outer engine");
     probe_task.abort();
     let _ = echo_task.await;
+}
+
+async fn wait_for_probe_event(subscriber: &EventSubscriber, trigger: &str) -> RawApiEvent {
+    for _ in 0..200 {
+        if let Some(event) = subscriber.try_recv() {
+            if event.payload["trigger"] == trigger {
+                return event;
+            }
+        }
+        sleep(Duration::from_millis(20)).await;
+    }
+
+    panic!("did not receive urltest event with trigger `{trigger}`");
 }

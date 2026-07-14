@@ -57,6 +57,13 @@ impl ProbeTriggerRegistry {
             .remove(group_tag);
     }
 
+    pub fn clear(&self) {
+        self.triggers
+            .lock()
+            .expect("probe trigger registry lock poisoned")
+            .clear();
+    }
+
     pub fn get(&self, group_tag: &str) -> Option<ProbeTrigger> {
         self.triggers
             .lock()

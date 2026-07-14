@@ -111,6 +111,16 @@ pub struct PolicySelectedPayload {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PolicyProbeCompletedPayload {
     pub policy_tag: String,
+    #[serde(default)]
+    pub trigger: String,
+    #[serde(default)]
+    pub url: String,
+    #[serde(default)]
+    pub started_at_unix_ms: u64,
+    #[serde(default)]
+    pub completed_at_unix_ms: u64,
+    #[serde(default)]
+    pub duration_ms: u64,
     pub selected: Option<String>,
     pub members: Vec<PolicyProbeMember>,
 }

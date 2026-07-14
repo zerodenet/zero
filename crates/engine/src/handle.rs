@@ -1,6 +1,5 @@
-use std::sync::{mpsc, Arc, Mutex};
+use std::sync::mpsc;
 
-use mpsc::SyncSender;
 use zero_api::{
     ApiResult, CommandRequest, CommandResponse, CommandService, EventFilter, EventSource,
     QueryRequest, QueryResponse, QueryService, RawApiEvent,
@@ -17,15 +16,11 @@ use super::runtime::Engine;
 #[derive(Clone)]
 pub struct EngineHandle {
     engine: Engine,
-    subscribers: Arc<Mutex<Vec<SyncSender<RawApiEvent>>>>,
 }
 
 impl EngineHandle {
     pub fn new(engine: Engine) -> Self {
-        Self {
-            engine,
-            subscribers: Arc::new(Mutex::new(Vec::new())),
-        }
+        Self { engine }
     }
 
     /// Convenience constructor that loads configuration from `path`.
@@ -43,8 +38,7 @@ impl EngineHandle {
     /// Stale subscribers (those whose receivers have been dropped) are
     /// removed lazily.
     pub fn emit(&self, event: RawApiEvent) {
-        let mut subscribers = self.subscribers.lock().unwrap_or_else(|e| e.into_inner());
-        subscribers.retain(|tx| tx.send(event.clone()).is_ok());
+        self.engine.emit_event(event);
     }
 }
 
@@ -65,10 +59,7 @@ impl EventSource for EngineHandle {
 
     fn subscribe(&self, filter: EventFilter) -> ApiResult<Self::Stream> {
         let (tx, rx) = mpsc::sync_channel(64);
-        self.subscribers
-            .lock()
-            .expect("subscriber lock poisoned")
-            .push(tx);
+        self.engine.subscribe_events(tx);
         Ok(EventSubscriber { rx, filter })
     }
 

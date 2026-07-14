@@ -220,6 +220,11 @@ url_test 探测完成后发射，包含每个成员的探测结果。
 ```json
 {
   "policy_tag": "auto",
+  "trigger": "scheduled",
+  "url": "http://www.gstatic.com/generate_204",
+  "started_at_unix_ms": 1710000000000,
+  "completed_at_unix_ms": 1710000000320,
+  "duration_ms": 320,
   "selected": "server-b",
   "members": [
     { "target_tag": "server-a", "healthy": true, "latency_ms": 120, "error": null },
@@ -228,6 +233,10 @@ url_test 探测完成后发射，包含每个成员的探测结果。
   ]
 }
 ```
+
+`trigger` is one of `startup`, `scheduled`, or `manual`. The event envelope
+timestamp records publication time; the payload timestamps record the complete
+probe cycle and `duration_ms` records its elapsed time.
 
 ### stats.sampled
 

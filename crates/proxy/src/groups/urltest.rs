@@ -2,7 +2,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use tokio::sync::{watch, Notify};
-use tokio::time::{sleep, timeout};
+use tokio::time::{interval, timeout, MissedTickBehavior};
 use tracing::{debug, info, warn};
 use zero_core::{Address, Network, ProtocolType, Session};
 use zero_traits::AsyncSocket;
@@ -58,9 +58,13 @@ impl Proxy {
             "urltest group started"
         );
 
-        loop {
-            self.refresh_urltest_group(group_id, &probe).await;
+        let mut schedule = interval(urltest.interval());
+        schedule.set_missed_tick_behavior(MissedTickBehavior::Skip);
+        schedule.tick().await;
+        self.refresh_urltest_group(group_id, &probe, "startup")
+            .await;
 
+        loop {
             tokio::select! {
                 changed = shutdown.changed() => {
                     match changed {
@@ -71,8 +75,11 @@ impl Proxy {
                 }
                 _ = probe_notify.notified() => {
                     debug!(group_tag = %group_tag, "urltest probe triggered by api");
+                    self.refresh_urltest_group(group_id, &probe, "manual").await;
                 }
-                _ = sleep(urltest.interval()) => {}
+                _ = schedule.tick() => {
+                    self.refresh_urltest_group(group_id, &probe, "scheduled").await;
+                }
             }
         }
 
@@ -81,17 +88,31 @@ impl Proxy {
         Ok(())
     }
 
-    async fn refresh_urltest_group(&self, group_id: TargetId, probe: &UrlTestProbe) {
+    async fn refresh_urltest_group(
+        &self,
+        group_id: TargetId,
+        probe: &UrlTestProbe,
+        trigger: &'static str,
+    ) {
         let plan = self.engine().plan();
-        let group = plan
-            .target(group_id)
-            .expect("engine plan should resolve urltest group");
+        let Some(group) = plan.target(group_id) else {
+            debug!(
+                group_id = group_id.index(),
+                trigger, "urltest group disappeared during config reload"
+            );
+            return;
+        };
         let Some(urltest) = group.as_urltest() else {
+            debug!(
+                group_id = group_id.index(),
+                trigger, "urltest group changed during config reload"
+            );
             return;
         };
         let group_tag = group.tag();
         let mut best: Option<ProbeSuccess> = None;
-        let checked_at_unix_ms = unix_timestamp_ms();
+        let started_at_unix_ms = unix_timestamp_ms();
+        let started_at = Instant::now();
         let mut member_states = Vec::with_capacity(urltest.members().len());
 
         for member_id in urltest.members() {
@@ -104,7 +125,7 @@ impl Proxy {
                     member_id: *member_id,
                     healthy: false,
                     latency_ms: None,
-                    last_checked_unix_ms: Some(checked_at_unix_ms),
+                    last_checked_unix_ms: Some(started_at_unix_ms),
                     last_error: Some("failed to resolve probe target".to_owned()),
                     effective_chains,
                 });
@@ -128,7 +149,7 @@ impl Proxy {
                         member_id: *member_id,
                         healthy: true,
                         latency_ms: Some(latency_ms),
-                        last_checked_unix_ms: Some(checked_at_unix_ms),
+                        last_checked_unix_ms: Some(started_at_unix_ms),
                         last_error: None,
                         effective_chains,
                     });
@@ -144,7 +165,7 @@ impl Proxy {
                         member_id: *member_id,
                         healthy: false,
                         latency_ms: None,
-                        last_checked_unix_ms: Some(checked_at_unix_ms),
+                        last_checked_unix_ms: Some(started_at_unix_ms),
                         last_error: Some(error.to_string()),
                         effective_chains,
                     });
@@ -185,16 +206,41 @@ impl Proxy {
             })
             .collect();
 
+        let healthy_members = member_states.iter().filter(|member| member.healthy).count();
+        let total_members = member_states.len();
         self.update_urltest_state(group_id, selected, latency_ms, member_states);
 
-        self.engine().push_policy_probe_completed(
+        let completed_at_unix_ms = unix_timestamp_ms();
+        let duration_ms = started_at.elapsed().as_millis() as u64;
+        let event_payload = PolicyProbeCompletedPayload {
+            policy_tag: group_tag.to_owned(),
+            trigger: trigger.to_owned(),
+            url: probe.url.clone(),
+            started_at_unix_ms,
+            completed_at_unix_ms,
+            duration_ms,
+            selected: Some(selected_tag.clone()),
+            members: probe_members,
+        };
+
+        info!(
+            event_type = "policy.probe.completed",
+            group_kind = "url_test",
             group_tag,
-            PolicyProbeCompletedPayload {
-                policy_tag: group_tag.to_owned(),
-                selected: Some(selected_tag.clone()),
-                members: probe_members,
-            },
+            trigger,
+            url = probe.url.as_str(),
+            started_at_unix_ms,
+            completed_at_unix_ms,
+            duration_ms,
+            selected = %selected_tag,
+            healthy_members,
+            total_members,
+            members = ?event_payload.members,
+            "urltest probe completed"
         );
+
+        self.engine()
+            .push_policy_probe_completed(group_tag, event_payload);
 
         log_urltest_group_target_changed(
             group_tag,
