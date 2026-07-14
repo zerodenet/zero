@@ -1,3 +1,4 @@
+use std::path::Path;
 use std::sync::Arc;
 
 use zero_engine::{EngineError, ResolvedLeafOutbound};
@@ -15,6 +16,9 @@ use crate::protocol_registry::{OutboundLeafRuntime, TcpOutboundCapability};
 ))]
 use crate::protocol_registry::{UdpFlowCapability, UdpPacketPathCapability};
 use crate::runtime::path::TcpPathCategory;
+use crate::runtime::tcp_dispatch::operation::{
+    PreparedTcpConnectOperation, PreparedTcpRelayOperation,
+};
 #[cfg(any(
     feature = "socks5",
     feature = "vless",
@@ -35,17 +39,6 @@ use crate::runtime::udp_dispatch::operation::PreparedUdpFlowOperation;
     feature = "mieru"
 ))]
 use crate::transport::RelayCarrier;
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
-))]
-use std::path::Path;
-
 pub(crate) struct ClaimedOutboundLeaf<'a> {
     #[cfg(any(
         feature = "socks5",
@@ -123,6 +116,58 @@ impl<'a> ClaimedOutboundLeaf<'a> {
         }
     }
 
+    pub(crate) fn prepare_tcp_connect(
+        &self,
+        leaf: &'a ResolvedLeafOutbound<'a>,
+        source_dir: Option<&Path>,
+    ) -> Result<Box<dyn PreparedTcpConnectOperation + 'a>, crate::transport::TcpOutboundFailure>
+    {
+        self.tcp
+            .as_ref()
+            .expect("non-block tcp leaf must expose a tcp capability")
+            .prepare_tcp_connect(leaf, source_dir)
+    }
+
+    pub(crate) fn prepare_tcp_relay_hop(
+        &self,
+        leaf: &'a ResolvedLeafOutbound<'a>,
+        source_dir: Option<&Path>,
+    ) -> Result<(&'a str, u16, Box<dyn PreparedTcpRelayOperation + 'a>), EngineError> {
+        let endpoint = self.runtime.endpoint.ok_or_else(|| {
+            EngineError::Io(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "relay hop resolved without upstream endpoint",
+            ))
+        })?;
+        let operation = self
+            .tcp
+            .as_ref()
+            .expect("tcp relay hop must expose a tcp capability")
+            .prepare_tcp_relay_hop(leaf, source_dir)?;
+        Ok((endpoint.server, endpoint.port, operation))
+    }
+
+    #[cfg(any(
+        feature = "socks5",
+        feature = "vless",
+        feature = "hysteria2",
+        feature = "shadowsocks",
+        feature = "trojan",
+        feature = "vmess",
+        feature = "mieru"
+    ))]
+    pub(crate) fn prepare_udp_flow(
+        &self,
+        leaf: &'a ResolvedLeafOutbound<'a>,
+        source_dir: Option<&Path>,
+    ) -> Result<Box<dyn PreparedUdpFlowOperation + 'a>, crate::runtime::udp_dispatch::FlowFailure>
+    {
+        self.udp
+            .as_ref()
+            .expect("non-block udp leaf must expose a udp-flow capability")
+            .prepare_udp_flow(leaf, source_dir)
+    }
+
     #[cfg(any(
         feature = "socks5",
         feature = "vless",
@@ -185,6 +230,27 @@ impl<'a> ClaimedOutboundLeaf<'a> {
                 self.leaf.clone(),
                 source_dir,
             )
+    }
+
+    #[cfg(any(
+        feature = "socks5",
+        feature = "vless",
+        feature = "hysteria2",
+        feature = "shadowsocks",
+        feature = "trojan",
+        feature = "vmess",
+        feature = "mieru"
+    ))]
+    pub(crate) fn prepare_udp_packet_path(
+        &self,
+        leaf: &'a ResolvedLeafOutbound<'a>,
+    ) -> Option<
+        Box<
+            dyn crate::runtime::udp_dispatch::packet_path_operation::PreparedUdpPacketPathOperation
+                + 'a,
+        >,
+    > {
+        self.packet_path.as_ref()?.prepare_udp_packet_path(leaf)
     }
 }
 

@@ -1,7 +1,7 @@
 use zero_engine::EngineError;
 
 use super::super::ProtocolInventory;
-use crate::protocol_registry::{OutboundAdapterContext, TcpOutboundCapability, TcpRuntimeServices};
+use crate::protocol_registry::{OutboundAdapterContext, TcpRuntimeServices};
 use crate::runtime::path::TcpPathCategory;
 use crate::runtime::tcp_dispatch::operation::{
     PreparedTcpConnectOperation, PreparedTcpRelayOperation,
@@ -97,14 +97,7 @@ impl ProtocolInventory {
                 tag: runtime.kernel_tag.unwrap_or("block").to_owned(),
             }
         } else {
-            let adapter = claimed
-                .tcp
-                .expect("non-block tcp leaf must expose a tcp capability");
-            let operation = TcpOutboundCapability::prepare_tcp_connect(
-                adapter.as_ref(),
-                leaf,
-                ctx.source_dir(),
-            )?;
+            let operation = claimed.prepare_tcp_connect(leaf, ctx.source_dir())?;
             PreparedTcpCandidateExecution::Connect(operation)
         };
         Ok(PreparedTcpCandidate {
@@ -119,21 +112,10 @@ impl ProtocolInventory {
         leaf: &'a zero_engine::ResolvedLeafOutbound<'a>,
     ) -> Result<PreparedTcpRelayHop<'a>, EngineError> {
         let claimed = self.claim_outbound_leaf(leaf)?;
-        let runtime = claimed.runtime;
-        let endpoint = runtime.endpoint.ok_or_else(|| {
-            EngineError::Io(std::io::Error::new(
-                std::io::ErrorKind::InvalidInput,
-                "relay hop resolved without upstream endpoint",
-            ))
-        })?;
-        let adapter = claimed
-            .tcp
-            .expect("tcp relay hop must expose a tcp capability");
-        let operation =
-            TcpOutboundCapability::prepare_tcp_relay_hop(adapter.as_ref(), leaf, ctx.source_dir())?;
+        let (server, port, operation) = claimed.prepare_tcp_relay_hop(leaf, ctx.source_dir())?;
         Ok(PreparedTcpRelayHop {
-            server: endpoint.server.to_owned(),
-            port: endpoint.port,
+            server: server.to_owned(),
+            port,
             operation,
         })
     }

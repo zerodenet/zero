@@ -1,7 +1,7 @@
 use zero_engine::EngineError;
 
 use super::super::ProtocolInventory;
-use crate::protocol_registry::{ClaimedOutboundLeaf, UdpAdapterContext, UdpPacketPathCapability};
+use crate::protocol_registry::{ClaimedOutboundLeaf, UdpAdapterContext};
 use crate::runtime::udp_dispatch::operation::PreparedUdpFlowOperation;
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
 use crate::runtime::udp_flow::packet_path::{PacketPathFlowBinding, UdpPacketRef};
@@ -38,17 +38,14 @@ impl ProtocolInventory {
         datagram_leaf: &'a zero_engine::ResolvedLeafOutbound<'a>,
         packet: UdpPacketRef<'a>,
     ) -> Option<(PacketPathFlowBinding, PacketPathStartRequest<'a>)> {
-        let carrier_adapter = self.claim_outbound_leaf(carrier_leaf).ok()?.packet_path?;
-        let datagram_adapter = self.claim_outbound_leaf(datagram_leaf).ok()?.packet_path?;
-
-        let carrier_operation = UdpPacketPathCapability::prepare_udp_packet_path(
-            carrier_adapter.as_ref(),
-            carrier_leaf,
-        )?;
-        let datagram_operation = UdpPacketPathCapability::prepare_udp_packet_path(
-            datagram_adapter.as_ref(),
-            datagram_leaf,
-        )?;
+        let carrier_operation = self
+            .claim_outbound_leaf(carrier_leaf)
+            .ok()?
+            .prepare_udp_packet_path(carrier_leaf)?;
+        let datagram_operation = self
+            .claim_outbound_leaf(datagram_leaf)
+            .ok()?
+            .prepare_udp_packet_path(datagram_leaf)?;
 
         super::packet_path::build_udp_packet_path_pair(
             session_id,

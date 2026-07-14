@@ -390,7 +390,9 @@ fn inventory_udp_leaf_and_relay_use_adapter_context_instead_of_proxy() {
     assert!(!udp_leaf.contains("find_udp_flow_leaf("));
     assert!(!udp_relay.contains("find_udp_flow_leaf("));
     assert!(!udp_relay.contains("find_udp_packet_path_leaf("));
+    assert!(!udp_leaf.contains("UdpFlowCapability"));
     assert!(!udp_relay.contains("UdpFlowCapability"));
+    assert!(!udp_relay.contains("UdpPacketPathCapability"));
 }
 
 #[test]
@@ -552,6 +554,7 @@ fn inventory_tcp_leaf_stays_adapter_facing() {
     assert!(!leaf.contains("use crate::runtime::Proxy"));
     assert!(!leaf.contains("&Proxy"));
     assert!(!leaf.contains("find_outbound_leaf("));
+    assert!(!leaf.contains("TcpOutboundCapability"));
 }
 
 #[test]
@@ -611,9 +614,13 @@ fn registry_outbound_claim_surface_replaces_lookup_only_helpers() {
 fn claimed_outbound_leaf_owns_capability_preparation() {
     let outbound = read(&proxy_src().join("protocol_registry/registry/outbound.rs"));
     for method in [
+        "fn prepare_tcp_connect(",
+        "fn prepare_tcp_relay_hop(",
+        "fn prepare_udp_flow(",
         "fn udp_relay_needs_two_streams(",
         "fn prepare_owned_udp_relay_final_hop(",
         "fn prepare_owned_udp_relay_two_stream(",
+        "fn prepare_udp_packet_path(",
     ] {
         assert!(
             outbound.contains(method),

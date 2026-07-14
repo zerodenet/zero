@@ -1,5 +1,5 @@
 use super::super::ProtocolInventory;
-use crate::protocol_registry::{UdpAdapterContext, UdpFlowCapability};
+use crate::protocol_registry::UdpAdapterContext;
 use crate::runtime::path::TcpPathCategory;
 use crate::runtime::udp_dispatch::operation::PreparedUdpFlowOperation;
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
@@ -57,11 +57,7 @@ impl ProtocolInventory {
             });
         }
 
-        let adapter = claimed
-            .udp
-            .expect("non-block udp leaf must expose a udp-flow capability");
-        let operation =
-            UdpFlowCapability::prepare_udp_flow(adapter.as_ref(), leaf, ctx.source_dir())?;
+        let operation = claimed.prepare_udp_flow(leaf, ctx.source_dir())?;
         Ok(PreparedUdpLeafCandidate::Flow(operation))
     }
 
