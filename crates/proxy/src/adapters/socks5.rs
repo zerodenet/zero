@@ -1,9 +1,9 @@
+use ::socks5::transport::Socks5TransportLeaf;
 use async_trait::async_trait;
 
 use zero_config::{InboundConfig, InboundProtocolConfig, OutboundProtocolConfig};
 use zero_engine::{EngineError, ResolvedLeafOutbound};
 use zero_traits::{ProtocolCapabilityDescriptor, ProtocolMetadata};
-use zero_transport::socks5_transport::Socks5TransportLeaf;
 
 use crate::adapters::identity::{
     named_protocol_claims_runtime_leaf, named_protocol_supports_inbound,
@@ -54,7 +54,7 @@ impl NamedProtocolAdapter for Socks5Adapter {
 #[cfg(feature = "socks5")]
 impl UdpPacketPathCapability for Socks5Adapter {
     fn prepare_udp_packet_path<'a>(
-        &'a self,
+        &self,
         leaf: &'a ResolvedLeafOutbound<'a>,
     ) -> Option<
         Box<

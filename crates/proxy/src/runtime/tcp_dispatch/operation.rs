@@ -12,16 +12,6 @@ use zero_engine::EngineError;
     feature = "vmess",
     feature = "mieru"
 ))]
-use zero_engine::ResolvedLeafOutbound;
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
-))]
 use zero_transport::outbound_leaf::{
     open_prepared_tcp_transport_bridge_relay_hop, open_prepared_tcp_transport_bridge_stream,
     PreparedTransportBridgeLeaf, ProtocolSessionTcpHandshake, ProtocolSocketTcpHandshake,
@@ -30,18 +20,6 @@ use zero_transport::outbound_leaf::{
 };
 
 use crate::protocol_registry::OutboundAdapterContext;
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
-))]
-use crate::protocol_registry::{
-    prepare_transport_bridge_leaf, ProtocolTransportLeafResolver, ResolveTransportLeafError,
-};
 use crate::transport::{EstablishedTcpOutbound, TcpOutboundFailure, TcpRelayStream};
 
 pub(crate) trait PreparedTcpConnectOperation: Send {
@@ -240,8 +218,8 @@ where
     feature = "mieru"
 ))]
 pub(crate) struct TransportBridgeTcpConnectOperation<'a, TBridge, TLeaf> {
-    bridge: &'a TBridge,
-    prepared: PreparedTransportBridgeLeaf<TLeaf>,
+    pub(crate) bridge: &'a TBridge,
+    pub(crate) prepared: PreparedTransportBridgeLeaf<TLeaf>,
 }
 
 #[cfg(any(
@@ -284,7 +262,7 @@ where
             .await
             .map_err(|error| TcpOutboundFailure {
                 stage: TBridge::TCP_CONNECT_STAGE,
-                error,
+                error: error.into(),
                 upstream_endpoint: Some((server.clone(), port)),
             })?;
             let (stream, traffic) = opened.into_proxied_stream_parts();
@@ -306,8 +284,8 @@ where
     feature = "mieru"
 ))]
 pub(crate) struct TransportBridgeTcpRelayOperation<'a, TBridge, TLeaf> {
-    bridge: &'a TBridge,
-    prepared: PreparedTransportBridgeLeaf<TLeaf>,
+    pub(crate) bridge: &'a TBridge,
+    pub(crate) prepared: PreparedTransportBridgeLeaf<TLeaf>,
 }
 
 #[cfg(any(
@@ -342,152 +320,9 @@ where
                 &self.prepared,
             )
             .await
+            .map_err(Into::into)
         })
     }
-}
-
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
-))]
-pub(crate) fn prepare_transport_bridge_tcp_connect<'a, TBridge>(
-    bridge: &'a TBridge,
-    source_dir: Option<&std::path::Path>,
-    leaf: &'a ResolvedLeafOutbound<'a>,
-) -> Result<Box<dyn PreparedTcpConnectOperation + 'a>, TcpOutboundFailure>
-where
-    TBridge: Send
-        + Sync
-        + ProtocolTransportLeafResolver<'a>
-        + ProtocolTcpTransportBridgeMetadata
-        + ProtocolTcpTransportBridgeOps<<TBridge as ProtocolTransportLeafResolver<'a>>::TransportLeaf>,
-    <TBridge as ProtocolTransportLeafResolver<'a>>::TransportLeaf:
-        ProtocolTransportLeaf + Send + Sync,
-    <TBridge as ProtocolTransportLeafResolver<'a>>::ResolveError: std::fmt::Display,
-    TBridge::Opened: ProtocolTcpTransportOpenResult,
-{
-    let prepared = prepare_transport_bridge_leaf(bridge, source_dir, leaf)
-        .map_err(|error| connect_prepare_failure::<TBridge>(leaf, error))?;
-    Ok(Box::new(TransportBridgeTcpConnectOperation {
-        bridge,
-        prepared,
-    }))
-}
-
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
-))]
-pub(crate) fn prepare_transport_bridge_tcp_relay<'a, TBridge>(
-    bridge: &'a TBridge,
-    source_dir: Option<&std::path::Path>,
-    leaf: &'a ResolvedLeafOutbound<'a>,
-) -> Result<Box<dyn PreparedTcpRelayOperation + 'a>, EngineError>
-where
-    TBridge: Send
-        + Sync
-        + ProtocolTransportLeafResolver<'a>
-        + ProtocolTcpTransportBridgeMetadata
-        + ProtocolTcpTransportBridgeOps<<TBridge as ProtocolTransportLeafResolver<'a>>::TransportLeaf>,
-    <TBridge as ProtocolTransportLeafResolver<'a>>::TransportLeaf: Send + Sync,
-    <TBridge as ProtocolTransportLeafResolver<'a>>::ResolveError: std::fmt::Display,
-{
-    let prepared = prepare_transport_bridge_leaf(bridge, source_dir, leaf)
-        .map_err(|error| relay_prepare_error::<TBridge, _>(error))?;
-    Ok(Box::new(TransportBridgeTcpRelayOperation {
-        bridge,
-        prepared,
-    }))
-}
-
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
-))]
-fn connect_prepare_failure<TBridge>(
-    leaf: &ResolvedLeafOutbound<'_>,
-    error: ResolveTransportLeafError<impl std::fmt::Display>,
-) -> TcpOutboundFailure
-where
-    TBridge: ProtocolTcpTransportBridgeMetadata,
-{
-    let (stage, error, upstream_endpoint) = match error {
-        ResolveTransportLeafError::InvalidConfig(error) => (
-            TBridge::TCP_CONNECT_STAGE,
-            invalid_input(TBridge::TCP_INVALID_CONNECT_CONFIG, error),
-            leaf.proxy_endpoint()
-                .map(|(server, port)| (server.to_owned(), port)),
-        ),
-        ResolveTransportLeafError::MissingLeaf => (
-            TBridge::TCP_CONNECT_STAGE,
-            invalid_input(
-                TBridge::TCP_INVALID_CONNECT_LEAF_STAGE,
-                TBridge::EXPECTED_OUTBOUND_LEAF,
-            ),
-            None,
-        ),
-    };
-    TcpOutboundFailure {
-        stage,
-        error,
-        upstream_endpoint,
-    }
-}
-
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
-))]
-fn relay_prepare_error<TBridge, E>(error: ResolveTransportLeafError<E>) -> EngineError
-where
-    TBridge: ProtocolTcpTransportBridgeMetadata,
-    E: std::fmt::Display,
-{
-    match error {
-        ResolveTransportLeafError::InvalidConfig(error) => {
-            invalid_input(TBridge::TCP_INVALID_RELAY_CONFIG, error)
-        }
-        ResolveTransportLeafError::MissingLeaf => invalid_input(
-            TBridge::TCP_INVALID_RELAY_LEAF_STAGE,
-            TBridge::EXPECTED_OUTBOUND_LEAF,
-        ),
-    }
-}
-
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
-))]
-fn invalid_input(stage: &'static str, error: impl std::fmt::Display) -> EngineError {
-    EngineError::Io(std::io::Error::new(
-        std::io::ErrorKind::InvalidInput,
-        format!("{stage}: {error}"),
-    ))
 }
 
 pub(crate) enum PreparedTcpOperation<'a, 'leaf> {
@@ -547,7 +382,7 @@ where
         .await
         .map_err(|error| TcpOutboundFailure {
             stage: handshake.connect_stage(),
-            error,
+            error: error.into(),
             upstream_endpoint: Some(endpoint.clone()),
         })?;
     Ok(EstablishedTcpOutbound::proxied(
@@ -583,7 +418,7 @@ where
         .await
         .map_err(|error| TcpOutboundFailure {
             stage: handshake.connect_stage(),
-            error,
+            error: error.into(),
             upstream_endpoint: Some(endpoint.clone()),
         })?;
     let (stream, traffic) = handshake
@@ -591,7 +426,7 @@ where
         .await
         .map_err(|error| TcpOutboundFailure {
             stage: handshake.connect_stage(),
-            error,
+            error: error.into(),
             upstream_endpoint: Some(endpoint.clone()),
         })?;
     if !traffic.is_empty() {
@@ -622,7 +457,11 @@ pub(crate) async fn execute_socket_tcp_relay_hop_operation<T>(
 where
     T: ProtocolSocketTcpHandshake,
 {
-    operation.handshake.handshake_relay(stream, session).await
+    operation
+        .handshake
+        .handshake_relay(stream, session)
+        .await
+        .map_err(Into::into)
 }
 
 pub(crate) async fn execute_direct_tcp_operation(

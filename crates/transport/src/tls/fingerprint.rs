@@ -1,14 +1,14 @@
 use std::io;
 
+use crate::RuntimeError;
 use tokio::io::{AsyncRead, AsyncWrite};
-use zero_engine::EngineError;
 use zero_platform_tokio::{TcpRelayStream, TokioSocket};
 
 pub(super) async fn connect_stream<S>(
     stream: S,
     server_name: &str,
     fingerprint: &crate::fingerprint::TlsFingerprint,
-) -> Result<TcpRelayStream, EngineError>
+) -> Result<TcpRelayStream, RuntimeError>
 where
     S: AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static,
 {
@@ -16,7 +16,7 @@ where
     let tls_stream = ztls::stream::Tls13Stream::connect_async(stream, config)
         .await
         .map_err(|error| {
-            EngineError::Io(io::Error::other(format!(
+            RuntimeError::Io(io::Error::other(format!(
                 "custom TLS handshake over relay stream: {error}"
             )))
         })?;
@@ -27,12 +27,12 @@ pub(super) async fn connect_upstream(
     socket: TokioSocket,
     server_name: &str,
     fingerprint: &crate::fingerprint::TlsFingerprint,
-) -> Result<TcpRelayStream, EngineError> {
+) -> Result<TcpRelayStream, RuntimeError> {
     let config = tls13_config(server_name, fingerprint);
     let tls_stream = ztls::stream::Tls13Stream::connect(socket.into_inner(), config)
         .await
         .map_err(|error| {
-            EngineError::Io(io::Error::other(format!("custom TLS handshake: {error}")))
+            RuntimeError::Io(io::Error::other(format!("custom TLS handshake: {error}")))
         })?;
     Ok(TcpRelayStream::new(tls_stream))
 }

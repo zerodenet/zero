@@ -2,6 +2,7 @@
 use async_trait::async_trait;
 #[cfg(feature = "trojan")]
 mod listener;
+use ::trojan::transport::{OwnedTrojanOutboundTlsPlan, TrojanOutboundLeaf, TrojanTlsBridge};
 #[cfg(feature = "trojan")]
 use zero_config::InboundConfig;
 use zero_config::{InboundProtocolConfig, OutboundProtocolConfig};
@@ -9,9 +10,6 @@ use zero_config::{InboundProtocolConfig, OutboundProtocolConfig};
 #[cfg(feature = "trojan")]
 use zero_engine::{EngineError, ResolvedLeafOutbound};
 use zero_traits::{ProtocolCapabilityDescriptor, ProtocolMetadata};
-use zero_transport::trojan_transport::{
-    OwnedTrojanOutboundTlsPlan, TrojanOutboundLeaf, TrojanTlsBridge,
-};
 
 use crate::adapters::identity::{
     named_protocol_claims_runtime_leaf, named_protocol_supports_inbound,
@@ -19,19 +17,18 @@ use crate::adapters::identity::{
 };
 use crate::protocol_registry::ProtocolTransportLeafResolver;
 use crate::protocol_registry::{
-    proxy_leaf_runtime, InboundListenerCapability, ManagedUdpHandlerProvider, OutboundLeafRuntime,
-    ProtocolSupportCapability, TcpOutboundCapability, UdpFlowCapability, UdpPacketPathCapability,
+    prepare_transport_bridge_tcp_connect, prepare_transport_bridge_tcp_relay, proxy_leaf_runtime,
+    InboundListenerCapability, ManagedUdpHandlerProvider, OutboundLeafRuntime,
+    PreparedTransportUdpOperation, ProtocolSupportCapability, TcpOutboundCapability,
+    TransportBridgeUdpOperation, UdpFlowCapability, UdpPacketPathCapability,
 };
 use crate::runtime::path::TcpPathCategory;
 #[cfg(feature = "trojan")]
 use crate::runtime::tcp_dispatch::operation::{
-    prepare_transport_bridge_tcp_connect, prepare_transport_bridge_tcp_relay,
     PreparedTcpConnectOperation, PreparedTcpRelayOperation,
 };
 #[cfg(feature = "trojan")]
-use crate::runtime::udp_dispatch::operation::{
-    PreparedTransportUdpOperation, PreparedUdpFlowOperation, TransportBridgeUdpOperation,
-};
+use crate::runtime::udp_dispatch::operation::PreparedUdpFlowOperation;
 #[cfg(feature = "trojan")]
 use crate::runtime::udp_dispatch::FlowFailure;
 #[cfg(feature = "trojan")]

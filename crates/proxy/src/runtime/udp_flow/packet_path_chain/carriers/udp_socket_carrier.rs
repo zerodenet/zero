@@ -39,10 +39,13 @@ impl PacketPathCarrier for PacketPathCarrierAdapter {
         port: u16,
         payload: &[u8],
     ) -> Result<(), EngineError> {
-        self.0.send_to(target, port, payload).await
+        self.0
+            .send_to(target, port, payload)
+            .await
+            .map_err(Into::into)
     }
 
     async fn recv_from(&self, buf: &mut [u8]) -> Result<usize, EngineError> {
-        self.0.recv_from(buf).await
+        self.0.recv_from(buf).await.map_err(Into::into)
     }
 }

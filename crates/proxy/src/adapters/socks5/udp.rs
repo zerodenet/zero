@@ -1,5 +1,5 @@
+use ::socks5::transport::Socks5ManagedUdpPacketPathPlan;
 use zero_engine::{EngineError, ResolvedLeafOutbound};
-use zero_transport::socks5_transport::Socks5ManagedUdpPacketPathPlan;
 
 use crate::adapters::socks5::Socks5Adapter;
 use crate::protocol_registry::ProtocolSupportCapability;
@@ -16,10 +16,10 @@ struct Socks5PacketPathOperation {
 }
 
 impl PreparedUdpPacketPathOperation for Socks5PacketPathOperation {
-    fn into_carrier_descriptor(
-        self: Box<Self>,
+    fn carrier_descriptor(
+        &self,
     ) -> Option<crate::runtime::udp_flow::packet_path::PacketPathCarrierDescriptor> {
-        Some(packet_path::carrier_descriptor(self.plan))
+        Some(packet_path::carrier_descriptor(self.plan.clone()))
     }
 
     fn build_carrier<'a>(

@@ -12,11 +12,10 @@ use std::collections::HashMap;
 use crate::runtime::udp_flow::packet_path::{PacketPathLookupKey, UdpFlowContext, UdpPacketRef};
 use crate::runtime::udp_flow::result::FlowFailure;
 use crate::runtime::Proxy;
-use zero_engine::{EngineError, ResolvedLeafOutbound};
+use zero_engine::EngineError;
 
 mod bridge;
 pub(crate) mod carriers;
-mod diagnostics;
 mod entry;
 mod key;
 mod model;
@@ -25,8 +24,8 @@ mod snapshot;
 use bridge::dispatch_via_entry;
 use entry::build_entry;
 use key::PathKey;
-use model::Entry;
-pub(crate) use model::PacketPathStartRequest;
+use model::{Entry, EntryCandidate};
+pub(crate) use model::{PacketPathCarrierRequest, PacketPathStartRequest};
 
 pub(crate) struct PacketPathManager {
     upstreams: HashMap<PathKey, Entry>,
@@ -45,19 +44,24 @@ impl PacketPathManager {
         &mut self,
         ctx: UdpFlowContext<'_>,
         proxy: &Proxy,
-        carrier_leaf: &ResolvedLeafOutbound<'_>,
-        datagram_leaf: &ResolvedLeafOutbound<'_>,
-        packet_ref: UdpPacketRef<'_>,
+        request: PacketPathStartRequest<'_>,
     ) -> Result<usize, FlowFailure> {
+        let PacketPathStartRequest {
+            carrier,
+            datagram,
+            packet,
+            ..
+        } = request;
+        let upstream = carrier.upstream();
         let entry = self
-            .ensure_entry(proxy, carrier_leaf, datagram_leaf)
+            .ensure_entry(proxy, carrier, datagram)
             .await
             .map_err(|error| FlowFailure {
                 stage: "packet_path_establish",
                 error,
-                upstream: Some(diagnostics::carrier_upstream(proxy, carrier_leaf)),
+                upstream: Some(upstream),
             })?;
-        dispatch_via_entry(entry, ctx, packet_ref).await
+        dispatch_via_entry(entry, ctx, packet).await
     }
 
     /// Forward path: the carrier was cached at start time; look it up by the
@@ -78,14 +82,17 @@ impl PacketPathManager {
     async fn ensure_entry(
         &mut self,
         proxy: &Proxy,
-        carrier_leaf: &ResolvedLeafOutbound<'_>,
-        datagram_leaf: &ResolvedLeafOutbound<'_>,
+        carrier: PacketPathCarrierRequest<'_>,
+        datagram: crate::runtime::udp_flow::packet_path::UdpDatagramSource,
     ) -> Result<&Entry, EngineError> {
-        let candidate = entry::resolve_candidate(proxy, carrier_leaf, datagram_leaf)?;
+        let candidate = EntryCandidate {
+            carrier_desc: carrier.descriptor,
+            datagram,
+        };
         let key = candidate.key();
 
         if !self.upstreams.contains_key(&key) {
-            let entry = build_entry(proxy, carrier_leaf, candidate).await?;
+            let entry = build_entry(proxy, carrier.build_operation, candidate).await?;
             self.upstreams.insert(key.clone(), entry);
         }
 

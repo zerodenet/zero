@@ -12,10 +12,8 @@ use crate::runtime::udp_flow::managed::{
 };
 
 pub(crate) fn managed_stream_handler() -> ManagedStreamHandlerPair {
-    managed_stream_handler_box::<zero_transport::mieru_transport::MieruManagedStreamUdpResume>(
-        ManagedStreamStages::from_resume::<
-            zero_transport::mieru_transport::MieruManagedStreamUdpResume,
-        >(),
+    managed_stream_handler_box::<::mieru::transport::MieruManagedStreamUdpResume>(
+        ManagedStreamStages::from_resume::<::mieru::transport::MieruManagedStreamUdpResume>(),
     )
 }
 

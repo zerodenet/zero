@@ -16,7 +16,7 @@ use rand::seq::IndexedRandom;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf};
 use tokio::sync::mpsc;
 
-use zero_engine::EngineError;
+use crate::RuntimeError;
 use zero_traits::AsyncSocket;
 
 use zero_platform_tokio::ClientStream;
@@ -59,15 +59,18 @@ impl GrpcStream {
     }
 }
 
-// 鈹€鈹€ client (outbound) connect 鈹€鈹€
+// 閳光偓閳光偓 client (outbound) connect 閳光偓閳光偓
 
-pub async fn connect_grpc<S>(stream: S, service_names: &[String]) -> Result<GrpcStream, EngineError>
+pub async fn connect_grpc<S>(
+    stream: S,
+    service_names: &[String],
+) -> Result<GrpcStream, RuntimeError>
 where
     S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
     let (mut h2, conn) = h2::client::handshake(stream)
         .await
-        .map_err(|e| EngineError::Io(io::Error::other(format!("h2 client handshake: {e}"))))?;
+        .map_err(|e| RuntimeError::Io(io::Error::other(format!("h2 client handshake: {e}"))))?;
 
     tokio::spawn(async move {
         if let Err(e) = conn.await {
@@ -87,17 +90,17 @@ where
         .header("content-type", "application/grpc")
         .header("te", "trailers")
         .body(())
-        .map_err(|e| EngineError::Io(io::Error::other(format!("grpc request build: {e}"))))?;
+        .map_err(|e| RuntimeError::Io(io::Error::other(format!("grpc request build: {e}"))))?;
 
     // h2 0.4: send_request is synchronous, returns (ResponseFuture, SendStream)
     let (resp_future, send_stream) = h2
         .send_request(request, false)
-        .map_err(|e| EngineError::Io(io::Error::other(format!("grpc send request: {e}"))))?;
+        .map_err(|e| RuntimeError::Io(io::Error::other(format!("grpc send request: {e}"))))?;
 
     Ok(build_grpc_client_stream(send_stream, resp_future))
 }
 
-// 鈹€鈹€ server (inbound) accept 鈹€鈹€
+// 閳光偓閳光偓 server (inbound) accept 閳光偓閳光偓
 
 /// Accept gRPC streams on this h2 connection, calling `handler` for each.
 ///
@@ -112,15 +115,15 @@ pub async fn serve_grpc<S, H, F>(
     stream: S,
     expected_services: &[String],
     mut handler: H,
-) -> Result<(), EngineError>
+) -> Result<(), RuntimeError>
 where
     S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
     H: FnMut(GrpcStream) -> F + Send + 'static,
-    F: std::future::Future<Output = Result<(), EngineError>> + Send + 'static,
+    F: std::future::Future<Output = Result<(), RuntimeError>> + Send + 'static,
 {
     let mut conn = h2::server::handshake(stream)
         .await
-        .map_err(|e| EngineError::Io(io::Error::other(format!("h2 server handshake: {e}"))))?;
+        .map_err(|e| RuntimeError::Io(io::Error::other(format!("h2 server handshake: {e}"))))?;
 
     loop {
         let (request, mut respond) = match conn.accept().await {
@@ -182,24 +185,24 @@ where
 pub async fn accept_grpc<S>(
     stream: S,
     expected_services: &[String],
-) -> Result<GrpcStream, EngineError>
+) -> Result<GrpcStream, RuntimeError>
 where
     S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
     let mut conn = h2::server::handshake(stream)
         .await
-        .map_err(|e| EngineError::Io(io::Error::other(format!("h2 server handshake: {e}"))))?;
+        .map_err(|e| RuntimeError::Io(io::Error::other(format!("h2 server handshake: {e}"))))?;
 
     let (request, mut respond) = conn
         .accept()
         .await
         .ok_or_else(|| {
-            EngineError::Io(io::Error::new(
+            RuntimeError::Io(io::Error::new(
                 io::ErrorKind::ConnectionAborted,
                 "h2 connection closed before request",
             ))
         })?
-        .map_err(|e| EngineError::Io(io::Error::other(format!("h2 accept: {e}"))))?;
+        .map_err(|e| RuntimeError::Io(io::Error::other(format!("h2 accept: {e}"))))?;
 
     let path = request.uri().path();
     if !expected_services.iter().any(|s| s == path) {
@@ -207,8 +210,8 @@ where
         *resp.status_mut() = http::StatusCode::NOT_FOUND;
         respond
             .send_response(resp, true)
-            .map_err(|e| EngineError::Io(io::Error::other(format!("h2 respond: {e}"))))?;
-        return Err(EngineError::Io(io::Error::new(
+            .map_err(|e| RuntimeError::Io(io::Error::other(format!("h2 respond: {e}"))))?;
+        return Err(RuntimeError::Io(io::Error::new(
             io::ErrorKind::ConnectionRefused,
             format!("grpc path mismatch: got {path}"),
         )));
@@ -220,7 +223,7 @@ where
 
     let send_stream = respond
         .send_response(resp, false)
-        .map_err(|e| EngineError::Io(io::Error::other(format!("h2 respond: {e}"))))?;
+        .map_err(|e| RuntimeError::Io(io::Error::other(format!("h2 respond: {e}"))))?;
 
     let recv_stream = request.into_body();
 
@@ -238,12 +241,12 @@ where
     build_grpc_stream(send_stream, recv_stream)
 }
 
-// 鈹€鈹€ common gRPC stream builder 鈹€鈹€
+// 閳光偓閳光偓 common gRPC stream builder 閳光偓閳光偓
 
 fn build_grpc_stream(
     send_stream: h2::SendStream<Bytes>,
     recv_stream: h2::RecvStream,
-) -> Result<GrpcStream, EngineError> {
+) -> Result<GrpcStream, RuntimeError> {
     let (write_tx, write_rx) = mpsc::unbounded_channel::<Vec<u8>>();
     let (read_tx, read_rx) = mpsc::channel::<Vec<u8>>(64);
 
@@ -465,7 +468,7 @@ fn varint_len(mut value: u64) -> usize {
     len
 }
 
-// 鈹€鈹€ AsyncRead / AsyncWrite / AsyncSocket / ClientStream impls 鈹€鈹€
+// 閳光偓閳光偓 AsyncRead / AsyncWrite / AsyncSocket / ClientStream impls 閳光偓閳光偓
 
 impl AsyncRead for GrpcStream {
     fn poll_read(

@@ -1,0 +1,64 @@
+use std::io;
+use std::path::{Path, PathBuf};
+
+use super::super::profile::OwnedVlessQuicBindProfile;
+use zero_transport::RuntimeError;
+
+use zero_transport::quic;
+
+#[derive(Debug, Clone, Default)]
+pub struct OwnedVlessInboundBindPlan {
+    quic_cert_path: Option<String>,
+    quic_key_path: Option<String>,
+    source_dir: Option<PathBuf>,
+}
+
+impl OwnedVlessInboundBindPlan {
+    pub fn from_quic_profile(
+        source_dir: Option<&Path>,
+        quic: Option<&OwnedVlessQuicBindProfile>,
+    ) -> Self {
+        Self {
+            quic_cert_path: quic.and_then(|config| config.cert_path.clone()),
+            quic_key_path: quic.and_then(|config| config.key_path.clone()),
+            source_dir: source_dir.map(PathBuf::from),
+        }
+    }
+
+    async fn bind(&self, listen_addr: &str) -> Result<Option<quic::QuicInbound>, RuntimeError> {
+        match (
+            self.quic_cert_path.as_deref(),
+            self.quic_key_path.as_deref(),
+        ) {
+            (Some(cert_path), Some(key_path)) => Ok(Some(
+                quic::QuicInbound::bind(
+                    listen_addr,
+                    cert_path,
+                    key_path,
+                    self.source_dir.as_deref(),
+                )
+                .await?,
+            )),
+            (None, None) => Ok(None),
+            _ => Err(RuntimeError::Io(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "vless quic inbound bind requires both cert_path and key_path",
+            ))),
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl zero_transport::inbound_route::ProtocolInboundBindPlan for OwnedVlessInboundBindPlan {
+    async fn bind(
+        &self,
+        listen_addr: &str,
+    ) -> Result<zero_transport::inbound_route::TransportInboundBindTarget, RuntimeError> {
+        match OwnedVlessInboundBindPlan::bind(self, listen_addr).await? {
+            Some(endpoint) => {
+                Ok(zero_transport::inbound_route::TransportInboundBindTarget::Quic(endpoint))
+            }
+            None => Ok(zero_transport::inbound_route::TransportInboundBindTarget::Tcp),
+        }
+    }
+}

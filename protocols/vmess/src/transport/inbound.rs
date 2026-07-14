@@ -1,0 +1,110 @@
+use std::io;
+use std::path::Path;
+
+use zero_platform_tokio::{TcpRelayStream, TokioSocket};
+use zero_traits::{GrpcTransportProfile, ServerTlsProfile, WebSocketTransportProfile};
+use zero_transport::inbound_route::{NoClientMuxRouteDefaults, OpaqueMuxRoute};
+use zero_transport::inbound_stack::InboundStreamStack;
+use zero_transport::profile::{OwnedGrpcProfile, OwnedH2Profile, OwnedWebSocketProfile};
+use zero_transport::tls;
+use zero_transport::RuntimeError;
+
+#[derive(Clone)]
+pub struct VmessInboundListenerRequest {
+    profile: crate::inbound::VmessInboundProfile,
+    tls_acceptor: tls::TlsAcceptor,
+    ws: Option<OwnedWebSocketProfile>,
+    grpc: Option<OwnedGrpcProfile>,
+    protocol_name: &'static str,
+}
+
+impl VmessInboundListenerRequest {
+    pub const ERROR_PROTOCOL_NAME: &'static str = "vmess";
+    pub const UDP_PROTOCOL: &'static str = "vmess_udp";
+    pub const MUX_PROTOCOL: &'static str = "vmess_mux";
+    pub const PANIC_MESSAGE: &'static str = "vmess mux task panicked";
+    pub const ABORT_ON_END: bool = false;
+    pub const READ_ERROR_LOG: &'static str = "vmess mux frame read failed";
+
+    pub fn from_profile_refs<TTls, TWs, TGrpc>(
+        source_dir: Option<&Path>,
+        profile: crate::inbound::VmessInboundProfile,
+        tls: Option<&TTls>,
+        ws: Option<&TWs>,
+        grpc: Option<&TGrpc>,
+    ) -> Result<Self, RuntimeError>
+    where
+        TTls: ServerTlsProfile + ?Sized,
+        TWs: WebSocketTransportProfile + ?Sized,
+        TGrpc: GrpcTransportProfile + ?Sized,
+    {
+        let protocol_name = match (ws, grpc) {
+            (Some(_), Some(_)) => {
+                return Err(RuntimeError::Io(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "vmess: ws and grpc are mutually exclusive",
+                )));
+            }
+            (Some(_), None) => "vmess+ws",
+            (None, Some(_)) => "vmess+grpc",
+            (None, None) => "vmess",
+        };
+
+        Ok(Self {
+            profile,
+            tls_acceptor: zero_transport::inbound_stack::build_required_tls_acceptor(
+                source_dir,
+                tls,
+                "vmess requires TLS",
+            )?,
+            ws: ws.map(OwnedWebSocketProfile::from_profile),
+            grpc: grpc.map(OwnedGrpcProfile::from_profile),
+            protocol_name,
+        })
+    }
+
+    pub fn protocol_name(&self) -> &'static str {
+        self.protocol_name
+    }
+
+    pub fn error_protocol_name(&self) -> &'static str {
+        Self::ERROR_PROTOCOL_NAME
+    }
+
+    pub fn no_client_mux_route_defaults(&self) -> NoClientMuxRouteDefaults {
+        NoClientMuxRouteDefaults {
+            udp_protocol: Self::UDP_PROTOCOL,
+            mux_protocol: Self::MUX_PROTOCOL,
+            panic_message: Self::PANIC_MESSAGE,
+            abort_on_end: Self::ABORT_ON_END,
+            read_error_log: Self::READ_ERROR_LOG,
+        }
+    }
+
+    pub async fn accept_route(
+        self,
+        socket: TokioSocket,
+    ) -> Result<
+        OpaqueMuxRoute<
+            crate::mux::VmessInboundAcceptedStream<crate::stream::VmessAeadStream<TcpRelayStream>>,
+        >,
+        RuntimeError,
+    > {
+        let stream = zero_transport::inbound_stack::accept_tls_inbound_stream_stack(
+            socket,
+            &self.tls_acceptor,
+            InboundStreamStack {
+                ws: self.ws.as_ref(),
+                grpc: self.grpc.as_ref(),
+                h2: None::<&OwnedH2Profile>,
+            },
+            "vmess: ws and grpc are mutually exclusive",
+        )
+        .await?;
+        self.profile
+            .accept_route_owned(crate::inbound::VmessInbound, stream)
+            .await
+            .map(OpaqueMuxRoute::new)
+            .map_err(RuntimeError::from)
+    }
+}

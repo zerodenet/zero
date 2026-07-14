@@ -1,35 +1,34 @@
-//! XHTTP transport (formerly SplitHTTP) — `split_http.rs`
+//! XHTTP transport (formerly SplitHTTP) 鈥?`split_http.rs`
 //!
 //! Splits a bidirectional stream across HTTP request(s) paired by an
-//! `X-Session-Id` header. XTLS renamed SplitHTTP → XHTTP; the standalone
+//! `X-Session-Id` header. XTLS renamed SplitHTTP 鈫?XHTTP; the standalone
 //! `quic` transport was removed in favour of XHTTP `stream-one` over H3.
 //!
-//! ## Modes (`SplitHttpConfig.mode`)
+//! ## Modes (`SplitHttpTransportProfile::mode`)
 //! - **stream-one** (default, also selected by `auto`): a single
-//!   bidirectional connection — a chunked POST body carries upload and a
+//!   bidirectional connection 鈥?a chunked POST body carries upload and a
 //!   chunked response body carries download, both over the same TCP/TLS
 //!   socket. This is the only mode that works as a **relay-chain final hop**,
 //!   where the relay prefix provides a single stream. `XhttpStreamOne`
 //!   implements it.
-//! - **packet-up** / **stream-up**: the legacy two-connection model — a POST
+//! - **packet-up** / **stream-up**: the legacy two-connection model 鈥?a POST
 //!   connection uploads, a separate GET connection downloads, paired by the
 //!   server-side `SplitHttpRegistry`. Single-hop direct only; cannot be a
 //!   relay final hop.
 //!
 //! ## Architecture
-//! - Client `stream-one`: `connect_xhttp_stream_one` — one connection.
-//! - Client two-connection: `connect_split_http` — POST + GET on two sockets.
+//! - Client `stream-one`: `connect_xhttp_stream_one` 鈥?one connection.
+//! - Client two-connection: `connect_split_http` 鈥?POST + GET on two sockets.
 //! - Server two-connection: `accept_split_http` pairs POST/GET by session ID.
 
 use std::io;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
+use crate::RuntimeError;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf};
-use zero_config::SplitHttpConfig;
-use zero_engine::EngineError;
 use zero_platform_tokio::ClientStream;
-use zero_traits::AsyncSocket;
+use zero_traits::{AsyncSocket, SplitHttpTransportProfile};
 
 mod chunked;
 mod legacy;
@@ -132,15 +131,16 @@ impl<S> ClientStream for AcceptedSplitHttpInboundStream<S> where
 }
 
 /// Accept either XHTTP stream-one or paired SplitHTTP inbound transport.
-pub async fn accept_xhttp_inbound<S>(
+pub async fn accept_xhttp_inbound<S, TProfile>(
     stream: S,
-    config: &SplitHttpConfig,
+    config: &TProfile,
     registry: &SplitHttpRegistry,
-) -> Result<Option<AcceptedSplitHttpInboundStream<S>>, EngineError>
+) -> Result<Option<AcceptedSplitHttpInboundStream<S>>, RuntimeError>
 where
     S: AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static,
+    TProfile: SplitHttpTransportProfile + ?Sized,
 {
-    if XhttpMode::parse(&config.mode).is_single_connection() {
+    if XhttpMode::parse(config.mode()).is_single_connection() {
         return accept_xhttp_stream_one(stream, config)
             .await
             .map(AcceptedSplitHttpInboundStream::StreamOne)

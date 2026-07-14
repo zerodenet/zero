@@ -1,5 +1,8 @@
-﻿use serde::{Deserialize, Serialize};
-use zero_traits::ClientTlsProfile;
+use serde::{Deserialize, Serialize};
+use zero_traits::{
+    ClientTlsProfile, GrpcTransportProfile, H2TransportProfile, HttpUpgradeTransportProfile,
+    InboundFallbackProfile, ServerTlsProfile, SplitHttpTransportProfile, WebSocketTransportProfile,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -13,6 +16,24 @@ pub struct TlsConfig {
     /// Controls cipher suite preference order in the ServerHello.
     #[serde(default)]
     pub server_fingerprint: Option<String>,
+}
+
+impl ServerTlsProfile for TlsConfig {
+    fn cert_path(&self) -> &str {
+        &self.cert_path
+    }
+
+    fn key_path(&self) -> &str {
+        &self.key_path
+    }
+
+    fn alpn(&self) -> &[String] {
+        self.alpn.as_slice()
+    }
+
+    fn server_fingerprint(&self) -> Option<&str> {
+        self.server_fingerprint.as_deref()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -93,6 +114,19 @@ pub struct WebSocketConfig {
     pub headers: std::collections::HashMap<String, String>,
 }
 
+impl WebSocketTransportProfile for WebSocketConfig {
+    fn path(&self) -> &str {
+        &self.path
+    }
+
+    fn header_pairs(&self) -> Vec<(String, String)> {
+        self.headers
+            .iter()
+            .map(|(key, value)| (key.clone(), value.clone()))
+            .collect()
+    }
+}
+
 fn default_ws_path() -> String {
     "/".to_string()
 }
@@ -105,6 +139,12 @@ pub struct GrpcConfig {
         deserialize_with = "deserialize_service_names"
     )]
     pub service_names: Vec<String>,
+}
+
+impl GrpcTransportProfile for GrpcConfig {
+    fn service_names(&self) -> &[String] {
+        self.service_names.as_slice()
+    }
 }
 
 fn default_grpc_service_names() -> Vec<String> {
@@ -161,6 +201,16 @@ pub struct H2Config {
     pub path: String,
 }
 
+impl H2TransportProfile for H2Config {
+    fn host(&self) -> Option<&str> {
+        self.host.as_deref()
+    }
+
+    fn path(&self) -> &str {
+        &self.path
+    }
+}
+
 fn default_h2_path() -> String {
     "/".to_string()
 }
@@ -172,6 +222,16 @@ pub struct HttpUpgradeConfig {
     pub host: Option<String>,
     #[serde(default = "default_http_upgrade_path")]
     pub path: String,
+}
+
+impl HttpUpgradeTransportProfile for HttpUpgradeConfig {
+    fn host(&self) -> Option<&str> {
+        self.host.as_deref()
+    }
+
+    fn path(&self) -> &str {
+        &self.path
+    }
 }
 
 fn default_http_upgrade_path() -> String {
@@ -200,6 +260,20 @@ pub struct SplitHttpConfig {
     pub mode: String,
 }
 
+impl SplitHttpTransportProfile for SplitHttpConfig {
+    fn host(&self) -> Option<&str> {
+        self.host.as_deref()
+    }
+
+    fn path(&self) -> &str {
+        &self.path
+    }
+
+    fn mode(&self) -> &str {
+        &self.mode
+    }
+}
+
 fn default_split_http_path() -> String {
     "/".to_string()
 }
@@ -215,6 +289,20 @@ pub struct FallbackConfig {
     pub port: u16,
     #[serde(default)]
     pub alpn: Option<String>,
+}
+
+impl InboundFallbackProfile for FallbackConfig {
+    fn server(&self) -> &str {
+        &self.server
+    }
+
+    fn port(&self) -> u16 {
+        self.port
+    }
+
+    fn alpn(&self) -> Option<&str> {
+        self.alpn.as_deref()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

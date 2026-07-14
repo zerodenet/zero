@@ -18,7 +18,7 @@ pub struct TlsFingerprint {
     pub kx_groups: Vec<&'static dyn rustls::crypto::SupportedKxGroup>,
 }
 
-// ── Cipher suite aliases ────────────────────────────────────────────
+// 鈹€鈹€ Cipher suite aliases 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
 fn cs(name: &str) -> SupportedCipherSuite {
     let suites = ring_provider::default_provider().cipher_suites;
@@ -59,7 +59,7 @@ fn tls12_rsa_chacha() -> SupportedCipherSuite {
     cs("TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256")
 }
 
-// ── Kx groups ───────────────────────────────────────────────────────
+// 鈹€鈹€ Kx groups 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
 fn kx_x25519() -> &'static dyn rustls::crypto::SupportedKxGroup {
     ring_provider::kx_group::X25519
@@ -71,7 +71,7 @@ fn kx_p384() -> &'static dyn rustls::crypto::SupportedKxGroup {
     ring_provider::kx_group::SECP384R1
 }
 
-// ── Lookup ──────────────────────────────────────────────────────────
+// 鈹€鈹€ Lookup 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
 /// Look up a fingerprint preset by name.
 pub fn lookup_fingerprint(name: &str) -> Option<TlsFingerprint> {
@@ -98,7 +98,7 @@ pub fn build_provider(fp: &TlsFingerprint) -> CryptoProvider {
     }
 }
 
-// ── Presets ─────────────────────────────────────────────────────────
+// 鈹€鈹€ Presets 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
 fn chrome() -> TlsFingerprint {
     TlsFingerprint {

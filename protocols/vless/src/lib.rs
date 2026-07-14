@@ -22,6 +22,8 @@ pub mod outbound;
 pub mod reality;
 #[cfg(feature = "runtime")]
 mod shared;
+#[cfg(all(feature = "runtime", feature = "reality"))]
+pub mod transport;
 #[cfg(feature = "runtime")]
 pub mod udp;
 mod uuid;

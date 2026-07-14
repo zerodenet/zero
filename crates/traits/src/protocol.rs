@@ -44,6 +44,61 @@ pub trait ClientTlsProfile {
     fn client_fingerprint(&self) -> Option<&str>;
 }
 
+/// Neutral server TLS profile consumed by inbound acceptors.
+pub trait ServerTlsProfile {
+    fn cert_path(&self) -> &str;
+
+    fn key_path(&self) -> &str;
+
+    fn alpn(&self) -> &[String];
+
+    fn server_fingerprint(&self) -> Option<&str>;
+}
+
+/// Neutral WebSocket transport profile consumed by transport openers.
+pub trait WebSocketTransportProfile {
+    fn path(&self) -> &str;
+
+    fn header_pairs(&self) -> Vec<(String, String)>;
+}
+
+/// Neutral gRPC transport profile consumed by transport openers.
+pub trait GrpcTransportProfile {
+    fn service_names(&self) -> &[String];
+}
+
+/// Neutral HTTP/2 transport profile consumed by transport openers.
+pub trait H2TransportProfile {
+    fn host(&self) -> Option<&str>;
+
+    fn path(&self) -> &str;
+}
+
+/// Neutral HTTP upgrade transport profile consumed by transport openers.
+pub trait HttpUpgradeTransportProfile {
+    fn host(&self) -> Option<&str>;
+
+    fn path(&self) -> &str;
+}
+
+/// Neutral SplitHTTP/XHTTP transport profile consumed by transport openers.
+pub trait SplitHttpTransportProfile {
+    fn host(&self) -> Option<&str>;
+
+    fn path(&self) -> &str;
+
+    fn mode(&self) -> &str;
+}
+
+/// Neutral inbound fallback target consumed by runtime fallback replay.
+pub trait InboundFallbackProfile {
+    fn server(&self) -> &str;
+
+    fn port(&self) -> u16;
+
+    fn alpn(&self) -> Option<&str>;
+}
+
 /// Neutral transport identity hints for stream-based protocol MUX profile
 /// selection.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]

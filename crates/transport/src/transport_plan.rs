@@ -1,11 +1,11 @@
 use core::future::Future;
 use core::pin::Pin;
 
-use zero_engine::EngineError;
+use crate::RuntimeError;
 use zero_platform_tokio::{TcpRelayStream, TokioSocket};
 
 pub type TransportOpenFuture<'a> =
-    Pin<Box<dyn Future<Output = Result<TcpRelayStream, EngineError>> + Send + 'a>>;
+    Pin<Box<dyn Future<Output = Result<TcpRelayStream, RuntimeError>> + Send + 'a>>;
 
 pub trait TcpStreamTransportPlan: Clone + Send + Sync + 'static {
     fn open_direct_stream<'a, OpenSocket, OpenSocketFut>(
@@ -14,7 +14,7 @@ pub trait TcpStreamTransportPlan: Clone + Send + Sync + 'static {
     ) -> TransportOpenFuture<'a>
     where
         OpenSocket: FnOnce(&str, u16) -> OpenSocketFut + Send + 'a,
-        OpenSocketFut: Future<Output = Result<TokioSocket, EngineError>> + Send + 'a;
+        OpenSocketFut: Future<Output = Result<TokioSocket, RuntimeError>> + Send + 'a;
 
     fn open_relay_stream<'a>(&'a self, stream: TcpRelayStream) -> TransportOpenFuture<'a>;
 }
@@ -26,7 +26,7 @@ pub fn direct_stream_opener<'a, TPlan, OpenSocket, OpenSocketFut>(
 where
     TPlan: TcpStreamTransportPlan,
     OpenSocket: FnOnce(&str, u16) -> OpenSocketFut + Send + 'a,
-    OpenSocketFut: Future<Output = Result<TokioSocket, EngineError>> + Send + 'a,
+    OpenSocketFut: Future<Output = Result<TokioSocket, RuntimeError>> + Send + 'a,
 {
     move || transport.open_direct_stream(open_socket)
 }
@@ -61,7 +61,7 @@ where
     ) -> TransportOpenFuture<'a>
     where
         OpenSocket: FnOnce(&str, u16) -> OpenSocketFut + Send + 'a,
-        OpenSocketFut: Future<Output = Result<TokioSocket, EngineError>> + Send + 'a;
+        OpenSocketFut: Future<Output = Result<TokioSocket, RuntimeError>> + Send + 'a;
 
     fn open_relay_stream_with_profile<'a>(
         &'a self,
@@ -79,7 +79,7 @@ where
     TPlan: ProfiledTcpStreamTransportPlan<TProfile>,
     TProfile: Send + 'a,
     OpenSocket: FnOnce(&str, u16) -> OpenSocketFut + Send + 'a,
-    OpenSocketFut: Future<Output = Result<TokioSocket, EngineError>> + Send + 'a,
+    OpenSocketFut: Future<Output = Result<TokioSocket, RuntimeError>> + Send + 'a,
 {
     move || transport.open_direct_stream_with_profile(open_socket, profile)
 }

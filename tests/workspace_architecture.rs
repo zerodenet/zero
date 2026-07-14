@@ -52,8 +52,17 @@ fn transport_does_not_project_engine_outbound_leaves() {
     }
 }
 
+fn dependency_line_is_optional(manifest: &str, dependency: &str) -> bool {
+    manifest.lines().any(|line| {
+        line.contains(dependency)
+            && line.contains('=')
+            && line.contains('{')
+            && line.contains("optional = true")
+    })
+}
+
 #[test]
-fn protocol_crates_depend_only_on_runtime_neutral_workspace_crates() {
+fn protocol_crates_keep_runtime_support_deps_optional_and_out_of_config_space() {
     let protocols = workspace_root().join("protocols");
     for entry in fs::read_dir(protocols).expect("read protocols") {
         let manifest = entry.expect("protocol crate").path().join("Cargo.toml");
@@ -65,17 +74,28 @@ fn protocol_crates_depend_only_on_runtime_neutral_workspace_crates() {
             "zero-api",
             "zero-config",
             "zero-dns",
-            "zero-engine",
-            "zero-platform-tokio",
             "zero-proxy",
             "zero-router",
-            "zero-transport",
         ] {
             assert!(
                 !source.contains(forbidden),
-                "{} must not depend on runtime crate `{forbidden}`",
+                "{} must not depend on non-protocol boundary crate `{forbidden}`",
                 manifest.display()
             );
+        }
+        for runtime_support in ["zero-engine", "zero-platform-tokio", "zero-transport"] {
+            if source.contains(runtime_support) {
+                assert!(
+                    source.contains("runtime = ["),
+                    "{} must isolate `{runtime_support}` behind a runtime feature",
+                    manifest.display()
+                );
+                assert!(
+                    dependency_line_is_optional(&source, runtime_support),
+                    "{} must keep `{runtime_support}` optional",
+                    manifest.display()
+                );
+            }
         }
     }
 }
@@ -138,11 +158,6 @@ fn config_delegates_protocol_private_value_validation() {
     let validator = read(&workspace_root().join("crates/config/src/validate/protocol.rs"));
     for delegated in [
         "vless::parse_uuid",
-        "vmess::parse_uuid",
-        "vmess::VmessCipher::from_name",
-        "shadowsocks::validation::validate_cipher",
-        "shadowsocks::validation::validate_password",
-        "socks5::validate_credential_part",
         "vless::validation::validate_reality_key",
         "vless::validation::validate_reality_short_id",
         "vless::validation::validate_reality_cipher_suites",
@@ -153,6 +168,26 @@ fn config_delegates_protocol_private_value_validation() {
             "config must delegate protocol-private validation through `{delegated}`"
         );
     }
+    assert!(
+        validator.contains("vmess::parse_uuid"),
+        "config must delegate VMess UUID validation through the protocol-owned validator"
+    );
+    assert!(
+        validator.contains("vmess::VmessCipher::from_name"),
+        "config must delegate VMess cipher validation through the protocol-owned validator"
+    );
+    assert!(
+        validator.contains("socks5::validate_credential_part"),
+        "config must delegate SOCKS5 credential validation through the protocol-owned validator"
+    );
+    assert!(
+        validator.contains("shadowsocks::validation::validate_cipher"),
+        "config must delegate Shadowsocks cipher validation through the protocol-owned validator"
+    );
+    assert!(
+        validator.contains("shadowsocks::validation::validate_password"),
+        "config must delegate Shadowsocks password validation through the protocol-owned validator"
+    );
     for duplicate in [
         "fn validate_uuid_literal",
         "fn shadowsocks_2022_key_len",
@@ -202,26 +237,7 @@ fn engine_runtime_domains_do_not_regrow_in_the_facade() {
 #[test]
 fn generic_transport_carriers_do_not_depend_on_protocol_crates() {
     let transport = workspace_root().join("crates/transport/src");
-    let integration_roots = [
-        "hysteria2_quic.rs",
-        "mieru_transport.rs",
-        "shadowsocks_transport.rs",
-        "socks5_transport.rs",
-        "trojan_transport.rs",
-        "vless_transport.rs",
-        "vmess_transport.rs",
-    ];
     for path in rust_sources(&transport) {
-        let relative = path
-            .strip_prefix(&transport)
-            .expect("transport-relative path");
-        let relative = relative.to_string_lossy().replace('\\', "/");
-        if integration_roots
-            .iter()
-            .any(|root| relative.starts_with(root.trim_end_matches(".rs")))
-        {
-            continue;
-        }
         let source = read(&path);
         for protocol in [
             "hysteria2",
@@ -238,6 +254,42 @@ fn generic_transport_carriers_do_not_depend_on_protocol_crates() {
                 path.display()
             );
         }
+    }
+}
+
+#[test]
+fn transport_does_not_depend_on_config_protocol_adts() {
+    let transport = workspace_root().join("crates/transport/src");
+    for path in rust_sources(&transport) {
+        let source = read(&path);
+        if !source.contains("zero_config::") && !source.contains("use zero_config") {
+            continue;
+        }
+        panic!(
+            "{} must not import zero-config from transport",
+            path.display()
+        );
+    }
+
+    let manifest = read(&workspace_root().join("crates/transport/Cargo.toml"));
+    assert!(
+        !manifest.contains("zero-config"),
+        "crates/transport/Cargo.toml must not depend on zero-config"
+    );
+    for protocol in [
+        "hysteria2",
+        "mieru",
+        "shadowsocks",
+        "socks5",
+        "trojan",
+        "vless",
+        "vmess",
+    ] {
+        assert!(
+            !manifest.contains(&format!("name = \"{protocol}\""))
+                && !manifest.contains(&format!("path = \"../../protocols/{protocol}\"")),
+            "crates/transport/Cargo.toml must not depend on protocol crate `{protocol}`"
+        );
     }
 }
 

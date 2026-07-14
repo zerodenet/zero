@@ -12,7 +12,7 @@ use crate::runtime::udp_flow::packet_path::{
     packet_path_carrier_descriptor_from_build, udp_datagram_source_from_build, PacketPathCarrier,
     PacketPathCarrierDescriptor, UdpDatagramSource,
 };
-use zero_transport::shadowsocks_transport::{
+use ::shadowsocks::transport::{
     ShadowsocksManagedUdpPacketPathCarrierDescriptor,
     ShadowsocksManagedUdpPacketPathDatagramSourceBuild, ShadowsocksManagedUdpPacketPathPlan,
 };
@@ -67,12 +67,12 @@ struct ShadowsocksPacketPathOperation<'a> {
 }
 
 impl PreparedUdpPacketPathOperation for ShadowsocksPacketPathOperation<'_> {
-    fn into_carrier_descriptor(self: Box<Self>) -> Option<PacketPathCarrierDescriptor> {
-        Some(packet_path_carrier_descriptor(self.plan))
+    fn carrier_descriptor(&self) -> Option<PacketPathCarrierDescriptor> {
+        Some(packet_path_carrier_descriptor(self.plan.clone()))
     }
 
-    fn into_datagram_source(self: Box<Self>) -> Option<UdpDatagramSource> {
-        Some(packet_path_datagram_source(self.plan))
+    fn datagram_source(&self) -> Option<UdpDatagramSource> {
+        Some(packet_path_datagram_source(self.plan.clone()))
     }
 
     fn build_carrier<'a>(
@@ -95,7 +95,7 @@ impl PreparedUdpPacketPathOperation for ShadowsocksPacketPathOperation<'_> {
 
 pub(crate) fn managed_datagram_handler() -> Box<dyn ManagedDatagramFlowHandler> {
     managed_datagram_socket_handler_box::<
-        zero_transport::shadowsocks_transport::ShadowsocksManagedDatagramFlowResume,
+        ::shadowsocks::transport::ShadowsocksManagedDatagramFlowResume,
     >()
 }
 

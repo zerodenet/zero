@@ -4,7 +4,7 @@ use tokio::io::ReadBuf;
 
 /// HTTP chunked-transfer-encoding decoder state machine.
 ///
-/// Pure state over an internal byte buffer — it performs no I/O. The owner
+/// Pure state over an internal byte buffer 鈥?it performs no I/O. The owner
 /// feeds raw bytes via [`ChunkedDecoder::feed`] and drains decoded body bytes
 /// via [`ChunkedDecoder::try_decode`]. This correctly handles arbitrary TCP
 /// segmentation and consumes the trailing `\r\n` after each chunk's data
@@ -23,9 +23,9 @@ enum ChunkState {
 /// Outcome of a single [`ChunkedDecoder::try_decode`] pass.
 pub(super) enum DecodeStep {
     /// Body bytes were produced, the stream hit EOF, or the output buffer is
-    /// full — the caller returns `Poll::Ready(Ok(()))`.
+    /// full 鈥?the caller returns `Poll::Ready(Ok(()))`.
     Done,
-    /// More raw bytes are required — the caller feeds its source, then retries.
+    /// More raw bytes are required 鈥?the caller feeds its source, then retries.
     NeedsMore,
 }
 
@@ -81,7 +81,7 @@ impl ChunkedDecoder {
     /// Returns `Done` when output was produced, the stream hit EOF, or the
     /// output buffer is full; returns `NeedsMore` only when **nothing** was
     /// produced this pass and more raw bytes are required. This respects the
-    /// `AsyncRead` contract — a caller must never return `Pending` while it
+    /// `AsyncRead` contract 鈥?a caller must never return `Pending` while it
     /// has already filled the caller's buffer, otherwise the peer waits
     /// forever for an ack that never comes (a real deadlock the greedy
     /// version caused in the stream-one round-trip).
@@ -105,7 +105,7 @@ impl ChunkedDecoder {
                             )
                         })?;
                         // RFC 7230 chunk-size is hex digits, optionally followed
-                        // by `;chunk-ext` — ignore any extension before parsing.
+                        // by `;chunk-ext` 鈥?ignore any extension before parsing.
                         let hex_part = hex_str.split(';').next().unwrap_or("").trim();
                         let size = usize::from_str_radix(hex_part, 16).map_err(|_| {
                             io::Error::new(

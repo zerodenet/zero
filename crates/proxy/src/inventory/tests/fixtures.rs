@@ -498,8 +498,8 @@ struct FakePacketPathOperation {
 }
 
 impl PreparedUdpPacketPathOperation for FakePacketPathOperation {
-    fn into_carrier_descriptor(
-        self: Box<Self>,
+    fn carrier_descriptor(
+        &self,
     ) -> Option<crate::runtime::udp_flow::packet_path::PacketPathCarrierDescriptor> {
         self.calls.packet_descriptors.fetch_add(1, Ordering::SeqCst);
         Some(
@@ -539,9 +539,7 @@ impl PreparedUdpPacketPathOperation for FakePacketPathOperation {
         })
     }
 
-    fn into_datagram_source(
-        self: Box<Self>,
-    ) -> Option<crate::runtime::udp_flow::packet_path::UdpDatagramSource> {
+    fn datagram_source(&self) -> Option<crate::runtime::udp_flow::packet_path::UdpDatagramSource> {
         self.calls.packet_sources.fetch_add(1, Ordering::SeqCst);
         Some(crate::runtime::udp_flow::packet_path::udp_datagram_source(
             "fake-datagram",
@@ -555,7 +553,7 @@ impl PreparedUdpPacketPathOperation for FakePacketPathOperation {
 
 impl UdpPacketPathCapability for FakeTcpCapability {
     fn prepare_udp_packet_path<'a>(
-        &'a self,
+        &self,
         _: &'a ResolvedLeafOutbound<'a>,
     ) -> Option<Box<dyn PreparedUdpPacketPathOperation + 'a>> {
         Some(Box::new(FakePacketPathOperation {

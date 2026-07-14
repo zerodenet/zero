@@ -1,101 +1,50 @@
-use zero_engine::EngineError;
-
 use super::super::ProtocolInventory;
-use crate::protocol_registry::{UdpAdapterContext, UdpPacketPathCapability};
-use crate::runtime::Proxy;
+use crate::protocol_registry::UdpPacketPathCapability;
+use crate::runtime::udp_flow::packet_path::{PacketPathFlowBinding, UdpPacketRef};
+use crate::runtime::udp_flow::packet_path_chain::{
+    PacketPathCarrierRequest, PacketPathStartRequest,
+};
 
 impl ProtocolInventory {
-    /// Return packet-path datagram params and carrier snapshot when the two
-    /// relay-chain leaves form a supported packet-path pair.
-    pub(crate) fn udp_packet_path_pair(
+    /// Prepare the packet-path carrier/datagram pair and lazy carrier builder
+    /// for a two-hop UDP relay chain.
+    pub(crate) fn prepare_udp_packet_path_pair<'a>(
         &self,
-        carrier_leaf: &zero_engine::ResolvedLeafOutbound<'_>,
-        datagram_leaf: &zero_engine::ResolvedLeafOutbound<'_>,
-    ) -> Option<crate::runtime::udp_flow::packet_path::PacketPathFlowBinding> {
+        session_id: u64,
+        carrier_leaf: &'a zero_engine::ResolvedLeafOutbound<'a>,
+        datagram_leaf: &'a zero_engine::ResolvedLeafOutbound<'a>,
+        packet: UdpPacketRef<'a>,
+    ) -> Option<(PacketPathFlowBinding, PacketPathStartRequest<'a>)> {
         let carrier_adapter = self.registry.find_udp_packet_path_leaf(carrier_leaf).ok()?;
         let datagram_adapter = self
             .registry
             .find_udp_packet_path_leaf(datagram_leaf)
             .ok()?;
 
-        let carrier_desc = UdpPacketPathCapability::prepare_udp_packet_path(
+        let carrier_operation = UdpPacketPathCapability::prepare_udp_packet_path(
             carrier_adapter.as_ref(),
             carrier_leaf,
-        )?
-        .into_carrier_descriptor()?;
-        let datagram = UdpPacketPathCapability::prepare_udp_packet_path(
+        )?;
+        let datagram_operation = UdpPacketPathCapability::prepare_udp_packet_path(
             datagram_adapter.as_ref(),
             datagram_leaf,
-        )?
-        .into_datagram_source()?;
-        Some(
-            crate::runtime::udp_flow::packet_path::PacketPathFlowBinding::new(
+        )?;
+
+        let carrier_desc = carrier_operation.carrier_descriptor()?;
+        let datagram = datagram_operation.datagram_source()?;
+        let flow_binding = PacketPathFlowBinding::new(datagram.clone(), &carrier_desc);
+
+        Some((
+            flow_binding,
+            PacketPathStartRequest {
+                session_id,
+                carrier: PacketPathCarrierRequest {
+                    descriptor: carrier_desc,
+                    build_operation: carrier_operation,
+                },
                 datagram,
-                &carrier_desc,
-            ),
-        )
-    }
-
-    /// Resolve packet-path entry construction params through the carrier and
-    /// datagram adapters.
-    pub(crate) fn resolve_udp_packet_path_candidate(
-        &self,
-        carrier_leaf: &zero_engine::ResolvedLeafOutbound<'_>,
-        datagram_leaf: &zero_engine::ResolvedLeafOutbound<'_>,
-    ) -> Result<
-        (
-            crate::runtime::udp_flow::packet_path::PacketPathCarrierDescriptor,
-            crate::runtime::udp_flow::packet_path::UdpDatagramSource,
-        ),
-        EngineError,
-    > {
-        let carrier_adapter = self.registry.find_udp_packet_path_leaf(carrier_leaf)?;
-        let datagram_adapter = self.registry.find_udp_packet_path_leaf(datagram_leaf)?;
-        let carrier_desc = UdpPacketPathCapability::prepare_udp_packet_path(
-            carrier_adapter.as_ref(),
-            carrier_leaf,
-        )
-        .and_then(|operation| operation.into_carrier_descriptor())
-        .ok_or_else(|| {
-            EngineError::Io(std::io::Error::new(
-                std::io::ErrorKind::Unsupported,
-                "outbound does not support UDP packet-path carrier role",
-            ))
-        })?;
-        let datagram = UdpPacketPathCapability::prepare_udp_packet_path(
-            datagram_adapter.as_ref(),
-            datagram_leaf,
-        )
-        .and_then(|operation| operation.into_datagram_source())
-        .ok_or_else(|| {
-            EngineError::Io(std::io::Error::new(
-                std::io::ErrorKind::Unsupported,
-                "outbound does not support UDP packet-path datagram role",
-            ))
-        })?;
-        Ok((carrier_desc, datagram))
-    }
-
-    /// Build the concrete packet-path carrier through the carrier adapter.
-    pub(crate) async fn build_udp_packet_path_carrier(
-        &self,
-        proxy: &Proxy,
-        carrier_leaf: &zero_engine::ResolvedLeafOutbound<'_>,
-    ) -> Result<
-        std::sync::Arc<dyn crate::runtime::udp_flow::packet_path::PacketPathCarrier>,
-        EngineError,
-    > {
-        let carrier_adapter = self.registry.find_udp_packet_path_leaf(carrier_leaf)?;
-        let operation = UdpPacketPathCapability::prepare_udp_packet_path(
-            carrier_adapter.as_ref(),
-            carrier_leaf,
-        )
-        .ok_or_else(|| {
-            EngineError::Io(std::io::Error::new(
-                std::io::ErrorKind::Unsupported,
-                "outbound does not support UDP packet-path carrier role",
-            ))
-        })?;
-        operation.build_carrier(UdpAdapterContext::new(proxy)).await
+                packet,
+            },
+        ))
     }
 }

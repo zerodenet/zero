@@ -2,10 +2,10 @@ use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 
 use zero_core::Address;
-use zero_engine::ResolvedLeafOutbound;
 
 use super::bridge::Waiter;
 use super::key::PathKey;
+use crate::runtime::udp_dispatch::packet_path_operation::PreparedUdpPacketPathOperation;
 use crate::runtime::udp_flow::packet_path::PacketPathCarrier;
 use crate::runtime::udp_flow::packet_path::{
     DatagramCodec, PacketPathCarrierDescriptor, UdpDatagramEndpoint, UdpDatagramSource,
@@ -14,9 +14,20 @@ use crate::runtime::udp_flow::packet_path::{
 
 pub(crate) struct PacketPathStartRequest<'a> {
     pub(crate) session_id: u64,
-    pub(crate) carrier_leaf: &'a ResolvedLeafOutbound<'a>,
-    pub(crate) datagram_leaf: &'a ResolvedLeafOutbound<'a>,
+    pub(crate) carrier: PacketPathCarrierRequest<'a>,
+    pub(crate) datagram: UdpDatagramSource,
     pub(crate) packet: UdpPacketRef<'a>,
+}
+
+pub(crate) struct PacketPathCarrierRequest<'a> {
+    pub(crate) descriptor: PacketPathCarrierDescriptor,
+    pub(crate) build_operation: Box<dyn PreparedUdpPacketPathOperation + 'a>,
+}
+
+impl PacketPathCarrierRequest<'_> {
+    pub(crate) fn upstream(&self) -> (String, u16) {
+        (self.descriptor.server.clone(), self.descriptor.port)
+    }
 }
 
 pub(super) struct Entry {

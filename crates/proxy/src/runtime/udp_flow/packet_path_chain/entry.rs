@@ -2,22 +2,17 @@ use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 
 use tracing::debug;
-use zero_engine::{EngineError, ResolvedLeafOutbound};
+use zero_engine::EngineError;
 
 use super::bridge::recv_loop;
 use super::model::{Entry, EntryCandidate};
+use crate::protocol_registry::UdpAdapterContext;
+use crate::runtime::udp_dispatch::packet_path_operation::PreparedUdpPacketPathOperation;
 use crate::runtime::Proxy;
 
-pub(super) fn resolve_candidate(
-    proxy: &Proxy,
-    carrier_leaf: &ResolvedLeafOutbound<'_>,
-    datagram_leaf: &ResolvedLeafOutbound<'_>,
-) -> Result<EntryCandidate, EngineError> {
-    let (carrier_desc, datagram) = proxy
-        .protocols
-        .resolve_udp_packet_path_candidate(carrier_leaf, datagram_leaf)?;
-
-    let datagram_desc = datagram.descriptor();
+pub(super) fn log_candidate(candidate: &EntryCandidate) {
+    let carrier_desc = &candidate.carrier_desc;
+    let datagram_desc = candidate.datagram.descriptor();
     debug!(
         carrier = %carrier_desc.cache_key,
         carrier_server = %carrier_desc.server,
@@ -27,21 +22,16 @@ pub(super) fn resolve_candidate(
         datagram_port = datagram_desc.port,
         "ensuring UDP packet-path relay chain"
     );
-
-    Ok(EntryCandidate {
-        carrier_desc,
-        datagram,
-    })
 }
 
 pub(super) async fn build_entry(
     proxy: &Proxy,
-    carrier_leaf: &ResolvedLeafOutbound<'_>,
+    build_operation: Box<dyn PreparedUdpPacketPathOperation + '_>,
     candidate: EntryCandidate,
 ) -> Result<Entry, EngineError> {
-    let path = proxy
-        .protocols
-        .build_udp_packet_path_carrier(proxy, carrier_leaf)
+    log_candidate(&candidate);
+    let path = build_operation
+        .build_carrier(UdpAdapterContext::new(proxy))
         .await?;
     let codec = candidate.datagram.codec.clone();
     let datagram_desc = candidate.datagram.descriptor();

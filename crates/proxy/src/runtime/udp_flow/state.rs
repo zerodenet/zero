@@ -255,9 +255,7 @@ impl UdpFlowState {
                     session_id: request.session_id,
                 },
                 proxy,
-                request.carrier_leaf,
-                request.datagram_leaf,
-                request.packet,
+                request,
             )
             .await
     }

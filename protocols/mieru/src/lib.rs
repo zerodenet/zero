@@ -15,6 +15,8 @@ pub mod protocol;
 pub mod segment;
 #[cfg(feature = "crypto")]
 pub mod session;
+#[cfg(feature = "runtime")]
+pub mod transport;
 pub mod udp;
 
 #[cfg(feature = "crypto")]

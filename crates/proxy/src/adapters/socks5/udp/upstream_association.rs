@@ -1,11 +1,14 @@
 //! SOCKS5 upstream UDP association runtime and transport bridges.
 
-use zero_core::Address;
-use zero_engine::EngineError;
-use zero_transport::socks5_transport::{
-    Socks5ManagedUdpAssociationTarget, Socks5UpstreamAssociationCloseReason,
+use ::socks5::transport::{
+    establish_packet_path_udp_association, establish_registered_udp_association,
+    Socks5ManagedUdpAssociationTarget, Socks5ManagedUdpPacketPathCarrierBuild,
+    Socks5UdpAssociationRuntime, Socks5UpstreamAssociationCloseReason,
     Socks5UpstreamUdpAssociation,
 };
+use zero_core::Address;
+use zero_engine::EngineError;
+use zero_transport::RuntimeError;
 
 use crate::protocol_registry::{UdpAssociationCloseKind, UdpRuntimeServices};
 
@@ -21,14 +24,12 @@ impl ProxySocks5UdpAssociationRuntime {
 }
 
 #[async_trait::async_trait]
-impl zero_transport::socks5_transport::Socks5UdpAssociationRuntime
-    for ProxySocks5UdpAssociationRuntime
-{
+impl Socks5UdpAssociationRuntime for ProxySocks5UdpAssociationRuntime {
     async fn open_control_socket(
         &self,
         server: &str,
         port: u16,
-    ) -> Result<zero_platform_tokio::TokioSocket, EngineError> {
+    ) -> Result<zero_platform_tokio::TokioSocket, RuntimeError> {
         self.services.connect_upstream(server, port).await
     }
 
@@ -41,7 +42,7 @@ impl zero_transport::socks5_transport::Socks5UdpAssociationRuntime
             zero_traits::SocketAddress,
             zero_platform_tokio::TokioDatagramSocket,
         ),
-        EngineError,
+        RuntimeError,
     > {
         self.services
             .resolve_udp_peer(
@@ -81,14 +82,11 @@ impl zero_transport::socks5_transport::Socks5UdpAssociationRuntime
 
 pub(super) async fn establish_packet_path_association(
     services: UdpRuntimeServices,
-    build: zero_transport::socks5_transport::Socks5ManagedUdpPacketPathCarrierBuild,
+    build: Socks5ManagedUdpPacketPathCarrierBuild,
 ) -> Result<Socks5UpstreamUdpAssociation, EngineError> {
-    zero_transport::socks5_transport::establish_packet_path_udp_association(
-        ProxySocks5UdpAssociationRuntime::new(services),
-        build,
-        0,
-    )
-    .await
+    establish_packet_path_udp_association(ProxySocks5UdpAssociationRuntime::new(services), build, 0)
+        .await
+        .map_err(Into::into)
 }
 
 #[async_trait::async_trait]
@@ -101,12 +99,14 @@ impl crate::runtime::udp_flow::packet_path::PacketPathPayloadTransport
         port: u16,
         payload: &[u8],
     ) -> Result<(), EngineError> {
-        self.send_packet(target, port, payload).await?;
+        self.send_packet(target, port, payload)
+            .await
+            .map_err(EngineError::from)?;
         Ok(())
     }
 
     async fn recv_from(&self, buf: &mut [u8]) -> Result<usize, EngineError> {
-        self.recv_payload(buf).await
+        self.recv_payload(buf).await.map_err(Into::into)
     }
 }
 
@@ -121,12 +121,13 @@ impl
         target: Socks5ManagedUdpAssociationTarget,
         session_id: u64,
     ) -> Result<Self, EngineError> {
-        zero_transport::socks5_transport::establish_registered_udp_association(
+        establish_registered_udp_association(
             ProxySocks5UdpAssociationRuntime::new(services),
             target,
             session_id,
         )
         .await
+        .map_err(Into::into)
     }
 
     async fn send_packet(
@@ -135,14 +136,16 @@ impl
         port: u16,
         payload: &[u8],
     ) -> Result<usize, EngineError> {
-        self.send_packet(target, port, payload).await
+        self.send_packet(target, port, payload)
+            .await
+            .map_err(Into::into)
     }
 
     async fn recv_response_parts(
         &self,
         buf: &mut [u8],
     ) -> Result<(Address, u16, Vec<u8>), EngineError> {
-        self.recv_response_parts(buf).await
+        self.recv_response_parts(buf).await.map_err(Into::into)
     }
 
     fn close(self, reason: crate::runtime::udp_flow::registered::UpstreamAssociationCloseReason) {

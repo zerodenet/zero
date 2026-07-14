@@ -10,6 +10,10 @@ homepage.workspace = true
 
 [features]
 default = []
+runtime = [
+    "dep:zero-platform-tokio",
+    "dep:zero-transport",
+]
 
 [dependencies]
 async-trait = "0.1"
@@ -22,6 +26,8 @@ sha2 = "0.10"
 sha3 = "0.10"
 tokio.workspace = true
 zero-core = { path = "../../crates/core" }
+zero-platform-tokio = { path = "../../crates/platform/tokio", optional = true }
+zero-transport = { path = "../../crates/transport", optional = true, features = ["grpc", "tls", "ws"] }
 zero-traits = { path = "../../crates/traits" }
 
 [dev-dependencies]

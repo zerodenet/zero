@@ -3,6 +3,7 @@ use std::io;
 use thiserror::Error;
 use zero_config::ConfigError;
 use zero_core::Error as CoreError;
+use zero_runtime_error::RuntimeError;
 
 #[derive(Debug, Error)]
 pub enum EngineError {
@@ -44,4 +45,23 @@ pub enum EngineError {
     },
     #[error("outbound `{tag}` is temporarily unhealthy")]
     UnhealthyOutbound { tag: String },
+}
+
+impl From<RuntimeError> for EngineError {
+    fn from(error: RuntimeError) -> Self {
+        match error {
+            RuntimeError::Io(error) => Self::Io(error),
+            RuntimeError::Core(error) => Self::Core(error),
+        }
+    }
+}
+
+impl From<EngineError> for RuntimeError {
+    fn from(error: EngineError) -> Self {
+        match error {
+            EngineError::Io(error) => Self::Io(error),
+            EngineError::Core(error) => Self::Core(error),
+            other => Self::Io(io::Error::other(other.to_string())),
+        }
+    }
 }

@@ -8,7 +8,8 @@
 //! # Module layout
 //!
 //! - [`forward`](self::forward): re-dispatch packets on existing outbound flows
-//! - [`start`](self::start): establish new outbound flows (single-hop and relay chains)
+//! - [`crate::inventory::ProtocolInventory`]: resolved outbound selection and
+//!   adapter-owned UDP flow preparation
 //! - [`crate::runtime::udp_flow::registered`]: protocol handlers assembled by
 //!   `register.rs` and their neutral runtime state
 //! - [`crate::runtime::udp_flow::packet_path_chain`][]: generic
@@ -122,16 +123,6 @@ use zero_platform_tokio::TokioDatagramSocket;
 
 // Sub-module declarations.
 
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
-))]
-mod candidate;
 mod dispatch;
 #[cfg(any(
     feature = "socks5",
@@ -173,30 +164,7 @@ mod managed;
     feature = "mieru"
 ))]
 mod packet_path;
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
-))]
-mod start;
-
-// Re-exports.
-
 pub(crate) use crate::runtime::udp_flow::result::{FlowFailure, FlowStartResult};
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
-))]
-pub(crate) use candidate::UdpCandidate;
 #[cfg(feature = "socks5")]
 pub(crate) use managed::UpstreamTrackedStart;
 

@@ -11,6 +11,12 @@ homepage.workspace = true
 default = []
 crypto = ["dep:aes", "dep:chacha20poly1305", "dep:md-5", "dep:ring", "dep:tokio"]
 blake3 = ["dep:base64", "dep:blake3"]
+runtime = [
+    "crypto",
+    "dep:tracing",
+    "dep:zero-platform-tokio",
+    "dep:zero-transport",
+]
 
 [dependencies]
 async-trait = "0.1"
@@ -21,7 +27,10 @@ chacha20poly1305 = { version = "0.10", optional = true }
 md-5 = { version = "0.10", optional = true, default-features = false }
 ring = { version = "0.17", optional = true }
 tokio = { workspace = true, optional = true }
+tracing = { workspace = true, optional = true }
 zero-core = { path = "../../crates/core" }
+zero-platform-tokio = { path = "../../crates/platform/tokio", optional = true }
+zero-transport = { path = "../../crates/transport", optional = true }
 zero-traits = { path = "../../crates/traits" }
 
 [dev-dependencies]

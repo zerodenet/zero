@@ -13,11 +13,11 @@ pub(crate) type PacketPathCarrierFuture<'a> =
     Pin<Box<dyn Future<Output = Result<Arc<dyn PacketPathCarrier>, EngineError>> + Send + 'a>>;
 
 pub(crate) trait PreparedUdpPacketPathOperation: Send {
-    fn into_carrier_descriptor(self: Box<Self>) -> Option<PacketPathCarrierDescriptor> {
+    fn carrier_descriptor(&self) -> Option<PacketPathCarrierDescriptor> {
         None
     }
 
-    fn into_datagram_source(self: Box<Self>) -> Option<UdpDatagramSource> {
+    fn datagram_source(&self) -> Option<UdpDatagramSource> {
         None
     }
 

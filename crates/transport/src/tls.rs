@@ -6,12 +6,10 @@ use rustls::{ClientConfig, RootCertStore};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite};
 pub use tokio_rustls::TlsAcceptor;
 use tokio_rustls::TlsConnector;
-use zero_config::ClientTlsConfig;
-use zero_config::TlsConfig;
 use zero_platform_tokio::TokioSocket;
-use zero_traits::ClientTlsProfile;
+use zero_traits::{ClientTlsProfile, ServerTlsProfile};
 
-use zero_engine::EngineError;
+use crate::RuntimeError;
 use zero_platform_tokio::TcpRelayStream;
 
 mod certificates;
@@ -73,18 +71,15 @@ impl rustls::client::danger::ServerCertVerifier for InsecureCertVerifier {
     }
 }
 
-pub fn build_tls_acceptor(
-    tls: &TlsConfig,
-    base_dir: Option<&Path>,
-) -> Result<TlsAcceptor, EngineError> {
-    let certs = load_certs(&resolve_path(base_dir, &tls.cert_path))?;
-    let key = load_private_key(&resolve_path(base_dir, &tls.key_path))?;
+pub fn build_tls_acceptor<T>(tls: &T, base_dir: Option<&Path>) -> Result<TlsAcceptor, RuntimeError>
+where
+    T: ServerTlsProfile + ?Sized,
+{
+    let certs = load_certs(&resolve_path(base_dir, tls.cert_path()))?;
+    let key = load_private_key(&resolve_path(base_dir, tls.key_path()))?;
 
     // Look up server fingerprint preset for cipher suite preference control
-    let fingerprint = tls
-        .server_fingerprint
-        .as_deref()
-        .and_then(|name| {
+    let fingerprint = tls.server_fingerprint().and_then(|name| {
             let fp = crate::fingerprint::lookup_fingerprint(name);
             if fp.is_none() {
                 tracing::warn!(fingerprint = %name, "unknown tls server fingerprint preset, using defaults");
@@ -95,7 +90,7 @@ pub fn build_tls_acceptor(
     let config_builder = if let Some(ref fp) = fingerprint {
         let provider = Arc::new(crate::fingerprint::build_provider(fp));
         tracing::debug!(
-            fingerprint = %tls.server_fingerprint.as_deref().unwrap_or(""),
+            fingerprint = %tls.server_fingerprint().unwrap_or(""),
             cipher_count = fp.cipher_suites.len(),
             "tls server fingerprint applied"
         );
@@ -111,9 +106,9 @@ pub fn build_tls_acceptor(
         .with_single_cert(certs, key)
         .map_err(|error| io::Error::new(io::ErrorKind::InvalidInput, error))?;
 
-    if !tls.alpn.is_empty() {
+    if !tls.alpn().is_empty() {
         config.alpn_protocols = tls
-            .alpn
+            .alpn()
             .iter()
             .map(|proto| proto.as_bytes().to_vec())
             .collect();
@@ -125,11 +120,11 @@ pub fn build_tls_acceptor(
 pub async fn accept_tls_inbound(
     stream: TokioSocket,
     acceptor: &TlsAcceptor,
-) -> Result<InboundTlsStream<TokioSocket>, EngineError> {
+) -> Result<InboundTlsStream<TokioSocket>, RuntimeError> {
     let tls = acceptor
         .accept(stream)
         .await
-        .map_err(|error| EngineError::Io(io::Error::other(error)))?;
+        .map_err(|error| RuntimeError::Io(io::Error::other(error)))?;
     Ok(InboundTlsStream::new_generic(tls))
 }
 
@@ -195,7 +190,7 @@ pub async fn connect_tls_upstream_with_profile<P>(
     tls: &P,
     base_dir: Option<&Path>,
     default_server_name: &str,
-) -> Result<TcpRelayStream, EngineError>
+) -> Result<TcpRelayStream, RuntimeError>
 where
     P: ClientTlsProfile + ?Sized,
 {
@@ -302,12 +297,15 @@ where
     Ok(TcpRelayStream::new(stream))
 }
 
-pub async fn connect_tls_upstream(
+pub async fn connect_tls_upstream<T>(
     socket: TokioSocket,
-    tls: &ClientTlsConfig,
+    tls: &T,
     base_dir: Option<&Path>,
     default_server_name: &str,
-) -> Result<TcpRelayStream, EngineError> {
+) -> Result<TcpRelayStream, RuntimeError>
+where
+    T: ClientTlsProfile + ?Sized,
+{
     connect_tls_upstream_with_profile(socket, tls, base_dir, default_server_name).await
 }
 
@@ -316,7 +314,7 @@ pub async fn connect_tls_stream_with_profile<S, P>(
     tls: &P,
     base_dir: Option<&Path>,
     default_server_name: &str,
-) -> Result<TcpRelayStream, EngineError>
+) -> Result<TcpRelayStream, RuntimeError>
 where
     S: AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static,
     P: ClientTlsProfile + ?Sized,
@@ -373,14 +371,15 @@ where
     Ok(TcpRelayStream::new(stream))
 }
 
-pub async fn connect_tls_stream<S>(
+pub async fn connect_tls_stream<S, T>(
     stream: S,
-    tls: &ClientTlsConfig,
+    tls: &T,
     base_dir: Option<&Path>,
     default_server_name: &str,
-) -> Result<TcpRelayStream, EngineError>
+) -> Result<TcpRelayStream, RuntimeError>
 where
     S: AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static,
+    T: ClientTlsProfile + ?Sized,
 {
     connect_tls_stream_with_profile(stream, tls, base_dir, default_server_name).await
 }

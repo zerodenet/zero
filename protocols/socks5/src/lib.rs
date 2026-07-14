@@ -2,11 +2,15 @@
 #![allow(async_fn_in_trait)]
 
 extern crate alloc;
+#[cfg(feature = "runtime")]
+extern crate std;
 
 mod inbound;
 mod metadata;
 mod outbound;
 mod shared;
+#[cfg(feature = "runtime")]
+pub mod transport;
 pub mod udp;
 
 pub use inbound::{

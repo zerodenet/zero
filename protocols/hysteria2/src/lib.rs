@@ -7,6 +7,8 @@ pub mod inbound;
 mod metadata;
 mod outbound;
 pub mod shared;
+#[cfg(feature = "runtime")]
+pub mod transport;
 pub mod udp;
 
 pub use metadata::Hysteria2Protocol;

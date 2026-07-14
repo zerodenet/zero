@@ -44,7 +44,7 @@ impl UdpRuntimeServices {
         &self,
         server: &str,
         port: u16,
-    ) -> Result<zero_platform_tokio::TokioSocket, zero_engine::EngineError> {
+    ) -> Result<zero_platform_tokio::TokioSocket, zero_transport::RuntimeError> {
         self.proxy
             .connect_upstream_host_owned(server.to_owned(), port)
             .await
@@ -60,7 +60,7 @@ impl UdpRuntimeServices {
             zero_traits::SocketAddress,
             zero_platform_tokio::TokioDatagramSocket,
         ),
-        zero_engine::EngineError,
+        zero_transport::RuntimeError,
     > {
         let (peer, socket) = crate::runtime::udp_socket::resolve_udp_peer_endpoint(
             &self.proxy,
@@ -68,7 +68,8 @@ impl UdpRuntimeServices {
             port,
             context,
         )
-        .await?;
+        .await
+        .map_err(zero_transport::RuntimeError::from)?;
         Ok((
             zero_platform_tokio::socket_addr_to_socket_address(peer),
             socket,

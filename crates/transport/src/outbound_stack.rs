@@ -1,9 +1,12 @@
 use std::io;
 use std::path::Path;
 
-use zero_config::{ClientTlsConfig, GrpcConfig, H2Config, HttpUpgradeConfig, WebSocketConfig};
-use zero_engine::EngineError;
+use crate::RuntimeError;
 use zero_platform_tokio::{TcpRelayStream, TokioSocket};
+use zero_traits::{
+    ClientTlsProfile, GrpcTransportProfile, H2TransportProfile, HttpUpgradeTransportProfile,
+    WebSocketTransportProfile,
+};
 
 #[cfg(feature = "h2")]
 use crate::h2;
@@ -12,22 +15,36 @@ use crate::http_upgrade;
 use crate::{grpc, tls, ws};
 
 #[derive(Clone, Copy)]
-pub struct StreamTransportStack<'a> {
-    pub tls: Option<&'a ClientTlsConfig>,
-    pub ws: Option<&'a WebSocketConfig>,
-    pub grpc: Option<&'a GrpcConfig>,
-    pub h2: Option<&'a H2Config>,
-    pub http_upgrade: Option<&'a HttpUpgradeConfig>,
+pub struct StreamTransportStack<'a, TTls, TWs, TGrpc, TH2, THttp>
+where
+    TTls: ClientTlsProfile + ?Sized,
+    TWs: WebSocketTransportProfile + ?Sized,
+    TGrpc: GrpcTransportProfile + ?Sized,
+    TH2: H2TransportProfile + ?Sized,
+    THttp: HttpUpgradeTransportProfile + ?Sized,
+{
+    pub tls: Option<&'a TTls>,
+    pub ws: Option<&'a TWs>,
+    pub grpc: Option<&'a TGrpc>,
+    pub h2: Option<&'a TH2>,
+    pub http_upgrade: Option<&'a THttp>,
     pub source_dir: Option<&'a Path>,
 }
 
-pub async fn connect_socket_transport_stack(
+pub async fn connect_socket_transport_stack<TTls, TWs, TGrpc, TH2, THttp>(
     socket: TokioSocket,
-    stack: StreamTransportStack<'_>,
+    stack: StreamTransportStack<'_, TTls, TWs, TGrpc, TH2, THttp>,
     server: &str,
     port: u16,
     invalid_message: &'static str,
-) -> Result<TcpRelayStream, EngineError> {
+) -> Result<TcpRelayStream, RuntimeError>
+where
+    TTls: ClientTlsProfile + ?Sized,
+    TWs: WebSocketTransportProfile + ?Sized,
+    TGrpc: GrpcTransportProfile + ?Sized,
+    TH2: H2TransportProfile + ?Sized,
+    THttp: HttpUpgradeTransportProfile + ?Sized,
+{
     let StreamTransportStack {
         tls: tls_config,
         ws: ws_config,
@@ -55,13 +72,20 @@ pub async fn connect_socket_transport_stack(
     .await
 }
 
-pub async fn connect_relay_transport_stack(
+pub async fn connect_relay_transport_stack<TTls, TWs, TGrpc, TH2, THttp>(
     stream: TcpRelayStream,
-    stack: StreamTransportStack<'_>,
+    stack: StreamTransportStack<'_, TTls, TWs, TGrpc, TH2, THttp>,
     server: &str,
     port: u16,
     invalid_message: &'static str,
-) -> Result<TcpRelayStream, EngineError> {
+) -> Result<TcpRelayStream, RuntimeError>
+where
+    TTls: ClientTlsProfile + ?Sized,
+    TWs: WebSocketTransportProfile + ?Sized,
+    TGrpc: GrpcTransportProfile + ?Sized,
+    TH2: H2TransportProfile + ?Sized,
+    THttp: HttpUpgradeTransportProfile + ?Sized,
+{
     let StreamTransportStack {
         tls: tls_config,
         ws: ws_config,
@@ -89,16 +113,22 @@ pub async fn connect_relay_transport_stack(
     .await
 }
 
-async fn connect_layered_transport_stack(
+async fn connect_layered_transport_stack<TWs, TGrpc, TH2, THttp>(
     carrier: TcpRelayStream,
-    ws_config: Option<&WebSocketConfig>,
-    grpc_config: Option<&GrpcConfig>,
-    h2_config: Option<&H2Config>,
-    http_upgrade_config: Option<&HttpUpgradeConfig>,
+    ws_config: Option<&TWs>,
+    grpc_config: Option<&TGrpc>,
+    h2_config: Option<&TH2>,
+    http_upgrade_config: Option<&THttp>,
     server: &str,
     port: u16,
     invalid_message: &'static str,
-) -> Result<TcpRelayStream, EngineError> {
+) -> Result<TcpRelayStream, RuntimeError>
+where
+    TWs: WebSocketTransportProfile + ?Sized,
+    TGrpc: GrpcTransportProfile + ?Sized,
+    TH2: H2TransportProfile + ?Sized,
+    THttp: HttpUpgradeTransportProfile + ?Sized,
+{
     #[cfg(not(feature = "h2"))]
     if h2_config.is_some() {
         return invalid_transport_stack(invalid_message);
@@ -124,7 +154,7 @@ async fn connect_layered_transport_stack(
             ws::connect_ws(carrier, ws, server, port).await?,
         )),
         (None, Some(grpc), None) => Ok(TcpRelayStream::new(
-            grpc::connect_grpc(carrier, &grpc.service_names).await?,
+            grpc::connect_grpc(carrier, grpc.service_names()).await?,
         )),
         #[cfg(feature = "h2")]
         (None, None, Some(h2_config)) => Ok(TcpRelayStream::new(
@@ -135,8 +165,8 @@ async fn connect_layered_transport_stack(
     }
 }
 
-fn invalid_transport_stack(invalid_message: &'static str) -> Result<TcpRelayStream, EngineError> {
-    Err(EngineError::Io(io::Error::new(
+fn invalid_transport_stack(invalid_message: &'static str) -> Result<TcpRelayStream, RuntimeError> {
+    Err(RuntimeError::Io(io::Error::new(
         io::ErrorKind::InvalidInput,
         invalid_message,
     )))

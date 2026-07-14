@@ -663,6 +663,11 @@ where
     }
 }
 
+impl<IO> zero_platform_tokio::ClientStream for RealityTlsStream<IO> where
+    IO: AsyncRead + AsyncWrite + Send + Sync + Unpin
+{
+}
+
 struct SyncReadAdapter<'a, 'b, T> {
     io: &'a mut T,
     cx: &'a mut Context<'b>,

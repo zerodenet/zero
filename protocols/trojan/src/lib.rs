@@ -10,4 +10,6 @@ pub mod inbound;
 pub mod metadata;
 pub mod outbound;
 mod shared;
+#[cfg(feature = "runtime")]
+pub mod transport;
 pub mod udp;

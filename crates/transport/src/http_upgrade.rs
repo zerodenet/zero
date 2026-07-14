@@ -1,4 +1,4 @@
-//! HTTPUpgrade transport — http_upgrade.rs
+//! HTTPUpgrade transport 鈥?http_upgrade.rs
 //!
 //! Lightweight WebSocket alternative: a single HTTP upgrade handshake
 //! produces a raw bidirectional stream. No frame headers, no masking.
@@ -9,30 +9,30 @@ use std::task::{Context, Poll};
 
 use std::net::SocketAddr;
 
+use crate::RuntimeError;
 use http::{Method, Request};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf};
-use zero_config::HttpUpgradeConfig;
-use zero_engine::EngineError;
 use zero_platform_tokio::ClientStream;
-use zero_traits::AsyncSocket;
+use zero_traits::{AsyncSocket, HttpUpgradeTransportProfile};
 
 /// Bidirectional stream after HTTP upgrade.
 pub struct HttpUpgradeStream<S> {
     inner: S,
 }
 
-// ── client (outbound) connect ──
+// 鈹€鈹€ client (outbound) connect 鈹€鈹€
 
 /// Connect via HTTPUpgrade: send GET + Upgrade header, expect 101.
-pub async fn connect_http_upgrade<S>(
+pub async fn connect_http_upgrade<S, TProfile>(
     stream: S,
-    config: &HttpUpgradeConfig,
-) -> Result<HttpUpgradeStream<S>, EngineError>
+    config: &TProfile,
+) -> Result<HttpUpgradeStream<S>, RuntimeError>
 where
     S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+    TProfile: HttpUpgradeTransportProfile + ?Sized,
 {
-    let host = config.host.as_deref().unwrap_or("localhost");
-    let path = config.path.as_str();
+    let host = config.host().unwrap_or("localhost");
+    let path = config.path();
 
     let req = Request::builder()
         .method(Method::GET)
@@ -43,22 +43,22 @@ where
         .header("Sec-WebSocket-Version", "13")
         .header("Sec-WebSocket-Key", "dGhlIHNhbXBsZSBub25jZQ==")
         .body(())
-        .map_err(|e| EngineError::Io(io::Error::other(format!("http-upgrade request: {e}"))))?;
+        .map_err(|e| RuntimeError::Io(io::Error::other(format!("http-upgrade request: {e}"))))?;
 
     let mut io = stream;
 
     // Write the request
     let mut req_bytes = Vec::new();
     write_http_request(&mut req_bytes, &req);
-    io.write_all(&req_bytes).await.map_err(EngineError::Io)?;
+    io.write_all(&req_bytes).await.map_err(RuntimeError::Io)?;
 
     // Read the response
     let mut buf = vec![0u8; 4096];
     let mut total = 0;
     loop {
-        let n = io.read(&mut buf[total..]).await.map_err(EngineError::Io)?;
+        let n = io.read(&mut buf[total..]).await.map_err(RuntimeError::Io)?;
         if n == 0 {
-            return Err(EngineError::Io(io::Error::new(
+            return Err(RuntimeError::Io(io::Error::new(
                 io::ErrorKind::ConnectionAborted,
                 "http-upgrade: unexpected EOF",
             )));
@@ -66,13 +66,13 @@ where
         total += n;
         if find_header_end(&buf[..total]).is_some() {
             let status = parse_status(&buf[..total]).ok_or_else(|| {
-                EngineError::Io(io::Error::new(
+                RuntimeError::Io(io::Error::new(
                     io::ErrorKind::InvalidData,
                     "http-upgrade: bad response",
                 ))
             })?;
             if status != 101 {
-                return Err(EngineError::Io(io::Error::new(
+                return Err(RuntimeError::Io(io::Error::new(
                     io::ErrorKind::ConnectionRefused,
                     format!("http-upgrade: server returned {status}"),
                 )));
@@ -82,7 +82,7 @@ where
             break;
         }
         if total >= buf.len() {
-            return Err(EngineError::Io(io::Error::new(
+            return Err(RuntimeError::Io(io::Error::new(
                 io::ErrorKind::InvalidData,
                 "http-upgrade: response headers too large",
             )));
@@ -92,15 +92,16 @@ where
     Ok(HttpUpgradeStream { inner: io })
 }
 
-// ── server (inbound) accept ──
+// 鈹€鈹€ server (inbound) accept 鈹€鈹€
 
 /// Accept an HTTPUpgrade connection: read upgrade request, respond 101.
-pub async fn accept_http_upgrade<S>(
+pub async fn accept_http_upgrade<S, TProfile>(
     stream: S,
-    config: &HttpUpgradeConfig,
-) -> Result<HttpUpgradeStream<S>, EngineError>
+    config: &TProfile,
+) -> Result<HttpUpgradeStream<S>, RuntimeError>
 where
     S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+    TProfile: HttpUpgradeTransportProfile + ?Sized,
 {
     let mut io = stream;
 
@@ -108,9 +109,9 @@ where
     let mut buf = vec![0u8; 4096];
     let mut total = 0;
     loop {
-        let n = io.read(&mut buf[total..]).await.map_err(EngineError::Io)?;
+        let n = io.read(&mut buf[total..]).await.map_err(RuntimeError::Io)?;
         if n == 0 {
-            return Err(EngineError::Io(io::Error::new(
+            return Err(RuntimeError::Io(io::Error::new(
                 io::ErrorKind::ConnectionAborted,
                 "http-upgrade accept: unexpected EOF",
             )));
@@ -118,9 +119,9 @@ where
         total += n;
         if find_header_end(&buf[..total]).is_some() {
             let req_path = parse_request_path(&buf[..total]);
-            let expected = config.path.as_str();
+            let expected = config.path();
             if req_path.as_deref() != Some(expected) {
-                return Err(EngineError::Io(io::Error::new(
+                return Err(RuntimeError::Io(io::Error::new(
                     io::ErrorKind::ConnectionRefused,
                     format!("http-upgrade: path mismatch, expected {expected}"),
                 )));
@@ -128,7 +129,7 @@ where
             break;
         }
         if total >= buf.len() {
-            return Err(EngineError::Io(io::Error::new(
+            return Err(RuntimeError::Io(io::Error::new(
                 io::ErrorKind::InvalidData,
                 "http-upgrade accept: request headers too large",
             )));
@@ -139,12 +140,12 @@ where
     let resp = "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: s3pPLMBiTxaQ9kYGzzhZRbK+xOo=\r\n\r\n";
     io.write_all(resp.as_bytes())
         .await
-        .map_err(EngineError::Io)?;
+        .map_err(RuntimeError::Io)?;
 
     Ok(HttpUpgradeStream { inner: io })
 }
 
-// ── AsyncRead / AsyncWrite / AsyncSocket ──
+// 鈹€鈹€ AsyncRead / AsyncWrite / AsyncSocket 鈹€鈹€
 
 impl<S> AsyncRead for HttpUpgradeStream<S>
 where
@@ -221,7 +222,7 @@ where
     }
 }
 
-// ── helpers ──
+// 鈹€鈹€ helpers 鈹€鈹€
 
 fn find_header_end(buf: &[u8]) -> Option<usize> {
     buf.windows(4).position(|w| w == b"\r\n\r\n").map(|p| p + 4)

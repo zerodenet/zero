@@ -145,6 +145,7 @@ pub(crate) fn packet_path_payload_carrier(
 /// Produced by `PreparedUdpPacketPathOperation::into_carrier_descriptor`. The
 /// `cache_key` uniquely identifies one carrier connection so the manager can
 /// reuse it across packets; `server`/`port` are the endpoint for diagnostics.
+#[derive(Clone)]
 pub(crate) struct PacketPathCarrierDescriptor {
     pub(crate) cache_key: String,
     pub(crate) server: String,
@@ -182,6 +183,7 @@ pub(crate) fn packet_path_carrier_descriptor_from_build(
 /// Produced by `PreparedUdpPacketPathOperation::into_datagram_source`. The `cache_key`
 /// feeds packet-path cache identity without exposing raw config parsing to the
 /// manager.
+#[derive(Clone)]
 pub(crate) struct UdpDatagramDescriptor {
     pub(crate) tag: String,
     pub(crate) server: String,
@@ -220,6 +222,7 @@ impl UdpDatagramDescriptor {
 ///
 /// The descriptor is the generic chain-management surface. The codec is the
 /// protocol-provided packet framing object for the selected datagram hop.
+#[derive(Clone)]
 pub(crate) struct UdpDatagramSource {
     pub(crate) descriptor: UdpDatagramDescriptor,
     pub(crate) codec: Arc<dyn DatagramCodec<Address, Error = zero_core::Error>>,

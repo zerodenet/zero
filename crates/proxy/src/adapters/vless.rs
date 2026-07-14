@@ -1,19 +1,20 @@
 #[cfg(feature = "vless")]
+use ::vless::transport::{
+    OwnedVlessInboundBindPlan, OwnedVlessOutboundTransportPlan, OwnedVlessQuicBindProfile,
+    OwnedVlessQuicClientProfile, OwnedVlessRealityClientProfile, VlessOutboundLeaf,
+    VlessStreamBridge,
+};
+#[cfg(feature = "vless")]
 use async_trait::async_trait;
 #[cfg(feature = "vless")]
 mod listener;
 #[cfg(feature = "vless")]
-use zero_config::InboundConfig;
+use zero_config::{InboundConfig, QuicConfig, RealityConfig};
 use zero_config::{InboundProtocolConfig, OutboundProtocolConfig};
 #[cfg(feature = "vless")]
 #[cfg(feature = "vless")]
 use zero_engine::{EngineError, ResolvedLeafOutbound};
 use zero_traits::{ProtocolCapabilityDescriptor, ProtocolMetadata};
-#[cfg(feature = "vless")]
-use zero_transport::vless_transport::OwnedVlessInboundBindPlan;
-use zero_transport::vless_transport::{
-    OwnedVlessOutboundTransportPlan, VlessOutboundLeaf, VlessStreamBridge,
-};
 
 use crate::adapters::identity::{
     named_protocol_claims_runtime_leaf, named_protocol_supports_inbound,
@@ -21,30 +22,25 @@ use crate::adapters::identity::{
 };
 use crate::protocol_registry::ProtocolTransportLeafResolver;
 use crate::protocol_registry::{
-    bind_transport_inbound, proxy_leaf_runtime, BoundInbound, InboundListenerCapability,
-    ManagedUdpHandlerProvider, OutboundLeafRuntime, ProtocolSupportCapability,
-    TcpOutboundCapability, UdpFlowCapability, UdpPacketPathCapability,
+    bind_transport_inbound, prepare_transport_bridge_tcp_connect,
+    prepare_transport_bridge_tcp_relay, proxy_leaf_runtime,
+    transport_bridge_udp_relay_needs_two_streams, BoundInbound, InboundListenerCapability,
+    ManagedUdpHandlerProvider, OutboundLeafRuntime, PreparedTransportUdpOperation,
+    ProtocolSupportCapability, RelayTwoStreamUdpOperation, TcpOutboundCapability,
+    TransportBridgeUdpOperation, UdpFlowCapability, UdpPacketPathCapability,
 };
 use crate::runtime::path::TcpPathCategory;
 #[cfg(feature = "vless")]
 use crate::runtime::tcp_dispatch::operation::{
-    prepare_transport_bridge_tcp_connect, prepare_transport_bridge_tcp_relay,
     PreparedTcpConnectOperation, PreparedTcpRelayOperation,
 };
 #[cfg(feature = "vless")]
-use crate::runtime::udp_dispatch::operation::{
-    PreparedTransportUdpOperation, PreparedUdpFlowOperation, RelayTwoStreamUdpOperation,
-    TransportBridgeUdpOperation,
-};
+use crate::runtime::udp_dispatch::operation::PreparedUdpFlowOperation;
 #[cfg(feature = "vless")]
 use crate::runtime::udp_dispatch::FlowFailure;
 #[cfg(feature = "vless")]
 use crate::runtime::udp_flow::managed::{
-    bridge::{
-        managed_stream_udp_handler_for_bridge,
-        protocol_transport_bridge_udp_relay_needs_two_streams,
-    },
-    ManagedStreamHandlerPair,
+    bridge::managed_stream_udp_handler_for_bridge, ManagedStreamHandlerPair,
 };
 #[cfg(feature = "vless")]
 use crate::transport::TcpOutboundFailure;
@@ -53,6 +49,36 @@ use crate::transport::TcpOutboundFailure;
 #[derive(Debug, Default)]
 pub(crate) struct VlessAdapter {
     bridge: VlessStreamBridge,
+}
+
+#[cfg(feature = "vless")]
+fn outbound_reality_profile(
+    reality: Option<&RealityConfig>,
+) -> Option<OwnedVlessRealityClientProfile> {
+    reality.map(|reality| {
+        OwnedVlessRealityClientProfile::new(
+            reality.public_key.clone(),
+            reality.short_id.clone(),
+            reality.server_name.clone(),
+            reality.cipher_suites.clone(),
+        )
+    })
+}
+
+#[cfg(feature = "vless")]
+fn quic_client_profile(quic: Option<&QuicConfig>) -> Option<OwnedVlessQuicClientProfile> {
+    quic.map(|quic| {
+        OwnedVlessQuicClientProfile::new(
+            quic.server_name.clone(),
+            quic.insecure,
+            quic.ca_cert_path.clone(),
+        )
+    })
+}
+
+#[cfg(feature = "vless")]
+fn quic_bind_profile(quic: Option<&QuicConfig>) -> Option<OwnedVlessQuicBindProfile> {
+    quic.map(|quic| OwnedVlessQuicBindProfile::new(quic.cert_path.clone(), quic.key_path.clone()))
 }
 
 #[cfg(feature = "vless")]
@@ -102,18 +128,20 @@ impl<'a> ProtocolTransportLeafResolver<'a> for VlessStreamBridge {
         else {
             return Ok(None);
         };
-        let transport = OwnedVlessOutboundTransportPlan::from_config_refs(
+        let reality = outbound_reality_profile(*reality);
+        let quic = quic_client_profile(*quic);
+        let transport = OwnedVlessOutboundTransportPlan::from_profile_refs(
             source_dir,
             server,
             *port,
             *tls,
-            *reality,
+            reality.as_ref(),
             *ws,
             *grpc,
             *h2,
             *http_upgrade,
             *split_http,
-            *quic,
+            quic.as_ref(),
         );
         let protocol = ::vless::outbound::PreparedVlessOutboundRequestBundle::from_config_with_transport_hints(
             id,
@@ -168,7 +196,15 @@ impl InboundListenerCapability for VlessAdapter {
         inbound: &InboundConfig,
         source_dir: Option<&std::path::Path>,
     ) -> Result<BoundInbound, EngineError> {
-        bind_transport_inbound::<OwnedVlessInboundBindPlan>(inbound, source_dir).await
+        let InboundProtocolConfig::Vless { quic, .. } = &inbound.protocol else {
+            return Err(EngineError::Io(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "vless inbound bind received non-vless inbound config",
+            )));
+        };
+        let quic = quic_bind_profile(quic.as_deref());
+        let plan = OwnedVlessInboundBindPlan::from_quic_profile(source_dir, quic.as_ref());
+        bind_transport_inbound(inbound, plan).await
     }
 
     fn prepare_inbound_listener(
@@ -228,7 +264,7 @@ impl UdpFlowCapability for VlessAdapter {
     }
 
     fn udp_relay_needs_two_streams(&self, leaf: &ResolvedLeafOutbound<'_>) -> bool {
-        protocol_transport_bridge_udp_relay_needs_two_streams(self.bridge(), leaf)
+        transport_bridge_udp_relay_needs_two_streams(self.bridge(), leaf)
     }
 
     fn prepare_udp_relay_two_stream<'a>(

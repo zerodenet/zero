@@ -1,11 +1,10 @@
 use std::io;
 use std::net::SocketAddr;
 
+use crate::RuntimeError;
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio_tungstenite::tungstenite::http::Request;
-use zero_config::WebSocketConfig;
-use zero_engine::EngineError;
-use zero_traits::AsyncSocket;
+use zero_traits::{AsyncSocket, WebSocketTransportProfile};
 
 use zero_platform_tokio::ClientStream;
 
@@ -25,7 +24,10 @@ impl<S> WebSocketSocket<S> {
     }
 }
 
-pub async fn accept_ws<S>(stream: S, expected_path: &str) -> Result<WebSocketSocket<S>, EngineError>
+pub async fn accept_ws<S>(
+    stream: S,
+    expected_path: &str,
+) -> Result<WebSocketSocket<S>, RuntimeError>
 where
     S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
@@ -53,7 +55,7 @@ where
     let ws_stream = tokio_tungstenite::accept_hdr_async(stream, callback)
         .await
         .map_err(|e| {
-            EngineError::Io(std::io::Error::new(
+            RuntimeError::Io(std::io::Error::new(
                 std::io::ErrorKind::ConnectionRefused,
                 format!("WebSocket accept failed: {e}"),
             ))
@@ -62,20 +64,21 @@ where
     Ok(WebSocketSocket::new(ws_stream))
 }
 
-pub async fn connect_ws<S>(
+pub async fn connect_ws<S, TProfile>(
     stream: S,
-    ws: &WebSocketConfig,
+    ws: &TProfile,
     server: &str,
     port: u16,
-) -> Result<WebSocketSocket<S>, EngineError>
+) -> Result<WebSocketSocket<S>, RuntimeError>
 where
     S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+    TProfile: WebSocketTransportProfile + ?Sized,
 {
     let host = format!("{server}:{port}");
-    let path = if ws.path.starts_with('/') {
-        ws.path.clone()
+    let path = if ws.path().starts_with('/') {
+        ws.path().to_owned()
     } else {
-        format!("/{}", ws.path)
+        format!("/{}", ws.path())
     };
     let url = format!("ws://{host}{path}");
 
@@ -90,12 +93,12 @@ where
             tokio_tungstenite::tungstenite::handshake::client::generate_key(),
         );
 
-    for (key, value) in &ws.headers {
+    for (key, value) in ws.header_pairs() {
         request_builder = request_builder.header(key, value);
     }
 
     let request = request_builder.body(()).map_err(|e| {
-        EngineError::Io(std::io::Error::new(
+        RuntimeError::Io(std::io::Error::new(
             std::io::ErrorKind::InvalidInput,
             format!("WebSocket request build failed: {e}"),
         ))
@@ -104,7 +107,7 @@ where
     let (ws_stream, _) = tokio_tungstenite::client_async(request, stream)
         .await
         .map_err(|e| {
-            EngineError::Io(std::io::Error::new(
+            RuntimeError::Io(std::io::Error::new(
                 std::io::ErrorKind::ConnectionRefused,
                 format!("WebSocket handshake failed: {e}"),
             ))

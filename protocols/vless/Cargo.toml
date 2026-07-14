@@ -11,7 +11,7 @@ homepage.workspace = true
 [features]
 default = ["tokio", "runtime"]
 tokio = ["dep:tokio"]
-runtime = []
+runtime = ["dep:zero-platform-tokio", "dep:zero-transport"]
 validation = ["dep:base64"]
 reality = [
     "runtime",
@@ -40,6 +40,8 @@ tokio = { workspace = true, optional = true }
 x25519-dalek = { version = "2.0.1", default-features = false, features = ["static_secrets"], optional = true }
 x509-parser = { version = "0.18", default-features = false, features = ["verify"], optional = true }
 zero-core = { path = "../../crates/core" }
+zero-platform-tokio = { path = "../../crates/platform/tokio", optional = true }
+zero-transport = { path = "../../crates/transport", optional = true, features = ["grpc", "h2", "http_upgrade", "split_http", "quic", "tls", "ws"] }
 ztls = { path = "../../crates/ztls" }
 zero-traits = { path = "../../crates/traits" }
 

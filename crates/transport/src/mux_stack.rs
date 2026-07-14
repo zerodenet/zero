@@ -1,6 +1,6 @@
 use std::{future::Future, io};
 
-use zero_engine::EngineError;
+use crate::RuntimeError;
 use zero_platform_tokio::{TcpRelayStream, TokioSocket};
 
 pub async fn establish_mux_pool_connection<
@@ -21,14 +21,14 @@ pub async fn establish_mux_pool_connection<
     open_socket: OpenSocket,
     connect_transport: ConnectTransport,
     finalize: Finalize,
-) -> Result<PoolConn, EngineError>
+) -> Result<PoolConn, RuntimeError>
 where
     OpenSocket: FnOnce(&str, u16) -> OpenSocketFut,
-    OpenSocketFut: Future<Output = Result<TokioSocket, EngineError>>,
+    OpenSocketFut: Future<Output = Result<TokioSocket, RuntimeError>>,
     ConnectTransport: FnOnce(Transport, TokioSocket) -> ConnectTransportFut,
-    ConnectTransportFut: Future<Output = Result<Stream, EngineError>>,
+    ConnectTransportFut: Future<Output = Result<Stream, RuntimeError>>,
     Finalize: FnOnce(Stream, u32) -> FinalizeFut,
-    FinalizeFut: Future<Output = Result<PoolConn, EngineError>>,
+    FinalizeFut: Future<Output = Result<PoolConn, RuntimeError>>,
 {
     let socket = open_socket(server, port).await?;
     let stream = connect_transport(transport, socket).await?;
@@ -47,11 +47,11 @@ pub async fn use_mux_pool_connection<
     max_concurrency: u32,
     load_connection: LoadConnection,
     use_connection: UseConnection,
-) -> Result<Output, EngineError>
+) -> Result<Output, RuntimeError>
 where
     LoadConnection: FnOnce(Key, u32) -> LoadConnectionFut,
-    LoadConnectionFut: Future<Output = Result<Connection, EngineError>>,
-    UseConnection: FnOnce(Connection) -> Result<Output, EngineError>,
+    LoadConnectionFut: Future<Output = Result<Connection, RuntimeError>>,
+    UseConnection: FnOnce(Connection) -> Result<Output, RuntimeError>,
 {
     let conn = load_connection(key, max_concurrency).await?;
     use_connection(conn)
@@ -72,14 +72,14 @@ pub async fn open_cached_mux_pool_connection<
     get_or_create_cached_connection: GetOrCreateCachedConnection,
     create_connection: CreateConnection,
     use_connection: UseConnection,
-) -> Result<Output, EngineError>
+) -> Result<Output, RuntimeError>
 where
     GetOrCreateCachedConnection:
         FnOnce(Key, u32, CreateConnection) -> GetOrCreateCachedConnectionFut,
-    GetOrCreateCachedConnectionFut: Future<Output = Result<CachedConnection, EngineError>>,
+    GetOrCreateCachedConnectionFut: Future<Output = Result<CachedConnection, RuntimeError>>,
     CreateConnection: FnOnce(Key, u32) -> CreateConnectionFut,
     CreateConnectionFut: Future,
-    UseConnection: FnOnce(CachedConnection) -> Result<Output, EngineError>,
+    UseConnection: FnOnce(CachedConnection) -> Result<Output, RuntimeError>,
 {
     use_mux_pool_connection(
         key,
@@ -92,9 +92,9 @@ where
     .await
 }
 
-pub fn map_transport_connector_error(error: EngineError) -> io::Error {
+pub fn map_transport_connector_error(error: RuntimeError) -> io::Error {
     match error {
-        EngineError::Io(io_error) => io_error,
+        RuntimeError::Io(io_error) => io_error,
         other => io::Error::other(other),
     }
 }
@@ -105,7 +105,7 @@ pub async fn connect_transport_connector<BuildTransport, BuildTransportFut>(
 ) -> io::Result<TcpRelayStream>
 where
     BuildTransport: FnOnce(TokioSocket) -> BuildTransportFut,
-    BuildTransportFut: Future<Output = Result<TcpRelayStream, EngineError>>,
+    BuildTransportFut: Future<Output = Result<TcpRelayStream, RuntimeError>>,
 {
     build_transport(socket)
         .await

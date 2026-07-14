@@ -11,6 +11,13 @@ homepage.workspace = true
 [features]
 default = []
 crypto = ["dep:ring", "dep:subtle"]
+runtime = [
+    "crypto",
+    "tokio",
+    "dep:rustls",
+    "dep:tracing",
+    "dep:zero-transport",
+]
 tokio = ["dep:quinn", "dep:tokio"]
 
 [dependencies]
@@ -18,8 +25,11 @@ async-trait = "0.1"
 ring = { version = "0.17", optional = true }
 subtle = { version = "2.6", optional = true }
 quinn = { version = "0.11", default-features = false, features = ["rustls-ring"], optional = true }
+rustls = { workspace = true, optional = true }
 tokio = { workspace = true, optional = true }
+tracing = { workspace = true, optional = true }
 zero-core = { path = "../../crates/core" }
+zero-transport = { path = "../../crates/transport", optional = true, features = ["quic"] }
 zero-traits = { path = "../../crates/traits" }
 
 [dev-dependencies]

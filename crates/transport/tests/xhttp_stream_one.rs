@@ -11,14 +11,14 @@
 use std::time::Duration;
 
 use tokio::io::{duplex, AsyncReadExt, AsyncWriteExt};
-use zero_config::SplitHttpConfig;
+use zero_transport::profile::OwnedSplitHttpProfile;
 use zero_transport::split_http::{
     accept_xhttp_stream_one, connect_split_http, connect_xhttp_stream_one,
 };
 
 /// Build a config with the given host/path and `auto` mode.
-fn cfg(host: &str, path: &str) -> SplitHttpConfig {
-    SplitHttpConfig {
+fn cfg(host: &str, path: &str) -> OwnedSplitHttpProfile {
+    OwnedSplitHttpProfile {
         host: Some(host.to_string()),
         path: path.to_string(),
         mode: "auto".to_string(),

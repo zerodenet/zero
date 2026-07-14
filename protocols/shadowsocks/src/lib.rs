@@ -9,6 +9,8 @@ mod outbound;
 pub mod shared;
 #[cfg(feature = "crypto")]
 mod stream;
+#[cfg(feature = "runtime")]
+pub mod transport;
 pub mod udp;
 pub mod validation;
 

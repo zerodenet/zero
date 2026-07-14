@@ -175,7 +175,7 @@ impl Proxy {
         &self,
         server: &str,
         port: u16,
-    ) -> Result<TokioSocket, EngineError> {
+    ) -> Result<TokioSocket, zero_transport::RuntimeError> {
         self.protocols
             .direct_connector()
             .connect_host(server, port, self.resolver.as_ref())
@@ -196,7 +196,7 @@ impl Proxy {
         &self,
         server: String,
         port: u16,
-    ) -> Result<TokioSocket, EngineError> {
+    ) -> Result<TokioSocket, zero_transport::RuntimeError> {
         self.connect_upstream_host(&server, port).await
     }
 

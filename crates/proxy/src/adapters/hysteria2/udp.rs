@@ -12,7 +12,7 @@ use crate::runtime::udp_flow::packet_path::{
     packet_path_carrier_descriptor_from_build, DatagramCodec, PacketPathCarrier,
     PacketPathCarrierDescriptor, PacketPathCarrierDescriptorBuild,
 };
-use zero_transport::hysteria2_quic::{
+use ::hysteria2::transport::{
     Hysteria2ManagedUdpPacketPathCarrierDescriptor, Hysteria2ManagedUdpPacketPathPlan,
 };
 
@@ -34,10 +34,8 @@ async fn build_packet_path(
     let (conn, codec): (
         quinn::Connection,
         std::sync::Arc<dyn DatagramCodec<zero_core::Address, Error = zero_core::Error>>,
-    ) = zero_transport::hysteria2_quic::open_hysteria2_udp_packet_path_build(
-        plan.into_carrier_build(),
-    )
-    .await?;
+    ) = ::hysteria2::transport::open_hysteria2_udp_packet_path_build(plan.into_carrier_build())
+        .await?;
     crate::runtime::udp_flow::packet_path_chain::carriers::quic_datagram_carrier::build(
         std::sync::Arc::new(conn),
         codec,
@@ -50,8 +48,8 @@ struct Hysteria2PacketPathOperation {
 }
 
 impl PreparedUdpPacketPathOperation for Hysteria2PacketPathOperation {
-    fn into_carrier_descriptor(self: Box<Self>) -> Option<PacketPathCarrierDescriptor> {
-        Some(packet_path_carrier_descriptor(self.plan))
+    fn carrier_descriptor(&self) -> Option<PacketPathCarrierDescriptor> {
+        Some(packet_path_carrier_descriptor(self.plan.clone()))
     }
 
     fn build_carrier<'a>(
@@ -73,8 +71,7 @@ impl PreparedUdpPacketPathOperation for Hysteria2PacketPathOperation {
 }
 
 pub(crate) fn managed_datagram_handler() -> Box<dyn ManagedDatagramFlowHandler> {
-    managed_datagram_handler_box::<zero_transport::hysteria2_quic::Hysteria2ManagedDatagramFlowResume>(
-    )
+    managed_datagram_handler_box::<::hysteria2::transport::Hysteria2ManagedDatagramFlowResume>()
 }
 
 impl Hysteria2Adapter {

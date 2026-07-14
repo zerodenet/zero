@@ -1,4 +1,4 @@
-// HTTP/2 transport — h2.rs
+// HTTP/2 transport 鈥?h2.rs
 //
 // Raw DATA frames over HTTP/2 (no gRPC framing).
 // Simpler than gRPC transport: bytes flow directly in DATA frames.
@@ -13,9 +13,8 @@ use http::{Method, Request, Response};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf};
 use tokio::sync::mpsc;
 
-use zero_config::H2Config;
-use zero_engine::EngineError;
-use zero_traits::AsyncSocket;
+use crate::RuntimeError;
+use zero_traits::{AsyncSocket, H2TransportProfile};
 
 use zero_platform_tokio::ClientStream;
 
@@ -38,20 +37,21 @@ impl H2Stream {
     }
 }
 
-// ── client (outbound) connect ──
+// 鈹€鈹€ client (outbound) connect 鈹€鈹€
 
-pub async fn connect_h2<S>(
+pub async fn connect_h2<S, TProfile>(
     stream: S,
-    h2_config: &H2Config,
+    h2_config: &TProfile,
     server: &str,
     port: u16,
-) -> Result<H2Stream, EngineError>
+) -> Result<H2Stream, RuntimeError>
 where
     S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+    TProfile: H2TransportProfile + ?Sized,
 {
     let (mut h2, conn) = h2::client::handshake(stream)
         .await
-        .map_err(|e| EngineError::Io(io::Error::other(format!("h2 client handshake: {e}"))))?;
+        .map_err(|e| RuntimeError::Io(io::Error::other(format!("h2 client handshake: {e}"))))?;
 
     tokio::spawn(async move {
         if let Err(e) = conn.await {
@@ -60,13 +60,13 @@ where
     });
 
     let host = h2_config
-        .host
-        .clone()
+        .host()
+        .map(str::to_owned)
         .unwrap_or_else(|| format!("{server}:{port}"));
-    let path = if h2_config.path.starts_with('/') {
-        h2_config.path.clone()
+    let path = if h2_config.path().starts_with('/') {
+        h2_config.path().to_owned()
     } else {
-        format!("/{}", h2_config.path)
+        format!("/{}", h2_config.path())
     };
 
     let request = Request::builder()
@@ -75,18 +75,18 @@ where
         .header("host", &host)
         .header("content-type", "application/octet-stream")
         .body(())
-        .map_err(|e| EngineError::Io(io::Error::other(format!("h2 request build: {e}"))))?;
+        .map_err(|e| RuntimeError::Io(io::Error::other(format!("h2 request build: {e}"))))?;
 
     let (resp_future, send_stream) = h2
         .send_request(request, false)
-        .map_err(|e| EngineError::Io(io::Error::other(format!("h2 send request: {e}"))))?;
+        .map_err(|e| RuntimeError::Io(io::Error::other(format!("h2 send request: {e}"))))?;
 
     let resp = resp_future
         .await
-        .map_err(|e| EngineError::Io(io::Error::other(format!("h2 response: {e}"))))?;
+        .map_err(|e| RuntimeError::Io(io::Error::other(format!("h2 response: {e}"))))?;
 
     if !resp.status().is_success() {
-        return Err(EngineError::Io(io::Error::new(
+        return Err(RuntimeError::Io(io::Error::new(
             io::ErrorKind::ConnectionRefused,
             format!("h2 server returned {}", resp.status()),
         )));
@@ -97,29 +97,33 @@ where
     build_h2_stream(send_stream, recv_stream)
 }
 
-// ── server (inbound) accept ──
+// 鈹€鈹€ server (inbound) accept 鈹€鈹€
 
-pub async fn accept_h2<S>(stream: S, h2_config: &H2Config) -> Result<H2Stream, EngineError>
+pub async fn accept_h2<S, TProfile>(
+    stream: S,
+    h2_config: &TProfile,
+) -> Result<H2Stream, RuntimeError>
 where
     S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+    TProfile: H2TransportProfile + ?Sized,
 {
     let mut conn = h2::server::handshake(stream)
         .await
-        .map_err(|e| EngineError::Io(io::Error::other(format!("h2 server handshake: {e}"))))?;
+        .map_err(|e| RuntimeError::Io(io::Error::other(format!("h2 server handshake: {e}"))))?;
 
     let (request, mut respond) = conn
         .accept()
         .await
         .ok_or_else(|| {
-            EngineError::Io(io::Error::new(
+            RuntimeError::Io(io::Error::new(
                 io::ErrorKind::ConnectionAborted,
                 "h2 connection closed before request",
             ))
         })?
-        .map_err(|e| EngineError::Io(io::Error::other(format!("h2 accept: {e}"))))?;
+        .map_err(|e| RuntimeError::Io(io::Error::other(format!("h2 accept: {e}"))))?;
 
-    let expected_path = if h2_config.path.starts_with('/') {
-        h2_config.path.as_str()
+    let expected_path = if h2_config.path().starts_with('/') {
+        h2_config.path()
     } else {
         "/"
     };
@@ -129,8 +133,8 @@ where
         *resp.status_mut() = http::StatusCode::NOT_FOUND;
         respond
             .send_response(resp, true)
-            .map_err(|e| EngineError::Io(io::Error::other(format!("h2 respond: {e}"))))?;
-        return Err(EngineError::Io(io::Error::new(
+            .map_err(|e| RuntimeError::Io(io::Error::other(format!("h2 respond: {e}"))))?;
+        return Err(RuntimeError::Io(io::Error::new(
             io::ErrorKind::ConnectionRefused,
             format!("h2 path mismatch: expected {expected_path}, got {got_path}"),
         )));
@@ -142,23 +146,23 @@ where
 
     let send_stream = respond
         .send_response(resp, false)
-        .map_err(|e| EngineError::Io(io::Error::other(format!("h2 respond: {e}"))))?;
+        .map_err(|e| RuntimeError::Io(io::Error::other(format!("h2 respond: {e}"))))?;
 
     let recv_stream = request.into_body();
 
     build_h2_stream(send_stream, recv_stream)
 }
 
-// ── common H2 stream builder ──
+// 鈹€鈹€ common H2 stream builder 鈹€鈹€
 
 fn build_h2_stream(
     mut send_stream: h2::SendStream<Bytes>,
     mut recv_stream: h2::RecvStream,
-) -> Result<H2Stream, EngineError> {
+) -> Result<H2Stream, RuntimeError> {
     let (write_tx, mut write_rx) = mpsc::unbounded_channel::<Vec<u8>>();
     let (read_tx, read_rx) = mpsc::channel::<Vec<u8>>(32);
 
-    // Write relay: mpsc → h2 DATA frames
+    // Write relay: mpsc 鈫?h2 DATA frames
     tokio::spawn(async move {
         while let Some(data) = write_rx.recv().await {
             if send_stream.send_data(Bytes::from(data), false).is_err() {
@@ -168,7 +172,7 @@ fn build_h2_stream(
         let _ = send_stream.send_data(Bytes::new(), true);
     });
 
-    // Read relay: h2 DATA frames → mpsc
+    // Read relay: h2 DATA frames 鈫?mpsc
     tokio::spawn(async move {
         loop {
             match recv_stream.data().await {
@@ -187,7 +191,7 @@ fn build_h2_stream(
     Ok(H2Stream::new(read_rx, write_tx))
 }
 
-// ── AsyncRead / AsyncWrite / AsyncSocket / ClientStream ──
+// 鈹€鈹€ AsyncRead / AsyncWrite / AsyncSocket / ClientStream 鈹€鈹€
 
 impl AsyncRead for H2Stream {
     fn poll_read(

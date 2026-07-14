@@ -1,17 +1,16 @@
 use core::future::Future;
 use std::io;
-use std::path::Path;
 use std::pin::Pin;
 
-use zero_config::{FallbackConfig, InboundProtocolConfig};
+use crate::RuntimeError;
 use zero_core::{InboundMuxStreamRoute, InboundStreamRoute};
-use zero_engine::EngineError;
 use zero_platform_tokio::TokioSocket;
 
+use crate::profile::OwnedInboundFallbackProfile;
 use crate::ClientStream;
 
 pub struct InboundFallback<R> {
-    pub config: FallbackConfig,
+    pub config: OwnedInboundFallbackProfile,
     pub replay: R,
 }
 
@@ -183,11 +182,6 @@ pub enum TransportInboundBindTarget {
 }
 
 #[async_trait::async_trait]
-pub trait ProtocolInboundBindPlan: Sized {
-    fn from_protocol_config(
-        protocol: &InboundProtocolConfig,
-        source_dir: Option<&Path>,
-    ) -> Result<Self, EngineError>;
-
-    async fn bind(&self, listen_addr: &str) -> Result<TransportInboundBindTarget, EngineError>;
+pub trait ProtocolInboundBindPlan {
+    async fn bind(&self, listen_addr: &str) -> Result<TransportInboundBindTarget, RuntimeError>;
 }

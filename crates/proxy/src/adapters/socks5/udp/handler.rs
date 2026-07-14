@@ -1,11 +1,11 @@
+use ::socks5::transport::{Socks5ManagedUdpAssociationTarget, Socks5UpstreamUdpAssociation};
+
 use crate::runtime::udp_flow::registered::{
     boxed_registered_upstream_handler, UpstreamAssociationHandler, UpstreamAssociationStages,
     UpstreamAssociationTarget,
 };
 
-impl UpstreamAssociationTarget
-    for zero_transport::socks5_transport::Socks5ManagedUdpAssociationTarget
-{
+impl UpstreamAssociationTarget for Socks5ManagedUdpAssociationTarget {
     fn outbound_tag(&self) -> &str {
         self.outbound_tag()
     }
@@ -17,8 +17,8 @@ impl UpstreamAssociationTarget
 
 pub(super) fn upstream_association_handler() -> Box<dyn UpstreamAssociationHandler> {
     boxed_registered_upstream_handler::<
-        zero_transport::socks5_transport::Socks5ManagedUdpAssociationTarget,
-        zero_transport::socks5_transport::Socks5UpstreamUdpAssociation,
+        Socks5ManagedUdpAssociationTarget,
+        Socks5UpstreamUdpAssociation,
     >(UpstreamAssociationStages::new(
         "udp_socks5_proxy",
         "udp_socks5_resume",

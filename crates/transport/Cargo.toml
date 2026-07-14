@@ -14,15 +14,8 @@ h2 = []
 http_upgrade = []
 split_http = []
 quic = []
-socks5 = ["dep:socks5"]
 tls = []
 ws = []
-hysteria2 = ["dep:hysteria2", "hysteria2/crypto", "hysteria2/tokio"]
-mieru = ["dep:mieru", "mieru/crypto"]
-shadowsocks = ["dep:shadowsocks", "shadowsocks/crypto", "shadowsocks/blake3"]
-trojan = ["tls", "dep:trojan", "trojan/crypto", "trojan/tokio"]
-vless = ["grpc", "h2", "http_upgrade", "split_http", "quic", "tls", "ws"]
-vmess = ["grpc", "tls", "ws", "dep:vmess"]
 
 [dependencies]
 async-trait = "0.1"
@@ -42,18 +35,10 @@ tracing = { workspace = true }
 x25519-dalek = { version = "2.0.1", default-features = false, features = ["static_secrets"] }
 tungstenite = "0.23"
 webpki-roots = "1"
-zero-config = { path = "../config" }
 zero-core = { path = "../core" }
-zero-engine = { path = "../engine" }
+zero-runtime-error = { path = "../runtime-error" }
 ztls = { path = "../ztls" }
 zero-platform-tokio = { path = "../platform/tokio" }
-socks5 = { path = "../../protocols/socks5", optional = true }
-vless = { path = "../../protocols/vless", default-features = false, features = ["reality"] }
-hysteria2 = { path = "../../protocols/hysteria2", optional = true, default-features = false }
-mieru = { path = "../../protocols/mieru", optional = true, default-features = false }
-shadowsocks = { path = "../../protocols/shadowsocks", optional = true, default-features = false }
-trojan = { path = "../../protocols/trojan", optional = true, default-features = false }
-vmess = { path = "../../protocols/vmess", optional = true }
 zero-traits = { path = "../traits" }
 
 [dev-dependencies]

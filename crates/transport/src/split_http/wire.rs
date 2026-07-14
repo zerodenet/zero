@@ -1,8 +1,8 @@
 use std::io;
 
+use crate::RuntimeError;
 use http::Request;
 use tokio::io::{AsyncWrite, AsyncWriteExt};
-use zero_engine::EngineError;
 
 pub(super) fn find_header_end(buf: &[u8]) -> Option<usize> {
     buf.windows(4).position(|w| w == b"\r\n\r\n").map(|p| p + 4)
@@ -19,22 +19,22 @@ pub(super) fn parse_status(buf: &[u8]) -> Option<u16> {
     }
 }
 
-pub(super) fn parse_method_and_session(buf: &[u8]) -> Result<(String, String), EngineError> {
+pub(super) fn parse_method_and_session(buf: &[u8]) -> Result<(String, String), RuntimeError> {
     let head = std::str::from_utf8(buf).map_err(|_| {
-        EngineError::Io(io::Error::new(
+        RuntimeError::Io(io::Error::new(
             io::ErrorKind::InvalidData,
             "split-http: non-UTF-8 headers",
         ))
     })?;
     let first_line = head.lines().next().ok_or_else(|| {
-        EngineError::Io(io::Error::new(
+        RuntimeError::Io(io::Error::new(
             io::ErrorKind::InvalidData,
             "split-http: empty request",
         ))
     })?;
     let parts: Vec<_> = first_line.split_whitespace().collect();
     if parts.len() < 2 {
-        return Err(EngineError::Io(io::Error::new(
+        return Err(RuntimeError::Io(io::Error::new(
             io::ErrorKind::InvalidData,
             "split-http: malformed request line",
         )));
@@ -51,22 +51,22 @@ pub(super) fn parse_method_and_session(buf: &[u8]) -> Result<(String, String), E
     Ok((method, session_id))
 }
 
-pub(super) fn validate_path(buf: &[u8], expected: &str) -> Result<(), EngineError> {
+pub(super) fn validate_path(buf: &[u8], expected: &str) -> Result<(), RuntimeError> {
     let head = std::str::from_utf8(buf).map_err(|_| {
-        EngineError::Io(io::Error::new(
+        RuntimeError::Io(io::Error::new(
             io::ErrorKind::InvalidData,
             "split-http: non-UTF-8 headers",
         ))
     })?;
     let first_line = head.lines().next().ok_or_else(|| {
-        EngineError::Io(io::Error::new(
+        RuntimeError::Io(io::Error::new(
             io::ErrorKind::InvalidData,
             "split-http: empty request",
         ))
     })?;
     let parts: Vec<_> = first_line.split_whitespace().collect();
     if parts.len() >= 2 && parts[1] != expected {
-        return Err(EngineError::Io(io::Error::new(
+        return Err(RuntimeError::Io(io::Error::new(
             io::ErrorKind::ConnectionRefused,
             format!("split-http: path mismatch, expected {expected}"),
         )));
@@ -76,11 +76,11 @@ pub(super) fn validate_path(buf: &[u8], expected: &str) -> Result<(), EngineErro
 
 pub(super) async fn write_get_response<W: AsyncWrite + Unpin>(
     writer: &mut W,
-) -> Result<(), EngineError> {
+) -> Result<(), RuntimeError> {
     writer
         .write_all(b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n")
         .await
-        .map_err(EngineError::Io)
+        .map_err(RuntimeError::Io)
 }
 
 pub(super) fn write_http_request(buf: &mut Vec<u8>, req: &Request<()>) {

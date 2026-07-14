@@ -3,11 +3,10 @@ use std::net::SocketAddr;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
+use crate::RuntimeError;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf};
-use zero_config::SplitHttpConfig;
-use zero_engine::EngineError;
 use zero_platform_tokio::ClientStream;
-use zero_traits::AsyncSocket;
+use zero_traits::{AsyncSocket, SplitHttpTransportProfile};
 
 use super::chunked::{ChunkedDecoder, DecodeStep};
 use super::registry::generate_session_id;
@@ -45,15 +44,16 @@ pub struct XhttpStreamOne<S> {
     write_finished: bool,
 }
 
-pub async fn connect_xhttp_stream_one<S>(
+pub async fn connect_xhttp_stream_one<S, TProfile>(
     stream: S,
-    config: &SplitHttpConfig,
-) -> Result<XhttpStreamOne<S>, EngineError>
+    config: &TProfile,
+) -> Result<XhttpStreamOne<S>, RuntimeError>
 where
     S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+    TProfile: SplitHttpTransportProfile + ?Sized,
 {
-    let host = config.host.as_deref().unwrap_or("localhost");
-    let path = config.path.as_str();
+    let host = config.host().unwrap_or("localhost");
+    let path = config.path();
     let session_id = generate_session_id();
     let mut stream = stream;
     let request = format!(
@@ -67,8 +67,8 @@ where
     stream
         .write_all(request.as_bytes())
         .await
-        .map_err(EngineError::Io)?;
-    stream.flush().await.map_err(EngineError::Io)?;
+        .map_err(RuntimeError::Io)?;
+    stream.flush().await.map_err(RuntimeError::Io)?;
 
     let mut buf = vec![0u8; 8192];
     let mut total = 0;
@@ -76,9 +76,9 @@ where
         let n = stream
             .read(&mut buf[total..])
             .await
-            .map_err(EngineError::Io)?;
+            .map_err(RuntimeError::Io)?;
         if n == 0 {
-            return Err(EngineError::Io(io::Error::new(
+            return Err(RuntimeError::Io(io::Error::new(
                 io::ErrorKind::ConnectionAborted,
                 "xhttp stream-one: unexpected EOF reading response",
             )));
@@ -88,7 +88,7 @@ where
             break end;
         }
         if total >= buf.len() {
-            return Err(EngineError::Io(io::Error::new(
+            return Err(RuntimeError::Io(io::Error::new(
                 io::ErrorKind::InvalidData,
                 "xhttp stream-one: response headers too large",
             )));
@@ -97,7 +97,7 @@ where
 
     let status = parse_status(&buf[..head_end]);
     if status != Some(200) {
-        return Err(EngineError::Io(io::Error::new(
+        return Err(RuntimeError::Io(io::Error::new(
             io::ErrorKind::ConnectionRefused,
             format!("xhttp stream-one: expected 200, got {status:?}"),
         )));
@@ -111,12 +111,13 @@ where
     })
 }
 
-pub async fn accept_xhttp_stream_one<S>(
+pub async fn accept_xhttp_stream_one<S, TProfile>(
     stream: S,
-    config: &SplitHttpConfig,
-) -> Result<XhttpStreamOne<S>, EngineError>
+    config: &TProfile,
+) -> Result<XhttpStreamOne<S>, RuntimeError>
 where
     S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+    TProfile: SplitHttpTransportProfile + ?Sized,
 {
     let mut stream = stream;
     let mut buf = vec![0u8; 8192];
@@ -125,9 +126,9 @@ where
         let n = stream
             .read(&mut buf[total..])
             .await
-            .map_err(EngineError::Io)?;
+            .map_err(RuntimeError::Io)?;
         if n == 0 {
-            return Err(EngineError::Io(io::Error::new(
+            return Err(RuntimeError::Io(io::Error::new(
                 io::ErrorKind::ConnectionAborted,
                 "xhttp stream-one accept: unexpected EOF before request headers",
             )));
@@ -137,19 +138,19 @@ where
             break end;
         }
         if total >= buf.len() {
-            return Err(EngineError::Io(io::Error::new(
+            return Err(RuntimeError::Io(io::Error::new(
                 io::ErrorKind::InvalidData,
                 "xhttp stream-one accept: request headers too large",
             )));
         }
     };
 
-    validate_path(&buf[..head_end], config.path.as_str())?;
+    validate_path(&buf[..head_end], config.path())?;
     stream
         .write_all(b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n")
         .await
-        .map_err(EngineError::Io)?;
-    stream.flush().await.map_err(EngineError::Io)?;
+        .map_err(RuntimeError::Io)?;
+    stream.flush().await.map_err(RuntimeError::Io)?;
 
     let prefetched = buf[head_end..total].to_vec();
     Ok(XhttpStreamOne {

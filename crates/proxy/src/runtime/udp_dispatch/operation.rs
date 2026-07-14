@@ -2,32 +2,15 @@ use std::future::Future;
 use std::pin::Pin;
 
 use zero_core::Session;
-use zero_engine::ResolvedLeafOutbound;
-#[cfg(any(feature = "vless", feature = "vmess", feature = "trojan"))]
-use zero_transport::managed_udp::ProtocolManagedStreamUdpBridgeOps;
-#[cfg(feature = "vless")]
-use zero_transport::managed_udp::ProtocolRelayTwoStreamManagedUdpBridgeOps;
-#[cfg(feature = "vless")]
-use zero_transport::outbound_leaf::{
-    ProtocolRelayTwoStreamTransportLeaf, ProtocolRelayTwoStreamUdpTransportBridgeMetadata,
-};
-#[cfg(any(feature = "vless", feature = "vmess", feature = "trojan"))]
-use zero_transport::outbound_leaf::{ProtocolTransportLeaf, ProtocolUdpTransportBridgeMetadata};
 
-use crate::protocol_registry::{ProtocolTransportLeafResolver, UdpAdapterContext};
+use crate::protocol_registry::UdpAdapterContext;
 use crate::runtime::udp_dispatch::UdpDispatch;
 #[cfg(feature = "socks5")]
 use crate::runtime::udp_dispatch::UpstreamTrackedStart;
-#[cfg(feature = "vless")]
-use crate::runtime::udp_flow::managed::bridge::start_protocol_transport_bridge_udp_relay_two_stream;
 #[cfg(feature = "mieru")]
 use crate::runtime::udp_flow::managed::bridge::{
     start_direct_managed_stream_packet, start_relay_managed_stream_packet,
     ManagedStreamPacketRelay, ManagedStreamPacketStartBridge,
-};
-#[cfg(any(feature = "vless", feature = "vmess", feature = "trojan"))]
-use crate::runtime::udp_flow::managed::bridge::{
-    start_protocol_transport_bridge_udp_flow, start_protocol_transport_bridge_udp_relay_final_hop,
 };
 use crate::runtime::udp_flow::outbound::UdpFlowOutbound;
 use crate::runtime::udp_flow::result::{FlowFailure, FlowStartResult};
@@ -264,16 +247,6 @@ where
         .await
 }
 
-pub(crate) enum PreparedTransportUdpOperation<'a, 'leaf> {
-    Direct {
-        leaf: &'leaf ResolvedLeafOutbound<'a>,
-    },
-    RelayFinalHop {
-        carrier: RelayCarrier,
-        leaf: &'leaf ResolvedLeafOutbound<'a>,
-    },
-}
-
 #[cfg(feature = "mieru")]
 pub(crate) enum PreparedManagedStreamPacketOperation<'a, T> {
     Direct {
@@ -283,131 +256,6 @@ pub(crate) enum PreparedManagedStreamPacketOperation<'a, T> {
         plan: zero_transport::managed_udp::ManagedStreamPacketBridgePlan<'a, T>,
         carrier: RelayCarrier,
     },
-}
-
-#[cfg(any(feature = "vless", feature = "vmess", feature = "trojan"))]
-pub(crate) struct TransportBridgeUdpOperation<'a, TBridge> {
-    pub(crate) bridge: &'a TBridge,
-    pub(crate) operation: PreparedTransportUdpOperation<'a, 'a>,
-}
-
-#[cfg(any(feature = "vless", feature = "vmess", feature = "trojan"))]
-impl<'leaf, TBridge> PreparedUdpFlowOperation for TransportBridgeUdpOperation<'leaf, TBridge>
-where
-    TBridge: Send
-        + Sync
-        + ProtocolUdpTransportBridgeMetadata
-        + for<'resolve> ProtocolTransportLeafResolver<'resolve>,
-    for<'resolve> TBridge: ProtocolManagedStreamUdpBridgeOps<
-        <TBridge as ProtocolTransportLeafResolver<'resolve>>::TransportLeaf,
-    >,
-    for<'resolve> <TBridge as ProtocolTransportLeafResolver<'resolve>>::TransportLeaf:
-        ProtocolTransportLeaf + Send,
-    for<'resolve> <TBridge as ProtocolTransportLeafResolver<'resolve>>::ResolveError:
-        std::fmt::Display,
-{
-    fn execute<'a>(
-        self: Box<Self>,
-        dispatch: &'a mut UdpDispatch,
-        ctx: UdpAdapterContext<'a>,
-        session: &'a Session,
-        payload: &'a [u8],
-    ) -> Pin<Box<dyn Future<Output = Result<FlowStartResult, FlowFailure>> + Send + 'a>>
-    where
-        Self: 'a,
-    {
-        Box::pin(async move {
-            execute_transport_udp_operation(
-                self.bridge,
-                dispatch,
-                ctx.proxy(),
-                session,
-                payload,
-                self.operation,
-            )
-            .await
-        })
-    }
-}
-
-#[cfg(feature = "vless")]
-pub(crate) struct PreparedRelayTwoStreamUdpOperation<'a> {
-    pub(crate) chain: Vec<ResolvedLeafOutbound<'a>>,
-}
-
-#[cfg(feature = "vless")]
-pub(crate) struct RelayTwoStreamUdpOperation<'a, TBridge> {
-    pub(crate) bridge: &'a TBridge,
-    pub(crate) chain: Vec<ResolvedLeafOutbound<'a>>,
-}
-
-#[cfg(feature = "vless")]
-impl<'leaf, TBridge> PreparedUdpFlowOperation for RelayTwoStreamUdpOperation<'leaf, TBridge>
-where
-    TBridge: Send
-        + Sync
-        + ProtocolRelayTwoStreamUdpTransportBridgeMetadata
-        + for<'resolve> ProtocolTransportLeafResolver<'resolve>,
-    for<'resolve> TBridge: ProtocolRelayTwoStreamManagedUdpBridgeOps<
-        <TBridge as ProtocolTransportLeafResolver<'resolve>>::TransportLeaf,
-    >,
-    for<'resolve> <TBridge as ProtocolTransportLeafResolver<'resolve>>::TransportLeaf:
-        ProtocolRelayTwoStreamTransportLeaf + Send + Sync,
-    for<'resolve> <TBridge as ProtocolTransportLeafResolver<'resolve>>::ResolveError:
-        std::fmt::Display,
-{
-    fn execute<'a>(
-        self: Box<Self>,
-        dispatch: &'a mut UdpDispatch,
-        ctx: UdpAdapterContext<'a>,
-        session: &'a Session,
-        payload: &'a [u8],
-    ) -> Pin<Box<dyn Future<Output = Result<FlowStartResult, FlowFailure>> + Send + 'a>>
-    where
-        Self: 'a,
-    {
-        Box::pin(async move {
-            execute_relay_two_stream_udp_operation(
-                self.bridge,
-                dispatch,
-                ctx.proxy(),
-                session,
-                payload,
-                PreparedRelayTwoStreamUdpOperation { chain: self.chain },
-            )
-            .await
-        })
-    }
-}
-
-#[cfg(feature = "vless")]
-pub(crate) async fn execute_relay_two_stream_udp_operation<'a, TBridge>(
-    bridge: &TBridge,
-    dispatch: &mut UdpDispatch,
-    proxy: &Proxy,
-    session: &Session,
-    payload: &[u8],
-    operation: PreparedRelayTwoStreamUdpOperation<'a>,
-) -> Result<FlowStartResult, FlowFailure>
-where
-    TBridge: ProtocolRelayTwoStreamUdpTransportBridgeMetadata
-        + ProtocolTransportLeafResolver<'a>
-        + ProtocolRelayTwoStreamManagedUdpBridgeOps<
-            <TBridge as ProtocolTransportLeafResolver<'a>>::TransportLeaf,
-        >,
-    <TBridge as ProtocolTransportLeafResolver<'a>>::TransportLeaf:
-        ProtocolRelayTwoStreamTransportLeaf,
-    <TBridge as ProtocolTransportLeafResolver<'a>>::ResolveError: std::fmt::Display,
-{
-    start_protocol_transport_bridge_udp_relay_two_stream(
-        bridge,
-        dispatch.flow_start_context(),
-        proxy,
-        session,
-        &operation.chain,
-        payload,
-    )
-    .await
 }
 
 #[cfg(feature = "mieru")]
@@ -455,51 +303,6 @@ where
                     plan.resume,
                     payload,
                 ),
-            )
-            .await
-        }
-    }
-}
-
-#[cfg(any(feature = "vless", feature = "vmess", feature = "trojan"))]
-pub(crate) async fn execute_transport_udp_operation<'a, TBridge>(
-    bridge: &TBridge,
-    dispatch: &mut UdpDispatch,
-    proxy: &Proxy,
-    session: &Session,
-    payload: &[u8],
-    operation: PreparedTransportUdpOperation<'a, '_>,
-) -> Result<FlowStartResult, FlowFailure>
-where
-    TBridge: ProtocolUdpTransportBridgeMetadata
-        + ProtocolTransportLeafResolver<'a>
-        + ProtocolManagedStreamUdpBridgeOps<
-            <TBridge as ProtocolTransportLeafResolver<'a>>::TransportLeaf,
-        >,
-    <TBridge as ProtocolTransportLeafResolver<'a>>::TransportLeaf: ProtocolTransportLeaf,
-    <TBridge as ProtocolTransportLeafResolver<'a>>::ResolveError: std::fmt::Display,
-{
-    match operation {
-        PreparedTransportUdpOperation::Direct { leaf } => {
-            start_protocol_transport_bridge_udp_flow(
-                bridge,
-                dispatch.flow_start_context(),
-                proxy,
-                session,
-                leaf,
-                payload,
-            )
-            .await
-        }
-        PreparedTransportUdpOperation::RelayFinalHop { carrier, leaf } => {
-            start_protocol_transport_bridge_udp_relay_final_hop(
-                bridge,
-                dispatch.flow_start_context(),
-                proxy,
-                session,
-                carrier,
-                leaf,
-                payload,
             )
             .await
         }

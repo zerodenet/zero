@@ -5,7 +5,7 @@ use crate::runtime::udp_flow::packet_path_chain::PacketPathStartRequest;
 use crate::runtime::Proxy;
 
 impl UdpDispatch {
-    pub(super) fn datagram_chain_flow_outbound(
+    pub(crate) fn datagram_chain_flow_outbound(
         flow_binding: PacketPathFlowBinding,
     ) -> UdpFlowOutbound {
         let (datagram, flow_snapshot) = flow_binding.into_parts();
@@ -22,7 +22,7 @@ impl UdpDispatch {
         }
     }
 
-    pub(super) async fn send_packet_path_chain(
+    pub(crate) async fn send_packet_path_chain(
         &mut self,
         proxy: &Proxy,
         request: PacketPathStartRequest<'_>,

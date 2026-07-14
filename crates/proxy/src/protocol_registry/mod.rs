@@ -85,6 +85,12 @@ pub(crate) use registry::ProtocolRegistry;
     feature = "mieru"
 ))]
 pub(crate) use transport_leaf::{
-    prepare_last_transport_bridge_leaf, prepare_transport_bridge_leaf,
-    ProtocolTransportLeafResolver, ResolveTransportLeafError,
+    prepare_transport_bridge_tcp_connect, prepare_transport_bridge_tcp_relay,
+    ProtocolTransportLeafResolver,
 };
+#[cfg(feature = "vless")]
+pub(crate) use transport_leaf::{
+    transport_bridge_udp_relay_needs_two_streams, RelayTwoStreamUdpOperation,
+};
+#[cfg(any(feature = "vless", feature = "vmess", feature = "trojan"))]
+pub(crate) use transport_leaf::{PreparedTransportUdpOperation, TransportBridgeUdpOperation};

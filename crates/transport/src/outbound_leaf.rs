@@ -1,7 +1,7 @@
 use std::future::Future;
 
+use crate::RuntimeError;
 use zero_core::Session;
-use zero_engine::EngineError;
 use zero_platform_tokio::TokioSocket;
 
 use crate::{StreamTraffic, TcpRelayStream};
@@ -29,7 +29,7 @@ pub trait ProtocolTransportLeaf {
 
     fn port(&self) -> u16;
 
-    fn validate_udp_relay_final_hop(&self) -> Result<(), EngineError> {
+    fn validate_udp_relay_final_hop(&self) -> Result<(), RuntimeError> {
         Ok(())
     }
 }
@@ -42,13 +42,13 @@ pub trait ProtocolSocketTcpHandshake: ProtocolTransportLeaf + Send + Sync {
         &self,
         socket: TokioSocket,
         session: &Session,
-    ) -> Result<(TcpRelayStream, StreamTraffic), EngineError>;
+    ) -> Result<(TcpRelayStream, StreamTraffic), RuntimeError>;
 
     async fn handshake_relay(
         &self,
         stream: TcpRelayStream,
         session: &Session,
-    ) -> Result<TcpRelayStream, EngineError>;
+    ) -> Result<TcpRelayStream, RuntimeError>;
 }
 
 #[async_trait::async_trait]
@@ -58,7 +58,7 @@ pub trait ProtocolSessionTcpHandshake: ProtocolTransportLeaf + Send + Sync {
     async fn connect_session_stream(
         &self,
         session: &Session,
-    ) -> Result<TcpRelayStream, EngineError>;
+    ) -> Result<TcpRelayStream, RuntimeError>;
 }
 
 pub trait ProtocolTcpTransportOpenResult {
@@ -83,17 +83,17 @@ pub trait ProtocolTcpTransportBridgeOps<TLeaf>: Send + Sync {
         session: &Session,
         leaf: &TLeaf,
         open_socket: OpenSocket,
-    ) -> Result<Self::Opened, EngineError>
+    ) -> Result<Self::Opened, RuntimeError>
     where
         OpenSocket: Clone + Fn(&str, u16) -> OpenSocketFut + Send + Sync,
-        OpenSocketFut: Future<Output = Result<TokioSocket, EngineError>> + Send;
+        OpenSocketFut: Future<Output = Result<TokioSocket, RuntimeError>> + Send;
 
     async fn open_tcp_relay_hop_for_leaf(
         &self,
         stream: TcpRelayStream,
         session: &Session,
         leaf: &TLeaf,
-    ) -> Result<TcpRelayStream, EngineError>;
+    ) -> Result<TcpRelayStream, RuntimeError>;
 }
 pub trait ProtocolUdpTransportBridgeMetadata {
     const UDP_DIRECT_STAGE: &'static str;
@@ -115,7 +115,7 @@ pub trait ProtocolRelayTwoStreamTransportLeaf: ProtocolTransportLeaf {
         &self,
         post_stream: TcpRelayStream,
         get_stream: TcpRelayStream,
-    ) -> Result<TcpRelayStream, EngineError>;
+    ) -> Result<TcpRelayStream, RuntimeError>;
 
     fn needs_relay_two_streams(&self) -> bool;
 }
@@ -157,7 +157,7 @@ where
         transport_leaf_endpoint(self.leaf())
     }
 
-    pub fn validate_udp_relay_final_hop(&self) -> Result<(), EngineError> {
+    pub fn validate_udp_relay_final_hop(&self) -> Result<(), RuntimeError> {
         self.leaf().validate_udp_relay_final_hop()
     }
 }
@@ -167,11 +167,11 @@ pub async fn open_prepared_tcp_transport_bridge_stream<TLeaf, TBridge, OpenSocke
     session: &Session,
     prepared: &PreparedTransportBridgeLeaf<TLeaf>,
     open_socket: OpenSocket,
-) -> Result<TBridge::Opened, EngineError>
+) -> Result<TBridge::Opened, RuntimeError>
 where
     TBridge: ProtocolTcpTransportBridgeOps<TLeaf>,
     OpenSocket: Clone + Fn(&str, u16) -> OpenSocketFut + Send + Sync,
-    OpenSocketFut: Future<Output = Result<TokioSocket, EngineError>> + Send,
+    OpenSocketFut: Future<Output = Result<TokioSocket, RuntimeError>> + Send,
 {
     open_tcp_transport_bridge_stream(bridge, session, prepared.leaf(), open_socket).await
 }
@@ -181,7 +181,7 @@ pub async fn open_prepared_tcp_transport_bridge_relay_hop<TLeaf, TBridge>(
     stream: TcpRelayStream,
     session: &Session,
     prepared: &PreparedTransportBridgeLeaf<TLeaf>,
-) -> Result<TcpRelayStream, EngineError>
+) -> Result<TcpRelayStream, RuntimeError>
 where
     TBridge: ProtocolTcpTransportBridgeOps<TLeaf>,
 {
@@ -232,7 +232,7 @@ pub async fn open_prepared_relay_two_stream_udp_transport<TLeaf>(
     prepared: &PreparedTransportBridgeLeaf<TLeaf>,
     post_stream: TcpRelayStream,
     get_stream: TcpRelayStream,
-) -> Result<TcpRelayStream, EngineError>
+) -> Result<TcpRelayStream, RuntimeError>
 where
     TLeaf: ProtocolRelayTwoStreamTransportLeaf,
 {
@@ -244,11 +244,11 @@ pub async fn open_tcp_transport_bridge_stream<TLeaf, TBridge, OpenSocket, OpenSo
     session: &Session,
     leaf: &TLeaf,
     open_socket: OpenSocket,
-) -> Result<TBridge::Opened, EngineError>
+) -> Result<TBridge::Opened, RuntimeError>
 where
     TBridge: ProtocolTcpTransportBridgeOps<TLeaf>,
     OpenSocket: Clone + Fn(&str, u16) -> OpenSocketFut + Send + Sync,
-    OpenSocketFut: Future<Output = Result<TokioSocket, EngineError>> + Send,
+    OpenSocketFut: Future<Output = Result<TokioSocket, RuntimeError>> + Send,
 {
     bridge
         .open_tcp_stream_for_leaf(session, leaf, open_socket)
@@ -260,7 +260,7 @@ pub async fn open_tcp_transport_bridge_relay_hop<TLeaf, TBridge>(
     stream: TcpRelayStream,
     session: &Session,
     leaf: &TLeaf,
-) -> Result<TcpRelayStream, EngineError>
+) -> Result<TcpRelayStream, RuntimeError>
 where
     TBridge: ProtocolTcpTransportBridgeOps<TLeaf>,
 {
@@ -273,7 +273,7 @@ pub async fn open_relay_two_stream_udp_transport<TLeaf>(
     leaf: &TLeaf,
     post_stream: TcpRelayStream,
     get_stream: TcpRelayStream,
-) -> Result<TcpRelayStream, EngineError>
+) -> Result<TcpRelayStream, RuntimeError>
 where
     TLeaf: ProtocolRelayTwoStreamTransportLeaf,
 {

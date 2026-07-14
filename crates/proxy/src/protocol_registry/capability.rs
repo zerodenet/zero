@@ -185,7 +185,7 @@ pub(crate) trait ManagedUdpHandlerProvider: Send + Sync {
 ))]
 pub(crate) trait UdpPacketPathCapability: Send + Sync {
     fn prepare_udp_packet_path<'a>(
-        &'a self,
+        &self,
         _leaf: &'a ResolvedLeafOutbound<'a>,
     ) -> Option<
         Box<

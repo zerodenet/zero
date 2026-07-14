@@ -1,4 +1,4 @@
-// QUIC transport — quic.rs
+// QUIC transport 鈥?quic.rs
 //
 // UDP-based transport with TLS 1.3 encryption built-in via QUIC.
 // Uses quinn (Rust QUIC implementation).
@@ -12,7 +12,7 @@ use std::task::{Context, Poll};
 
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf};
 
-use zero_engine::EngineError;
+use crate::RuntimeError;
 use zero_traits::AsyncSocket;
 
 use zero_platform_tokio::ClientStream;
@@ -29,13 +29,13 @@ impl QuicStream {
     }
 }
 
-// ── client (outbound) connect ──
+// 鈹€鈹€ client (outbound) connect 鈹€鈹€
 
 pub async fn connect_quic(
     server_name: &str,
     port: u16,
     _insecure: bool,
-) -> Result<QuicStream, EngineError> {
+) -> Result<QuicStream, RuntimeError> {
     use quinn::crypto::rustls::QuicClientConfig;
 
     let mut tls_config = rustls::ClientConfig::builder()
@@ -46,7 +46,7 @@ pub async fn connect_quic(
     tls_config.alpn_protocols = vec![b"h3".to_vec()];
 
     let quic_cfg = QuicClientConfig::try_from(tls_config)
-        .map_err(|e| EngineError::Io(io::Error::other(format!("quic cfg: {e}"))))?;
+        .map_err(|e| RuntimeError::Io(io::Error::other(format!("quic cfg: {e}"))))?;
 
     let mut client_cfg = quinn::ClientConfig::new(Arc::new(quic_cfg));
     let mut transport = quinn::TransportConfig::default();
@@ -55,39 +55,39 @@ pub async fn connect_quic(
 
     let bind_addr = "0.0.0.0:0"
         .parse::<std::net::SocketAddr>()
-        .map_err(|e| EngineError::Io(io::Error::other(format!("quic bind addr: {e}"))))?;
+        .map_err(|e| RuntimeError::Io(io::Error::other(format!("quic bind addr: {e}"))))?;
 
     let socket = std::net::UdpSocket::bind(bind_addr)
-        .map_err(|e| EngineError::Io(io::Error::other(format!("quic bind socket: {e}"))))?;
+        .map_err(|e| RuntimeError::Io(io::Error::other(format!("quic bind socket: {e}"))))?;
     let mut endpoint = quinn::Endpoint::new(
         quinn::EndpointConfig::default(),
         None,
         socket,
         Arc::new(quinn::TokioRuntime),
     )
-    .map_err(|e| EngineError::Io(io::Error::other(format!("quic endpoint: {e}"))))?;
+    .map_err(|e| RuntimeError::Io(io::Error::other(format!("quic endpoint: {e}"))))?;
 
     endpoint.set_default_client_config(client_cfg);
 
     let server_addr = format!("{server_name}:{port}")
         .parse::<std::net::SocketAddr>()
-        .map_err(|e| EngineError::Io(io::Error::other(format!("quic addr parse: {e}"))))?;
+        .map_err(|e| RuntimeError::Io(io::Error::other(format!("quic addr parse: {e}"))))?;
 
     let conn = endpoint
         .connect(server_addr, server_name)
-        .map_err(|e| EngineError::Io(io::Error::other(format!("quic connect: {e}"))))?
+        .map_err(|e| RuntimeError::Io(io::Error::other(format!("quic connect: {e}"))))?
         .await
-        .map_err(|e| EngineError::Io(io::Error::other(format!("quic connection: {e}"))))?;
+        .map_err(|e| RuntimeError::Io(io::Error::other(format!("quic connection: {e}"))))?;
 
     let (send, recv) = conn
         .open_bi()
         .await
-        .map_err(|e| EngineError::Io(io::Error::other(format!("quic open stream: {e}"))))?;
+        .map_err(|e| RuntimeError::Io(io::Error::other(format!("quic open stream: {e}"))))?;
 
     Ok(QuicStream::new(send, recv))
 }
 
-// ── server (inbound) accept ──
+// 鈹€鈹€ server (inbound) accept 鈹€鈹€
 
 pub struct QuicInbound {
     endpoint: quinn::Endpoint,
@@ -99,7 +99,7 @@ impl QuicInbound {
         cert_path: &str,
         key_path: &str,
         base_dir: Option<&Path>,
-    ) -> Result<Self, EngineError> {
+    ) -> Result<Self, RuntimeError> {
         use std::fs::File;
         use std::io::BufReader;
 
@@ -107,7 +107,7 @@ impl QuicInbound {
         let key_path = resolve_path(base_dir, key_path);
 
         let cert_file = File::open(&cert_path).map_err(|e| {
-            EngineError::Io(io::Error::other(format!(
+            RuntimeError::Io(io::Error::other(format!(
                 "quic cert file `{}`: {e}",
                 cert_path.display()
             )))
@@ -116,29 +116,29 @@ impl QuicInbound {
         let certs: Vec<rustls::pki_types::CertificateDer<'static>> =
             rustls_pemfile::certs(&mut reader)
                 .collect::<Result<Vec<_>, _>>()
-                .map_err(|e| EngineError::Io(io::Error::other(format!("quic cert parse: {e}"))))?;
+                .map_err(|e| RuntimeError::Io(io::Error::other(format!("quic cert parse: {e}"))))?;
 
         let key_file = File::open(&key_path).map_err(|e| {
-            EngineError::Io(io::Error::other(format!(
+            RuntimeError::Io(io::Error::other(format!(
                 "quic key file `{}`: {e}",
                 key_path.display()
             )))
         })?;
         let mut reader = BufReader::new(key_file);
         let key = rustls_pemfile::private_key(&mut reader)
-            .map_err(|e| EngineError::Io(io::Error::other(format!("quic key parse: {e}"))))?
+            .map_err(|e| RuntimeError::Io(io::Error::other(format!("quic key parse: {e}"))))?
             .ok_or_else(|| {
-                EngineError::Io(io::Error::other("quic key file contains no private key"))
+                RuntimeError::Io(io::Error::other("quic key file contains no private key"))
             })?;
 
         let mut tls_config = rustls::ServerConfig::builder()
             .with_no_client_auth()
             .with_single_cert(certs, key)
-            .map_err(|e| EngineError::Io(io::Error::other(format!("quic server tls cfg: {e}"))))?;
+            .map_err(|e| RuntimeError::Io(io::Error::other(format!("quic server tls cfg: {e}"))))?;
         tls_config.alpn_protocols = vec![b"h3".to_vec(), b"hysteria2".to_vec()];
 
         let quic_cfg = quinn::crypto::rustls::QuicServerConfig::try_from(tls_config)
-            .map_err(|e| EngineError::Io(io::Error::other(format!("quic server cfg: {e}"))))?;
+            .map_err(|e| RuntimeError::Io(io::Error::other(format!("quic server cfg: {e}"))))?;
         let mut server_cfg = quinn::ServerConfig::with_crypto(Arc::new(quic_cfg));
 
         let mut transport = quinn::TransportConfig::default();
@@ -148,50 +148,50 @@ impl QuicInbound {
 
         let bind_addr = listen_addr
             .parse::<std::net::SocketAddr>()
-            .map_err(|e| EngineError::Io(io::Error::other(format!("quic bind addr: {e}"))))?;
+            .map_err(|e| RuntimeError::Io(io::Error::other(format!("quic bind addr: {e}"))))?;
 
         let socket = std::net::UdpSocket::bind(bind_addr)
-            .map_err(|e| EngineError::Io(io::Error::other(format!("quic bind socket: {e}"))))?;
+            .map_err(|e| RuntimeError::Io(io::Error::other(format!("quic bind socket: {e}"))))?;
         let endpoint = quinn::Endpoint::new(
             quinn::EndpointConfig::default(),
             Some(server_cfg),
             socket,
             Arc::new(quinn::TokioRuntime),
         )
-        .map_err(|e| EngineError::Io(io::Error::other(format!("quic endpoint: {e}"))))?;
+        .map_err(|e| RuntimeError::Io(io::Error::other(format!("quic endpoint: {e}"))))?;
 
         Ok(Self { endpoint })
     }
 
-    pub async fn accept(&self) -> Result<QuicStream, EngineError> {
+    pub async fn accept(&self) -> Result<QuicStream, RuntimeError> {
         let conn = self.accept_connection().await?;
 
         let (send, recv) = conn
             .accept_bi()
             .await
-            .map_err(|e| EngineError::Io(io::Error::other(format!("quic accept stream: {e}"))))?;
+            .map_err(|e| RuntimeError::Io(io::Error::other(format!("quic accept stream: {e}"))))?;
 
         Ok(QuicStream::new(send, recv))
     }
 
-    /// Accept a raw QUIC connection — returns the full Connection for protocols
+    /// Accept a raw QUIC connection 鈥?returns the full Connection for protocols
     /// that need multi-stream support and key export (e.g. Hysteria2).
-    pub async fn accept_connection(&self) -> Result<quinn::Connection, EngineError> {
+    pub async fn accept_connection(&self) -> Result<quinn::Connection, RuntimeError> {
         self.endpoint
             .accept()
             .await
             .ok_or_else(|| {
-                EngineError::Io(io::Error::new(
+                RuntimeError::Io(io::Error::new(
                     io::ErrorKind::ConnectionAborted,
                     "quic endpoint closed",
                 ))
             })?
             .await
-            .map_err(|e| EngineError::Io(io::Error::other(format!("quic connection: {e}"))))
+            .map_err(|e| RuntimeError::Io(io::Error::other(format!("quic connection: {e}"))))
     }
 }
 
-// ── SkipServerVerification for QUIC client ──
+// 鈹€鈹€ SkipServerVerification for QUIC client 鈹€鈹€
 
 #[derive(Debug)]
 struct SkipServerVerification;
@@ -241,7 +241,7 @@ impl rustls::client::danger::ServerCertVerifier for SkipServerVerification {
     }
 }
 
-// ── AsyncRead / AsyncWrite / AsyncSocket / ClientStream ──
+// 鈹€鈹€ AsyncRead / AsyncWrite / AsyncSocket / ClientStream 鈹€鈹€
 
 impl AsyncRead for QuicStream {
     fn poll_read(

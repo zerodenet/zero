@@ -7,11 +7,13 @@ pub mod protocol;
 
 use alloc::vec::Vec;
 pub use protocol::{
-    ClientTlsProfile, DatagramCodec, DeferredTcpTunnelProtocol, ProtocolCapabilityDescriptor,
-    ProtocolCapabilityLevel, ProtocolCapabilityState, ProtocolMetadata, ProtocolNetworkCapability,
+    ClientTlsProfile, DatagramCodec, DeferredTcpTunnelProtocol, GrpcTransportProfile,
+    H2TransportProfile, HttpUpgradeTransportProfile, InboundFallbackProfile,
+    ProtocolCapabilityDescriptor, ProtocolCapabilityLevel, ProtocolCapabilityState,
+    ProtocolMetadata, ProtocolNetworkCapability, ServerTlsProfile, SplitHttpTransportProfile,
     StreamMuxTransportHints, TcpSessionProtocol, TcpTunnelProtocol, UdpDatagramFraming,
     UdpPacketFraming, UdpPacketPath, UdpPacketStreamFraming, UdpPacketTunnelProtocol,
-    UdpRelayProtocol,
+    UdpRelayProtocol, WebSocketTransportProfile,
 };
 pub use protocol::{InboundTransport, TransportKind};
 

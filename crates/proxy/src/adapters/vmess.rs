@@ -2,6 +2,7 @@
 use async_trait::async_trait;
 #[cfg(feature = "vmess")]
 mod listener;
+use ::vmess::transport::{OwnedVmessOutboundTransportPlan, VmessOutboundLeaf, VmessStreamBridge};
 #[cfg(feature = "vmess")]
 use zero_config::InboundConfig;
 use zero_config::{InboundProtocolConfig, OutboundProtocolConfig};
@@ -9,9 +10,6 @@ use zero_config::{InboundProtocolConfig, OutboundProtocolConfig};
 #[cfg(feature = "vmess")]
 use zero_engine::{EngineError, ResolvedLeafOutbound};
 use zero_traits::{ProtocolCapabilityDescriptor, ProtocolMetadata};
-use zero_transport::vmess_transport::{
-    OwnedVmessOutboundTransportPlan, VmessOutboundLeaf, VmessStreamBridge,
-};
 
 use crate::adapters::identity::{
     named_protocol_claims_runtime_leaf, named_protocol_supports_inbound,
@@ -19,19 +17,18 @@ use crate::adapters::identity::{
 };
 use crate::protocol_registry::ProtocolTransportLeafResolver;
 use crate::protocol_registry::{
-    proxy_leaf_runtime, InboundListenerCapability, ManagedUdpHandlerProvider, OutboundLeafRuntime,
-    ProtocolSupportCapability, TcpOutboundCapability, UdpFlowCapability, UdpPacketPathCapability,
+    prepare_transport_bridge_tcp_connect, prepare_transport_bridge_tcp_relay, proxy_leaf_runtime,
+    InboundListenerCapability, ManagedUdpHandlerProvider, OutboundLeafRuntime,
+    PreparedTransportUdpOperation, ProtocolSupportCapability, TcpOutboundCapability,
+    TransportBridgeUdpOperation, UdpFlowCapability, UdpPacketPathCapability,
 };
 use crate::runtime::path::TcpPathCategory;
 #[cfg(feature = "vmess")]
 use crate::runtime::tcp_dispatch::operation::{
-    prepare_transport_bridge_tcp_connect, prepare_transport_bridge_tcp_relay,
     PreparedTcpConnectOperation, PreparedTcpRelayOperation,
 };
 #[cfg(feature = "vmess")]
-use crate::runtime::udp_dispatch::operation::{
-    PreparedTransportUdpOperation, PreparedUdpFlowOperation, TransportBridgeUdpOperation,
-};
+use crate::runtime::udp_dispatch::operation::PreparedUdpFlowOperation;
 #[cfg(feature = "vmess")]
 use crate::runtime::udp_dispatch::FlowFailure;
 #[cfg(feature = "vmess")]
@@ -89,7 +86,7 @@ impl<'a> ProtocolTransportLeafResolver<'a> for VmessStreamBridge {
         else {
             return Ok(None);
         };
-        let transport = OwnedVmessOutboundTransportPlan::from_config_refs(
+        let transport = OwnedVmessOutboundTransportPlan::from_profile_refs(
             source_dir, server, *port, *tls, *ws, *grpc,
         );
         let protocol = ::vmess::outbound::PreparedVmessOutboundRequestBundle::from_config_with_transport_hints(

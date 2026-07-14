@@ -1,17 +1,16 @@
-use zero_engine::EngineError;
-use zero_transport::socks5_transport::{
-    Socks5ManagedUdpPacketPathPlan, Socks5UpstreamUdpAssociation,
+use ::socks5::transport::{
+    Socks5ManagedUdpPacketPathCarrierDescriptor, Socks5ManagedUdpPacketPathPlan,
+    Socks5UpstreamUdpAssociation,
 };
+use zero_engine::EngineError;
 
 use super::upstream_association::establish_packet_path_association;
 
 impl crate::runtime::udp_flow::packet_path::PacketPathCarrierDescriptorBuild
-    for zero_transport::socks5_transport::Socks5ManagedUdpPacketPathCarrierDescriptor
+    for Socks5ManagedUdpPacketPathCarrierDescriptor
 {
     fn into_parts(self) -> (String, String, u16) {
-        zero_transport::socks5_transport::Socks5ManagedUdpPacketPathCarrierDescriptor::into_parts(
-            self,
-        )
+        Socks5ManagedUdpPacketPathCarrierDescriptor::into_parts(self)
     }
 }
 

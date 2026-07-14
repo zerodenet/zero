@@ -1,9 +1,10 @@
 use async_trait::async_trait;
 
+use ::mieru::transport::MieruTransportLeaf;
+
 use zero_config::{InboundConfig, InboundProtocolConfig, OutboundProtocolConfig};
 use zero_engine::{EngineError, ResolvedLeafOutbound};
 use zero_traits::{ProtocolCapabilityDescriptor, ProtocolMetadata};
-use zero_transport::mieru_transport::MieruTransportLeaf;
 
 use crate::adapters::identity::{
     named_protocol_claims_runtime_leaf, named_protocol_supports_inbound,

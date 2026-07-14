@@ -1,9 +1,9 @@
 use async_trait::async_trait;
 
+use ::shadowsocks::transport::ShadowsocksTransportLeaf;
 use zero_config::{InboundConfig, InboundProtocolConfig, OutboundProtocolConfig};
 use zero_engine::{EngineError, ResolvedLeafOutbound};
 use zero_traits::{ProtocolCapabilityDescriptor, ProtocolMetadata};
-use zero_transport::shadowsocks_transport::ShadowsocksTransportLeaf;
 
 use crate::adapters::identity::{
     named_protocol_claims_runtime_leaf, named_protocol_supports_inbound,
@@ -54,7 +54,7 @@ impl NamedProtocolAdapter for ShadowsocksAdapter {
 #[cfg(feature = "shadowsocks")]
 impl UdpPacketPathCapability for ShadowsocksAdapter {
     fn prepare_udp_packet_path<'a>(
-        &'a self,
+        &self,
         leaf: &'a ResolvedLeafOutbound<'a>,
     ) -> Option<
         Box<

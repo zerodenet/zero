@@ -1,4 +1,4 @@
-//! Custom TLS 1.3 ClientHello builder — byte-level construction.
+//! Custom TLS 1.3 ClientHello builder 鈥?byte-level construction.
 //!
 //! Contains REALITY-derived constants for Chrome-style extension ordering,
 //! signature algorithms, supported groups, and padding.
@@ -106,10 +106,10 @@ pub const FIREFOX_EXTENSION_ORDER: &[u16] = &[
     extension_ids::EC_POINT_FORMATS,          // 11
 ];
 
-/// Chrome ALPN — prefers HTTP/2 then HTTP/1.1.
+/// Chrome ALPN 鈥?prefers HTTP/2 then HTTP/1.1.
 pub const CHROME_ALPN: &[&str] = &["h2", "http/1.1"];
 
-/// Chrome padding — rounds ClientHello to 512-byte boundary.
+/// Chrome padding 鈥?rounds ClientHello to 512-byte boundary.
 pub fn chrome_padding_size(current_size: usize) -> usize {
     let target = if current_size < 256 {
         256

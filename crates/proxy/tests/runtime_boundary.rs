@@ -104,6 +104,51 @@ fn runtime_operations_are_protocol_neutral() {
 }
 
 #[test]
+fn tcp_runtime_dispatch_does_not_retain_engine_leaf_types() {
+    assert_sources_exclude(
+        &proxy_src().join("runtime/tcp_dispatch"),
+        &["ResolvedLeafOutbound"],
+    );
+}
+
+#[test]
+fn proxy_runtime_does_not_retain_engine_leaf_types() {
+    assert_sources_exclude(&proxy_src().join("runtime"), &["ResolvedLeafOutbound"]);
+}
+
+#[test]
+fn udp_runtime_dispatch_does_not_retain_engine_leaf_types() {
+    assert_sources_exclude(
+        &proxy_src().join("runtime/udp_dispatch"),
+        &["ResolvedLeafOutbound"],
+    );
+}
+
+#[test]
+fn udp_managed_bridge_runtime_does_not_retain_engine_leaf_types() {
+    assert_sources_exclude(
+        &proxy_src().join("runtime/udp_flow/managed/bridge"),
+        &["ResolvedLeafOutbound"],
+    );
+}
+
+#[test]
+fn udp_packet_path_chain_runtime_does_not_retain_engine_leaf_types() {
+    assert_sources_exclude(
+        &proxy_src().join("runtime/udp_flow/packet_path_chain"),
+        &["ResolvedLeafOutbound"],
+    );
+}
+
+#[test]
+fn transport_integrations_do_not_parse_top_level_inbound_protocol_enum() {
+    assert_sources_exclude(
+        &workspace_root().join("crates/transport/src"),
+        &["InboundProtocolConfig"],
+    );
+}
+
+#[test]
 fn generic_runtime_does_not_dispatch_protocol_config_variants() {
     assert_sources_exclude(
         &proxy_src().join("runtime"),
@@ -154,7 +199,7 @@ fn capability_surface_is_split_and_context_is_narrow() {
 #[test]
 fn transport_bridge_operations_are_generic() {
     let tcp = read(&proxy_src().join("runtime/tcp_dispatch/operation.rs"));
-    let udp = read(&proxy_src().join("runtime/udp_dispatch/operation.rs"));
+    let udp = read(&proxy_src().join("protocol_registry/transport_leaf.rs"));
     assert!(tcp.contains("TransportBridgeTcpConnectOperation"));
     assert!(tcp.contains("TransportBridgeTcpRelayOperation"));
     assert!(tcp.contains("PreparedTransportBridgeLeaf"));
@@ -163,7 +208,7 @@ fn transport_bridge_operations_are_generic() {
 }
 
 #[test]
-fn protocol_crates_do_not_depend_on_proxy_or_runtime_crates() {
+fn protocol_crates_do_not_depend_on_proxy_or_config_union_crates() {
     let protocols = workspace_root().join("protocols");
     for entry in fs::read_dir(&protocols).expect("read protocols") {
         let crate_dir = entry.expect("protocol crate").path();
@@ -175,15 +220,10 @@ fn protocol_crates_do_not_depend_on_proxy_or_runtime_crates() {
             continue;
         }
         let source = read(&manifest);
-        for forbidden in [
-            "zero-proxy",
-            "zero-engine",
-            "zero-transport",
-            "zero-platform-tokio",
-        ] {
+        for forbidden in ["zero-proxy", "zero-config"] {
             assert!(
                 !source.contains(forbidden),
-                "{} must remain runtime-neutral and not depend on `{forbidden}`",
+                "{} must not depend on `{forbidden}`",
                 manifest.display()
             );
         }

@@ -1,17 +1,17 @@
 use std::io;
 use std::pin::Pin;
 
-use zero_config::FallbackConfig;
 use zero_engine::EngineError;
 use zero_platform_tokio::TokioSocket;
 use zero_transport::inbound_route::FallbackReplayToUpstream;
+use zero_transport::profile::OwnedInboundFallbackProfile;
 
 use crate::runtime::Proxy;
 use crate::transport::{relay_bidirectional_metered, ClientStream, MeteredStream};
 
 pub(crate) async fn relay_recorded_fallback<S, FReplay>(
     proxy: Proxy,
-    fallback: FallbackConfig,
+    fallback: OwnedInboundFallbackProfile,
     replay_to_upstream: FReplay,
 ) -> Result<(), EngineError>
 where
@@ -46,7 +46,7 @@ where
 
 pub(crate) async fn relay_recorded_fallback_replay<R>(
     proxy: Proxy,
-    fallback: FallbackConfig,
+    fallback: OwnedInboundFallbackProfile,
     replay: R,
 ) -> Result<(), EngineError>
 where

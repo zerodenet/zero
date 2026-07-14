@@ -3,8 +3,8 @@
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::sync::Arc;
 
+use crate::RuntimeError;
 use zero_core::Address;
-use zero_engine::EngineError;
 use zero_traits::DatagramCodec;
 
 pub struct UdpSocketPacketPath {
@@ -17,7 +17,7 @@ impl UdpSocketPacketPath {
     pub async fn establish(
         endpoint: SocketAddr,
         codec: Arc<dyn DatagramCodec<Address, Error = zero_core::Error>>,
-    ) -> Result<Self, EngineError> {
+    ) -> Result<Self, RuntimeError> {
         let bind_addr = match endpoint {
             SocketAddr::V4(_) => SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 0),
             SocketAddr::V6(_) => SocketAddr::new(IpAddr::V6(Ipv6Addr::UNSPECIFIED), 0),
@@ -35,16 +35,16 @@ impl UdpSocketPacketPath {
         target: &Address,
         port: u16,
         payload: &[u8],
-    ) -> Result<(), EngineError> {
+    ) -> Result<(), RuntimeError> {
         let packet = self.codec.encode(target, port, payload)?;
         self.socket.send_to(&packet, self.endpoint).await?;
         Ok(())
     }
 
-    pub async fn recv_from(&self, buf: &mut [u8]) -> Result<usize, EngineError> {
+    pub async fn recv_from(&self, buf: &mut [u8]) -> Result<usize, RuntimeError> {
         let (read, _) = self.socket.recv_from(buf).await?;
         let (_, _, payload) = self.codec.decode(&buf[..read]).ok_or_else(|| {
-            EngineError::Io(std::io::Error::new(
+            RuntimeError::Io(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
                 "failed to decode UDP packet-path datagram",
             ))
@@ -73,24 +73,24 @@ impl QuicDatagramPacketPath {
         target: &Address,
         port: u16,
         payload: &[u8],
-    ) -> Result<(), EngineError> {
+    ) -> Result<(), RuntimeError> {
         let datagram = self.codec.encode(target, port, payload)?;
         self.conn.send_datagram(datagram.into()).map_err(|e| {
-            EngineError::Io(std::io::Error::other(format!(
+            RuntimeError::Io(std::io::Error::other(format!(
                 "QUIC datagram packet-path carrier send: {e}"
             )))
         })?;
         Ok(())
     }
 
-    pub async fn recv_from(&self, buf: &mut [u8]) -> Result<usize, EngineError> {
+    pub async fn recv_from(&self, buf: &mut [u8]) -> Result<usize, RuntimeError> {
         let data = self.conn.read_datagram().await.map_err(|e| {
-            EngineError::Io(std::io::Error::other(format!(
+            RuntimeError::Io(std::io::Error::other(format!(
                 "QUIC datagram packet-path carrier recv: {e}"
             )))
         })?;
         let (_, _, payload) = self.codec.decode(&data).ok_or_else(|| {
-            EngineError::Io(std::io::Error::new(
+            RuntimeError::Io(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
                 "failed to decode QUIC packet-path datagram",
             ))
@@ -103,10 +103,10 @@ fn copy_payload(
     buf: &mut [u8],
     payload: Vec<u8>,
     carrier_name: &'static str,
-) -> Result<usize, EngineError> {
+) -> Result<usize, RuntimeError> {
     let len = payload.len();
     if len > buf.len() {
-        return Err(EngineError::Io(std::io::Error::new(
+        return Err(RuntimeError::Io(std::io::Error::new(
             std::io::ErrorKind::InvalidData,
             format!(
                 "{carrier_name} datagram ({len}B) exceeds recv buffer ({}B)",

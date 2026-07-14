@@ -1,8 +1,8 @@
 use core::future::Future;
 use std::net::SocketAddr;
 
+use crate::RuntimeError;
 use zero_core::{Address, Session, UdpFlowPacket};
-use zero_engine::EngineError;
 use zero_platform_tokio::TokioSocket;
 
 use crate::TcpRelayStream;
@@ -75,6 +75,24 @@ pub trait ProtocolManagedStreamUdpResumeMetadata {
     const MISMATCH_MESSAGE: &'static str;
 }
 
+pub trait ProtocolManagedTupleUdpResumeMetadata {
+    const ESTABLISH_STAGE: &'static str;
+    const RELAY_UPSTREAM_STAGE: &'static str;
+    const RELAY_ESTABLISH_STAGE: &'static str;
+    const RELAY_SEND_STAGE: &'static str;
+    const MISMATCH_STAGE: &'static str;
+    const MISMATCH_MESSAGE: &'static str;
+}
+
+pub trait ProtocolManagedPacketUdpResumeMetadata {
+    const ESTABLISH_STAGE: &'static str;
+    const RELAY_UPSTREAM_STAGE: &'static str;
+    const RELAY_ESTABLISH_STAGE: &'static str;
+    const RELAY_SEND_STAGE: &'static str;
+    const MISMATCH_STAGE: &'static str;
+    const MISMATCH_MESSAGE: &'static str;
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct ProtocolManagedStreamFlowStages {
     pub establish_stage: &'static str,
@@ -130,7 +148,7 @@ pub trait ProtocolManagedDatagramUdpResumeConnectionOps:
         target: &Address,
         target_port: u16,
         payload: &[u8],
-    ) -> Result<Self::RawConnection, EngineError>;
+    ) -> Result<Self::RawConnection, RuntimeError>;
 }
 
 #[async_trait::async_trait]
@@ -148,7 +166,7 @@ pub trait ProtocolManagedDatagramSocketUdpResumeConnectionOps:
     async fn open_protocol_connection(
         &self,
         endpoint: SocketAddr,
-    ) -> Result<Self::RawConnection, EngineError>;
+    ) -> Result<Self::RawConnection, RuntimeError>;
 }
 
 #[derive(Debug, Clone)]
@@ -160,6 +178,18 @@ impl<T> ManagedTupleUdpResume<T> {
     }
 }
 
+impl<T> ProtocolManagedStreamUdpResumeMetadata for ManagedTupleUdpResume<T>
+where
+    T: ProtocolManagedTupleUdpResumeMetadata,
+{
+    const ESTABLISH_STAGE: &'static str = T::ESTABLISH_STAGE;
+    const RELAY_UPSTREAM_STAGE: &'static str = T::RELAY_UPSTREAM_STAGE;
+    const RELAY_ESTABLISH_STAGE: &'static str = T::RELAY_ESTABLISH_STAGE;
+    const RELAY_SEND_STAGE: &'static str = T::RELAY_SEND_STAGE;
+    const MISMATCH_STAGE: &'static str = T::MISMATCH_STAGE;
+    const MISMATCH_MESSAGE: &'static str = T::MISMATCH_MESSAGE;
+}
+
 #[derive(Debug, Clone)]
 pub struct ManagedPacketUdpResume<T>(pub T);
 
@@ -167,6 +197,18 @@ impl<T> ManagedPacketUdpResume<T> {
     pub fn new(inner: T) -> Self {
         Self(inner)
     }
+}
+
+impl<T> ProtocolManagedStreamUdpResumeMetadata for ManagedPacketUdpResume<T>
+where
+    T: ProtocolManagedPacketUdpResumeMetadata,
+{
+    const ESTABLISH_STAGE: &'static str = T::ESTABLISH_STAGE;
+    const RELAY_UPSTREAM_STAGE: &'static str = T::RELAY_UPSTREAM_STAGE;
+    const RELAY_ESTABLISH_STAGE: &'static str = T::RELAY_ESTABLISH_STAGE;
+    const RELAY_SEND_STAGE: &'static str = T::RELAY_SEND_STAGE;
+    const MISMATCH_STAGE: &'static str = T::MISMATCH_STAGE;
+    const MISMATCH_MESSAGE: &'static str = T::MISMATCH_MESSAGE;
 }
 
 pub trait ProtocolManagedStreamUdpBridgeOps<TLeaf> {
@@ -203,17 +245,17 @@ pub trait ProtocolManagedTupleUdpFlowResumeConnectionOps:
         &self,
         session: &Session,
         open_socket: OpenSocket,
-    ) -> Result<Self::RawConnection, EngineError>
+    ) -> Result<Self::RawConnection, RuntimeError>
     where
         OpenSocket: Clone + Fn(&str, u16) -> OpenSocketFut + Send + Sync,
-        OpenSocketFut: Future<Output = Result<TokioSocket, EngineError>> + Send;
+        OpenSocketFut: Future<Output = Result<TokioSocket, RuntimeError>> + Send;
 
     async fn open_relay_protocol_connection(
         &self,
         stream: TcpRelayStream,
         session: &Session,
         tls_server_name: Option<&str>,
-    ) -> Result<Self::RawConnection, EngineError>;
+    ) -> Result<Self::RawConnection, RuntimeError>;
 }
 
 #[async_trait::async_trait]
@@ -234,17 +276,17 @@ pub trait ProtocolManagedPacketUdpFlowResumeConnectionOps:
         &self,
         session: &Session,
         open_socket: OpenSocket,
-    ) -> Result<Self::RawConnection, EngineError>
+    ) -> Result<Self::RawConnection, RuntimeError>
     where
         OpenSocket: Clone + Fn(&str, u16) -> OpenSocketFut + Send + Sync,
-        OpenSocketFut: Future<Output = Result<TokioSocket, EngineError>> + Send;
+        OpenSocketFut: Future<Output = Result<TokioSocket, RuntimeError>> + Send;
 
     async fn open_relay_protocol_connection(
         &self,
         stream: TcpRelayStream,
         session: &Session,
         tls_server_name: Option<&str>,
-    ) -> Result<Self::RawConnection, EngineError>;
+    ) -> Result<Self::RawConnection, RuntimeError>;
 }
 
 #[async_trait::async_trait]

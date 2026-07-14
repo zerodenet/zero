@@ -10,6 +10,11 @@ homepage.workspace = true
 [features]
 default = []
 crypto = ["dep:chacha20poly1305", "dep:sha2", "dep:ring", "dep:rand", "dep:tokio"]
+runtime = [
+    "crypto",
+    "dep:zero-platform-tokio",
+    "dep:zero-transport",
+]
 
 [dependencies]
 async-trait = "0.1"
@@ -19,6 +24,8 @@ ring = { version = "0.17", optional = true }
 rand = { version = "0.8", optional = true }
 tokio = { workspace = true, optional = true }
 zero-core = { path = "../../crates/core" }
+zero-platform-tokio = { path = "../../crates/platform/tokio", optional = true }
+zero-transport = { path = "../../crates/transport", optional = true }
 zero-traits = { path = "../../crates/traits" }
 
 [dev-dependencies]

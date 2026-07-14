@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
+use crate::RuntimeError;
 use zero_core::{InboundClientResponse, InboundDatagramUdpRelay, Session};
-use zero_engine::EngineError;
 use zero_traits::AsyncSocket;
 
 #[async_trait::async_trait]
@@ -11,7 +11,7 @@ pub trait AuthenticatedQuicInboundProfile: Clone + Send + Sync + 'static {
     async fn accept_authenticated_connection(
         &self,
         connection: quinn::Connection,
-    ) -> Result<Self::Connection, EngineError>;
+    ) -> Result<Self::Connection, RuntimeError>;
 }
 
 #[async_trait::async_trait]
@@ -30,5 +30,6 @@ pub trait AuthenticatedQuicInboundConnection: Send + Sync + 'static {
     fn udp_relay(&self) -> Self::UdpRelay;
     fn response_protocol(&self) -> Self::ResponseProtocol;
 
-    async fn accept_next_tcp_stream(&self) -> Result<Option<(Session, Self::Stream)>, EngineError>;
+    async fn accept_next_tcp_stream(&self)
+        -> Result<Option<(Session, Self::Stream)>, RuntimeError>;
 }

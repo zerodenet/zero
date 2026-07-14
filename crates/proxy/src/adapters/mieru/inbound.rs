@@ -1,5 +1,6 @@
 //! Mieru inbound preparation and protocol handshake handoff.
 
+use zero_config::InboundProtocolConfig;
 use zero_engine::EngineError;
 
 use crate::runtime::inbound_operation::{InboundConnectionContext, TcpInboundListenerOperation};
@@ -13,14 +14,27 @@ impl crate::adapters::mieru::MieruAdapter {
         Box<dyn crate::runtime::inbound_operation::PreparedInboundListenerOperation>,
         EngineError,
     > {
-        let profile =
-            zero_transport::mieru_transport::inbound_profile_from_protocol(&inbound.protocol)?;
+        let profile = match &inbound.protocol {
+            InboundProtocolConfig::Mieru { users } => {
+                ::mieru::transport::inbound_profile_from_users(
+                    users
+                        .iter()
+                        .map(|user| (user.username.as_str(), user.password.as_str())),
+                )
+            }
+            _ => {
+                return Err(EngineError::Io(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "mieru inbound listener received non-mieru inbound config",
+                )));
+            }
+        };
         Ok(Box::new(TcpInboundListenerOperation {
             inbound_tag: inbound.tag,
             protocol_name: "mieru",
             error_protocol_name: "mieru",
             request: profile,
-            dispatch: |profile: zero_transport::mieru_transport::OwnedMieruInboundProfile,
+            dispatch: |profile: ::mieru::transport::OwnedMieruInboundProfile,
                        socket,
                        context: InboundConnectionContext| async move {
                 let tcp_context = context.clone();

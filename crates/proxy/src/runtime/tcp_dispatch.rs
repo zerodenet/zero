@@ -5,4 +5,3 @@
 
 mod leaf;
 pub(crate) mod operation;
-mod relay;

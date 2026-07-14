@@ -1,5 +1,6 @@
 //! Shadowsocks inbound preparation and protocol handshake handoff.
 
+use zero_config::InboundProtocolConfig;
 use zero_engine::EngineError;
 
 use crate::runtime::inbound_operation::{
@@ -16,9 +17,17 @@ impl crate::adapters::shadowsocks::ShadowsocksAdapter {
         Box<dyn crate::runtime::inbound_operation::PreparedInboundListenerOperation>,
         EngineError,
     > {
-        let profile = zero_transport::shadowsocks_transport::inbound_profile_from_protocol(
-            &inbound.protocol,
-        )?;
+        let profile = match &inbound.protocol {
+            InboundProtocolConfig::Shadowsocks {
+                password, cipher, ..
+            } => ::shadowsocks::transport::inbound_profile_from_cipher_password(cipher, password)?,
+            _ => {
+                return Err(EngineError::Io(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "shadowsocks inbound listener received non-shadowsocks inbound config",
+                )));
+            }
+        };
         let (acceptor, udp_relay) = profile.into_listener_bindings().into_parts();
         Ok(Box::new(TcpAndDatagramInboundListenerOperation {
             inbound_tag: inbound.tag,
@@ -27,22 +36,23 @@ impl crate::adapters::shadowsocks::ShadowsocksAdapter {
             listen_address: inbound.listen.address,
             listen_port: inbound.listen.port,
             tcp_request: acceptor,
-            tcp_dispatch: |acceptor: zero_transport::shadowsocks_transport::OwnedShadowsocksInboundTcpAcceptor,
-                           socket,
-                           context: InboundConnectionContext| async move {
-                acceptor
-                    .accept_and_dispatch_stream(
-                        MeteredStream::new(TcpRelayStream::from(socket)),
-                        |session, client| {
-                            context.serve(
-                                session,
-                                client,
-                                NoClientResponseStreamProtocol::new(),
-                            )
-                        },
-                    )
-                    .await
-            },
+            tcp_dispatch:
+                |acceptor: ::shadowsocks::transport::OwnedShadowsocksInboundTcpAcceptor,
+                 socket,
+                 context: InboundConnectionContext| async move {
+                    acceptor
+                        .accept_and_dispatch_stream(
+                            MeteredStream::new(TcpRelayStream::from(socket)),
+                            |session, client| {
+                                context.serve(
+                                    session,
+                                    client,
+                                    NoClientResponseStreamProtocol::new(),
+                                )
+                            },
+                        )
+                        .await
+                },
             udp_relay,
         }))
     }

@@ -301,10 +301,24 @@ async fn inventory_composes_packet_path_roles_and_builds_carrier() {
     let calls = Arc::new(TcpCapabilityCalls::default());
     let proxy = proxy_with_fake_tcp(calls.clone());
     let leaf = fake_direct_leaf();
+    let target = zero_core::Address::Domain("target.test".to_owned());
+    let payload = b"packet";
+    let mut dispatch = UdpDispatch::new("fake-inbound", &proxy.protocols)
+        .await
+        .expect("UDP dispatch");
 
-    let binding = proxy
+    let (binding, request) = proxy
         .protocols
-        .udp_packet_path_pair(&leaf, &leaf)
+        .prepare_udp_packet_path_pair(
+            41,
+            &leaf,
+            &leaf,
+            crate::runtime::udp_flow::packet_path::UdpPacketRef {
+                target: &target,
+                port: 53,
+                payload,
+            },
+        )
         .expect("fake packet-path pair");
     let (source, snapshot) = binding.into_parts();
     assert_eq!(source.descriptor().tag, "fake-datagram");
@@ -312,31 +326,18 @@ async fn inventory_composes_packet_path_roles_and_builds_carrier() {
         snapshot.lookup_key().datagram_endpoint(),
         ("datagram.test".to_owned(), 2443)
     );
+    assert_eq!(request.carrier.descriptor.server, "carrier.test");
+    assert_eq!(request.carrier.descriptor.port, 1443);
+    assert_eq!(request.datagram.descriptor().cache_key, "fake-datagram-key");
 
-    let (carrier, source) = proxy
-        .protocols
-        .resolve_udp_packet_path_candidate(&leaf, &leaf)
-        .expect("fake packet-path candidate");
-    assert_eq!(carrier.server, "carrier.test");
-    assert_eq!(carrier.port, 1443);
-    assert_eq!(source.descriptor().cache_key, "fake-datagram-key");
+    let sent = match dispatch.send_packet_path_chain(&proxy, request).await {
+        Ok(sent) => sent,
+        Err(_) => panic!("fake packet-path send"),
+    };
 
-    let built = proxy
-        .protocols
-        .build_udp_packet_path_carrier(&proxy, &leaf)
-        .await
-        .expect("fake packet-path carrier");
-    built
-        .send_to(
-            &zero_core::Address::Domain("target.test".to_owned()),
-            53,
-            b"packet",
-        )
-        .await
-        .expect("fake packet-path send");
-
-    assert_eq!(calls.packet_descriptors(), 2);
-    assert_eq!(calls.packet_sources(), 2);
+    assert_eq!(sent, payload.len());
+    assert_eq!(calls.packet_descriptors(), 1);
+    assert_eq!(calls.packet_sources(), 1);
     assert_eq!(calls.packet_builds(), 1);
     assert_eq!(calls.packet_sends(), 1);
 }
