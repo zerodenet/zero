@@ -1,8 +1,8 @@
 use super::{FlowFailure, UdpDispatch};
+use crate::protocol_registry::UdpAdapterContext;
 use crate::runtime::udp_flow::outbound::UdpFlowOutbound;
 use crate::runtime::udp_flow::packet_path::PacketPathFlowBinding;
 use crate::runtime::udp_flow::packet_path_chain::PacketPathStartRequest;
-use crate::runtime::Proxy;
 
 impl UdpDispatch {
     pub(crate) fn datagram_chain_flow_outbound(
@@ -24,9 +24,9 @@ impl UdpDispatch {
 
     pub(crate) async fn send_packet_path_chain(
         &mut self,
-        proxy: &Proxy,
+        ctx: UdpAdapterContext<'_>,
         request: PacketPathStartRequest<'_>,
     ) -> Result<usize, FlowFailure> {
-        self.flow_state.send_packet_path_chain(proxy, request).await
+        self.flow_state.send_packet_path_chain(ctx, request).await
     }
 }

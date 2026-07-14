@@ -4,6 +4,13 @@ use std::pin::Pin;
 use zero_core::Session;
 
 use crate::protocol_registry::UdpAdapterContext;
+#[cfg(any(
+    feature = "socks5",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "mieru"
+))]
+use crate::protocol_registry::UdpRuntimeServices;
 use crate::runtime::udp_dispatch::UdpDispatch;
 #[cfg(feature = "socks5")]
 use crate::runtime::udp_dispatch::UpstreamTrackedStart;
@@ -14,7 +21,6 @@ use crate::runtime::udp_flow::managed::bridge::{
 };
 use crate::runtime::udp_flow::outbound::UdpFlowOutbound;
 use crate::runtime::udp_flow::result::{FlowFailure, FlowStartResult};
-use crate::runtime::Proxy;
 use crate::transport::RelayCarrier;
 
 pub(crate) trait PreparedUdpFlowOperation: Send {
@@ -47,7 +53,7 @@ impl PreparedUdpFlowOperation for DirectUdpFlowOperation {
         Box::pin(async move {
             execute_direct_udp_operation(
                 dispatch,
-                ctx.proxy(),
+                ctx.runtime_services(),
                 session,
                 payload,
                 PreparedDirectUdpOperation { tag: &self.tag },
@@ -79,8 +85,9 @@ where
         Self: 'a,
     {
         Box::pin(async move {
-            let proxy = self.needs_proxy.then(|| ctx.proxy());
-            execute_managed_datagram_operation(dispatch, proxy, session, payload, self.plan).await
+            let services = self.needs_proxy.then(|| ctx.runtime_services());
+            execute_managed_datagram_operation(dispatch, services, session, payload, self.plan)
+                .await
         })
     }
 }
@@ -114,7 +121,7 @@ where
                 session,
                 payload,
                 PreparedRegisteredAssociationOperation {
-                    proxy: Some(ctx.proxy()),
+                    services: Some(ctx.runtime_services()),
                     tag: self.tag,
                     server: self.server,
                     port: self.port,
@@ -127,13 +134,13 @@ where
 }
 
 #[cfg(feature = "mieru")]
-pub(crate) struct ManagedStreamPacketUdpOperation<'a, T> {
-    pub(crate) operation: PreparedManagedStreamPacketOperation<'a, T>,
+pub(crate) struct ManagedStreamPacketUdpOperation<T> {
+    pub(crate) operation: PreparedManagedStreamPacketOperation<T>,
     pub(crate) needs_proxy: bool,
 }
 
 #[cfg(feature = "mieru")]
-impl<T> PreparedUdpFlowOperation for ManagedStreamPacketUdpOperation<'_, T>
+impl<T> PreparedUdpFlowOperation for ManagedStreamPacketUdpOperation<T>
 where
     T: std::any::Any + Send + Sync + std::fmt::Debug,
 {
@@ -148,10 +155,10 @@ where
         Self: 'a,
     {
         Box::pin(async move {
-            let proxy = self.needs_proxy.then(|| ctx.proxy());
+            let services = self.needs_proxy.then(|| ctx.runtime_services());
             execute_managed_stream_packet_operation(
                 dispatch,
-                proxy,
+                services,
                 session,
                 payload,
                 self.operation,
@@ -167,15 +174,13 @@ pub(crate) struct PreparedDirectUdpOperation<'a> {
 
 pub(crate) async fn execute_direct_udp_operation(
     dispatch: &mut UdpDispatch,
-    proxy: &Proxy,
+    services: UdpRuntimeServices,
     session: &Session,
     payload: &[u8],
     operation: PreparedDirectUdpOperation<'_>,
 ) -> Result<FlowStartResult, FlowFailure> {
-    let target_addr = proxy
-        .protocols
-        .direct_connector()
-        .resolve_target_addr(session, proxy.resolver.as_ref())
+    let target_addr = services
+        .resolve_direct_target(session)
         .await
         .map_err(|error| FlowFailure {
             stage: "resolve_udp_target",
@@ -202,7 +207,7 @@ pub(crate) async fn execute_direct_udp_operation(
 #[cfg(any(feature = "hysteria2", feature = "shadowsocks"))]
 pub(crate) async fn execute_managed_datagram_operation<T>(
     dispatch: &mut UdpDispatch,
-    proxy: Option<&Proxy>,
+    services: Option<UdpRuntimeServices>,
     session: &Session,
     payload: &[u8],
     operation: zero_transport::managed_udp::ManagedDatagramStartPlan<'_, T>,
@@ -211,13 +216,13 @@ where
     T: std::any::Any + Send + Sync + std::fmt::Debug,
 {
     dispatch
-        .start_transport_managed_datagram(proxy, session, payload, operation)
+        .start_transport_managed_datagram(services, session, payload, operation)
         .await
 }
 
 #[cfg(feature = "socks5")]
 pub(crate) struct PreparedRegisteredAssociationOperation<'a, T> {
-    pub(crate) proxy: Option<&'a Proxy>,
+    pub(crate) services: Option<UdpRuntimeServices>,
     pub(crate) tag: &'a str,
     pub(crate) server: &'a str,
     pub(crate) port: u16,
@@ -236,7 +241,7 @@ where
 {
     dispatch
         .start_tracked_upstream(UpstreamTrackedStart {
-            proxy: operation.proxy,
+            services: operation.services,
             tag: operation.tag,
             session,
             server: operation.server,
@@ -248,12 +253,12 @@ where
 }
 
 #[cfg(feature = "mieru")]
-pub(crate) enum PreparedManagedStreamPacketOperation<'a, T> {
+pub(crate) enum PreparedManagedStreamPacketOperation<T> {
     Direct {
-        plan: zero_transport::managed_udp::ManagedStreamPacketBridgePlan<'a, T>,
+        plan: zero_transport::managed_udp::ManagedStreamPacketBridgePlan<T>,
     },
     RelayFinalHop {
-        plan: zero_transport::managed_udp::ManagedStreamPacketBridgePlan<'a, T>,
+        plan: zero_transport::managed_udp::ManagedStreamPacketBridgePlan<T>,
         carrier: RelayCarrier,
     },
 }
@@ -261,10 +266,10 @@ pub(crate) enum PreparedManagedStreamPacketOperation<'a, T> {
 #[cfg(feature = "mieru")]
 pub(crate) async fn execute_managed_stream_packet_operation<T>(
     dispatch: &mut UdpDispatch,
-    proxy: Option<&Proxy>,
+    services: Option<UdpRuntimeServices>,
     session: &Session,
     payload: &[u8],
-    operation: PreparedManagedStreamPacketOperation<'_, T>,
+    operation: PreparedManagedStreamPacketOperation<T>,
 ) -> Result<FlowStartResult, FlowFailure>
 where
     T: std::any::Any + Send + Sync + std::fmt::Debug,
@@ -273,14 +278,15 @@ where
     match operation {
         PreparedManagedStreamPacketOperation::Direct { plan } => {
             debug_assert!(!plan.relay_chain);
-            let proxy = proxy.expect("direct managed stream operation requires proxy context");
+            let services =
+                services.expect("direct managed stream operation requires runtime services");
             start_direct_managed_stream_packet(
                 &mut context,
                 ManagedStreamPacketStartBridge::direct(
-                    proxy,
-                    plan.tag,
+                    services,
+                    &plan.tag,
                     session,
-                    (plan.server, plan.port),
+                    (&plan.server, plan.port),
                     plan.resume,
                     payload,
                 ),
@@ -292,14 +298,14 @@ where
             start_relay_managed_stream_packet(
                 &mut context,
                 ManagedStreamPacketStartBridge::relay(
-                    proxy,
-                    plan.tag,
+                    services,
+                    &plan.tag,
                     session,
                     ManagedStreamPacketRelay {
                         carrier,
                         tls_server_name: None,
                     },
-                    (plan.server, plan.port),
+                    (&plan.server, plan.port),
                     plan.resume,
                     payload,
                 ),

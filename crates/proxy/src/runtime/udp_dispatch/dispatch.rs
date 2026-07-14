@@ -5,6 +5,7 @@ use zero_engine::{EngineError, SessionOutcome};
 
 use super::{FlowStartResult, UdpDispatch};
 use crate::logging::{log_session_accepted, log_session_failed, log_session_finished};
+use crate::protocol_registry::{UdpAdapterContext, UdpRuntimeServices};
 use crate::runtime::pipe::UdpPipeInput;
 use crate::runtime::tcp_ingress::apply_kernel_rate_limits;
 use crate::runtime::Proxy;
@@ -66,10 +67,18 @@ impl UdpDispatch {
         };
         log_session_accepted(&session, &action, proxy.config.mode.kind());
 
-        match proxy
-            .protocols
-            .start_udp_resolved_outbound(self, proxy, &session, resolved, input.payload)
-            .await
+        match crate::inventory::start_udp_resolved_outbound(
+            &proxy.protocols,
+            self,
+            UdpAdapterContext::new(
+                proxy.config.source_dir(),
+                UdpRuntimeServices::from_proxy(proxy),
+            ),
+            &session,
+            resolved,
+            input.payload,
+        )
+        .await
         {
             Ok(FlowStartResult::Flow { outbound, tx_bytes }) => {
                 let session_id = session.id;

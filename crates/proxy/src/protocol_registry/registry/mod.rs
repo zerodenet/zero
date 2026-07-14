@@ -34,7 +34,6 @@ mod runtime;
 mod support;
 mod validation;
 
-pub(crate) use outbound::direct_leaf_runtime;
 #[cfg(any(
     feature = "socks5",
     feature = "vless",
@@ -45,6 +44,7 @@ pub(crate) use outbound::direct_leaf_runtime;
     feature = "mieru"
 ))]
 pub(crate) use outbound::proxy_leaf_runtime;
+pub(crate) use outbound::{direct_leaf_runtime, ClaimedOutboundLeaf};
 
 /// Registry of all compiled-in protocol adapters.
 ///

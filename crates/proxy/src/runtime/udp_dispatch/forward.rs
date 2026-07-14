@@ -18,6 +18,7 @@ use std::time::Instant;
 use zero_engine::EngineError;
 
 use super::UdpDispatch;
+use crate::protocol_registry::UdpRuntimeServices;
 use crate::runtime::path::UdpPathCategory;
 use crate::runtime::udp_flow::snapshot::UdpFlowSnapshot;
 use crate::runtime::udp_socket::send_direct_udp_packet;
@@ -84,7 +85,10 @@ impl UdpDispatch {
             UdpPathCategory::Datagram => {
                 let result = self
                     .flow_state
-                    .forward_existing_managed_flow(proxy, (flow, payload))
+                    .forward_existing_managed_flow(
+                        UdpRuntimeServices::from_proxy(proxy),
+                        (flow, payload),
+                    )
                     .await;
                 self.record_or_fail(flow, proxy, started_at, result)?;
             }
@@ -98,7 +102,10 @@ impl UdpDispatch {
             UdpPathCategory::StreamPacket => {
                 let result = self
                     .flow_state
-                    .forward_existing_managed_flow(proxy, (flow, payload))
+                    .forward_existing_managed_flow(
+                        UdpRuntimeServices::from_proxy(proxy),
+                        (flow, payload),
+                    )
                     .await;
                 self.record_or_fail(flow, proxy, started_at, result)?;
             }

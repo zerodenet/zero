@@ -1,7 +1,12 @@
 use std::future::Future;
+use std::path::Path;
 
 use zero_core::Session;
 use zero_platform_tokio::{TcpRelayStream, TokioSocket};
+use zero_traits::{
+    ClientTlsProfile, GrpcTransportProfile, H2TransportProfile, HttpUpgradeTransportProfile,
+    SplitHttpTransportProfile, WebSocketTransportProfile,
+};
 use zero_transport::RuntimeError;
 
 use zero_transport::outbound_leaf::{
@@ -13,27 +18,77 @@ use zero_transport::StreamTraffic;
 
 use super::managed_udp::VlessManagedUdpFlowResume;
 use super::outbound::OwnedVlessOutboundTransportPlan;
+use super::profile::{OwnedVlessQuicClientProfile, OwnedVlessRealityClientProfile};
 
 #[derive(Clone)]
-pub struct VlessOutboundLeaf<'a> {
-    tag: &'a str,
-    server: &'a str,
+pub struct VlessOutboundLeaf {
+    tag: String,
+    server: String,
     port: u16,
     transport: OwnedVlessOutboundTransportPlan,
     protocol: crate::outbound::PreparedVlessOutboundRequestBundle,
 }
 
-impl<'a> VlessOutboundLeaf<'a> {
+impl VlessOutboundLeaf {
+    #[allow(clippy::too_many_arguments)]
+    pub fn from_profile_refs<TTls, TWs, TGrpc, TH2, THttp, TSplit>(
+        source_dir: Option<&Path>,
+        tag: &str,
+        server: &str,
+        port: u16,
+        id: &str,
+        flow: Option<&str>,
+        mux_concurrency: Option<u32>,
+        tls: Option<&TTls>,
+        reality: Option<&OwnedVlessRealityClientProfile>,
+        ws: Option<&TWs>,
+        grpc: Option<&TGrpc>,
+        h2: Option<&TH2>,
+        http_upgrade: Option<&THttp>,
+        split_http: Option<&TSplit>,
+        quic: Option<&OwnedVlessQuicClientProfile>,
+    ) -> Result<Self, zero_core::Error>
+    where
+        TTls: ClientTlsProfile + ?Sized,
+        TWs: WebSocketTransportProfile + ?Sized,
+        TGrpc: GrpcTransportProfile + ?Sized,
+        TH2: H2TransportProfile + ?Sized,
+        THttp: HttpUpgradeTransportProfile + ?Sized,
+        TSplit: SplitHttpTransportProfile + ?Sized,
+    {
+        let transport = OwnedVlessOutboundTransportPlan::from_profile_refs(
+            source_dir,
+            server,
+            port,
+            tls,
+            reality,
+            ws,
+            grpc,
+            h2,
+            http_upgrade,
+            split_http,
+            quic,
+        );
+        let protocol =
+            crate::outbound::PreparedVlessOutboundRequestBundle::from_config_with_transport_hints(
+                id,
+                flow,
+                mux_concurrency,
+                transport.mux_transport_hints(),
+            )?;
+        Ok(Self::new(tag, server, port, transport, protocol))
+    }
+
     pub fn new(
-        tag: &'a str,
-        server: &'a str,
+        tag: &str,
+        server: &str,
         port: u16,
         transport: OwnedVlessOutboundTransportPlan,
         protocol: crate::outbound::PreparedVlessOutboundRequestBundle,
     ) -> Self {
         Self {
-            tag,
-            server,
+            tag: tag.to_owned(),
+            server: server.to_owned(),
             port,
             protocol,
             transport,
@@ -79,7 +134,7 @@ impl<'a> VlessOutboundLeaf<'a> {
         protocol
             .open_tcp_stream_with_transport_or_mux(
                 session,
-                self.server,
+                &self.server,
                 self.port,
                 self.uses_deferred_tcp_response(),
                 mux_pool,
@@ -140,13 +195,13 @@ impl<'a> VlessOutboundLeaf<'a> {
     }
 }
 
-impl ProtocolTransportLeaf for VlessOutboundLeaf<'_> {
+impl ProtocolTransportLeaf for VlessOutboundLeaf {
     fn tag(&self) -> &str {
-        self.tag
+        &self.tag
     }
 
     fn server(&self) -> &str {
-        self.server
+        &self.server
     }
 
     fn port(&self) -> u16 {
@@ -178,7 +233,7 @@ impl ProtocolTcpTransportOpenResult for crate::outbound::VlessTcpStreamOpen {
 }
 
 #[async_trait::async_trait]
-impl<'a> ProtocolRelayTwoStreamTransportLeaf for VlessOutboundLeaf<'a> {
+impl ProtocolRelayTwoStreamTransportLeaf for VlessOutboundLeaf {
     async fn open_relay_two_stream_udp_transport(
         &self,
         post_stream: TcpRelayStream,

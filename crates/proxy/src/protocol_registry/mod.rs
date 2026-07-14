@@ -36,7 +36,7 @@ pub(crate) use capability::{
     feature = "mieru"
 ))]
 pub(crate) use capability::{UdpFlowCapability, UdpPacketPathCapability};
-pub(crate) use context::OutboundAdapterContext;
+pub(crate) use context::{OutboundAdapterContext, TcpRuntimeServices};
 #[cfg(any(
     feature = "socks5",
     feature = "vless",
@@ -74,23 +74,18 @@ pub(crate) use registry::fake_direct_leaf;
     feature = "mieru"
 ))]
 pub(crate) use registry::proxy_leaf_runtime;
+pub(crate) use registry::ClaimedOutboundLeaf;
 pub(crate) use registry::ProtocolRegistry;
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
-))]
+#[cfg(any(feature = "vless", feature = "vmess", feature = "trojan"))]
 pub(crate) use transport_leaf::{
-    prepare_transport_bridge_tcp_connect, prepare_transport_bridge_tcp_relay,
-    ProtocolTransportLeafResolver,
+    prepare_owned_transport_bridge_udp_relay_final_hop, prepare_transport_bridge_udp_direct,
 };
 #[cfg(feature = "vless")]
 pub(crate) use transport_leaf::{
-    transport_bridge_udp_relay_needs_two_streams, RelayTwoStreamUdpOperation,
+    prepare_owned_transport_bridge_udp_relay_two_stream,
+    transport_bridge_udp_relay_needs_two_streams,
 };
 #[cfg(any(feature = "vless", feature = "vmess", feature = "trojan"))]
-pub(crate) use transport_leaf::{PreparedTransportUdpOperation, TransportBridgeUdpOperation};
+pub(crate) use transport_leaf::{
+    prepare_transport_bridge_tcp_connect, prepare_transport_bridge_tcp_relay,
+};

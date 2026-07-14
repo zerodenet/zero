@@ -93,7 +93,7 @@ impl Hysteria2Adapter {
         FlowFailure,
     > {
         let Some(leaf) = super::transport_leaf(leaf) else {
-            return Err(unreachable_udp_leaf(self.name(), leaf));
+            return Err(unreachable_udp_leaf(self.name()));
         };
         Ok(Box::new(
             crate::runtime::udp_dispatch::operation::ManagedDatagramUdpOperation {

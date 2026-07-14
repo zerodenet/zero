@@ -1,10 +1,10 @@
 use super::handler::UpstreamAssociationHandler;
+use crate::protocol_registry::UdpRuntimeServices;
 use crate::runtime::udp_flow::managed::ManagedUdpFlowResume;
-use crate::runtime::Proxy;
 use zero_core::Session;
 
 pub(crate) struct UpstreamAssociationSend<'a> {
-    pub(crate) proxy: Option<&'a Proxy>,
+    pub(crate) services: Option<UdpRuntimeServices>,
     pub(crate) session: &'a Session,
     pub(crate) server: &'a str,
     pub(crate) port: u16,

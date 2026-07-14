@@ -1,5 +1,6 @@
 use std::io;
 
+use crate::protocol_registry::TcpRuntimeServices;
 use crate::runtime::Proxy;
 use crate::transport::{extract_tcp_stream, TcpRouteResult};
 use zero_core::Session;
@@ -16,10 +17,13 @@ impl Proxy {
         self.resolve_fake_ip_target(session).await;
         let action = self.route_decision(session);
         let (resolved, _plan) = self.resolve_outbound(&action)?;
-        let outbound = self
-            .dispatch_tcp_outbound(session, resolved)
-            .await
-            .map_err(|f| EngineError::Io(io::Error::other(f.error)))?;
+        let outbound = crate::inventory::dispatch_tcp_outbound(
+            TcpRuntimeServices::from_proxy(self),
+            session,
+            resolved,
+        )
+        .await
+        .map_err(|f| EngineError::Io(io::Error::other(f.error)))?;
         let mut result = extract_tcp_stream(outbound)?;
         result.route_action = action;
         Ok(result)

@@ -40,8 +40,18 @@ pub(crate) use zero_transport::RecordingStream;
     feature = "vmess",
     feature = "mieru"
 ))]
+pub(crate) use zero_transport::RelayCarrier;
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
 pub(crate) use zero_transport::StreamTraffic;
-pub(crate) use zero_transport::{RelayCarrier, TcpRelayStream};
+pub(crate) use zero_transport::TcpRelayStream;
 
 // Re-export transport implementations from zero-transport.
 // Only items used directly by proxy code are listed.

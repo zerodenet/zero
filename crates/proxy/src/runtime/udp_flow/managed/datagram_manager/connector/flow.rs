@@ -8,9 +8,9 @@ use super::super::super::connection::{
     managed_tuple_udp_connection_from_ops, SharedManagedUdpConnection,
 };
 use super::super::manager::ManagedDatagramFlowManager;
+use crate::protocol_registry::UdpRuntimeServices;
 use crate::runtime::path::OutboundEndpoint;
 use crate::runtime::udp_flow::packet_path::UdpPacketRef;
-use crate::runtime::Proxy;
 
 #[async_trait]
 pub(crate) trait ManagedDatagramFlowConnector<T>: Send + Sync {
@@ -24,7 +24,7 @@ pub(crate) trait ManagedDatagramFlowConnector<T>: Send + Sync {
 
     async fn establish(
         &self,
-        proxy: Option<&Proxy>,
+        services: Option<UdpRuntimeServices>,
         endpoint: OutboundEndpoint<'_>,
         resume: T,
         initial_packet: UdpPacketRef<'_>,
@@ -79,7 +79,7 @@ where
 
     async fn establish(
         &self,
-        _proxy: Option<&Proxy>,
+        _services: Option<UdpRuntimeServices>,
         endpoint: OutboundEndpoint<'_>,
         resume: T,
         initial_packet: UdpPacketRef<'_>,

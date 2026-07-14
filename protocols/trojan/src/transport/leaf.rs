@@ -1,4 +1,5 @@
 use std::future::Future;
+use std::path::Path;
 
 use zero_core::Session;
 use zero_platform_tokio::TokioSocket;
@@ -10,25 +11,45 @@ use super::managed_udp::TrojanManagedUdpFlowResume;
 use super::outbound::{OwnedTrojanOutboundTlsPlan, TrojanTcpStreamOpen};
 
 #[derive(Clone)]
-pub struct TrojanOutboundLeaf<'a> {
-    tag: &'a str,
-    server: &'a str,
+pub struct TrojanOutboundLeaf {
+    tag: String,
+    server: String,
     port: u16,
     transport: OwnedTrojanOutboundTlsPlan,
     protocol: crate::outbound::PreparedTrojanOutboundRequestBundle,
 }
 
-impl<'a> TrojanOutboundLeaf<'a> {
+impl TrojanOutboundLeaf {
+    pub fn from_config_refs(
+        source_dir: Option<&Path>,
+        tag: &str,
+        server: &str,
+        port: u16,
+        password: &str,
+        sni: Option<&str>,
+        insecure: bool,
+        client_fingerprint: Option<&str>,
+    ) -> Self {
+        let protocol = crate::outbound::PreparedTrojanOutboundRequestBundle::from_config(
+            password,
+            sni,
+            insecure,
+            client_fingerprint,
+        );
+        let transport = OwnedTrojanOutboundTlsPlan::from_parts(source_dir, server, port);
+        Self::new(tag, server, port, transport, protocol)
+    }
+
     pub fn new(
-        tag: &'a str,
-        server: &'a str,
+        tag: &str,
+        server: &str,
         port: u16,
         transport: OwnedTrojanOutboundTlsPlan,
         protocol: crate::outbound::PreparedTrojanOutboundRequestBundle,
     ) -> Self {
         Self {
-            tag,
-            server,
+            tag: tag.to_owned(),
+            server: server.to_owned(),
             port,
             protocol,
             transport,
@@ -89,13 +110,13 @@ impl<'a> TrojanOutboundLeaf<'a> {
     }
 }
 
-impl ProtocolTransportLeaf for TrojanOutboundLeaf<'_> {
+impl ProtocolTransportLeaf for TrojanOutboundLeaf {
     fn tag(&self) -> &str {
-        self.tag
+        &self.tag
     }
 
     fn server(&self) -> &str {
-        self.server
+        &self.server
     }
 
     fn port(&self) -> u16 {

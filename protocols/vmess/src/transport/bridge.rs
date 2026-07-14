@@ -43,13 +43,13 @@ impl ProtocolUdpTransportBridgeMetadata for VmessStreamBridge {
 }
 
 #[async_trait::async_trait]
-impl<'a> ProtocolTcpTransportBridgeOps<VmessOutboundLeaf<'a>> for VmessStreamBridge {
+impl ProtocolTcpTransportBridgeOps<VmessOutboundLeaf> for VmessStreamBridge {
     type Opened = crate::outbound::VmessTcpStreamOpen;
 
     async fn open_tcp_stream_for_leaf<OpenSocket, OpenSocketFut>(
         &self,
         session: &Session,
-        leaf: &VmessOutboundLeaf<'a>,
+        leaf: &VmessOutboundLeaf,
         open_socket: OpenSocket,
     ) -> Result<Self::Opened, RuntimeError>
     where
@@ -64,21 +64,21 @@ impl<'a> ProtocolTcpTransportBridgeOps<VmessOutboundLeaf<'a>> for VmessStreamBri
         &self,
         stream: TcpRelayStream,
         session: &Session,
-        leaf: &VmessOutboundLeaf<'a>,
+        leaf: &VmessOutboundLeaf,
     ) -> Result<TcpRelayStream, RuntimeError> {
         let _ = self;
         leaf.open_tcp_relay_hop(stream, session).await
     }
 }
 
-impl<'a> ProtocolManagedStreamUdpBridgeOps<VmessOutboundLeaf<'a>> for VmessStreamBridge {
+impl ProtocolManagedStreamUdpBridgeOps<VmessOutboundLeaf> for VmessStreamBridge {
     type Resume = VmessManagedStreamUdpResume;
 
-    fn direct_udp_resume_for_leaf(&self, leaf: &VmessOutboundLeaf<'a>) -> Self::Resume {
+    fn direct_udp_resume_for_leaf(&self, leaf: &VmessOutboundLeaf) -> Self::Resume {
         ManagedTupleUdpResume::new(leaf.direct_udp_resume(self.mux_pool.clone()))
     }
 
-    fn relay_final_hop_udp_resume_for_leaf(&self, leaf: &VmessOutboundLeaf<'a>) -> Self::Resume {
+    fn relay_final_hop_udp_resume_for_leaf(&self, leaf: &VmessOutboundLeaf) -> Self::Resume {
         ManagedTupleUdpResume::new(leaf.relay_final_hop_udp_resume(self.mux_pool.clone()))
     }
 }

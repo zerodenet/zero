@@ -41,13 +41,13 @@ impl ProtocolUdpTransportBridgeMetadata for TrojanTlsBridge {
 }
 
 #[async_trait::async_trait]
-impl<'a> ProtocolTcpTransportBridgeOps<TrojanOutboundLeaf<'a>> for TrojanTlsBridge {
+impl ProtocolTcpTransportBridgeOps<TrojanOutboundLeaf> for TrojanTlsBridge {
     type Opened = TrojanTcpStreamOpen;
 
     async fn open_tcp_stream_for_leaf<OpenSocket, OpenSocketFut>(
         &self,
         session: &Session,
-        leaf: &TrojanOutboundLeaf<'a>,
+        leaf: &TrojanOutboundLeaf,
         open_socket: OpenSocket,
     ) -> Result<Self::Opened, RuntimeError>
     where
@@ -62,22 +62,22 @@ impl<'a> ProtocolTcpTransportBridgeOps<TrojanOutboundLeaf<'a>> for TrojanTlsBrid
         &self,
         stream: TcpRelayStream,
         session: &Session,
-        leaf: &TrojanOutboundLeaf<'a>,
+        leaf: &TrojanOutboundLeaf,
     ) -> Result<TcpRelayStream, RuntimeError> {
         let _ = self;
         leaf.open_tcp_relay_hop(stream, session).await
     }
 }
 
-impl<'a> ProtocolManagedStreamUdpBridgeOps<TrojanOutboundLeaf<'a>> for TrojanTlsBridge {
+impl ProtocolManagedStreamUdpBridgeOps<TrojanOutboundLeaf> for TrojanTlsBridge {
     type Resume = TrojanManagedStreamUdpResume;
 
-    fn direct_udp_resume_for_leaf(&self, leaf: &TrojanOutboundLeaf<'a>) -> Self::Resume {
+    fn direct_udp_resume_for_leaf(&self, leaf: &TrojanOutboundLeaf) -> Self::Resume {
         let _ = self;
         ManagedPacketUdpResume::new(leaf.direct_udp_resume())
     }
 
-    fn relay_final_hop_udp_resume_for_leaf(&self, leaf: &TrojanOutboundLeaf<'a>) -> Self::Resume {
+    fn relay_final_hop_udp_resume_for_leaf(&self, leaf: &TrojanOutboundLeaf) -> Self::Resume {
         let _ = self;
         ManagedPacketUdpResume::new(leaf.relay_final_hop_udp_resume())
     }

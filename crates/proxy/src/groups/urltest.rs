@@ -9,9 +9,10 @@ use zero_traits::AsyncSocket;
 
 use super::super::transport::extract_tcp_stream;
 use super::super::{logging::log_urltest_group_target_changed, runtime::Proxy};
+use crate::protocol_registry::TcpRuntimeServices;
 use zero_engine::{
-    EngineError, PolicyProbeCompletedPayload, PolicyProbeMember, ProbeTrigger,
-    ResolvedLeafOutbound, ResolvedOutbound, TargetId, UrlTestMemberState,
+    EngineError, PolicyProbeCompletedPayload, PolicyProbeMember, ProbeTrigger, ResolvedOutbound,
+    TargetId, UrlTestMemberState,
 };
 
 /// Default probe URL for single-outbound diagnostics (`diagnostics.probe_outbound`).
@@ -260,28 +261,15 @@ impl Proxy {
 
     async fn probe_outbound(
         &self,
-        candidate: ResolvedOutbound<'_>,
+        candidate: ResolvedOutbound<'static>,
         probe: &UrlTestProbe,
     ) -> Result<u64, EngineError> {
         match candidate {
-            ResolvedOutbound::Single(candidate) => self.probe_leaf_outbound(candidate, probe).await,
             ResolvedOutbound::Relay { .. } => Err(EngineError::Io(std::io::Error::new(
                 std::io::ErrorKind::Unsupported,
                 "relay chain cannot be used as a urltest member",
             ))),
-            ResolvedOutbound::Fallback { candidates } => {
-                let mut last_error = None;
-
-                for candidate in candidates {
-                    match self.probe_leaf_outbound(candidate, probe).await {
-                        Ok(latency_ms) => return Ok(latency_ms),
-                        Err(error) => last_error = Some(error),
-                    }
-                }
-
-                Err(last_error
-                    .expect("validated fallback groups always have at least one candidate"))
-            }
+            resolved => self.probe_resolved_outbound(resolved, probe).await,
         }
     }
 
@@ -317,9 +305,9 @@ impl Proxy {
         self.probe_outbound(candidate, &probe).await
     }
 
-    async fn probe_leaf_outbound(
+    async fn probe_resolved_outbound(
         &self,
-        candidate: ResolvedLeafOutbound<'_>,
+        resolved: ResolvedOutbound<'static>,
         probe: &UrlTestProbe,
     ) -> Result<u64, EngineError> {
         const URLTEST_PROBE_TIMEOUT: Duration = Duration::from_secs(5);
@@ -338,12 +326,14 @@ impl Proxy {
             );
 
             // Use the existing TCP outbound establishment pipeline which
-            // handles ALL protocol types generically (Direct, Socks5,
-            // Vless, Hysteria2, Shadowsocks, Trojan, Vmess, Mieru, etc.).
-            let outbound = self
-                .dispatch_tcp_candidate(&probe_session, candidate)
-                .await
-                .map_err(|f| f.error)?;
+            // handles all protocol types generically, including fallback.
+            let outbound = crate::inventory::dispatch_tcp_outbound(
+                TcpRuntimeServices::from_proxy(self),
+                &probe_session,
+                resolved,
+            )
+            .await
+            .map_err(|f| f.error)?;
             let result = extract_tcp_stream(outbound)?;
             let mut socket = result.upstream;
 

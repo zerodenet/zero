@@ -15,7 +15,7 @@ impl ShadowsocksAdapter {
         leaf: &'a ResolvedLeafOutbound<'a>,
     ) -> Result<Box<dyn PreparedTcpConnectOperation + 'a>, TcpOutboundFailure> {
         let Some(leaf) = super::transport_leaf(leaf) else {
-            return Err(unreachable_leaf(self.name(), leaf));
+            return Err(unreachable_leaf(self.name()));
         };
         Ok(Box::new(SocketTcpConnectOperation { handshake: leaf }))
     }
@@ -25,7 +25,7 @@ impl ShadowsocksAdapter {
         leaf: &'a ResolvedLeafOutbound<'a>,
     ) -> Result<Box<dyn PreparedTcpRelayOperation + 'a>, EngineError> {
         let Some(leaf) = super::transport_leaf(leaf) else {
-            return Err(unreachable_leaf(self.name(), leaf).error);
+            return Err(unreachable_leaf(self.name()).error);
         };
         Ok(Box::new(SocketTcpRelayOperation { handshake: leaf }))
     }

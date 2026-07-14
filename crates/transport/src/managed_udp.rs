@@ -27,19 +27,25 @@ impl<'a, T> ManagedDatagramStartPlan<'a, T> {
 }
 
 #[derive(Debug, Clone)]
-pub struct ManagedStreamPacketBridgePlan<'a, T> {
-    pub tag: &'a str,
-    pub server: &'a str,
+pub struct ManagedStreamPacketBridgePlan<T> {
+    pub tag: String,
+    pub server: String,
     pub port: u16,
     pub resume: T,
     pub relay_chain: bool,
 }
 
-impl<'a, T> ManagedStreamPacketBridgePlan<'a, T> {
-    pub fn new(tag: &'a str, server: &'a str, port: u16, resume: T, relay_chain: bool) -> Self {
+impl<T> ManagedStreamPacketBridgePlan<T> {
+    pub fn new(
+        tag: impl Into<String>,
+        server: impl Into<String>,
+        port: u16,
+        resume: T,
+        relay_chain: bool,
+    ) -> Self {
         Self {
-            tag,
-            server,
+            tag: tag.into(),
+            server: server.into(),
             port,
             resume,
             relay_chain,

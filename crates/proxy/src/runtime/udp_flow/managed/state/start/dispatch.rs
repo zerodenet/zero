@@ -38,7 +38,7 @@ impl ManagedUdpState {
                 self.start_datagram_flow(
                     chain_tasks,
                     ManagedDatagramFlow {
-                        proxy: request.proxy,
+                        services: request.services,
                         session: request.session,
                         server: request.server,
                         port: request.port,
@@ -64,7 +64,7 @@ impl ManagedUdpState {
                         "expected chain task context for managed UDP flow",
                     ));
                 };
-                let Some(proxy) = request.proxy else {
+                let Some(services) = request.services else {
                     return Err(flow_mismatch(
                         "udp_stream_packet_proxy",
                         request.server,
@@ -74,7 +74,7 @@ impl ManagedUdpState {
                 };
                 self.start_stream_packet_flow(ManagedStreamPacketFlow {
                     chain_tasks,
-                    proxy,
+                    services,
                     session: request.session,
                     server: request.server,
                     port: request.port,
@@ -104,7 +104,7 @@ impl ManagedUdpState {
                 };
                 self.start_relay_stream_flow(ManagedRelayStreamFlow {
                     chain_tasks,
-                    proxy: request.proxy,
+                    services: request.services,
                     session: request.session,
                     carrier,
                     tls_server_name: request.tls_server_name,

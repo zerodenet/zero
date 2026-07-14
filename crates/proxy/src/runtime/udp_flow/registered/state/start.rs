@@ -99,7 +99,7 @@ impl RegisteredUdpState {
 ))]
 fn upstream_send(request: ManagedUdpFlowRequest<'_>) -> UpstreamAssociationSend<'_> {
     UpstreamAssociationSend {
-        proxy: request.proxy,
+        services: request.services,
         session: request.session,
         server: request.server,
         port: request.port,

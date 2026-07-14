@@ -6,8 +6,8 @@ use zero_engine::EngineError;
 use zero_transport::managed_udp::ProtocolManagedStreamConnectorParts;
 
 use super::super::super::connection::SharedManagedUdpConnection;
+use crate::protocol_registry::UdpRuntimeServices;
 use crate::runtime::path::OutboundEndpoint;
-use crate::runtime::Proxy;
 use crate::transport::TcpRelayStream;
 
 #[async_trait]
@@ -22,7 +22,7 @@ pub(crate) trait ManagedStreamFlowConnector:
 
     async fn establish_direct(
         &self,
-        proxy: &Proxy,
+        services: UdpRuntimeServices,
         session: &Session,
         endpoint: OutboundEndpoint<'_>,
     ) -> Result<SharedManagedUdpConnection, EngineError>;
@@ -31,7 +31,7 @@ pub(crate) trait ManagedStreamFlowConnector:
         &self,
         stream: TcpRelayStream,
         tls_server_name: Option<&str>,
-        proxy: Option<&Proxy>,
+        services: Option<UdpRuntimeServices>,
         session: &Session,
         endpoint: OutboundEndpoint<'_>,
     ) -> Result<SharedManagedUdpConnection, EngineError>;

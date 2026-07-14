@@ -5,7 +5,9 @@ use zero_core::{Address, Network, ProtocolType, Session};
 
 use super::fixtures::{FakeTcpCapability, TcpCapabilityCalls};
 use crate::inventory::ProtocolInventory;
-use crate::protocol_registry::{fake_direct_leaf, ProtocolRegistry};
+use crate::protocol_registry::{
+    fake_direct_leaf, OutboundAdapterContext, ProtocolRegistry, TcpRuntimeServices,
+};
 use crate::runtime::Proxy;
 use crate::transport::TcpRelayStream;
 
@@ -55,10 +57,14 @@ async fn inventory_invokes_fake_tcp_leaf_and_relay_capabilities() {
     let calls = Arc::new(TcpCapabilityCalls::default());
     let proxy = proxy_with_fake_tcp(calls.clone());
     let leaf = fake_direct_leaf();
+    let ctx = OutboundAdapterContext::new(proxy.config.source_dir());
 
-    let established = match proxy
-        .protocols
-        .connect_tcp_leaf(&proxy, &session(), &leaf)
+    let prepared = match proxy.protocols.prepare_tcp_candidate(ctx.clone(), &leaf) {
+        Ok(prepared) => prepared,
+        Err(_) => panic!("fake leaf prepare failed"),
+    };
+    let established = match prepared
+        .execute(TcpRuntimeServices::from_proxy(&proxy), &session())
         .await
     {
         Ok(established) => established,
@@ -69,7 +75,13 @@ async fn inventory_invokes_fake_tcp_leaf_and_relay_capabilities() {
     let (stream, _peer) = tokio::io::duplex(64);
     proxy
         .protocols
-        .apply_tcp_relay_hop(&proxy, TcpRelayStream::new(stream), &session(), &leaf)
+        .prepare_tcp_relay_hop(ctx, &leaf)
+        .expect("fake relay prepare")
+        .execute(
+            TcpRuntimeServices::from_proxy(&proxy),
+            TcpRelayStream::new(stream),
+            &session(),
+        )
         .await
         .expect("fake relay hop");
 
@@ -83,10 +95,14 @@ async fn inventory_preserves_tcp_and_relay_capability_failures() {
     calls.set_fail_tcp(true);
     let proxy = proxy_with_fake_tcp(calls.clone());
     let leaf = fake_direct_leaf();
+    let ctx = OutboundAdapterContext::new(proxy.config.source_dir());
 
-    let failure = match proxy
-        .protocols
-        .connect_tcp_leaf(&proxy, &session(), &leaf)
+    let prepared = match proxy.protocols.prepare_tcp_candidate(ctx.clone(), &leaf) {
+        Ok(prepared) => prepared,
+        Err(_) => panic!("fake leaf prepare failed"),
+    };
+    let failure = match prepared
+        .execute(TcpRuntimeServices::from_proxy(&proxy), &session())
         .await
     {
         Ok(_) => panic!("fake TCP connect unexpectedly succeeded"),
@@ -104,7 +120,13 @@ async fn inventory_preserves_tcp_and_relay_capability_failures() {
     let (stream, _peer) = tokio::io::duplex(64);
     let error = match proxy
         .protocols
-        .apply_tcp_relay_hop(&proxy, TcpRelayStream::new(stream), &session(), &leaf)
+        .prepare_tcp_relay_hop(ctx, &leaf)
+        .expect("fake relay prepare")
+        .execute(
+            TcpRuntimeServices::from_proxy(&proxy),
+            TcpRelayStream::new(stream),
+            &session(),
+        )
         .await
     {
         Ok(_) => panic!("fake relay hop unexpectedly succeeded"),

@@ -70,8 +70,9 @@ impl NamedProtocolAdapter for DirectAdapter {
 ))]
 impl UdpFlowCapability for DirectAdapter {
     fn prepare_udp_flow<'a>(
-        &'a self,
+        &self,
         leaf: &'a ResolvedLeafOutbound<'a>,
+        _source_dir: Option<&std::path::Path>,
     ) -> Result<
         Box<dyn crate::runtime::udp_dispatch::operation::PreparedUdpFlowOperation + 'a>,
         FlowFailure,
@@ -116,7 +117,7 @@ impl TcpOutboundCapability for DirectAdapter {
         direct_leaf_runtime(leaf)
     }
     fn prepare_tcp_connect<'a>(
-        &'a self,
+        &self,
         leaf: &'a ResolvedLeafOutbound<'a>,
         _source_dir: Option<&std::path::Path>,
     ) -> Result<

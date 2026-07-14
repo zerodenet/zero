@@ -6,8 +6,16 @@
     feature = "vmess",
     feature = "mieru"
 ))]
+use crate::protocol_registry::UdpRuntimeServices;
+#[cfg(any(
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
 use crate::runtime::udp_flow::managed::{ManagedUdpFlowKind, ManagedUdpFlowResume};
-use crate::runtime::Proxy;
 use zero_core::Session;
 
 #[cfg(any(
@@ -19,7 +27,7 @@ use zero_core::Session;
     feature = "mieru"
 ))]
 pub(super) struct ManagedUdpSend<'a> {
-    pub(super) proxy: Option<&'a Proxy>,
+    pub(super) services: Option<UdpRuntimeServices>,
     #[cfg(any(feature = "hysteria2", feature = "shadowsocks"))]
     pub(super) tag: &'a str,
     pub(super) session: &'a Session,
@@ -46,7 +54,7 @@ pub(super) struct ManagedUdpSend<'a> {
 
 #[cfg(any(feature = "hysteria2", feature = "shadowsocks"))]
 pub(crate) struct ManagedDatagramStart<'a, T> {
-    pub(crate) proxy: Option<&'a Proxy>,
+    pub(crate) services: Option<UdpRuntimeServices>,
     pub(crate) tag: &'a str,
     pub(crate) session: &'a Session,
     pub(crate) server: &'a str,
@@ -57,7 +65,7 @@ pub(crate) struct ManagedDatagramStart<'a, T> {
 
 #[cfg(feature = "socks5")]
 pub(crate) struct UpstreamTrackedStart<'a, T> {
-    pub(crate) proxy: Option<&'a Proxy>,
+    pub(crate) services: Option<crate::protocol_registry::UdpRuntimeServices>,
     pub(crate) tag: &'a str,
     pub(crate) session: &'a Session,
     pub(crate) server: &'a str,

@@ -1,3 +1,4 @@
+use crate::protocol_registry::UdpRuntimeServices;
 use crate::runtime::udp_flow::managed::flow::{ManagedDatagramFlow, ManagedUdpFlowResume};
 use crate::runtime::udp_flow::managed::model::{
     ManagedDatagramExistingSend, ManagedDatagramFlowHandler,
@@ -5,7 +6,6 @@ use crate::runtime::udp_flow::managed::model::{
 use crate::runtime::udp_flow::packet_path::ChainTask;
 use crate::runtime::udp_flow::result::FlowFailure;
 use crate::runtime::udp_flow::snapshot::UdpFlowSnapshot;
-use crate::runtime::Proxy;
 use tokio::task::JoinSet;
 
 pub(in crate::runtime::udp_flow::managed) struct ManagedDatagramState {
@@ -43,7 +43,7 @@ impl ManagedDatagramState {
     pub(in crate::runtime::udp_flow::managed) async fn forward_existing_flow(
         &mut self,
         chain_tasks: &mut JoinSet<ChainTask>,
-        proxy: &Proxy,
+        services: UdpRuntimeServices,
         flow: &UdpFlowSnapshot,
         resume: &ManagedUdpFlowResume,
         payload: &[u8],
@@ -60,7 +60,7 @@ impl ManagedDatagramState {
                 handler
                     .send_managed_existing(ManagedDatagramExistingSend::forwarded(
                         chain_tasks,
-                        proxy,
+                        services.clone(),
                         flow,
                         resume.clone(),
                         upstream.server,

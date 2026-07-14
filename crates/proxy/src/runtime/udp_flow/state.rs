@@ -4,6 +4,7 @@ use tokio::time::Instant as TokioInstant;
 #[cfg(feature = "socks5")]
 use zero_engine::EngineError;
 
+use crate::protocol_registry::UdpAdapterContext;
 #[cfg(any(
     feature = "vless",
     feature = "hysteria2",
@@ -39,8 +40,6 @@ use crate::runtime::udp_flow::registered::{
 use crate::runtime::udp_flow::response::UpstreamUdpResponse;
 use crate::runtime::udp_flow::result::FlowFailure;
 use crate::runtime::udp_flow::snapshot::UdpFlowSnapshot;
-use crate::runtime::Proxy;
-
 pub(crate) struct UdpFlowState {
     registered: RegisteredUdpState,
     packet_path: PacketPathManager,
@@ -235,17 +234,17 @@ impl UdpFlowState {
     ))]
     pub(crate) async fn forward_existing_managed_flow(
         &mut self,
-        proxy: &Proxy,
+        services: crate::protocol_registry::UdpRuntimeServices,
         request: ManagedExistingFlowForward<'_>,
     ) -> Result<usize, FlowFailure> {
         self.registered
-            .forward_existing_managed_flow(&mut self.chain_tasks, proxy, request)
+            .forward_existing_managed_flow(&mut self.chain_tasks, services, request)
             .await
     }
 
     pub(crate) async fn send_packet_path_chain(
         &mut self,
-        proxy: &Proxy,
+        ctx: UdpAdapterContext<'_>,
         request: PacketPathStartRequest<'_>,
     ) -> Result<usize, FlowFailure> {
         self.packet_path
@@ -254,7 +253,7 @@ impl UdpFlowState {
                     chain_tasks: &mut self.chain_tasks,
                     session_id: request.session_id,
                 },
-                proxy,
+                ctx,
                 request,
             )
             .await

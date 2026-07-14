@@ -7,10 +7,10 @@ use super::super::super::model::{ManagedDatagramExistingSend, ManagedDatagramFlo
 use super::super::connector::ManagedDatagramSocketFlowConnector;
 use super::mismatch::managed_mismatch;
 use super::model::ManagedDatagramSocketFlowManager;
+use crate::protocol_registry::UdpRuntimeServices;
 use crate::runtime::path::OutboundEndpoint;
 use crate::runtime::udp_flow::packet_path::{UdpFlowContext, UdpPacketRef};
 use crate::runtime::udp_flow::result::FlowFailure;
-use crate::runtime::Proxy;
 
 impl<T, C> ManagedDatagramSocketFlowManager<T, C>
 where
@@ -24,7 +24,7 @@ where
     async fn send(
         &mut self,
         ctx: UdpFlowContext<'_>,
-        proxy: Option<&Proxy>,
+        services: Option<UdpRuntimeServices>,
         endpoint: OutboundEndpoint<'_>,
         resume: T,
         packet_ref: UdpPacketRef<'_>,
@@ -38,7 +38,7 @@ where
             .get_or_insert_key(
                 cache_key,
                 self.connector
-                    .establish(proxy, endpoint, resume, packet_ref),
+                    .establish(services, endpoint, resume, packet_ref),
             )
             .await
             .map_err(|error| FlowFailure {
@@ -80,7 +80,7 @@ where
                 chain_tasks: request.chain_tasks,
                 session_id: request.session_id,
             },
-            request.proxy,
+            request.services,
             OutboundEndpoint {
                 server: request.server,
                 port: request.port,

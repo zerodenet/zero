@@ -1,7 +1,9 @@
 use std::future::Future;
+use std::path::Path;
 
 use zero_core::Session;
 use zero_platform_tokio::{TcpRelayStream, TokioSocket};
+use zero_traits::{ClientTlsProfile, GrpcTransportProfile, WebSocketTransportProfile};
 use zero_transport::outbound_leaf::{
     clone_socket_opener, ProtocolTcpTransportOpenResult, ProtocolTransportLeaf,
 };
@@ -13,25 +15,55 @@ use super::managed_udp::VmessManagedUdpFlowResume;
 use super::outbound::OwnedVmessOutboundTransportPlan;
 
 #[derive(Clone)]
-pub struct VmessOutboundLeaf<'a> {
-    tag: &'a str,
-    server: &'a str,
+pub struct VmessOutboundLeaf {
+    tag: String,
+    server: String,
     port: u16,
     transport: OwnedVmessOutboundTransportPlan,
     protocol: crate::outbound::PreparedVmessOutboundRequestBundle,
 }
 
-impl<'a> VmessOutboundLeaf<'a> {
+impl VmessOutboundLeaf {
+    pub fn from_profile_refs<TTls, TWs, TGrpc>(
+        source_dir: Option<&Path>,
+        tag: &str,
+        server: &str,
+        port: u16,
+        id: &str,
+        cipher: &str,
+        mux_concurrency: Option<u32>,
+        tls: Option<&TTls>,
+        ws: Option<&TWs>,
+        grpc: Option<&TGrpc>,
+    ) -> Result<Self, zero_core::Error>
+    where
+        TTls: ClientTlsProfile + ?Sized,
+        TWs: WebSocketTransportProfile + ?Sized,
+        TGrpc: GrpcTransportProfile + ?Sized,
+    {
+        let transport = OwnedVmessOutboundTransportPlan::from_profile_refs(
+            source_dir, server, port, tls, ws, grpc,
+        );
+        let protocol =
+            crate::outbound::PreparedVmessOutboundRequestBundle::from_config_with_transport_hints(
+                id,
+                cipher,
+                mux_concurrency,
+                transport.mux_transport_hints(),
+            )?;
+        Ok(Self::new(tag, server, port, transport, protocol))
+    }
+
     pub fn new(
-        tag: &'a str,
-        server: &'a str,
+        tag: &str,
+        server: &str,
         port: u16,
         transport: OwnedVmessOutboundTransportPlan,
         protocol: crate::outbound::PreparedVmessOutboundRequestBundle,
     ) -> Self {
         Self {
-            tag,
-            server,
+            tag: tag.to_owned(),
+            server: server.to_owned(),
             port,
             protocol,
             transport,
@@ -59,7 +91,7 @@ impl<'a> VmessOutboundLeaf<'a> {
         protocol
             .open_tcp_stream_with_transport_or_mux(
                 session,
-                self.server,
+                &self.server,
                 self.port,
                 mux_pool,
                 direct_transport,
@@ -103,13 +135,13 @@ impl<'a> VmessOutboundLeaf<'a> {
     }
 }
 
-impl ProtocolTransportLeaf for VmessOutboundLeaf<'_> {
+impl ProtocolTransportLeaf for VmessOutboundLeaf {
     fn tag(&self) -> &str {
-        self.tag
+        &self.tag
     }
 
     fn server(&self) -> &str {
-        self.server
+        &self.server
     }
 
     fn port(&self) -> u16 {

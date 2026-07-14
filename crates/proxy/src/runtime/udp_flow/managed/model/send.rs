@@ -8,6 +8,7 @@ use zero_core::Address;
 ))]
 use zero_core::Session;
 
+use crate::protocol_registry::UdpRuntimeServices;
 #[cfg(any(feature = "hysteria2", feature = "shadowsocks"))]
 use crate::runtime::udp_flow::managed::flow::ManagedDatagramFlow;
 #[cfg(any(
@@ -27,7 +28,6 @@ use crate::runtime::udp_flow::managed::flow::ManagedStreamPacketFlow;
 use crate::runtime::udp_flow::managed::flow::ManagedUdpFlowResume;
 use crate::runtime::udp_flow::packet_path::ChainTask;
 use crate::runtime::udp_flow::snapshot::UdpFlowSnapshot;
-use crate::runtime::Proxy;
 #[cfg(any(
     feature = "vless",
     feature = "vmess",
@@ -40,7 +40,7 @@ use crate::transport::TcpRelayStream;
 pub(crate) struct ManagedDatagramExistingSend<'a> {
     pub(crate) chain_tasks: &'a mut JoinSet<ChainTask>,
     pub(crate) session_id: u64,
-    pub(crate) proxy: Option<&'a Proxy>,
+    pub(crate) services: Option<UdpRuntimeServices>,
     pub(crate) server: &'a str,
     pub(crate) port: u16,
     pub(crate) resume: ManagedUdpFlowResume,
@@ -58,7 +58,7 @@ impl<'a> ManagedDatagramExistingSend<'a> {
         Self {
             chain_tasks,
             session_id: flow.session.id,
-            proxy: flow.proxy,
+            services: flow.services.clone(),
             server: flow.server,
             port: flow.port,
             resume: flow.resume.clone(),
@@ -70,7 +70,7 @@ impl<'a> ManagedDatagramExistingSend<'a> {
 
     pub(crate) fn forwarded(
         chain_tasks: &'a mut JoinSet<ChainTask>,
-        proxy: &'a Proxy,
+        services: UdpRuntimeServices,
         flow: &'a UdpFlowSnapshot,
         resume: ManagedUdpFlowResume,
         server: &'a str,
@@ -80,7 +80,7 @@ impl<'a> ManagedDatagramExistingSend<'a> {
         Self {
             chain_tasks,
             session_id: flow.session.id,
-            proxy: Some(proxy),
+            services: Some(services),
             server,
             port,
             resume,
@@ -100,7 +100,7 @@ impl<'a> ManagedDatagramExistingSend<'a> {
 pub(crate) struct ManagedStreamExistingSend<'a> {
     pub(crate) chain_tasks: &'a mut JoinSet<ChainTask>,
     pub(crate) session_id: u64,
-    pub(crate) proxy: &'a Proxy,
+    pub(crate) services: UdpRuntimeServices,
     pub(crate) session: &'a Session,
     pub(crate) server: &'a str,
     pub(crate) port: u16,
@@ -121,7 +121,7 @@ impl<'a> ManagedStreamExistingSend<'a> {
         Self {
             chain_tasks: request.chain_tasks,
             session_id: request.session.id,
-            proxy: request.proxy,
+            services: request.services,
             session: request.session,
             server: request.server,
             port: request.port,
@@ -134,7 +134,7 @@ impl<'a> ManagedStreamExistingSend<'a> {
 
     pub(crate) fn forwarded(
         chain_tasks: &'a mut JoinSet<ChainTask>,
-        proxy: &'a Proxy,
+        services: UdpRuntimeServices,
         flow: &'a UdpFlowSnapshot,
         resume: ManagedUdpFlowResume,
         server: &'a str,
@@ -144,7 +144,7 @@ impl<'a> ManagedStreamExistingSend<'a> {
         Self {
             chain_tasks,
             session_id: flow.session.id,
-            proxy,
+            services,
             session: &flow.session,
             server,
             port,
@@ -167,7 +167,7 @@ pub(crate) struct ManagedRelayExistingSend<'a> {
     pub(crate) session_id: u64,
     pub(crate) stream: TcpRelayStream,
     pub(crate) tls_server_name: Option<&'a str>,
-    pub(crate) proxy: Option<&'a Proxy>,
+    pub(crate) services: Option<UdpRuntimeServices>,
     pub(crate) session: &'a Session,
     pub(crate) server: &'a str,
     pub(crate) port: u16,
@@ -190,7 +190,7 @@ impl<'a> ManagedRelayExistingSend<'a> {
             session_id: request.session.id,
             stream: request.carrier.stream,
             tls_server_name: request.tls_server_name,
-            proxy: request.proxy,
+            services: request.services,
             session: request.session,
             server: request.server,
             port: request.port,

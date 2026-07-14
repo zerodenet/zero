@@ -1,6 +1,6 @@
 use zero_core::Session;
 
-use crate::runtime::Proxy;
+use crate::protocol_registry::UdpRuntimeServices;
 use crate::transport::RelayCarrier;
 
 pub(crate) struct ManagedStreamPacketRelay<'a> {
@@ -9,7 +9,7 @@ pub(crate) struct ManagedStreamPacketRelay<'a> {
 }
 
 pub(crate) struct ManagedStreamPacketStartBridge<'a, T> {
-    pub(super) proxy: Option<&'a Proxy>,
+    pub(super) services: Option<UdpRuntimeServices>,
     pub(super) tag: &'a str,
     pub(super) session: &'a Session,
     pub(super) carrier: Option<RelayCarrier>,
@@ -23,7 +23,7 @@ pub(crate) struct ManagedStreamPacketStartBridge<'a, T> {
 
 impl<'a, T> ManagedStreamPacketStartBridge<'a, T> {
     pub(crate) fn direct(
-        proxy: &'a Proxy,
+        services: UdpRuntimeServices,
         tag: &'a str,
         session: &'a Session,
         endpoint: (&'a str, u16),
@@ -32,7 +32,7 @@ impl<'a, T> ManagedStreamPacketStartBridge<'a, T> {
     ) -> Self {
         let (server, port) = endpoint;
         Self {
-            proxy: Some(proxy),
+            services: Some(services),
             tag,
             session,
             carrier: None,
@@ -46,7 +46,7 @@ impl<'a, T> ManagedStreamPacketStartBridge<'a, T> {
     }
 
     pub(crate) fn relay(
-        proxy: Option<&'a Proxy>,
+        services: Option<UdpRuntimeServices>,
         tag: &'a str,
         session: &'a Session,
         relay: ManagedStreamPacketRelay<'a>,
@@ -56,7 +56,7 @@ impl<'a, T> ManagedStreamPacketStartBridge<'a, T> {
     ) -> Self {
         let (server, port) = endpoint;
         Self {
-            proxy,
+            services,
             tag,
             session,
             carrier: Some(relay.carrier),

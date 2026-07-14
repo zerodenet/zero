@@ -118,7 +118,7 @@ impl ShadowsocksAdapter {
         FlowFailure,
     > {
         let Some(leaf) = super::transport_leaf(leaf) else {
-            return Err(unreachable_udp_leaf(self.name(), leaf));
+            return Err(unreachable_udp_leaf(self.name()));
         };
         let plan = leaf.udp_flow_plan().map_err(|error| FlowFailure {
             stage: "udp_shadowsocks_resume",

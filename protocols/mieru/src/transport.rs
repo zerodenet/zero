@@ -25,16 +25,16 @@ pub struct OwnedMieruInboundResponseProtocol {
     protocol: crate::inbound::MieruInbound,
 }
 
-#[derive(Debug, Clone, Copy)]
-pub struct MieruTransportLeaf<'a> {
-    tag: &'a str,
-    server: &'a str,
+#[derive(Debug, Clone)]
+pub struct MieruTransportLeaf {
+    tag: String,
+    server: String,
     port: u16,
-    username: &'a str,
-    password: &'a str,
+    username: String,
+    password: String,
 }
 
-impl ProtocolTransportLeaf for MieruTransportLeaf<'_> {
+impl ProtocolTransportLeaf for MieruTransportLeaf {
     fn tag(&self) -> &str {
         self.tag()
     }
@@ -49,7 +49,7 @@ impl ProtocolTransportLeaf for MieruTransportLeaf<'_> {
 }
 
 #[async_trait::async_trait]
-impl ProtocolSocketTcpHandshake for MieruTransportLeaf<'_> {
+impl ProtocolSocketTcpHandshake for MieruTransportLeaf {
     fn connect_stage(&self) -> &'static str {
         "connect_upstream_mieru"
     }
@@ -62,8 +62,8 @@ impl ProtocolSocketTcpHandshake for MieruTransportLeaf<'_> {
         let stream = establish_mieru_tcp_tunnel(
             TcpRelayStream::new(socket),
             session,
-            self.username,
-            self.password,
+            &self.username,
+            &self.password,
         )
         .await?;
         Ok((stream, StreamTraffic::default()))
@@ -74,14 +74,14 @@ impl ProtocolSocketTcpHandshake for MieruTransportLeaf<'_> {
         stream: TcpRelayStream,
         session: &Session,
     ) -> Result<TcpRelayStream, RuntimeError> {
-        establish_mieru_tcp_tunnel(stream, session, self.username, self.password).await
+        establish_mieru_tcp_tunnel(stream, session, &self.username, &self.password).await
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct MieruManagedUdpFlowPlan<'a> {
-    tag: &'a str,
-    server: &'a str,
+pub struct MieruManagedUdpFlowPlan {
+    tag: String,
+    server: String,
     port: u16,
     resume: MieruManagedStreamUdpResume,
     relay_chain: bool,
@@ -153,29 +153,23 @@ where
     }
 }
 
-impl<'a> MieruTransportLeaf<'a> {
-    pub fn new(
-        tag: &'a str,
-        server: &'a str,
-        port: u16,
-        username: &'a str,
-        password: &'a str,
-    ) -> Self {
+impl MieruTransportLeaf {
+    pub fn new(tag: &str, server: &str, port: u16, username: &str, password: &str) -> Self {
         Self {
-            tag,
-            server,
+            tag: tag.to_owned(),
+            server: server.to_owned(),
             port,
-            username,
-            password,
+            username: username.to_owned(),
+            password: password.to_owned(),
         }
     }
 
     pub fn tag(&self) -> &str {
-        self.tag
+        &self.tag
     }
 
     pub fn server(&self) -> &str {
-        self.server
+        &self.server
     }
 
     pub fn port(&self) -> u16 {
@@ -183,14 +177,14 @@ impl<'a> MieruTransportLeaf<'a> {
     }
 
     pub fn flow_resume(&self, relay_chain: bool) -> MieruManagedStreamUdpResume {
-        MieruManagedUdpFlowConfig::new(self.server, self.port, self.username, self.password)
+        MieruManagedUdpFlowConfig::new(&self.server, self.port, &self.username, &self.password)
             .flow_resume(relay_chain)
     }
 
-    pub fn udp_flow_plan(&self, relay_chain: bool) -> MieruManagedUdpFlowPlan<'a> {
+    pub fn udp_flow_plan(&self, relay_chain: bool) -> MieruManagedUdpFlowPlan {
         MieruManagedUdpFlowPlan::new(
-            self.tag,
-            self.server,
+            self.tag.clone(),
+            self.server.clone(),
             self.port,
             self.flow_resume(relay_chain),
             relay_chain,
@@ -207,14 +201,14 @@ impl<'a> MieruTransportLeaf<'a> {
         OpenSocketFut: Future<Output = Result<TokioSocket, E>> + Send,
         E: Into<RuntimeError>,
     {
-        let socket = open_socket(self.server, self.port)
+        let socket = open_socket(&self.server, self.port)
             .await
             .map_err(Into::into)?;
         establish_mieru_tcp_tunnel(
             TcpRelayStream::new(socket),
             session,
-            self.username,
-            self.password,
+            &self.username,
+            &self.password,
         )
         .await
     }
@@ -224,7 +218,7 @@ impl<'a> MieruTransportLeaf<'a> {
         stream: TcpRelayStream,
         session: &Session,
     ) -> Result<TcpRelayStream, RuntimeError> {
-        establish_mieru_tcp_tunnel(stream, session, self.username, self.password).await
+        establish_mieru_tcp_tunnel(stream, session, &self.username, &self.password).await
     }
 }
 
@@ -253,10 +247,10 @@ pub fn udp_flow_resume_from_config(
     MieruManagedUdpFlowConfig::new(server, port, username, password).flow_resume(relay_chain)
 }
 
-impl<'a> MieruManagedUdpFlowPlan<'a> {
+impl MieruManagedUdpFlowPlan {
     fn new(
-        tag: &'a str,
-        server: &'a str,
+        tag: String,
+        server: String,
         port: u16,
         resume: MieruManagedStreamUdpResume,
         relay_chain: bool,
@@ -271,24 +265,22 @@ impl<'a> MieruManagedUdpFlowPlan<'a> {
     }
 
     pub fn tag(&self) -> &str {
-        self.tag
+        &self.tag
     }
 
     pub fn server(&self) -> &str {
-        self.server
+        &self.server
     }
 
     pub fn port(&self) -> u16 {
         self.port
     }
 
-    pub fn into_parts(self) -> (&'a str, &'a str, u16, MieruManagedStreamUdpResume) {
+    pub fn into_parts(self) -> (String, String, u16, MieruManagedStreamUdpResume) {
         (self.tag, self.server, self.port, self.resume)
     }
 
-    pub fn into_bridge_plan(
-        self,
-    ) -> ManagedStreamPacketBridgePlan<'a, MieruManagedStreamUdpResume> {
+    pub fn into_bridge_plan(self) -> ManagedStreamPacketBridgePlan<MieruManagedStreamUdpResume> {
         ManagedStreamPacketBridgePlan::new(
             self.tag,
             self.server,

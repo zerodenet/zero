@@ -1,4 +1,4 @@
-use zero_engine::{EngineError, ResolvedLeafOutbound};
+use zero_engine::EngineError;
 
 #[cfg(any(
     feature = "socks5",
@@ -79,10 +79,7 @@ pub(in crate::protocol_registry) fn udp_relay_final_hop_unsupported() -> FlowFai
     )
 }
 
-pub(crate) fn unreachable_leaf(
-    adapter: &'static str,
-    _leaf: &ResolvedLeafOutbound<'_>,
-) -> TcpOutboundFailure {
+pub(crate) fn unreachable_leaf(adapter: &'static str) -> TcpOutboundFailure {
     TcpOutboundFailure {
         stage: "outbound_leaf_mismatch",
         error: EngineError::Io(std::io::Error::other(format!(
@@ -101,10 +98,7 @@ pub(crate) fn unreachable_leaf(
     feature = "vmess",
     feature = "mieru"
 ))]
-pub(crate) fn unreachable_udp_leaf(
-    adapter: &'static str,
-    _leaf: &ResolvedLeafOutbound<'_>,
-) -> FlowFailure {
+pub(crate) fn unreachable_udp_leaf(adapter: &'static str) -> FlowFailure {
     FlowFailure {
         stage: "udp_leaf_mismatch",
         error: EngineError::Io(std::io::Error::other(format!(

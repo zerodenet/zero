@@ -37,7 +37,7 @@ where
             .establish_relay(
                 request.stream,
                 request.tls_server_name,
-                request.proxy,
+                request.services,
                 request.session,
                 request.endpoint,
             )
@@ -83,7 +83,7 @@ where
             },
             stream: request.stream,
             tls_server_name: request.tls_server_name,
-            proxy: request.proxy,
+            services: request.services,
             session: request.session,
             endpoint: OutboundEndpoint {
                 server: request.server,

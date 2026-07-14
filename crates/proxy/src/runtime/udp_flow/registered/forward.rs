@@ -1,15 +1,15 @@
 use super::RegisteredUdpState;
+use crate::protocol_registry::UdpRuntimeServices;
 use crate::runtime::udp_flow::managed::ManagedExistingFlowForward;
 use crate::runtime::udp_flow::packet_path::ChainTask;
 use crate::runtime::udp_flow::result::FlowFailure;
-use crate::runtime::Proxy;
 use tokio::task::JoinSet;
 
 impl RegisteredUdpState {
     pub(crate) async fn forward_existing_managed_flow(
         &mut self,
         _chain_tasks: &mut JoinSet<ChainTask>,
-        _proxy: &Proxy,
+        _services: UdpRuntimeServices,
         request: ManagedExistingFlowForward<'_>,
     ) -> Result<usize, FlowFailure> {
         let (flow, _) = request;
@@ -38,7 +38,7 @@ impl RegisteredUdpState {
         ))]
         if let Some(result) = self
             .managed
-            .forward_existing_flow(_chain_tasks, _proxy, request, resume)
+            .forward_existing_flow(_chain_tasks, _services, request, resume)
             .await?
         {
             return Ok(result);

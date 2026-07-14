@@ -9,9 +9,9 @@
 
 use std::collections::HashMap;
 
+use crate::protocol_registry::UdpAdapterContext;
 use crate::runtime::udp_flow::packet_path::{PacketPathLookupKey, UdpFlowContext, UdpPacketRef};
 use crate::runtime::udp_flow::result::FlowFailure;
-use crate::runtime::Proxy;
 use zero_engine::EngineError;
 
 mod bridge;
@@ -43,7 +43,7 @@ impl PacketPathManager {
     pub(crate) async fn send(
         &mut self,
         ctx: UdpFlowContext<'_>,
-        proxy: &Proxy,
+        services: UdpAdapterContext<'_>,
         request: PacketPathStartRequest<'_>,
     ) -> Result<usize, FlowFailure> {
         let PacketPathStartRequest {
@@ -54,7 +54,7 @@ impl PacketPathManager {
         } = request;
         let upstream = carrier.upstream();
         let entry = self
-            .ensure_entry(proxy, carrier, datagram)
+            .ensure_entry(services, carrier, datagram)
             .await
             .map_err(|error| FlowFailure {
                 stage: "packet_path_establish",
@@ -81,7 +81,7 @@ impl PacketPathManager {
 
     async fn ensure_entry(
         &mut self,
-        proxy: &Proxy,
+        ctx: UdpAdapterContext<'_>,
         carrier: PacketPathCarrierRequest<'_>,
         datagram: crate::runtime::udp_flow::packet_path::UdpDatagramSource,
     ) -> Result<&Entry, EngineError> {
@@ -92,7 +92,7 @@ impl PacketPathManager {
         let key = candidate.key();
 
         if !self.upstreams.contains_key(&key) {
-            let entry = build_entry(proxy, carrier.build_operation, candidate).await?;
+            let entry = build_entry(ctx, carrier.build_operation, candidate).await?;
             self.upstreams.insert(key.clone(), entry);
         }
 

@@ -133,7 +133,11 @@ async fn registered_udp_state_forwards_with_restored_opaque_resume() {
     let payload = b"forwarded payload";
 
     let sent = match state
-        .forward_existing_managed_flow(&mut chain_tasks, &proxy, (&flow, payload))
+        .forward_existing_managed_flow(
+            &mut chain_tasks,
+            crate::protocol_registry::UdpRuntimeServices::from_proxy(&proxy),
+            (&flow, payload),
+        )
         .await
     {
         Ok(sent) => sent,

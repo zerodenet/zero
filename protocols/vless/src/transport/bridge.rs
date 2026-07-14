@@ -49,13 +49,13 @@ impl ProtocolRelayTwoStreamUdpTransportBridgeMetadata for VlessStreamBridge {
 }
 
 #[async_trait::async_trait]
-impl<'a> ProtocolTcpTransportBridgeOps<VlessOutboundLeaf<'a>> for VlessStreamBridge {
+impl ProtocolTcpTransportBridgeOps<VlessOutboundLeaf> for VlessStreamBridge {
     type Opened = crate::outbound::VlessTcpStreamOpen;
 
     async fn open_tcp_stream_for_leaf<OpenSocket, OpenSocketFut>(
         &self,
         session: &Session,
-        leaf: &VlessOutboundLeaf<'a>,
+        leaf: &VlessOutboundLeaf,
         open_socket: OpenSocket,
     ) -> Result<Self::Opened, RuntimeError>
     where
@@ -70,21 +70,21 @@ impl<'a> ProtocolTcpTransportBridgeOps<VlessOutboundLeaf<'a>> for VlessStreamBri
         &self,
         stream: TcpRelayStream,
         session: &Session,
-        leaf: &VlessOutboundLeaf<'a>,
+        leaf: &VlessOutboundLeaf,
     ) -> Result<TcpRelayStream, RuntimeError> {
         let _ = self;
         leaf.open_tcp_relay_hop(stream, session).await
     }
 }
 
-impl<'a> ProtocolManagedStreamUdpBridgeOps<VlessOutboundLeaf<'a>> for VlessStreamBridge {
+impl ProtocolManagedStreamUdpBridgeOps<VlessOutboundLeaf> for VlessStreamBridge {
     type Resume = VlessManagedStreamUdpResume;
 
-    fn direct_udp_resume_for_leaf(&self, leaf: &VlessOutboundLeaf<'a>) -> Self::Resume {
+    fn direct_udp_resume_for_leaf(&self, leaf: &VlessOutboundLeaf) -> Self::Resume {
         ManagedTupleUdpResume::new(leaf.direct_udp_resume(self.mux_pool.clone()))
     }
 
-    fn relay_final_hop_udp_resume_for_leaf(&self, leaf: &VlessOutboundLeaf<'a>) -> Self::Resume {
+    fn relay_final_hop_udp_resume_for_leaf(&self, leaf: &VlessOutboundLeaf) -> Self::Resume {
         ManagedTupleUdpResume::new(leaf.relay_final_hop_udp_resume(self.mux_pool.clone()))
     }
 }
@@ -93,13 +93,13 @@ impl ProtocolManagedStreamUdpBridgeHandlerMetadata for VlessStreamBridge {
     type Resume = VlessManagedStreamUdpResume;
 }
 
-impl<'a> ProtocolRelayTwoStreamManagedUdpBridgeOps<VlessOutboundLeaf<'a>> for VlessStreamBridge {
-    fn udp_relay_needs_two_streams_for_leaf(&self, leaf: &VlessOutboundLeaf<'a>) -> bool {
+impl ProtocolRelayTwoStreamManagedUdpBridgeOps<VlessOutboundLeaf> for VlessStreamBridge {
+    fn udp_relay_needs_two_streams_for_leaf(&self, leaf: &VlessOutboundLeaf) -> bool {
         let _ = self;
         leaf.relay_needs_two_streams()
     }
 
-    fn relay_two_stream_udp_resume_for_leaf(&self, leaf: &VlessOutboundLeaf<'a>) -> Self::Resume {
+    fn relay_two_stream_udp_resume_for_leaf(&self, leaf: &VlessOutboundLeaf) -> Self::Resume {
         ManagedTupleUdpResume::new(leaf.relay_two_stream_udp_resume(self.mux_pool.clone()))
     }
 }

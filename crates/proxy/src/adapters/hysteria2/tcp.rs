@@ -14,7 +14,7 @@ impl Hysteria2Adapter {
         leaf: &'a ResolvedLeafOutbound<'a>,
     ) -> Result<Box<dyn PreparedTcpConnectOperation + 'a>, TcpOutboundFailure> {
         let Some(leaf) = super::transport_leaf(leaf) else {
-            return Err(unreachable_leaf(self.name(), leaf));
+            return Err(unreachable_leaf(self.name()));
         };
         Ok(Box::new(SessionTcpConnectOperation { handshake: leaf }))
     }

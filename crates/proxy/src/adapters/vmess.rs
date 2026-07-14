@@ -2,11 +2,10 @@
 use async_trait::async_trait;
 #[cfg(feature = "vmess")]
 mod listener;
-use ::vmess::transport::{OwnedVmessOutboundTransportPlan, VmessOutboundLeaf, VmessStreamBridge};
+use ::vmess::transport::{VmessOutboundLeaf, VmessStreamBridge};
 #[cfg(feature = "vmess")]
 use zero_config::InboundConfig;
 use zero_config::{InboundProtocolConfig, OutboundProtocolConfig};
-#[cfg(feature = "vmess")]
 #[cfg(feature = "vmess")]
 use zero_engine::{EngineError, ResolvedLeafOutbound};
 use zero_traits::{ProtocolCapabilityDescriptor, ProtocolMetadata};
@@ -15,12 +14,16 @@ use crate::adapters::identity::{
     named_protocol_claims_runtime_leaf, named_protocol_supports_inbound,
     named_protocol_supports_outbound, NamedProtocolAdapter, ProtocolTransportBridgeAdapter,
 };
-use crate::protocol_registry::ProtocolTransportLeafResolver;
+use crate::adapters::transport_bridge::{
+    prepare_transport_bridge_leaf, transport_bridge_connect_prepare_failure,
+    transport_bridge_relay_prepare_error, transport_bridge_udp_direct_prepare_failure,
+    transport_bridge_udp_relay_final_prepare_failure, ProtocolTransportLeafResolver,
+};
 use crate::protocol_registry::{
-    prepare_transport_bridge_tcp_connect, prepare_transport_bridge_tcp_relay, proxy_leaf_runtime,
+    prepare_owned_transport_bridge_udp_relay_final_hop, prepare_transport_bridge_tcp_connect,
+    prepare_transport_bridge_tcp_relay, prepare_transport_bridge_udp_direct, proxy_leaf_runtime,
     InboundListenerCapability, ManagedUdpHandlerProvider, OutboundLeafRuntime,
-    PreparedTransportUdpOperation, ProtocolSupportCapability, TcpOutboundCapability,
-    TransportBridgeUdpOperation, UdpFlowCapability, UdpPacketPathCapability,
+    ProtocolSupportCapability, TcpOutboundCapability, UdpFlowCapability, UdpPacketPathCapability,
 };
 use crate::runtime::path::TcpPathCategory;
 #[cfg(feature = "vmess")]
@@ -62,11 +65,11 @@ impl ProtocolTransportBridgeAdapter for VmessAdapter {
 }
 
 #[cfg(feature = "vmess")]
-impl<'a> ProtocolTransportLeafResolver<'a> for VmessStreamBridge {
-    type TransportLeaf = VmessOutboundLeaf<'a>;
+impl ProtocolTransportLeafResolver for VmessStreamBridge {
+    type TransportLeaf = VmessOutboundLeaf;
     type ResolveError = zero_core::Error;
 
-    fn resolve_transport_leaf(
+    fn resolve_transport_leaf<'a>(
         &self,
         source_dir: Option<&std::path::Path>,
         leaf: &ResolvedLeafOutbound<'a>,
@@ -86,18 +89,19 @@ impl<'a> ProtocolTransportLeafResolver<'a> for VmessStreamBridge {
         else {
             return Ok(None);
         };
-        let transport = OwnedVmessOutboundTransportPlan::from_profile_refs(
-            source_dir, server, *port, *tls, *ws, *grpc,
-        );
-        let protocol = ::vmess::outbound::PreparedVmessOutboundRequestBundle::from_config_with_transport_hints(
+        let resolved = VmessOutboundLeaf::from_profile_refs(
+            source_dir,
+            tag,
+            server,
+            *port,
             id,
             cipher,
             *mux_concurrency,
-            transport.mux_transport_hints(),
+            *tls,
+            *ws,
+            *grpc,
         )?;
-        Ok(Some(VmessOutboundLeaf::new(
-            tag, server, *port, transport, protocol,
-        )))
+        Ok(Some(resolved))
     }
 }
 
@@ -163,19 +167,28 @@ impl TcpOutboundCapability for VmessAdapter {
     }
 
     fn prepare_tcp_connect<'a>(
-        &'a self,
+        &self,
         leaf: &'a ResolvedLeafOutbound<'a>,
         source_dir: Option<&std::path::Path>,
     ) -> Result<Box<dyn PreparedTcpConnectOperation + 'a>, TcpOutboundFailure> {
-        prepare_transport_bridge_tcp_connect(self.bridge(), source_dir, leaf)
+        let prepared =
+            prepare_transport_bridge_leaf(self.bridge(), source_dir, leaf).map_err(|error| {
+                transport_bridge_connect_prepare_failure::<VmessStreamBridge, _>(leaf, error)
+            })?;
+        Ok(prepare_transport_bridge_tcp_connect(
+            self.bridge(),
+            prepared,
+        ))
     }
 
     fn prepare_tcp_relay_hop<'a>(
-        &'a self,
+        &self,
         leaf: &'a ResolvedLeafOutbound<'a>,
         source_dir: Option<&std::path::Path>,
     ) -> Result<Box<dyn PreparedTcpRelayOperation + 'a>, EngineError> {
-        prepare_transport_bridge_tcp_relay(self.bridge(), source_dir, leaf)
+        let prepared = prepare_transport_bridge_leaf(self.bridge(), source_dir, leaf)
+            .map_err(transport_bridge_relay_prepare_error::<VmessStreamBridge, _>)?;
+        Ok(prepare_transport_bridge_tcp_relay(self.bridge(), prepared))
     }
 }
 
@@ -183,24 +196,34 @@ impl TcpOutboundCapability for VmessAdapter {
 #[async_trait]
 impl UdpFlowCapability for VmessAdapter {
     fn prepare_udp_flow<'a>(
-        &'a self,
+        &self,
         leaf: &'a ResolvedLeafOutbound<'a>,
+        source_dir: Option<&std::path::Path>,
     ) -> Result<Box<dyn PreparedUdpFlowOperation + 'a>, FlowFailure> {
-        Ok(Box::new(TransportBridgeUdpOperation {
-            bridge: self.bridge(),
-            operation: PreparedTransportUdpOperation::Direct { leaf },
-        }))
+        let prepared =
+            prepare_transport_bridge_leaf(self.bridge(), source_dir, leaf).map_err(|error| {
+                transport_bridge_udp_direct_prepare_failure::<VmessStreamBridge, _>(leaf, error)
+            })?;
+        Ok(prepare_transport_bridge_udp_direct(self.bridge(), prepared))
     }
 
-    fn prepare_udp_relay_final_hop<'a>(
-        &'a self,
+    fn prepare_owned_udp_relay_final_hop<'a>(
+        &self,
         carrier: crate::transport::RelayCarrier,
-        leaf: &'a ResolvedLeafOutbound<'a>,
+        leaf: ResolvedLeafOutbound<'a>,
+        source_dir: Option<&std::path::Path>,
     ) -> Result<Box<dyn PreparedUdpFlowOperation + 'a>, FlowFailure> {
-        Ok(Box::new(TransportBridgeUdpOperation {
-            bridge: self.bridge(),
-            operation: PreparedTransportUdpOperation::RelayFinalHop { carrier, leaf },
-        }))
+        let prepared =
+            prepare_transport_bridge_leaf(self.bridge(), source_dir, &leaf).map_err(|error| {
+                transport_bridge_udp_relay_final_prepare_failure::<VmessStreamBridge, _>(
+                    &leaf, error,
+                )
+            })?;
+        Ok(prepare_owned_transport_bridge_udp_relay_final_hop(
+            self.bridge(),
+            carrier,
+            prepared,
+        ))
     }
 }
 

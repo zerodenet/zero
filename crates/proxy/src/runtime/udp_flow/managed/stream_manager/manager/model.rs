@@ -4,9 +4,9 @@ use std::sync::Arc;
 use zero_core::Session;
 
 use super::super::super::cache::ManagedUdpConnectionCache;
+use crate::protocol_registry::UdpRuntimeServices;
 use crate::runtime::path::OutboundEndpoint;
 use crate::runtime::udp_flow::packet_path::{UdpFlowContext, UdpPacketRef};
-use crate::runtime::Proxy;
 use crate::transport::TcpRelayStream;
 
 pub(crate) struct ManagedStreamFlowManager<T> {
@@ -34,7 +34,7 @@ pub(super) struct ManagedStreamRelayRequest<'a, T> {
     pub(super) ctx: UdpFlowContext<'a>,
     pub(super) stream: TcpRelayStream,
     pub(super) tls_server_name: Option<&'a str>,
-    pub(super) proxy: Option<&'a Proxy>,
+    pub(super) services: Option<UdpRuntimeServices>,
     pub(super) session: &'a Session,
     pub(super) endpoint: OutboundEndpoint<'a>,
     pub(super) resume: T,

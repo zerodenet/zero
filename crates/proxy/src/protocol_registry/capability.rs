@@ -85,7 +85,7 @@ pub(crate) trait TcpOutboundCapability: Send + Sync {
     }
 
     fn prepare_tcp_connect<'a>(
-        &'a self,
+        &self,
         _leaf: &'a ResolvedLeafOutbound<'a>,
         _source_dir: Option<&std::path::Path>,
     ) -> Result<Box<dyn PreparedTcpConnectOperation + 'a>, TcpOutboundFailure> {
@@ -93,7 +93,7 @@ pub(crate) trait TcpOutboundCapability: Send + Sync {
     }
 
     fn prepare_tcp_relay_hop<'a>(
-        &'a self,
+        &self,
         _leaf: &'a ResolvedLeafOutbound<'a>,
         _source_dir: Option<&std::path::Path>,
     ) -> Result<Box<dyn PreparedTcpRelayOperation + 'a>, EngineError> {
@@ -113,33 +113,43 @@ pub(crate) trait TcpOutboundCapability: Send + Sync {
 ))]
 pub(crate) trait UdpFlowCapability: Send + Sync {
     fn prepare_udp_flow<'a>(
-        &'a self,
+        &self,
         _leaf: &'a ResolvedLeafOutbound<'a>,
+        _source_dir: Option<&std::path::Path>,
     ) -> Result<Box<dyn PreparedUdpFlowOperation + 'a>, crate::runtime::udp_dispatch::FlowFailure>
     {
         Err(super::defaults::udp_outbound_unsupported())
     }
 
-    fn udp_relay_needs_two_streams(&self, _leaf: &ResolvedLeafOutbound<'_>) -> bool {
+    fn udp_relay_needs_two_streams(
+        &self,
+        _leaf: &ResolvedLeafOutbound<'_>,
+        _source_dir: Option<&std::path::Path>,
+    ) -> bool {
         false
     }
 
-    fn prepare_udp_relay_two_stream<'a>(
-        &'a self,
-        _chain: Vec<ResolvedLeafOutbound<'a>>,
-    ) -> Result<Box<dyn PreparedUdpFlowOperation + 'a>, crate::runtime::udp_dispatch::FlowFailure>
-    {
-        Err(super::defaults::udp_two_stream_relay_unsupported())
-    }
-
-    fn prepare_udp_relay_final_hop<'a>(
-        &'a self,
+    fn prepare_owned_udp_relay_final_hop<'a>(
+        &self,
         carrier: crate::transport::RelayCarrier,
-        _leaf: &'a ResolvedLeafOutbound<'a>,
+        _leaf: ResolvedLeafOutbound<'a>,
+        _source_dir: Option<&std::path::Path>,
     ) -> Result<Box<dyn PreparedUdpFlowOperation + 'a>, crate::runtime::udp_dispatch::FlowFailure>
     {
         let _ = carrier;
         Err(super::defaults::udp_relay_final_hop_unsupported())
+    }
+
+    fn prepare_owned_udp_relay_two_stream<'a>(
+        &self,
+        post_carrier: crate::transport::RelayCarrier,
+        get_carrier: crate::transport::RelayCarrier,
+        _leaf: ResolvedLeafOutbound<'a>,
+        _source_dir: Option<&std::path::Path>,
+    ) -> Result<Box<dyn PreparedUdpFlowOperation + 'a>, crate::runtime::udp_dispatch::FlowFailure>
+    {
+        let _ = (post_carrier, get_carrier);
+        Err(super::defaults::udp_two_stream_relay_unsupported())
     }
 }
 

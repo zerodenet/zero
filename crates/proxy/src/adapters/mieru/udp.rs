@@ -23,7 +23,7 @@ impl MieruAdapter {
         leaf: &'a ResolvedLeafOutbound<'a>,
     ) -> Result<Box<dyn PreparedUdpFlowOperation + 'a>, FlowFailure> {
         let Some(leaf) = super::transport_leaf(leaf) else {
-            return Err(unreachable_udp_leaf("mieru", leaf));
+            return Err(unreachable_udp_leaf("mieru"));
         };
         Ok(Box::new(ManagedStreamPacketUdpOperation {
             operation: PreparedManagedStreamPacketOperation::Direct {
@@ -33,13 +33,13 @@ impl MieruAdapter {
         }))
     }
 
-    pub(super) fn prepare_udp_relay_final_hop_impl<'a>(
+    pub(super) fn prepare_owned_udp_relay_final_hop_impl<'a>(
         &self,
         carrier: crate::transport::RelayCarrier,
-        leaf: &'a ResolvedLeafOutbound<'a>,
+        leaf: ResolvedLeafOutbound<'a>,
     ) -> Result<Box<dyn PreparedUdpFlowOperation + 'a>, FlowFailure> {
-        let Some(leaf) = super::transport_leaf(leaf) else {
-            return Err(unreachable_udp_leaf("mieru", leaf));
+        let Some(leaf) = super::transport_leaf(&leaf) else {
+            return Err(unreachable_udp_leaf("mieru"));
         };
         Ok(Box::new(ManagedStreamPacketUdpOperation {
             operation: PreparedManagedStreamPacketOperation::RelayFinalHop {

@@ -8,7 +8,6 @@ use super::bridge::recv_loop;
 use super::model::{Entry, EntryCandidate};
 use crate::protocol_registry::UdpAdapterContext;
 use crate::runtime::udp_dispatch::packet_path_operation::PreparedUdpPacketPathOperation;
-use crate::runtime::Proxy;
 
 pub(super) fn log_candidate(candidate: &EntryCandidate) {
     let carrier_desc = &candidate.carrier_desc;
@@ -25,14 +24,12 @@ pub(super) fn log_candidate(candidate: &EntryCandidate) {
 }
 
 pub(super) async fn build_entry(
-    proxy: &Proxy,
+    ctx: UdpAdapterContext<'_>,
     build_operation: Box<dyn PreparedUdpPacketPathOperation + '_>,
     candidate: EntryCandidate,
 ) -> Result<Entry, EngineError> {
     log_candidate(&candidate);
-    let path = build_operation
-        .build_carrier(UdpAdapterContext::new(proxy))
-        .await?;
+    let path = build_operation.build_carrier(ctx).await?;
     let codec = candidate.datagram.codec.clone();
     let datagram_desc = candidate.datagram.descriptor();
     let waiters = Arc::new(Mutex::new(VecDeque::new()));

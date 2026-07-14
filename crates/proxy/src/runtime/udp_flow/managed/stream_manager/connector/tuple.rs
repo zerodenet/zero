@@ -12,8 +12,8 @@ use super::flow::{
     managed_stream_connector_flow_from_build, ManagedStreamConnectorFlow,
     ManagedStreamFlowConnector,
 };
+use crate::protocol_registry::UdpRuntimeServices;
 use crate::runtime::path::OutboundEndpoint;
-use crate::runtime::Proxy;
 use crate::transport::TcpRelayStream;
 
 #[async_trait]
@@ -35,14 +35,16 @@ where
 
     async fn establish_direct(
         &self,
-        proxy: &Proxy,
+        services: UdpRuntimeServices,
         session: &Session,
         _endpoint: OutboundEndpoint<'_>,
     ) -> Result<SharedManagedUdpConnection, EngineError> {
         let connection = self
             .0
             .open_direct_protocol_connection(session, move |server, port| {
-                proxy.connect_upstream_host_owned(server.to_owned(), port)
+                let services = services.clone();
+                let server = server.to_owned();
+                async move { services.connect_upstream(&server, port).await }
             })
             .await?;
         Ok(managed_tuple_udp_connection_from_ops(connection))
@@ -52,7 +54,7 @@ where
         &self,
         stream: TcpRelayStream,
         tls_server_name: Option<&str>,
-        _proxy: Option<&Proxy>,
+        _services: Option<UdpRuntimeServices>,
         session: &Session,
         _endpoint: OutboundEndpoint<'_>,
     ) -> Result<SharedManagedUdpConnection, EngineError> {

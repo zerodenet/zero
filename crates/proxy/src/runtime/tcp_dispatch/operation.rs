@@ -19,13 +19,13 @@ use zero_transport::outbound_leaf::{
     ProtocolTcpTransportOpenResult, ProtocolTransportLeaf,
 };
 
-use crate::protocol_registry::OutboundAdapterContext;
+use crate::protocol_registry::TcpRuntimeServices;
 use crate::transport::{EstablishedTcpOutbound, TcpOutboundFailure, TcpRelayStream};
 
 pub(crate) trait PreparedTcpConnectOperation: Send {
     fn execute<'a>(
         self: Box<Self>,
-        ctx: OutboundAdapterContext<'a>,
+        services: TcpRuntimeServices,
         session: &'a Session,
     ) -> Pin<Box<dyn Future<Output = Result<EstablishedTcpOutbound, TcpOutboundFailure>> + Send + 'a>>
     where
@@ -35,7 +35,7 @@ pub(crate) trait PreparedTcpConnectOperation: Send {
 pub(crate) trait PreparedTcpRelayOperation: Send {
     fn execute<'a>(
         self: Box<Self>,
-        ctx: OutboundAdapterContext<'a>,
+        services: TcpRuntimeServices,
         stream: TcpRelayStream,
         session: &'a Session,
     ) -> Pin<Box<dyn Future<Output = Result<TcpRelayStream, EngineError>> + Send + 'a>>
@@ -50,7 +50,7 @@ pub(crate) struct DirectTcpConnectOperation {
 impl PreparedTcpConnectOperation for DirectTcpConnectOperation {
     fn execute<'a>(
         self: Box<Self>,
-        ctx: OutboundAdapterContext<'a>,
+        services: TcpRuntimeServices,
         session: &'a Session,
     ) -> Pin<Box<dyn Future<Output = Result<EstablishedTcpOutbound, TcpOutboundFailure>> + Send + 'a>>
     where
@@ -58,7 +58,7 @@ impl PreparedTcpConnectOperation for DirectTcpConnectOperation {
     {
         Box::pin(async move {
             execute_direct_tcp_operation(
-                ctx,
+                services,
                 session,
                 PreparedTcpOperation::Direct { tag: &self.tag },
             )
@@ -95,7 +95,7 @@ where
 {
     fn execute<'a>(
         self: Box<Self>,
-        ctx: OutboundAdapterContext<'a>,
+        services: TcpRuntimeServices,
         session: &'a Session,
     ) -> Pin<Box<dyn Future<Output = Result<EstablishedTcpOutbound, TcpOutboundFailure>> + Send + 'a>>
     where
@@ -103,7 +103,7 @@ where
     {
         Box::pin(async move {
             execute_socket_tcp_connect_operation(
-                ctx,
+                services,
                 session,
                 PreparedSocketTcpOperation {
                     handshake: &self.handshake,
@@ -142,7 +142,7 @@ where
 {
     fn execute<'a>(
         self: Box<Self>,
-        _ctx: OutboundAdapterContext<'a>,
+        _services: TcpRuntimeServices,
         stream: TcpRelayStream,
         session: &'a Session,
     ) -> Pin<Box<dyn Future<Output = Result<TcpRelayStream, EngineError>> + Send + 'a>>
@@ -190,7 +190,7 @@ where
 {
     fn execute<'a>(
         self: Box<Self>,
-        _ctx: OutboundAdapterContext<'a>,
+        _services: TcpRuntimeServices,
         session: &'a Session,
     ) -> Pin<Box<dyn Future<Output = Result<EstablishedTcpOutbound, TcpOutboundFailure>> + Send + 'a>>
     where
@@ -217,8 +217,8 @@ where
     feature = "vmess",
     feature = "mieru"
 ))]
-pub(crate) struct TransportBridgeTcpConnectOperation<'a, TBridge, TLeaf> {
-    pub(crate) bridge: &'a TBridge,
+pub(crate) struct TransportBridgeTcpConnectOperation<TBridge, TLeaf> {
+    pub(crate) bridge: TBridge,
     pub(crate) prepared: PreparedTransportBridgeLeaf<TLeaf>,
 }
 
@@ -232,7 +232,7 @@ pub(crate) struct TransportBridgeTcpConnectOperation<'a, TBridge, TLeaf> {
     feature = "mieru"
 ))]
 impl<TBridge, TLeaf> PreparedTcpConnectOperation
-    for TransportBridgeTcpConnectOperation<'_, TBridge, TLeaf>
+    for TransportBridgeTcpConnectOperation<TBridge, TLeaf>
 where
     TBridge:
         Send + Sync + ProtocolTcpTransportBridgeMetadata + ProtocolTcpTransportBridgeOps<TLeaf>,
@@ -241,7 +241,7 @@ where
 {
     fn execute<'a>(
         self: Box<Self>,
-        ctx: OutboundAdapterContext<'a>,
+        services: TcpRuntimeServices,
         session: &'a Session,
     ) -> Pin<Box<dyn Future<Output = Result<EstablishedTcpOutbound, TcpOutboundFailure>> + Send + 'a>>
     where
@@ -252,12 +252,16 @@ where
             let tag = endpoint.tag.to_owned();
             let server = endpoint.server.to_owned();
             let port = endpoint.port;
-            let proxy = ctx.proxy();
+            let dial_services = services.clone();
             let opened = open_prepared_tcp_transport_bridge_stream(
-                self.bridge,
+                &self.bridge,
                 session,
                 &self.prepared,
-                move |server, port| proxy.connect_upstream_host_owned(server.to_owned(), port),
+                move |server, port| {
+                    let services = dial_services.clone();
+                    let server = server.to_owned();
+                    async move { services.connect_upstream_owned(server, port).await }
+                },
             )
             .await
             .map_err(|error| TcpOutboundFailure {
@@ -267,7 +271,7 @@ where
             })?;
             let (stream, traffic) = opened.into_proxied_stream_parts();
             if !traffic.is_empty() {
-                proxy.record_session_outbound_traffic(session.id, traffic);
+                services.record_control_traffic(session.id, traffic);
             }
             Ok(EstablishedTcpOutbound::proxied(tag, server, port, stream))
         })
@@ -283,8 +287,8 @@ where
     feature = "vmess",
     feature = "mieru"
 ))]
-pub(crate) struct TransportBridgeTcpRelayOperation<'a, TBridge, TLeaf> {
-    pub(crate) bridge: &'a TBridge,
+pub(crate) struct TransportBridgeTcpRelayOperation<TBridge, TLeaf> {
+    pub(crate) bridge: TBridge,
     pub(crate) prepared: PreparedTransportBridgeLeaf<TLeaf>,
 }
 
@@ -297,15 +301,14 @@ pub(crate) struct TransportBridgeTcpRelayOperation<'a, TBridge, TLeaf> {
     feature = "vmess",
     feature = "mieru"
 ))]
-impl<TBridge, TLeaf> PreparedTcpRelayOperation
-    for TransportBridgeTcpRelayOperation<'_, TBridge, TLeaf>
+impl<TBridge, TLeaf> PreparedTcpRelayOperation for TransportBridgeTcpRelayOperation<TBridge, TLeaf>
 where
     TBridge: Send + Sync + ProtocolTcpTransportBridgeOps<TLeaf>,
     TLeaf: Send + Sync,
 {
     fn execute<'a>(
         self: Box<Self>,
-        _ctx: OutboundAdapterContext<'a>,
+        _services: TcpRuntimeServices,
         stream: TcpRelayStream,
         session: &'a Session,
     ) -> Pin<Box<dyn Future<Output = Result<TcpRelayStream, EngineError>> + Send + 'a>>
@@ -314,7 +317,7 @@ where
     {
         Box::pin(async move {
             open_prepared_tcp_transport_bridge_relay_hop(
-                self.bridge,
+                &self.bridge,
                 stream,
                 session,
                 &self.prepared,
@@ -403,18 +406,17 @@ where
     feature = "mieru"
 ))]
 pub(crate) async fn execute_socket_tcp_connect_operation<T>(
-    ctx: OutboundAdapterContext<'_>,
+    services: TcpRuntimeServices,
     session: &Session,
     operation: PreparedSocketTcpOperation<'_, T>,
 ) -> Result<EstablishedTcpOutbound, TcpOutboundFailure>
 where
     T: ProtocolSocketTcpHandshake,
 {
-    let proxy = ctx.proxy();
     let handshake = operation.handshake;
     let endpoint = (handshake.server().to_owned(), handshake.port());
-    let socket = proxy
-        .connect_upstream_host_owned(endpoint.0.clone(), endpoint.1)
+    let socket = services
+        .connect_upstream_owned(endpoint.0.clone(), endpoint.1)
         .await
         .map_err(|error| TcpOutboundFailure {
             stage: handshake.connect_stage(),
@@ -430,7 +432,7 @@ where
             upstream_endpoint: Some(endpoint.clone()),
         })?;
     if !traffic.is_empty() {
-        proxy.record_session_outbound_traffic(session.id, traffic);
+        services.record_control_traffic(session.id, traffic);
     }
     Ok(EstablishedTcpOutbound::proxied(
         handshake.tag().to_owned(),
@@ -465,24 +467,18 @@ where
 }
 
 pub(crate) async fn execute_direct_tcp_operation(
-    ctx: OutboundAdapterContext<'_>,
+    services: TcpRuntimeServices,
     session: &Session,
     operation: PreparedTcpOperation<'_, '_>,
 ) -> Result<EstablishedTcpOutbound, TcpOutboundFailure> {
     let PreparedTcpOperation::Direct { tag } = operation else {
         unreachable!("direct TCP executor received an invalid operation")
     };
-    let proxy = ctx.proxy();
-    match proxy
-        .protocols
-        .direct_connector()
-        .connect(session, proxy.resolver.as_ref())
-        .await
-    {
+    match services.connect_direct(session).await {
         Ok(upstream) => Ok(EstablishedTcpOutbound::direct(tag, upstream.into())),
         Err(error) => Err(TcpOutboundFailure {
             stage: "connect_direct",
-            error: error.into(),
+            error,
             upstream_endpoint: None,
         }),
     }

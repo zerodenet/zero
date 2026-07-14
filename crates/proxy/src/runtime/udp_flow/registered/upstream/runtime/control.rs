@@ -16,7 +16,7 @@ where
     T: UpstreamAssociationTarget + 'static,
     A: UpstreamAssociationTransport<T>,
 {
-    let Some(proxy) = request.proxy else {
+    let Some(services) = request.services else {
         return Err(upstream_flow_mismatch(
             proxy_stage,
             request.server,
@@ -35,7 +35,7 @@ where
 
     runtime
         .send_packet(
-            proxy,
+            &services,
             inbound_tag,
             association,
             request.session,

@@ -18,6 +18,28 @@ mod tests;
 ))]
 mod udp;
 
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
+pub(crate) use tcp::dispatch_prepared_tcp_relay_carrier;
+pub(crate) use tcp::{dispatch_tcp_outbound, PreparedTcpCandidate, PreparedTcpRelayChain};
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
+pub(crate) use udp::start_udp_resolved_outbound;
+
 #[derive(Debug, Clone)]
 pub struct ProtocolInventory {
     registry: ProtocolRegistry,

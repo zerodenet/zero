@@ -30,7 +30,7 @@ pub(crate) mod udp;
 #[derive(Debug)]
 pub(crate) struct MieruAdapter;
 
-fn transport_leaf<'a>(leaf: &'a ResolvedLeafOutbound<'a>) -> Option<MieruTransportLeaf<'a>> {
+fn transport_leaf(leaf: &ResolvedLeafOutbound<'_>) -> Option<MieruTransportLeaf> {
     let ResolvedLeafOutbound::Mieru {
         tag,
         server,
@@ -56,23 +56,25 @@ impl NamedProtocolAdapter for MieruAdapter {
 #[async_trait]
 impl UdpFlowCapability for MieruAdapter {
     fn prepare_udp_flow<'a>(
-        &'a self,
+        &self,
         leaf: &'a ResolvedLeafOutbound<'a>,
+        _source_dir: Option<&std::path::Path>,
     ) -> Result<
         Box<dyn crate::runtime::udp_dispatch::operation::PreparedUdpFlowOperation + 'a>,
         FlowFailure,
     > {
         self.prepare_udp_flow_impl(leaf)
     }
-    fn prepare_udp_relay_final_hop<'a>(
-        &'a self,
+    fn prepare_owned_udp_relay_final_hop<'a>(
+        &self,
         carrier: crate::transport::RelayCarrier,
-        leaf: &'a ResolvedLeafOutbound<'a>,
+        leaf: ResolvedLeafOutbound<'a>,
+        _source_dir: Option<&std::path::Path>,
     ) -> Result<
         Box<dyn crate::runtime::udp_dispatch::operation::PreparedUdpFlowOperation + 'a>,
         FlowFailure,
     > {
-        self.prepare_udp_relay_final_hop_impl(carrier, leaf)
+        self.prepare_owned_udp_relay_final_hop_impl(carrier, leaf)
     }
 }
 
@@ -115,7 +117,7 @@ impl TcpOutboundCapability for MieruAdapter {
     }
 
     fn prepare_tcp_connect<'a>(
-        &'a self,
+        &self,
         leaf: &'a ResolvedLeafOutbound<'a>,
         _source_dir: Option<&std::path::Path>,
     ) -> Result<
@@ -126,7 +128,7 @@ impl TcpOutboundCapability for MieruAdapter {
     }
 
     fn prepare_tcp_relay_hop<'a>(
-        &'a self,
+        &self,
         leaf: &'a ResolvedLeafOutbound<'a>,
         _source_dir: Option<&std::path::Path>,
     ) -> Result<

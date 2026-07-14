@@ -12,7 +12,7 @@ impl DirectAdapter {
         leaf: &'a ResolvedLeafOutbound<'a>,
     ) -> Result<Box<dyn PreparedUdpFlowOperation + 'a>, FlowFailure> {
         let ResolvedLeafOutbound::Direct { tag } = leaf else {
-            return Err(unreachable_udp_leaf(self.name(), leaf));
+            return Err(unreachable_udp_leaf(self.name()));
         };
         Ok(Box::new(DirectUdpFlowOperation {
             tag: (*tag).unwrap_or("direct").to_owned(),

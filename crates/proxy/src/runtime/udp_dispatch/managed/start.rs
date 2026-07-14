@@ -89,7 +89,7 @@ impl UdpDispatch {
     ) -> Result<usize, FlowFailure> {
         self.start_managed_flow(ManagedUdpFlowRequest {
             chain_tasks: None,
-            proxy: request.proxy,
+            services: request.services,
             kind: request.kind,
             session: request.session,
             #[cfg(any(
@@ -140,7 +140,7 @@ impl UdpDispatch {
     #[cfg(any(feature = "hysteria2", feature = "shadowsocks"))]
     pub(crate) async fn start_transport_managed_datagram<T>(
         &mut self,
-        proxy: Option<&crate::runtime::Proxy>,
+        services: Option<crate::protocol_registry::UdpRuntimeServices>,
         session: &zero_core::Session,
         payload: &[u8],
         plan: zero_transport::managed_udp::ManagedDatagramStartPlan<'_, T>,
@@ -149,7 +149,7 @@ impl UdpDispatch {
         T: std::any::Any + Send + Sync + std::fmt::Debug,
     {
         self.start_tracked_managed_datagram(ManagedDatagramStart {
-            proxy,
+            services,
             tag: plan.tag,
             session,
             server: plan.server,
@@ -169,7 +169,7 @@ impl UdpDispatch {
         T: std::any::Any + Send + Sync + std::fmt::Debug,
     {
         self.start_tracked_managed_udp(ManagedUdpSend {
-            proxy: request.proxy,
+            services: request.services,
             tag: request.tag,
             session: request.session,
             #[cfg(any(
@@ -209,7 +209,7 @@ impl UdpDispatch {
             .start_upstream_flow(
                 &self.inbound_tag,
                 UpstreamAssociationSend {
-                    proxy: request.proxy,
+                    services: request.services,
                     session: request.session,
                     server: request.server,
                     port: request.port,

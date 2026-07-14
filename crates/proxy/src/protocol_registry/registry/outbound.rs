@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use zero_engine::{EngineError, ResolvedLeafOutbound};
 
-use super::ProtocolRegistry;
+use super::{ProtocolRegistry, RegisteredProtocolEntry};
 use crate::protocol_registry::{OutboundLeafRuntime, TcpOutboundCapability};
 #[cfg(any(
     feature = "socks5",
@@ -15,6 +15,60 @@ use crate::protocol_registry::{OutboundLeafRuntime, TcpOutboundCapability};
 ))]
 use crate::protocol_registry::{UdpFlowCapability, UdpPacketPathCapability};
 use crate::runtime::path::TcpPathCategory;
+
+pub(crate) struct ClaimedOutboundLeaf<'a> {
+    pub(crate) runtime: OutboundLeafRuntime<'a>,
+    pub(crate) tcp: Option<Arc<dyn TcpOutboundCapability>>,
+    #[cfg(any(
+        feature = "socks5",
+        feature = "vless",
+        feature = "hysteria2",
+        feature = "shadowsocks",
+        feature = "trojan",
+        feature = "vmess",
+        feature = "mieru"
+    ))]
+    pub(crate) udp: Option<Arc<dyn UdpFlowCapability>>,
+    #[cfg(any(
+        feature = "socks5",
+        feature = "vless",
+        feature = "hysteria2",
+        feature = "shadowsocks",
+        feature = "trojan",
+        feature = "vmess",
+        feature = "mieru"
+    ))]
+    pub(crate) packet_path: Option<Arc<dyn UdpPacketPathCapability>>,
+}
+
+impl<'a> ClaimedOutboundLeaf<'a> {
+    fn new(runtime: OutboundLeafRuntime<'a>, entry: Option<&RegisteredProtocolEntry>) -> Self {
+        Self {
+            runtime,
+            tcp: entry.map(|entry| entry.tcp.clone()),
+            #[cfg(any(
+                feature = "socks5",
+                feature = "vless",
+                feature = "hysteria2",
+                feature = "shadowsocks",
+                feature = "trojan",
+                feature = "vmess",
+                feature = "mieru"
+            ))]
+            udp: entry.and_then(|entry| entry.udp.clone()),
+            #[cfg(any(
+                feature = "socks5",
+                feature = "vless",
+                feature = "hysteria2",
+                feature = "shadowsocks",
+                feature = "trojan",
+                feature = "vmess",
+                feature = "mieru"
+            ))]
+            packet_path: entry.and_then(|entry| entry.packet_path.clone()),
+        }
+    }
+}
 
 pub(crate) fn direct_leaf_runtime<'a>(
     leaf: &ResolvedLeafOutbound<'a>,
@@ -92,71 +146,73 @@ pub(crate) fn proxy_leaf_runtime<'a>(
     })
 }
 
+pub(crate) fn block_leaf_runtime<'a>(tag: Option<&'a str>) -> OutboundLeafRuntime<'a> {
+    OutboundLeafRuntime {
+        tcp_path: TcpPathCategory::Block,
+        #[cfg(any(
+            feature = "socks5",
+            feature = "vless",
+            feature = "hysteria2",
+            feature = "shadowsocks",
+            feature = "trojan",
+            feature = "vmess",
+            feature = "mieru"
+        ))]
+        health_tag: None,
+        endpoint: None,
+        kernel_tag: tag,
+        #[cfg(any(
+            feature = "socks5",
+            feature = "vless",
+            feature = "hysteria2",
+            feature = "shadowsocks",
+            feature = "trojan",
+            feature = "vmess",
+            feature = "mieru"
+        ))]
+        udp_policy_tag: tag,
+    }
+}
+
 impl ProtocolRegistry {
-    /// Find the adapter that owns this resolved outbound leaf, if any.
-    ///
-    /// Single dispatch point: the TCP/UDP runtime resolves a
-    /// [`ResolvedLeafOutbound`] to its adapter here instead of matching on
-    /// the protocol enum. Each adapter claims exactly its own variant via
-    /// [`TcpOutboundCapability::claims_outbound_leaf`].
-    pub(crate) fn find_outbound_leaf(
+    fn claimed_outbound_entry(
         &self,
         leaf: &ResolvedLeafOutbound<'_>,
-    ) -> Result<Arc<dyn TcpOutboundCapability>, EngineError> {
-        for entry in &self.entries {
-            if entry.tcp.claims_outbound_leaf(leaf) {
-                return Ok(entry.tcp.clone());
-            }
-        }
-        Err(EngineError::Io(std::io::Error::new(
-            std::io::ErrorKind::Unsupported,
-            "no compiled adapter handles this outbound leaf",
-        )))
+    ) -> Option<&RegisteredProtocolEntry> {
+        self.entries
+            .iter()
+            .find(|entry| entry.tcp.claims_outbound_leaf(leaf))
     }
 
-    #[cfg(any(
-        feature = "socks5",
-        feature = "vless",
-        feature = "hysteria2",
-        feature = "shadowsocks",
-        feature = "trojan",
-        feature = "vmess",
-        feature = "mieru"
-    ))]
-    pub(crate) fn find_udp_flow_leaf(
+    fn required_outbound_entry(
         &self,
         leaf: &ResolvedLeafOutbound<'_>,
-    ) -> Result<Arc<dyn UdpFlowCapability>, EngineError> {
-        for entry in &self.entries {
-            if entry.tcp.claims_outbound_leaf(leaf) {
-                return entry.udp.clone().ok_or_else(unsupported_outbound_leaf);
-            }
-        }
-        Err(unsupported_outbound_leaf())
+    ) -> Result<&RegisteredProtocolEntry, EngineError> {
+        self.claimed_outbound_entry(leaf)
+            .ok_or_else(unsupported_outbound_leaf)
     }
 
-    #[cfg(any(
-        feature = "socks5",
-        feature = "vless",
-        feature = "hysteria2",
-        feature = "shadowsocks",
-        feature = "trojan",
-        feature = "vmess",
-        feature = "mieru"
-    ))]
-    pub(crate) fn find_udp_packet_path_leaf(
+    fn claimed_runtime_and_entry<'a>(
         &self,
-        leaf: &ResolvedLeafOutbound<'_>,
-    ) -> Result<Arc<dyn UdpPacketPathCapability>, EngineError> {
-        for entry in &self.entries {
-            if entry.tcp.claims_outbound_leaf(leaf) {
-                return entry
-                    .packet_path
-                    .clone()
-                    .ok_or_else(unsupported_outbound_leaf);
-            }
+        leaf: &ResolvedLeafOutbound<'a>,
+    ) -> Result<(OutboundLeafRuntime<'a>, Option<&RegisteredProtocolEntry>), EngineError> {
+        let runtime = self.outbound_leaf_runtime(leaf)?;
+        if matches!(runtime.tcp_path, TcpPathCategory::Block) {
+            return Ok((runtime, None));
         }
-        Err(unsupported_outbound_leaf())
+        let entry = self.required_outbound_entry(leaf)?;
+        Ok((runtime, Some(entry)))
+    }
+
+    /// Single dispatch point: the inventory claims a [`ResolvedLeafOutbound`]
+    /// once and receives neutral runtime facts plus the compiled capabilities
+    /// that own that leaf.
+    pub(crate) fn claim_outbound_leaf<'a>(
+        &self,
+        leaf: &ResolvedLeafOutbound<'a>,
+    ) -> Result<ClaimedOutboundLeaf<'a>, EngineError> {
+        let (runtime, entry) = self.claimed_runtime_and_entry(leaf)?;
+        Ok(ClaimedOutboundLeaf::new(runtime, entry))
     }
 
     /// Return neutral runtime facts for a resolved outbound leaf.
@@ -169,62 +225,29 @@ impl ProtocolRegistry {
         leaf: &ResolvedLeafOutbound<'a>,
     ) -> Result<OutboundLeafRuntime<'a>, EngineError> {
         if let ResolvedLeafOutbound::Block { tag } = leaf {
-            return Ok(OutboundLeafRuntime {
-                tcp_path: TcpPathCategory::Block,
-                #[cfg(any(
-                    feature = "socks5",
-                    feature = "vless",
-                    feature = "hysteria2",
-                    feature = "shadowsocks",
-                    feature = "trojan",
-                    feature = "vmess",
-                    feature = "mieru"
-                ))]
-                health_tag: None,
-                endpoint: None,
-                kernel_tag: *tag,
-                #[cfg(any(
-                    feature = "socks5",
-                    feature = "vless",
-                    feature = "hysteria2",
-                    feature = "shadowsocks",
-                    feature = "trojan",
-                    feature = "vmess",
-                    feature = "mieru"
-                ))]
-                udp_policy_tag: *tag,
-            });
+            return Ok(block_leaf_runtime(*tag));
         }
 
-        for entry in &self.entries {
-            if !entry.tcp.claims_outbound_leaf(leaf) {
-                continue;
-            }
-            if let Some(runtime) = entry.tcp.outbound_leaf_runtime(leaf) {
-                return Ok(runtime);
-            }
-            break;
-        }
-
-        Err(EngineError::Io(std::io::Error::new(
-            std::io::ErrorKind::Unsupported,
-            "no compiled adapter describes this outbound leaf",
-        )))
+        let entry = self
+            .claimed_outbound_entry(leaf)
+            .ok_or_else(undescribed_outbound_leaf)?;
+        entry
+            .tcp
+            .outbound_leaf_runtime(leaf)
+            .ok_or_else(undescribed_outbound_leaf)
     }
 }
 
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
-))]
 fn unsupported_outbound_leaf() -> EngineError {
     EngineError::Io(std::io::Error::new(
         std::io::ErrorKind::Unsupported,
         "no compiled adapter handles this outbound leaf",
+    ))
+}
+
+fn undescribed_outbound_leaf() -> EngineError {
+    EngineError::Io(std::io::Error::new(
+        std::io::ErrorKind::Unsupported,
+        "no compiled adapter describes this outbound leaf",
     ))
 }

@@ -6,7 +6,7 @@ use super::super::super::contract::{
     UpstreamAssociationCloseReason, UpstreamAssociationTarget, UpstreamAssociationTransport,
 };
 use super::model::UpstreamAssociationRuntime;
-use crate::runtime::Proxy;
+use crate::protocol_registry::UdpRuntimeServices;
 
 impl<T, A> UpstreamAssociationRuntime<T, A>
 where
@@ -15,13 +15,13 @@ where
 {
     pub(crate) async fn send_packet(
         &mut self,
-        proxy: &Proxy,
+        services: &UdpRuntimeServices,
         inbound_tag: &str,
         association: T,
         session: &Session,
         payload: &[u8],
     ) -> Result<usize, EngineError> {
-        self.ensure_association(proxy, inbound_tag, association, session.id)
+        self.ensure_association(services, inbound_tag, association, session.id)
             .await?;
 
         let association_ref = self
@@ -34,12 +34,13 @@ where
             .await
         {
             Ok(sent) => {
-                proxy.record_udp_upstream_packet_sent();
-                self.idle_deadline = Some(TokioInstant::now() + proxy.udp_upstream_idle_timeout());
+                services.record_udp_upstream_packet_sent();
+                self.idle_deadline =
+                    Some(TokioInstant::now() + services.udp_upstream_idle_timeout());
                 Ok(sent)
             }
             Err(error) => {
-                proxy.record_udp_upstream_send_failure();
+                services.record_udp_upstream_send_failure();
                 self.drop_after_send_error(inbound_tag, &error);
                 Err(error)
             }
@@ -48,7 +49,7 @@ where
 
     async fn ensure_association(
         &mut self,
-        proxy: &Proxy,
+        services: &UdpRuntimeServices,
         inbound_tag: &str,
         association: T,
         session_id: u64,
@@ -56,7 +57,7 @@ where
         let needs_new_association = !self.upstream.matches_target(&association);
 
         if !needs_new_association {
-            proxy.record_udp_upstream_association_reused();
+            services.record_udp_upstream_association_reused();
             let (outbound_tag, server, port) = association.log_parts();
             crate::logging::log_udp_upstream_association_reused(
                 inbound_tag,
@@ -73,29 +74,24 @@ where
             self.idle_deadline = None;
         }
 
-        match A::establish(
-            crate::protocol_registry::UdpAdapterContext::new(proxy).runtime_services(),
-            association.clone(),
-            session_id,
-        )
-        .await
-        {
+        match A::establish(services.clone(), association.clone(), session_id).await {
             Ok(a) => {
-                proxy.record_udp_upstream_association_created();
-                self.idle_deadline = Some(TokioInstant::now() + proxy.udp_upstream_idle_timeout());
+                services.record_udp_upstream_association_created();
+                self.idle_deadline =
+                    Some(TokioInstant::now() + services.udp_upstream_idle_timeout());
                 let (outbound_tag, server, port) = association.log_parts();
                 crate::logging::log_udp_upstream_association_created(
                     inbound_tag,
                     outbound_tag,
                     server,
                     port,
-                    proxy.udp_upstream_idle_timeout(),
+                    services.udp_upstream_idle_timeout(),
                 );
                 let _ = self.upstream.insert(association, a);
                 Ok(())
             }
             Err(error) => {
-                proxy.record_udp_upstream_association_failed();
+                services.record_udp_upstream_association_failed();
                 Err(error)
             }
         }

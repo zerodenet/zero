@@ -14,6 +14,8 @@ mod mixed;
 mod shadowsocks;
 #[cfg(feature = "socks5")]
 mod socks5;
+#[cfg(any(feature = "vless", feature = "vmess", feature = "trojan"))]
+mod transport_bridge;
 #[cfg(feature = "trojan")]
 mod trojan;
 #[cfg(feature = "vless")]

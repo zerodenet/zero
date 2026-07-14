@@ -14,7 +14,7 @@ impl DirectAdapter {
         leaf: &'a ResolvedLeafOutbound<'a>,
     ) -> Result<Box<dyn PreparedTcpConnectOperation + 'a>, TcpOutboundFailure> {
         let ResolvedLeafOutbound::Direct { tag } = leaf else {
-            return Err(unreachable_leaf(self.name(), leaf));
+            return Err(unreachable_leaf(self.name()));
         };
         Ok(Box::new(DirectTcpConnectOperation {
             tag: (*tag).unwrap_or("direct").to_owned(),

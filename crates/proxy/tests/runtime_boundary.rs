@@ -178,6 +178,7 @@ fn listener_and_task_lifecycle_are_runtime_owned() {
 #[test]
 fn capability_surface_is_split_and_context_is_narrow() {
     let capability = read(&proxy_src().join("protocol_registry/capability.rs"));
+    let context = read(&proxy_src().join("protocol_registry/context.rs"));
     for capability_name in [
         "ProtocolSupportCapability",
         "InboundListenerCapability",
@@ -190,21 +191,77 @@ fn capability_surface_is_split_and_context_is_narrow() {
     assert!(!capability.contains("trait ProtocolAdapter"));
     assert!(!capability.contains("proxy: &Proxy"));
     assert!(capability.contains("BoundInbound"));
+    assert!(context.contains(
+        "pub(crate) struct OutboundAdapterContext {\n    source_dir: Option<std::path::PathBuf>,"
+    ));
+    assert!(
+        !context.contains("pub(crate) struct OutboundAdapterContext<'a> {\n    proxy: &'a Proxy,")
+    );
+    assert!(context.contains("pub(crate) struct UdpAdapterContext<'a> {\n    source_dir: Option<&'a std::path::Path>,\n    services: UdpRuntimeServices,"));
+    assert!(!context.contains("pub(crate) struct UdpAdapterContext<'a> {\n    proxy: &'a Proxy,"));
+    let tcp_leaf = read(&proxy_src().join("inventory/tcp/leaf.rs"));
     let tcp_operation = read(&proxy_src().join("runtime/tcp_dispatch/operation.rs"));
     let udp_operation = read(&proxy_src().join("runtime/udp_dispatch/operation.rs"));
-    assert!(tcp_operation.contains("OutboundAdapterContext"));
+    assert!(tcp_leaf.contains("OutboundAdapterContext"));
+    assert!(tcp_operation.contains("TcpRuntimeServices"));
     assert!(udp_operation.contains("UdpAdapterContext"));
 }
 
 #[test]
 fn transport_bridge_operations_are_generic() {
     let tcp = read(&proxy_src().join("runtime/tcp_dispatch/operation.rs"));
-    let udp = read(&proxy_src().join("protocol_registry/transport_leaf.rs"));
+    let udp = rust_sources(&proxy_src().join("protocol_registry/transport_leaf"))
+        .into_iter()
+        .map(|path| read(&path))
+        .collect::<String>();
     assert!(tcp.contains("TransportBridgeTcpConnectOperation"));
     assert!(tcp.contains("TransportBridgeTcpRelayOperation"));
     assert!(tcp.contains("PreparedTransportBridgeLeaf"));
-    assert!(udp.contains("TransportBridgeUdpOperation"));
-    assert!(udp.contains("RelayTwoStreamUdpOperation"));
+    assert!(udp.contains("prepare_transport_bridge_udp_direct"));
+    assert!(udp.contains("prepare_owned_transport_bridge_udp_relay_two_stream"));
+}
+
+#[test]
+fn transport_leaf_resolution_helpers_stay_leaf_scoped() {
+    let resolve = read(&proxy_src().join("adapters/transport_bridge.rs"));
+    let tcp = read(&proxy_src().join("protocol_registry/transport_leaf/tcp.rs"));
+    let udp = read(&proxy_src().join("protocol_registry/transport_leaf/udp.rs"));
+    assert!(!resolve.contains("prepare_last_transport_bridge_leaf"));
+    assert!(resolve.contains("prepare_transport_bridge_leaf"));
+    assert!(resolve.contains("trait ProtocolTransportLeafResolver {"));
+    assert!(!resolve.contains("trait ProtocolTransportLeafResolver<'a>"));
+    assert!(resolve.contains("ResolvedLeafOutbound"));
+    assert!(!tcp.contains("ResolvedLeafOutbound"));
+    assert!(!udp.contains("ResolvedLeafOutbound"));
+    assert_sources_exclude(
+        &proxy_src().join("protocol_registry/transport_leaf"),
+        &["ResolvedLeafOutbound"],
+    );
+}
+
+#[test]
+fn tcp_prepared_operations_do_not_borrow_inventory_or_runtime_services() {
+    let tcp_leaf = read(&proxy_src().join("inventory/tcp/leaf.rs"));
+    let context = read(&proxy_src().join("protocol_registry/context.rs"));
+    assert!(tcp_leaf.contains("pub(crate) fn prepare_tcp_candidate<'a>(\n        &self,"));
+    assert!(tcp_leaf.contains("pub(crate) fn prepare_tcp_relay_hop<'a>(\n        &self,"));
+    assert!(context.contains("pub(crate) fn prepare_tcp_candidate<'a>(\n        &self,"));
+    assert!(context.contains("pub(crate) fn prepare_tcp_relay_chain<'a>(\n        &self,"));
+    assert!(!context.contains("pub(crate) fn prepare_tcp_relay_hop<'a>(\n        &self,"));
+}
+
+#[test]
+fn udp_prepared_operations_do_not_borrow_adapters_or_bridges() {
+    let capability = read(&proxy_src().join("protocol_registry/capability.rs"));
+    let udp = read(&proxy_src().join("protocol_registry/transport_leaf/udp.rs"));
+    assert!(capability.contains("fn prepare_udp_flow<'a>(\n        &self,"));
+    assert!(capability.contains("fn prepare_owned_udp_relay_final_hop<'a>(\n        &self,"));
+    assert!(capability.contains("fn prepare_owned_udp_relay_two_stream<'a>(\n        &self,"));
+    assert!(!capability.contains("fn prepare_udp_relay_final_hop<'a>(\n        &self,"));
+    assert!(
+        !udp.contains("bridge: &'a TBridge"),
+        "prepared UDP transport operations must own bridge state instead of borrowing it"
+    );
 }
 
 #[test]
@@ -262,6 +319,7 @@ fn runtime_owns_post_accept_route_execution() {
 #[test]
 fn adapter_runtime_service_access_does_not_expose_proxy() {
     let context = read(&proxy_src().join("protocol_registry/context.rs"));
+    assert!(context.contains("struct TcpRuntimeServices"));
     assert!(context.contains("struct UdpRuntimeServices"));
     assert!(context.contains("fn runtime_services"));
     let adapters = rust_sources(&proxy_src().join("adapters"))
@@ -270,4 +328,288 @@ fn adapter_runtime_service_access_does_not_expose_proxy() {
         .collect::<String>();
     assert!(!adapters.contains("ctx.proxy()"));
     assert!(!adapters.contains("Proxy {"));
+}
+
+#[test]
+fn protocol_adapter_roots_do_not_construct_transport_plans_or_request_bundles_inline() {
+    for relative in [
+        "adapters/vless.rs",
+        "adapters/vmess.rs",
+        "adapters/trojan.rs",
+    ] {
+        let source = read(&proxy_src().join(relative));
+        for forbidden in [
+            "PreparedVlessOutboundRequestBundle",
+            "PreparedVmessOutboundRequestBundle",
+            "PreparedTrojanOutboundRequestBundle",
+            "OwnedVlessOutboundTransportPlan::from_profile_refs",
+            "OwnedVmessOutboundTransportPlan::from_profile_refs",
+            "OwnedTrojanOutboundTlsPlan::from_parts",
+        ] {
+            assert!(
+                !source.contains(forbidden),
+                "{relative} must delegate protocol-private leaf construction instead of building `{forbidden}` inline"
+            );
+        }
+    }
+}
+
+#[test]
+fn inventory_udp_dispatch_keeps_relay_choreography_outside_candidate_root() {
+    let dispatch = read(&proxy_src().join("inventory/udp/dispatch.rs"));
+    assert!(!dispatch.contains("dispatch_tcp_relay_prefix"));
+    assert!(!dispatch.contains("prepare_udp_packet_path_pair"));
+    assert!(!dispatch.contains("UdpPacketRef"));
+    assert!(!dispatch.contains("ResolvedLeafOutbound"));
+    assert!(!dispatch.contains("enum UdpCandidate"));
+    assert!(!dispatch.contains("outbound_leaf_runtime"));
+}
+
+#[test]
+fn inventory_udp_dispatch_uses_adapter_context_instead_of_proxy() {
+    let dispatch = read(&proxy_src().join("inventory/udp/dispatch.rs"));
+    assert!(!dispatch.contains("use crate::runtime::Proxy"));
+    assert!(!dispatch.contains("&Proxy"));
+}
+
+#[test]
+fn inventory_udp_leaf_and_relay_use_adapter_context_instead_of_proxy() {
+    for relative in ["inventory/udp/leaf.rs", "inventory/udp/relay.rs"] {
+        let source = read(&proxy_src().join(relative));
+        assert!(
+            !source.contains("use crate::runtime::Proxy"),
+            "{relative} must not import Proxy directly"
+        );
+        assert!(
+            !source.contains("&Proxy"),
+            "{relative} must not carry raw Proxy references"
+        );
+    }
+    let udp_leaf = read(&proxy_src().join("inventory/udp/leaf.rs"));
+    let udp_relay = read(&proxy_src().join("inventory/udp/relay.rs"));
+    assert!(!udp_leaf.contains("find_udp_flow_leaf("));
+    assert!(!udp_relay.contains("find_udp_flow_leaf("));
+    assert!(!udp_relay.contains("find_udp_packet_path_leaf("));
+}
+
+#[test]
+fn inventory_udp_packet_path_builder_stays_prepared_operation_scoped() {
+    let packet_path = read(&proxy_src().join("inventory/udp/packet_path.rs"));
+    assert!(!packet_path.contains("ResolvedLeafOutbound"));
+    assert!(!packet_path.contains("UdpPacketPathCapability"));
+    assert!(packet_path.contains("PreparedUdpPacketPathOperation"));
+}
+
+#[test]
+fn inventory_tcp_relay_executes_final_hop_without_old_helper_roundtrip() {
+    let relay = read(&proxy_src().join("inventory/tcp/relay.rs"));
+    assert!(
+        !relay.contains("apply_tcp_relay_hop("),
+        "tcp relay execution should keep the final prepared hop local instead of re-routing through an old helper"
+    );
+    assert!(
+        !relay.contains("Result<(RelayCarrier, ResolvedLeafOutbound"),
+        "tcp relay prefix helpers must not return raw engine leaf values once the final hop is prepared"
+    );
+    assert!(relay.contains("current_prepared"));
+    assert!(relay.contains("stage: \"relay_last\""));
+}
+
+#[test]
+fn inventory_udp_relay_executes_final_hop_without_start_helper_roundtrip() {
+    let relay = read(&proxy_src().join("inventory/udp/relay.rs"));
+    assert!(
+        !relay.contains("self.start_udp_relay_final_hop("),
+        "udp relay chain should prepare and execute the final hop locally instead of bouncing through a second start helper"
+    );
+    assert!(
+        !relay.contains("PreparedUdpRelayChain::FinalHop"),
+        "udp relay chain should collapse the relay prefix into an opaque prepared operation before execution"
+    );
+    assert!(relay.contains("PreparedUdpRelayChain"));
+    assert!(relay.contains("prepare_udp_relay_chain("));
+    assert!(relay.contains("prepare_udp_relay_final_hop_operation"));
+}
+
+#[test]
+fn udp_two_stream_transport_bridge_uses_carrier_only_relay_prefix() {
+    let relay = read(&proxy_src().join("inventory/udp/relay.rs"));
+    let udp = read(&proxy_src().join("protocol_registry/transport_leaf/udp.rs"));
+    assert!(relay.contains("prepare_tcp_relay_chain(&chain)"));
+    assert!(relay.contains("dispatch_prepared_tcp_relay_carrier(post_prepared)"));
+    assert!(relay.contains("dispatch_prepared_tcp_relay_carrier(get_prepared)"));
+    assert!(relay.contains("prepare_owned_udp_relay_two_stream"));
+    assert!(!udp.contains("prepare_tcp_relay_chain(&chain)"));
+    assert!(!udp.contains("dispatch_prepared_tcp_relay_carrier(post_prepared)"));
+    assert!(!udp.contains("dispatch_prepared_tcp_relay_carrier(get_prepared)"));
+}
+
+#[test]
+fn managed_stream_connectors_use_runtime_services_instead_of_proxy() {
+    assert_sources_exclude(
+        &proxy_src().join("runtime/udp_flow/managed/stream_manager/connector"),
+        &["use crate::runtime::Proxy", "&Proxy", "Option<&Proxy>"],
+    );
+}
+
+#[test]
+fn managed_datagram_connectors_use_runtime_services_instead_of_proxy() {
+    assert_sources_exclude(
+        &proxy_src().join("runtime/udp_flow/managed/datagram_manager/connector"),
+        &["use crate::runtime::Proxy", "&Proxy", "Option<&Proxy>"],
+    );
+}
+
+#[test]
+fn registered_upstream_runtime_uses_runtime_services_instead_of_proxy() {
+    assert_sources_exclude(
+        &proxy_src().join("runtime/udp_flow/registered/upstream/runtime/association"),
+        &["use crate::runtime::Proxy", "&Proxy"],
+    );
+}
+
+#[test]
+fn managed_stream_bridge_requests_use_runtime_services_instead_of_proxy() {
+    assert_sources_exclude(
+        &proxy_src().join("runtime/udp_flow/managed/bridge/stream_packet"),
+        &[
+            "use crate::runtime::Proxy",
+            "Option<&'a Proxy>",
+            "Option<&Proxy>",
+        ],
+    );
+}
+
+#[test]
+fn managed_udp_forward_paths_use_runtime_services_instead_of_proxy() {
+    for relative in [
+        "runtime/udp_flow/managed/state/forward.rs",
+        "runtime/udp_flow/managed/stream/forward.rs",
+        "runtime/udp_flow/registered/forward.rs",
+    ] {
+        let source = read(&proxy_src().join(relative));
+        assert!(
+            !source.contains("use crate::runtime::Proxy"),
+            "{relative} must not import Proxy directly"
+        );
+        assert!(
+            !source.contains("&Proxy"),
+            "{relative} must not carry raw Proxy references"
+        );
+    }
+}
+
+#[test]
+fn tcp_dispatch_operations_use_runtime_services_for_connect_flows() {
+    let operation = read(&proxy_src().join("runtime/tcp_dispatch/operation.rs"));
+    assert!(operation.contains("TcpRuntimeServices"));
+    assert!(!operation.contains("ctx.proxy()"));
+}
+
+#[test]
+fn udp_dispatch_operations_use_runtime_services_for_direct_flows() {
+    let operation = read(&proxy_src().join("runtime/udp_dispatch/operation.rs"));
+    assert!(operation.contains("ctx.runtime_services()"));
+    assert!(!operation.contains("ctx.proxy()"));
+}
+
+#[test]
+fn transport_leaf_udp_execution_uses_runtime_services_instead_of_proxy() {
+    let udp = read(&proxy_src().join("protocol_registry/transport_leaf/udp.rs"));
+    assert!(!udp.contains("use crate::runtime::Proxy"));
+    assert!(!udp.contains("ctx.proxy()"));
+    assert!(!udp.contains("&Proxy"));
+}
+
+#[test]
+fn packet_path_start_surfaces_use_adapter_context_instead_of_proxy() {
+    for relative in [
+        "runtime/udp_dispatch/packet_path.rs",
+        "runtime/udp_flow/packet_path_chain.rs",
+        "runtime/udp_flow/packet_path_chain/entry.rs",
+    ] {
+        let source = read(&proxy_src().join(relative));
+        assert!(
+            !source.contains("use crate::runtime::Proxy"),
+            "{relative} must not import Proxy directly"
+        );
+    }
+}
+
+#[test]
+fn inventory_tcp_relay_root_is_not_a_proxy_impl_bucket() {
+    let relay = read(&proxy_src().join("inventory/tcp/relay.rs"));
+    assert!(!relay.contains("impl Proxy"));
+    assert!(!relay.contains("use crate::runtime::Proxy"));
+    assert!(!relay.contains("&Proxy"));
+}
+
+#[test]
+fn inventory_tcp_leaf_stays_adapter_facing() {
+    let leaf = read(&proxy_src().join("inventory/tcp/leaf.rs"));
+    assert!(!leaf.contains("impl Proxy"));
+    assert!(!leaf.contains("use crate::runtime::Proxy"));
+    assert!(!leaf.contains("&Proxy"));
+    assert!(!leaf.contains("find_outbound_leaf("));
+}
+
+#[test]
+fn inventory_tcp_dispatch_root_is_not_a_proxy_impl_bucket() {
+    let dispatch = read(&proxy_src().join("inventory/tcp/dispatch.rs"));
+    assert!(!dispatch.contains("impl Proxy"));
+}
+
+#[test]
+fn inventory_tcp_candidate_and_dispatch_use_runtime_services_instead_of_proxy() {
+    for relative in ["inventory/tcp/candidate.rs", "inventory/tcp/dispatch.rs"] {
+        let source = read(&proxy_src().join(relative));
+        assert!(
+            !source.contains("use crate::runtime::Proxy"),
+            "{relative} must not import Proxy directly"
+        );
+        assert!(
+            !source.contains("&Proxy"),
+            "{relative} must not carry raw Proxy references"
+        );
+        assert!(
+            source.contains("TcpRuntimeServices"),
+            "{relative} must use TcpRuntimeServices"
+        );
+    }
+    let candidate = read(&proxy_src().join("inventory/tcp/candidate.rs"));
+    assert!(!candidate.contains("ResolvedLeafOutbound"));
+    assert!(candidate.contains("PreparedTcpCandidate"));
+}
+
+#[test]
+fn inventory_runtime_delegates_leaf_claim_logic_to_registry() {
+    let runtime = read(&proxy_src().join("inventory/runtime.rs"));
+    assert!(runtime.contains("self.registry.claim_outbound_leaf(leaf)"));
+    assert!(!runtime.contains("claimed_tcp_outbound_leaf"));
+    assert!(!runtime.contains("claimed_udp_flow_leaf"));
+    assert!(!runtime.contains("claimed_udp_packet_path_leaf"));
+    assert!(!runtime.contains("find_outbound_leaf("));
+    assert!(!runtime.contains("find_udp_flow_leaf("));
+    assert!(!runtime.contains("find_udp_packet_path_leaf("));
+    assert!(!runtime.contains("TcpPathCategory::Block"));
+}
+
+#[test]
+fn registry_outbound_claim_surface_replaces_lookup_only_helpers() {
+    let outbound = read(&proxy_src().join("protocol_registry/registry/outbound.rs"));
+    assert!(outbound.contains("fn claim_outbound_leaf"));
+    assert!(!outbound.contains("fn claimed_tcp_outbound_leaf"));
+    assert!(!outbound.contains("fn claimed_udp_flow_leaf"));
+    assert!(!outbound.contains("fn claimed_udp_packet_path_leaf"));
+    assert!(!outbound.contains("fn find_outbound_leaf"));
+    assert!(!outbound.contains("fn find_udp_flow_leaf"));
+    assert!(!outbound.contains("fn find_udp_packet_path_leaf"));
+}
+
+#[test]
+fn urltest_probe_uses_generic_tcp_outbound_dispatch() {
+    let urltest = read(&proxy_src().join("groups/urltest.rs"));
+    assert!(urltest.contains("dispatch_tcp_outbound("));
+    assert!(!urltest.contains("prepare_tcp_candidate("));
+    assert!(!urltest.contains("ResolvedLeafOutbound"));
 }

@@ -4,10 +4,10 @@ use super::super::super::model::ManagedStreamExistingSend;
 use super::super::connector::ManagedStreamFlowConnector;
 use super::mismatch::managed_mismatch;
 use super::model::ManagedStreamFlowManager;
+use crate::protocol_registry::UdpRuntimeServices;
 use crate::runtime::path::OutboundEndpoint;
 use crate::runtime::udp_flow::packet_path::{UdpFlowContext, UdpPacketRef};
 use crate::runtime::udp_flow::result::FlowFailure;
-use crate::runtime::Proxy;
 
 impl<T> ManagedStreamFlowManager<T>
 where
@@ -16,7 +16,7 @@ where
     pub(super) async fn send(
         &mut self,
         ctx: UdpFlowContext<'_>,
-        proxy: &Proxy,
+        services: UdpRuntimeServices,
         session: &zero_core::Session,
         endpoint: OutboundEndpoint<'_>,
         resume: T,
@@ -54,7 +54,7 @@ where
                 ctx.chain_tasks,
                 session_id,
                 packet_ref,
-                resume.establish_direct(proxy, session, endpoint),
+                resume.establish_direct(services, session, endpoint),
             )
             .await
             .map_err(|error| FlowFailure {
@@ -81,7 +81,7 @@ where
                 chain_tasks: request.chain_tasks,
                 session_id: request.session_id,
             },
-            request.proxy,
+            request.services,
             request.session,
             OutboundEndpoint {
                 server: request.server,

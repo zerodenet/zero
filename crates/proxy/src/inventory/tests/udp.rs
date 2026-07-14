@@ -6,7 +6,7 @@ use super::fixtures::FakeProviderResume;
 use super::fixtures::FakeUpstreamResume;
 use super::fixtures::{FakeTcpCapability, TcpCapabilityCalls};
 use super::tcp::{proxy_with_fake_tcp, session};
-use crate::protocol_registry::fake_direct_leaf;
+use crate::protocol_registry::{fake_direct_leaf, UdpAdapterContext, UdpRuntimeServices};
 use crate::runtime::udp_dispatch::{FlowStartResult, UdpDispatch};
 use crate::transport::{RelayCarrier, TcpRelayStream};
 
@@ -17,17 +17,15 @@ async fn inventory_invokes_fake_udp_leaf_capability() {
     let mut dispatch = UdpDispatch::new("fake-inbound", &proxy.protocols)
         .await
         .expect("UDP dispatch");
+    let ctx = UdpAdapterContext::new(
+        proxy.config.source_dir(),
+        UdpRuntimeServices::from_proxy(&proxy),
+    );
     let payload = b"capability payload";
 
     let result = match proxy
         .protocols
-        .start_udp_leaf_flow(
-            &mut dispatch,
-            &proxy,
-            &session(),
-            &fake_direct_leaf(),
-            payload,
-        )
+        .start_udp_leaf_flow(&mut dispatch, ctx, &session(), &fake_direct_leaf(), payload)
         .await
     {
         Ok(result) => result,
@@ -50,12 +48,16 @@ async fn inventory_preserves_fake_udp_failure_metadata() {
     let mut dispatch = UdpDispatch::new("fake-inbound", &proxy.protocols)
         .await
         .expect("UDP dispatch");
+    let ctx = UdpAdapterContext::new(
+        proxy.config.source_dir(),
+        UdpRuntimeServices::from_proxy(&proxy),
+    );
 
     let failure = match proxy
         .protocols
         .start_udp_leaf_flow(
             &mut dispatch,
-            &proxy,
+            ctx,
             &session(),
             &fake_direct_leaf(),
             b"failure",
@@ -81,11 +83,15 @@ async fn inventory_invokes_fake_udp_relay_capabilities() {
     let mut dispatch = UdpDispatch::new("fake-inbound", &proxy.protocols)
         .await
         .expect("UDP dispatch");
+    let ctx = UdpAdapterContext::new(
+        proxy.config.source_dir(),
+        UdpRuntimeServices::from_proxy(&proxy),
+    );
     let leaf = fake_direct_leaf();
 
     assert!(proxy
         .protocols
-        .udp_relay_needs_two_streams(&leaf)
+        .udp_relay_needs_two_streams(ctx.clone(), &leaf)
         .expect("two-stream predicate"));
 
     let two_stream_payload = b"two-stream capability";
@@ -93,7 +99,7 @@ async fn inventory_invokes_fake_udp_relay_capabilities() {
         .protocols
         .start_udp_relay_two_stream(
             &mut dispatch,
-            &proxy,
+            ctx.clone(),
             &session(),
             vec![fake_direct_leaf(), fake_direct_leaf()],
             two_stream_payload,
@@ -114,7 +120,7 @@ async fn inventory_invokes_fake_udp_relay_capabilities() {
         .protocols
         .start_udp_relay_final_hop(
             &mut dispatch,
-            &proxy,
+            ctx,
             &session(),
             RelayCarrier {
                 stream: TcpRelayStream::new(stream),
@@ -177,7 +183,11 @@ async fn inventory_executes_handler_produced_by_registered_provider() {
     let payload = b"provider handler payload";
 
     let sent = match state
-        .forward_existing_managed_flow(&mut chain_tasks, &proxy, (&flow, payload))
+        .forward_existing_managed_flow(
+            &mut chain_tasks,
+            crate::protocol_registry::UdpRuntimeServices::from_proxy(&proxy),
+            (&flow, payload),
+        )
         .await
     {
         Ok(sent) => sent,
@@ -222,12 +232,20 @@ async fn reload_invalidates_provider_resumes_before_new_generation_flows() {
     let payload = b"reload generation payload";
 
     assert!(state
-        .forward_existing_managed_flow(&mut chain_tasks, &proxy, (&old_flow, payload))
+        .forward_existing_managed_flow(
+            &mut chain_tasks,
+            crate::protocol_registry::UdpRuntimeServices::from_proxy(&proxy),
+            (&old_flow, payload),
+        )
         .await
         .is_ok());
     proxy.protocols.on_config_reloaded();
     let stale = state
-        .forward_existing_managed_flow(&mut chain_tasks, &proxy, (&old_flow, payload))
+        .forward_existing_managed_flow(
+            &mut chain_tasks,
+            crate::protocol_registry::UdpRuntimeServices::from_proxy(&proxy),
+            (&old_flow, payload),
+        )
         .await;
     assert!(stale.is_err(), "pre-reload resume must not be reused");
 
@@ -245,7 +263,11 @@ async fn reload_invalidates_provider_resumes_before_new_generation_flows() {
         client_session_id: None,
     };
     assert!(state
-        .forward_existing_managed_flow(&mut chain_tasks, &proxy, (&new_flow, payload))
+        .forward_existing_managed_flow(
+            &mut chain_tasks,
+            crate::protocol_registry::UdpRuntimeServices::from_proxy(&proxy),
+            (&new_flow, payload),
+        )
         .await
         .is_ok());
 
@@ -278,7 +300,9 @@ async fn inventory_executes_handler_produced_by_upstream_provider() {
         .start_upstream_udp_flow(
             "fake-inbound",
             UpstreamAssociationSend {
-                proxy: Some(&proxy),
+                services: Some(crate::protocol_registry::UdpRuntimeServices::from_proxy(
+                    &proxy,
+                )),
                 session: &session,
                 server: "upstream-provider.test",
                 port: 1080,
@@ -330,7 +354,16 @@ async fn inventory_composes_packet_path_roles_and_builds_carrier() {
     assert_eq!(request.carrier.descriptor.port, 1443);
     assert_eq!(request.datagram.descriptor().cache_key, "fake-datagram-key");
 
-    let sent = match dispatch.send_packet_path_chain(&proxy, request).await {
+    let sent = match dispatch
+        .send_packet_path_chain(
+            crate::protocol_registry::UdpAdapterContext::new(
+                proxy.config.source_dir(),
+                crate::protocol_registry::UdpRuntimeServices::from_proxy(&proxy),
+            ),
+            request,
+        )
+        .await
+    {
         Ok(sent) => sent,
         Err(_) => panic!("fake packet-path send"),
     };

@@ -7,9 +7,9 @@ use zero_transport::managed_udp::ProtocolManagedDatagramSocketUdpResumeConnectio
 use super::super::super::connection::SharedManagedDatagramUdpConnection;
 use super::super::super::datagram::managed_datagram_connection_from_ops;
 use super::super::manager::ManagedDatagramSocketFlowManager;
+use crate::protocol_registry::UdpRuntimeServices;
 use crate::runtime::path::OutboundEndpoint;
 use crate::runtime::udp_flow::packet_path::UdpPacketRef;
-use crate::runtime::Proxy;
 
 #[async_trait]
 pub(crate) trait ManagedDatagramSocketFlowConnector<T>: Send + Sync {
@@ -21,7 +21,7 @@ pub(crate) trait ManagedDatagramSocketFlowConnector<T>: Send + Sync {
 
     async fn establish(
         &self,
-        proxy: Option<&Proxy>,
+        services: Option<UdpRuntimeServices>,
         endpoint: OutboundEndpoint<'_>,
         resume: T,
         initial_packet: UdpPacketRef<'_>,
@@ -91,20 +91,17 @@ where
 
     async fn establish(
         &self,
-        proxy: Option<&Proxy>,
+        services: Option<UdpRuntimeServices>,
         endpoint: OutboundEndpoint<'_>,
         resume: T,
         _initial_packet: UdpPacketRef<'_>,
     ) -> Result<SharedManagedDatagramUdpConnection, EngineError> {
-        let proxy = proxy
+        let services = services
             .ok_or_else(|| EngineError::Io(std::io::Error::other(T::PROXY_CONTEXT_MESSAGE)))?;
-        let target_addr = proxy
-            .protocols
-            .direct_connector()
-            .resolve_address(
+        let target_addr = services
+            .resolve_direct_address(
                 &endpoint.address(),
                 endpoint.port,
-                proxy.resolver.as_ref(),
                 T::RESOLVE_UPSTREAM_MESSAGE,
             )
             .await?;

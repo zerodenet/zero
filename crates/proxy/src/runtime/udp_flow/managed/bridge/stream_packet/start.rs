@@ -23,7 +23,7 @@ where
     let sent = context
         .start_managed_flow(ManagedUdpFlowRequest {
             chain_tasks: None,
-            proxy: request.proxy,
+            services: request.services,
             kind: if relay_chain {
                 ManagedUdpFlowKind::RelayStream
             } else {
