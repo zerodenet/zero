@@ -1,5 +1,3 @@
-use std::io;
-
 use zero_engine::EngineError;
 
 use super::super::ProtocolInventory;
@@ -123,8 +121,8 @@ impl ProtocolInventory {
         let claimed = self.claim_outbound_leaf(leaf)?;
         let runtime = claimed.runtime;
         let endpoint = runtime.endpoint.ok_or_else(|| {
-            EngineError::Io(io::Error::new(
-                io::ErrorKind::InvalidInput,
+            EngineError::Io(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
                 "relay hop resolved without upstream endpoint",
             ))
         })?;

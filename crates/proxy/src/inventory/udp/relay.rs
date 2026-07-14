@@ -1,7 +1,7 @@
 use zero_engine::EngineError;
 
 use super::super::ProtocolInventory;
-use crate::protocol_registry::{UdpAdapterContext, UdpFlowCapability, UdpPacketPathCapability};
+use crate::protocol_registry::{ClaimedOutboundLeaf, UdpAdapterContext, UdpPacketPathCapability};
 use crate::runtime::udp_dispatch::operation::PreparedUdpFlowOperation;
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
 use crate::runtime::udp_flow::packet_path::{PacketPathFlowBinding, UdpPacketRef};
@@ -65,17 +65,7 @@ impl ProtocolInventory {
         leaf: &zero_engine::ResolvedLeafOutbound<'_>,
     ) -> Result<bool, EngineError> {
         let claimed = self.claim_outbound_leaf(leaf)?;
-        let adapter = claimed.udp.ok_or_else(|| {
-            EngineError::Io(std::io::Error::new(
-                std::io::ErrorKind::InvalidInput,
-                "block outbound cannot provide a udp relay capability",
-            ))
-        })?;
-        Ok(UdpFlowCapability::udp_relay_needs_two_streams(
-            adapter.as_ref(),
-            leaf,
-            ctx.source_dir(),
-        ))
+        Ok(claimed.udp_relay_needs_two_streams(ctx.source_dir()))
     }
 
     /// Start a two-stream UDP relay path through the final hop adapter.
@@ -99,24 +89,10 @@ impl ProtocolInventory {
                 upstream: None,
             }
         })?;
-        let adapter = claimed
-            .udp
-            .ok_or_else(|| crate::runtime::udp_dispatch::FlowFailure {
-                stage: "find_outbound_leaf",
-                error: EngineError::Io(std::io::Error::new(
-                    std::io::ErrorKind::InvalidInput,
-                    "block outbound cannot provide a udp relay capability",
-                )),
-                upstream: None,
-            })?;
-        let final_hop = chain
-            .last()
-            .cloned()
-            .expect("relay chain has at least 2 hops");
         let (post_stream, _post_peer) = tokio::io::duplex(64);
         let (get_stream, _get_peer) = tokio::io::duplex(64);
         let operation = self.prepare_udp_relay_two_stream_operation(
-            adapter.as_ref(),
+            &claimed,
             ctx.clone(),
             RelayCarrier {
                 stream: crate::transport::TcpRelayStream::new(post_stream),
@@ -128,7 +104,6 @@ impl ProtocolInventory {
                 server: "fake-relay-get.test".to_owned(),
                 port: 9444,
             },
-            final_hop,
         )?;
         operation.execute(dispatch, ctx, session, payload).await
     }
@@ -207,18 +182,6 @@ impl ProtocolInventory {
                     error,
                     upstream: None,
                 })?;
-            let adapter = claimed.udp.ok_or_else(|| FlowFailure {
-                stage: "find_outbound_leaf",
-                error: EngineError::Io(std::io::Error::new(
-                    std::io::ErrorKind::InvalidInput,
-                    "block outbound cannot provide a udp relay capability",
-                )),
-                upstream: None,
-            })?;
-            let final_hop = chain
-                .last()
-                .cloned()
-                .expect("relay chain has at least 2 hops");
             let services = ctx.runtime_services();
             let post_prepared = services
                 .prepare_tcp_relay_chain(&chain)
@@ -235,11 +198,10 @@ impl ProtocolInventory {
                 .await
                 .map_err(flow_failure_from_tcp_outbound)?;
             let operation = self.prepare_udp_relay_two_stream_operation(
-                adapter.as_ref(),
+                &claimed,
                 ctx.clone(),
                 post_carrier,
                 get_carrier,
-                final_hop,
             )?;
             return Ok(PreparedUdpRelayChain::Operation(operation));
         }
@@ -300,19 +262,12 @@ impl ProtocolInventory {
 
     fn prepare_udp_relay_two_stream_operation<'a>(
         &self,
-        adapter: &dyn UdpFlowCapability,
+        claimed: &ClaimedOutboundLeaf<'a>,
         ctx: UdpAdapterContext<'a>,
         post_carrier: RelayCarrier,
         get_carrier: RelayCarrier,
-        leaf: zero_engine::ResolvedLeafOutbound<'a>,
     ) -> Result<Box<dyn PreparedUdpFlowOperation + 'a>, FlowFailure> {
-        UdpFlowCapability::prepare_owned_udp_relay_two_stream(
-            adapter,
-            post_carrier,
-            get_carrier,
-            leaf,
-            ctx.source_dir(),
-        )
+        claimed.prepare_owned_udp_relay_two_stream(post_carrier, get_carrier, ctx.source_dir())
     }
 
     fn prepare_udp_relay_final_hop_operation<'a>(
@@ -328,20 +283,8 @@ impl ProtocolInventory {
                 error,
                 upstream: None,
             })?;
-        let adapter = claimed.udp.ok_or_else(|| FlowFailure {
-            stage: "find_outbound_leaf",
-            error: EngineError::Io(std::io::Error::new(
-                std::io::ErrorKind::InvalidInput,
-                "block outbound cannot provide a udp relay capability",
-            )),
-            upstream: None,
-        })?;
-        UdpFlowCapability::prepare_owned_udp_relay_final_hop(
-            adapter.as_ref(),
-            carrier,
-            leaf,
-            ctx.source_dir(),
-        )
+        let _ = leaf;
+        claimed.prepare_owned_udp_relay_final_hop(carrier, ctx.source_dir())
     }
 }
 

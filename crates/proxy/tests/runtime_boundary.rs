@@ -390,6 +390,7 @@ fn inventory_udp_leaf_and_relay_use_adapter_context_instead_of_proxy() {
     assert!(!udp_leaf.contains("find_udp_flow_leaf("));
     assert!(!udp_relay.contains("find_udp_flow_leaf("));
     assert!(!udp_relay.contains("find_udp_packet_path_leaf("));
+    assert!(!udp_relay.contains("UdpFlowCapability"));
 }
 
 #[test]
@@ -604,6 +605,21 @@ fn registry_outbound_claim_surface_replaces_lookup_only_helpers() {
     assert!(!outbound.contains("fn find_outbound_leaf"));
     assert!(!outbound.contains("fn find_udp_flow_leaf"));
     assert!(!outbound.contains("fn find_udp_packet_path_leaf"));
+}
+
+#[test]
+fn claimed_outbound_leaf_owns_capability_preparation() {
+    let outbound = read(&proxy_src().join("protocol_registry/registry/outbound.rs"));
+    for method in [
+        "fn udp_relay_needs_two_streams(",
+        "fn prepare_owned_udp_relay_final_hop(",
+        "fn prepare_owned_udp_relay_two_stream(",
+    ] {
+        assert!(
+            outbound.contains(method),
+            "claimed outbound leaves should expose `{method}` so inventory stays generic after claim"
+        );
+    }
 }
 
 #[test]
