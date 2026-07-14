@@ -15,7 +15,16 @@ pub(crate) use errors::unreachable_leaf;
     feature = "mieru"
 ))]
 pub(crate) use errors::unreachable_udp_leaf;
+pub(super) use errors::{relay_hop_unsupported, tcp_outbound_unsupported};
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
 pub(super) use errors::{
-    relay_hop_unsupported, tcp_outbound_unsupported, udp_outbound_unsupported,
-    udp_relay_final_hop_unsupported, udp_two_stream_relay_unsupported,
+    udp_outbound_unsupported, udp_relay_final_hop_unsupported, udp_two_stream_relay_unsupported,
 };

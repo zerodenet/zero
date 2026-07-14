@@ -2,7 +2,26 @@ use std::future::Future;
 use std::pin::Pin;
 
 use zero_core::Session;
-use zero_engine::{EngineError, ResolvedLeafOutbound};
+use zero_engine::EngineError;
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
+use zero_engine::ResolvedLeafOutbound;
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
 use zero_transport::outbound_leaf::{
     open_prepared_tcp_transport_bridge_relay_hop, open_prepared_tcp_transport_bridge_stream,
     PreparedTransportBridgeLeaf, ProtocolSessionTcpHandshake, ProtocolSocketTcpHandshake,
@@ -10,9 +29,18 @@ use zero_transport::outbound_leaf::{
     ProtocolTcpTransportOpenResult, ProtocolTransportLeaf,
 };
 
+use crate::protocol_registry::OutboundAdapterContext;
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
 use crate::protocol_registry::{
-    prepare_transport_bridge_leaf, OutboundAdapterContext, ProtocolTransportLeafResolver,
-    ResolveTransportLeafError,
+    prepare_transport_bridge_leaf, ProtocolTransportLeafResolver, ResolveTransportLeafError,
 };
 use crate::transport::{EstablishedTcpOutbound, TcpOutboundFailure, TcpRelayStream};
 
@@ -61,10 +89,28 @@ impl PreparedTcpConnectOperation for DirectTcpConnectOperation {
     }
 }
 
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
 pub(crate) struct SocketTcpConnectOperation<T> {
     pub(crate) handshake: T,
 }
 
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
 impl<T> PreparedTcpConnectOperation for SocketTcpConnectOperation<T>
 where
     T: ProtocolSocketTcpHandshake + Send + Sync,
@@ -90,10 +136,28 @@ where
     }
 }
 
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
 pub(crate) struct SocketTcpRelayOperation<T> {
     pub(crate) handshake: T,
 }
 
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
 impl<T> PreparedTcpRelayOperation for SocketTcpRelayOperation<T>
 where
     T: ProtocolSocketTcpHandshake + Send + Sync,
@@ -120,10 +184,28 @@ where
     }
 }
 
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
 pub(crate) struct SessionTcpConnectOperation<T> {
     pub(crate) handshake: T,
 }
 
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
 impl<T> PreparedTcpConnectOperation for SessionTcpConnectOperation<T>
 where
     T: ProtocolSessionTcpHandshake + Send + Sync,
@@ -148,11 +230,29 @@ where
     }
 }
 
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
 pub(crate) struct TransportBridgeTcpConnectOperation<'a, TBridge, TLeaf> {
     bridge: &'a TBridge,
     prepared: PreparedTransportBridgeLeaf<TLeaf>,
 }
 
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
 impl<TBridge, TLeaf> PreparedTcpConnectOperation
     for TransportBridgeTcpConnectOperation<'_, TBridge, TLeaf>
 where
@@ -196,11 +296,29 @@ where
     }
 }
 
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
 pub(crate) struct TransportBridgeTcpRelayOperation<'a, TBridge, TLeaf> {
     bridge: &'a TBridge,
     prepared: PreparedTransportBridgeLeaf<TLeaf>,
 }
 
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
 impl<TBridge, TLeaf> PreparedTcpRelayOperation
     for TransportBridgeTcpRelayOperation<'_, TBridge, TLeaf>
 where
@@ -228,6 +346,15 @@ where
     }
 }
 
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
 pub(crate) fn prepare_transport_bridge_tcp_connect<'a, TBridge>(
     bridge: &'a TBridge,
     source_dir: Option<&std::path::Path>,
@@ -252,6 +379,15 @@ where
     }))
 }
 
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
 pub(crate) fn prepare_transport_bridge_tcp_relay<'a, TBridge>(
     bridge: &'a TBridge,
     source_dir: Option<&std::path::Path>,
@@ -274,6 +410,15 @@ where
     }))
 }
 
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
 fn connect_prepare_failure<TBridge>(
     leaf: &ResolvedLeafOutbound<'_>,
     error: ResolveTransportLeafError<impl std::fmt::Display>,
@@ -304,6 +449,15 @@ where
     }
 }
 
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
 fn relay_prepare_error<TBridge, E>(error: ResolveTransportLeafError<E>) -> EngineError
 where
     TBridge: ProtocolTcpTransportBridgeMetadata,
@@ -320,6 +474,15 @@ where
     }
 }
 
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
 fn invalid_input(stage: &'static str, error: impl std::fmt::Display) -> EngineError {
     EngineError::Io(std::io::Error::new(
         std::io::ErrorKind::InvalidInput,
@@ -335,14 +498,41 @@ pub(crate) enum PreparedTcpOperation<'a, 'leaf> {
     _Lifetime(std::marker::PhantomData<&'leaf ()>),
 }
 
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
 pub(crate) struct PreparedSocketTcpOperation<'leaf, T> {
     pub(crate) handshake: &'leaf T,
 }
 
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
 pub(crate) struct PreparedSessionTcpOperation<'leaf, T> {
     pub(crate) handshake: &'leaf T,
 }
 
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
 pub(crate) async fn execute_session_tcp_connect_operation<T>(
     session: &Session,
     operation: PreparedSessionTcpOperation<'_, T>,
@@ -368,6 +558,15 @@ where
     ))
 }
 
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
 pub(crate) async fn execute_socket_tcp_connect_operation<T>(
     ctx: OutboundAdapterContext<'_>,
     session: &Session,
@@ -406,6 +605,15 @@ where
     ))
 }
 
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
 pub(crate) async fn execute_socket_tcp_relay_hop_operation<T>(
     stream: TcpRelayStream,
     session: &Session,

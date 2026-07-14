@@ -21,7 +21,6 @@ pub(crate) use contract::ClientResponseInboundProtocol;
 pub(crate) use contract::InboundProtocol;
 #[cfg(any(feature = "vmess", feature = "trojan"))]
 pub(crate) use contract::NoClientResponseInboundProtocol;
-#[cfg(feature = "shadowsocks")]
 pub(crate) use contract::NoClientResponseStreamProtocol;
 #[cfg(any(
     feature = "socks5",

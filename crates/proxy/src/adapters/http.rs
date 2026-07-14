@@ -6,8 +6,7 @@ use crate::adapters::identity::{
     named_protocol_supports_inbound, named_protocol_supports_outbound, NamedProtocolAdapter,
 };
 use crate::protocol_registry::{
-    InboundListenerCapability, ProtocolSupportCapability, TcpOutboundCapability, UdpFlowCapability,
-    UdpPacketPathCapability,
+    InboundListenerCapability, ProtocolSupportCapability, TcpOutboundCapability,
 };
 
 #[cfg(feature = "http")]
@@ -40,12 +39,6 @@ impl InboundListenerCapability for HttpConnectAdapter {
 
 #[cfg(feature = "http")]
 impl TcpOutboundCapability for HttpConnectAdapter {}
-
-#[cfg(feature = "http")]
-impl UdpFlowCapability for HttpConnectAdapter {}
-
-#[cfg(feature = "http")]
-impl UdpPacketPathCapability for HttpConnectAdapter {}
 
 #[cfg(feature = "http")]
 impl ProtocolSupportCapability for HttpConnectAdapter {

@@ -10,9 +10,11 @@ use crate::runtime::Proxy;
 #[cfg(any(
     feature = "socks5",
     feature = "vless",
-    feature = "vmess",
+    feature = "hysteria2",
+    feature = "shadowsocks",
     feature = "trojan",
-    feature = "shadowsocks"
+    feature = "vmess",
+    feature = "mieru"
 ))]
 use crate::transport::StreamTraffic;
 
@@ -138,9 +140,11 @@ impl Proxy {
     #[cfg(any(
         feature = "socks5",
         feature = "vless",
-        feature = "vmess",
+        feature = "hysteria2",
+        feature = "shadowsocks",
         feature = "trojan",
-        feature = "shadowsocks"
+        feature = "vmess",
+        feature = "mieru"
     ))]
     pub(crate) fn record_session_outbound_traffic(&self, session_id: u64, traffic: StreamTraffic) {
         if traffic.is_empty() {

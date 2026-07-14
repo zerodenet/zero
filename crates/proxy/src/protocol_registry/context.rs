@@ -1,17 +1,44 @@
 use crate::runtime::Proxy;
 
 #[derive(Clone)]
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
 pub(crate) struct UdpRuntimeServices {
     proxy: Proxy,
 }
 
 #[derive(Clone, Copy)]
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
 pub(crate) enum UdpAssociationCloseKind {
     Closed,
     IdleTimeout,
     Dropped,
 }
 
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
 impl UdpRuntimeServices {
     pub(crate) async fn connect_upstream(
         &self,
@@ -69,6 +96,7 @@ impl UdpRuntimeServices {
         }
     }
 
+    #[cfg(feature = "shadowsocks")]
     pub(crate) async fn build_udp_socket_carrier(
         &self,
         server: &str,
@@ -106,10 +134,28 @@ impl<'a> OutboundAdapterContext<'a> {
 }
 
 #[derive(Clone, Copy)]
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
 pub(crate) struct UdpAdapterContext<'a> {
     proxy: &'a Proxy,
 }
 
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
 impl<'a> UdpAdapterContext<'a> {
     pub(crate) fn new(proxy: &'a Proxy) -> Self {
         Self { proxy }

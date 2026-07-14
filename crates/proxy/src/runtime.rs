@@ -11,8 +11,10 @@ use zero_engine::{Engine, EngineError};
 #[cfg(any(
     feature = "socks5",
     feature = "vless",
-    feature = "vmess",
+    feature = "hysteria2",
+    feature = "shadowsocks",
     feature = "trojan",
+    feature = "vmess",
     feature = "mieru"
 ))]
 use zero_platform_tokio::TokioSocket;
@@ -70,7 +72,25 @@ pub(crate) mod udp_association;
     feature = "mieru"
 ))]
 pub(crate) mod udp_delivery;
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
 pub(crate) mod udp_dispatch;
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
 pub(crate) mod udp_flow;
 #[cfg(any(
     feature = "socks5",
@@ -82,6 +102,15 @@ pub(crate) mod udp_flow;
     feature = "mieru"
 ))]
 pub(crate) mod udp_ingress;
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
 pub(crate) mod udp_socket;
 
 pub use handle::ProxyHandle;
@@ -136,8 +165,10 @@ impl Proxy {
     #[cfg(any(
         feature = "socks5",
         feature = "vless",
-        feature = "vmess",
+        feature = "hysteria2",
+        feature = "shadowsocks",
         feature = "trojan",
+        feature = "vmess",
         feature = "mieru"
     ))]
     pub(crate) async fn connect_upstream_host(
@@ -155,8 +186,10 @@ impl Proxy {
     #[cfg(any(
         feature = "socks5",
         feature = "vless",
-        feature = "vmess",
+        feature = "hysteria2",
+        feature = "shadowsocks",
         feature = "trojan",
+        feature = "vmess",
         feature = "mieru"
     ))]
     pub(crate) async fn connect_upstream_host_owned(

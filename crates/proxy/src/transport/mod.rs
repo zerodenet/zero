@@ -34,9 +34,11 @@ pub(crate) use zero_transport::RecordingStream;
 #[cfg(any(
     feature = "socks5",
     feature = "vless",
-    feature = "vmess",
+    feature = "hysteria2",
+    feature = "shadowsocks",
     feature = "trojan",
-    feature = "shadowsocks"
+    feature = "vmess",
+    feature = "mieru"
 ))]
 pub(crate) use zero_transport::StreamTraffic;
 pub(crate) use zero_transport::{RelayCarrier, TcpRelayStream};

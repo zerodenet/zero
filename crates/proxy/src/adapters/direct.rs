@@ -9,6 +9,10 @@ use crate::adapters::identity::{
     named_protocol_supports_outbound, NamedProtocolAdapter,
 };
 use crate::protocol_catalog::protocol_descriptor;
+use crate::protocol_registry::{
+    direct_leaf_runtime, InboundListenerCapability, OutboundLeafRuntime, ProtocolSupportCapability,
+    TcpOutboundCapability,
+};
 #[cfg(any(
     feature = "socks5",
     feature = "vless",
@@ -18,10 +22,7 @@ use crate::protocol_catalog::protocol_descriptor;
     feature = "vmess",
     feature = "mieru"
 ))]
-use crate::protocol_registry::{
-    direct_leaf_runtime, InboundListenerCapability, OutboundLeafRuntime, ProtocolSupportCapability,
-    TcpOutboundCapability, UdpFlowCapability, UdpPacketPathCapability,
-};
+use crate::protocol_registry::{UdpFlowCapability, UdpPacketPathCapability};
 #[cfg(any(
     feature = "socks5",
     feature = "vless",
@@ -79,7 +80,7 @@ impl UdpFlowCapability for DirectAdapter {
     }
 }
 
-#[cfg(not(any(
+#[cfg(any(
     feature = "socks5",
     feature = "vless",
     feature = "hysteria2",
@@ -87,9 +88,7 @@ impl UdpFlowCapability for DirectAdapter {
     feature = "trojan",
     feature = "vmess",
     feature = "mieru"
-)))]
-impl UdpFlowCapability for DirectAdapter {}
-
+))]
 impl UdpPacketPathCapability for DirectAdapter {}
 
 impl InboundListenerCapability for DirectAdapter {

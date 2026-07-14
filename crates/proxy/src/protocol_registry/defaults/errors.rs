@@ -1,5 +1,14 @@
 use zero_engine::{EngineError, ResolvedLeafOutbound};
 
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
 use crate::runtime::udp_dispatch::FlowFailure;
 use crate::transport::TcpOutboundFailure;
 
@@ -22,6 +31,15 @@ pub(in crate::protocol_registry) fn relay_hop_unsupported() -> EngineError {
     unsupported_io("this adapter does not support relay hop")
 }
 
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
 pub(in crate::protocol_registry) fn udp_outbound_unsupported() -> FlowFailure {
     udp_flow_unsupported(
         "no_udp_outbound",
@@ -29,6 +47,15 @@ pub(in crate::protocol_registry) fn udp_outbound_unsupported() -> FlowFailure {
     )
 }
 
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
 pub(in crate::protocol_registry) fn udp_two_stream_relay_unsupported() -> FlowFailure {
     udp_flow_unsupported(
         "no_two_stream_relay",
@@ -36,6 +63,15 @@ pub(in crate::protocol_registry) fn udp_two_stream_relay_unsupported() -> FlowFa
     )
 }
 
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
 pub(in crate::protocol_registry) fn udp_relay_final_hop_unsupported() -> FlowFailure {
     udp_flow_unsupported(
         "no_udp_relay_final_hop",
@@ -78,6 +114,15 @@ pub(crate) fn unreachable_udp_leaf(
     }
 }
 
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
 fn udp_flow_unsupported(stage: &'static str, message: &'static str) -> FlowFailure {
     FlowFailure {
         stage,

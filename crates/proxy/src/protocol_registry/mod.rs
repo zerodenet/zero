@@ -24,12 +24,29 @@ pub(crate) use capability::ManagedUdpHandlerProvider;
 #[cfg(feature = "socks5")]
 pub(crate) use capability::UpstreamUdpHandlerProvider;
 pub(crate) use capability::{
-    InboundListenerCapability, ProtocolSupportCapability, TcpOutboundCapability, UdpFlowCapability,
-    UdpPacketPathCapability,
+    InboundListenerCapability, ProtocolSupportCapability, TcpOutboundCapability,
 };
-pub(crate) use context::{
-    OutboundAdapterContext, UdpAdapterContext, UdpAssociationCloseKind, UdpRuntimeServices,
-};
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
+pub(crate) use capability::{UdpFlowCapability, UdpPacketPathCapability};
+pub(crate) use context::OutboundAdapterContext;
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
+pub(crate) use context::{UdpAdapterContext, UdpAssociationCloseKind, UdpRuntimeServices};
 #[cfg(feature = "transport_quic")]
 pub(crate) use defaults::bind_transport_inbound;
 pub(crate) use defaults::unreachable_leaf;
@@ -58,6 +75,15 @@ pub(crate) use registry::fake_direct_leaf;
 ))]
 pub(crate) use registry::proxy_leaf_runtime;
 pub(crate) use registry::ProtocolRegistry;
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
 pub(crate) use transport_leaf::{
     prepare_last_transport_bridge_leaf, prepare_transport_bridge_leaf,
     ProtocolTransportLeafResolver, ResolveTransportLeafError,

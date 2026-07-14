@@ -10,10 +10,8 @@
     feature = "mieru"
 ))]
 use std::net::SocketAddr;
-#[cfg(feature = "socks5")]
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
-#[cfg(feature = "socks5")]
 use zero_core::Address;
 #[cfg(any(
     feature = "socks5",
@@ -36,7 +34,6 @@ use zero_engine::EngineError;
 ))]
 use zero_platform_tokio::TokioDatagramSocket;
 
-#[cfg(feature = "socks5")]
 use crate::runtime::Proxy;
 
 /// Send UDP packet directly to target.
@@ -60,7 +57,6 @@ pub(crate) async fn send_direct_udp_packet(
         .map_err(Into::into)
 }
 
-#[cfg(feature = "socks5")]
 pub(crate) fn datagram_bind_addr_for_peer(peer: SocketAddr) -> SocketAddr {
     match peer {
         SocketAddr::V4(_) => SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 0),
@@ -68,7 +64,6 @@ pub(crate) fn datagram_bind_addr_for_peer(peer: SocketAddr) -> SocketAddr {
     }
 }
 
-#[cfg(feature = "socks5")]
 pub(crate) async fn bind_datagram_socket_for_peer(
     peer: SocketAddr,
 ) -> Result<TokioDatagramSocket, EngineError> {
@@ -77,7 +72,6 @@ pub(crate) async fn bind_datagram_socket_for_peer(
         .map_err(Into::into)
 }
 
-#[cfg(feature = "socks5")]
 pub(crate) async fn resolve_udp_peer_endpoint(
     proxy: &Proxy,
     address: &Address,

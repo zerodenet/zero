@@ -23,15 +23,6 @@ pub(super) enum EstablishedTcpOutboundKind {
         upstream: TcpRelayStream,
     },
     Block,
-    #[cfg(any(
-        feature = "socks5",
-        feature = "vless",
-        feature = "hysteria2",
-        feature = "shadowsocks",
-        feature = "trojan",
-        feature = "vmess",
-        feature = "mieru"
-    ))]
     Proxied {
         tag: String,
         server: String,
@@ -93,15 +84,6 @@ impl EstablishedTcpOutbound {
     pub(crate) fn into_relay_stream(self) -> Result<TcpRelayStream, EngineError> {
         match self.kind {
             EstablishedTcpOutboundKind::Direct { upstream, .. } => Ok(upstream),
-            #[cfg(any(
-                feature = "socks5",
-                feature = "vless",
-                feature = "hysteria2",
-                feature = "shadowsocks",
-                feature = "trojan",
-                feature = "vmess",
-                feature = "mieru"
-            ))]
             EstablishedTcpOutboundKind::Proxied { upstream, .. } => Ok(upstream),
             EstablishedTcpOutboundKind::Relay { upstream } => Ok(upstream),
             EstablishedTcpOutboundKind::Block => Err(EngineError::Io(io::Error::new(

@@ -197,7 +197,6 @@ pub(crate) use crate::runtime::udp_flow::result::{FlowFailure, FlowStartResult};
     feature = "mieru"
 ))]
 pub(crate) use candidate::UdpCandidate;
-#[cfg(any(feature = "hysteria2", feature = "shadowsocks"))]
 #[cfg(feature = "socks5")]
 pub(crate) use managed::UpstreamTrackedStart;
 

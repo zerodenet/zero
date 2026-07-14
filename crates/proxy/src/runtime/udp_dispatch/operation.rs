@@ -3,11 +3,15 @@ use std::pin::Pin;
 
 use zero_core::Session;
 use zero_engine::ResolvedLeafOutbound;
+#[cfg(any(feature = "vless", feature = "vmess", feature = "trojan"))]
 use zero_transport::managed_udp::ProtocolManagedStreamUdpBridgeOps;
+#[cfg(feature = "vless")]
 use zero_transport::managed_udp::ProtocolRelayTwoStreamManagedUdpBridgeOps;
+#[cfg(feature = "vless")]
 use zero_transport::outbound_leaf::{
     ProtocolRelayTwoStreamTransportLeaf, ProtocolRelayTwoStreamUdpTransportBridgeMetadata,
 };
+#[cfg(any(feature = "vless", feature = "vmess", feature = "trojan"))]
 use zero_transport::outbound_leaf::{ProtocolTransportLeaf, ProtocolUdpTransportBridgeMetadata};
 
 use crate::protocol_registry::{ProtocolTransportLeafResolver, UdpAdapterContext};
@@ -16,10 +20,14 @@ use crate::runtime::udp_dispatch::UdpDispatch;
 use crate::runtime::udp_dispatch::UpstreamTrackedStart;
 #[cfg(feature = "vless")]
 use crate::runtime::udp_flow::managed::bridge::start_protocol_transport_bridge_udp_relay_two_stream;
+#[cfg(feature = "mieru")]
 use crate::runtime::udp_flow::managed::bridge::{
-    start_direct_managed_stream_packet, start_protocol_transport_bridge_udp_flow,
-    start_protocol_transport_bridge_udp_relay_final_hop, start_relay_managed_stream_packet,
+    start_direct_managed_stream_packet, start_relay_managed_stream_packet,
     ManagedStreamPacketRelay, ManagedStreamPacketStartBridge,
+};
+#[cfg(any(feature = "vless", feature = "vmess", feature = "trojan"))]
+use crate::runtime::udp_flow::managed::bridge::{
+    start_protocol_transport_bridge_udp_flow, start_protocol_transport_bridge_udp_relay_final_hop,
 };
 use crate::runtime::udp_flow::outbound::UdpFlowOutbound;
 use crate::runtime::udp_flow::result::{FlowFailure, FlowStartResult};
@@ -66,11 +74,13 @@ impl PreparedUdpFlowOperation for DirectUdpFlowOperation {
     }
 }
 
+#[cfg(any(feature = "hysteria2", feature = "shadowsocks"))]
 pub(crate) struct ManagedDatagramUdpOperation<'a, T> {
     pub(crate) plan: zero_transport::managed_udp::ManagedDatagramStartPlan<'a, T>,
     pub(crate) needs_proxy: bool,
 }
 
+#[cfg(any(feature = "hysteria2", feature = "shadowsocks"))]
 impl<T> PreparedUdpFlowOperation for ManagedDatagramUdpOperation<'_, T>
 where
     T: std::any::Any + Send + Sync + std::fmt::Debug,
@@ -133,11 +143,13 @@ where
     }
 }
 
+#[cfg(feature = "mieru")]
 pub(crate) struct ManagedStreamPacketUdpOperation<'a, T> {
     pub(crate) operation: PreparedManagedStreamPacketOperation<'a, T>,
     pub(crate) needs_proxy: bool,
 }
 
+#[cfg(feature = "mieru")]
 impl<T> PreparedUdpFlowOperation for ManagedStreamPacketUdpOperation<'_, T>
 where
     T: std::any::Any + Send + Sync + std::fmt::Debug,
@@ -204,6 +216,7 @@ pub(crate) async fn execute_direct_udp_operation(
     })
 }
 
+#[cfg(any(feature = "hysteria2", feature = "shadowsocks"))]
 pub(crate) async fn execute_managed_datagram_operation<T>(
     dispatch: &mut UdpDispatch,
     proxy: Option<&Proxy>,
@@ -261,6 +274,7 @@ pub(crate) enum PreparedTransportUdpOperation<'a, 'leaf> {
     },
 }
 
+#[cfg(feature = "mieru")]
 pub(crate) enum PreparedManagedStreamPacketOperation<'a, T> {
     Direct {
         plan: zero_transport::managed_udp::ManagedStreamPacketBridgePlan<'a, T>,
@@ -271,11 +285,13 @@ pub(crate) enum PreparedManagedStreamPacketOperation<'a, T> {
     },
 }
 
+#[cfg(any(feature = "vless", feature = "vmess", feature = "trojan"))]
 pub(crate) struct TransportBridgeUdpOperation<'a, TBridge> {
     pub(crate) bridge: &'a TBridge,
     pub(crate) operation: PreparedTransportUdpOperation<'a, 'a>,
 }
 
+#[cfg(any(feature = "vless", feature = "vmess", feature = "trojan"))]
 impl<'leaf, TBridge> PreparedUdpFlowOperation for TransportBridgeUdpOperation<'leaf, TBridge>
 where
     TBridge: Send
@@ -319,11 +335,13 @@ pub(crate) struct PreparedRelayTwoStreamUdpOperation<'a> {
     pub(crate) chain: Vec<ResolvedLeafOutbound<'a>>,
 }
 
+#[cfg(feature = "vless")]
 pub(crate) struct RelayTwoStreamUdpOperation<'a, TBridge> {
     pub(crate) bridge: &'a TBridge,
     pub(crate) chain: Vec<ResolvedLeafOutbound<'a>>,
 }
 
+#[cfg(feature = "vless")]
 impl<'leaf, TBridge> PreparedUdpFlowOperation for RelayTwoStreamUdpOperation<'leaf, TBridge>
 where
     TBridge: Send
@@ -392,6 +410,7 @@ where
     .await
 }
 
+#[cfg(feature = "mieru")]
 pub(crate) async fn execute_managed_stream_packet_operation<T>(
     dispatch: &mut UdpDispatch,
     proxy: Option<&Proxy>,
@@ -442,6 +461,7 @@ where
     }
 }
 
+#[cfg(any(feature = "vless", feature = "vmess", feature = "trojan"))]
 pub(crate) async fn execute_transport_udp_operation<'a, TBridge>(
     bridge: &TBridge,
     dispatch: &mut UdpDispatch,

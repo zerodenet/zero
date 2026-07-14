@@ -154,12 +154,10 @@ where
 }
 
 #[derive(Clone, Copy, Default)]
-#[cfg(feature = "shadowsocks")]
 pub(crate) struct NoClientResponseStreamProtocol<S> {
     _stream: core::marker::PhantomData<fn() -> S>,
 }
 
-#[cfg(feature = "shadowsocks")]
 impl<S> NoClientResponseStreamProtocol<S> {
     pub(crate) const fn new() -> Self {
         Self {
@@ -169,7 +167,6 @@ impl<S> NoClientResponseStreamProtocol<S> {
 }
 
 #[async_trait]
-#[cfg(feature = "shadowsocks")]
 impl<S> InboundProtocol for NoClientResponseStreamProtocol<S>
 where
     S: AsyncRead + AsyncWrite + Unpin + Send,

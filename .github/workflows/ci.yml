@@ -81,7 +81,7 @@ jobs:
           - name: core-only
             args: ""
           - name: simple-tcp
-            args: "--features http_connect"
+            args: "--features http"
           - name: registered-association
             args: "--features socks5"
           - name: socket-datagram-packet-path

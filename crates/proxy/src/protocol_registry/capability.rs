@@ -102,6 +102,15 @@ pub(crate) trait TcpOutboundCapability: Send + Sync {
 }
 
 #[async_trait]
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
 pub(crate) trait UdpFlowCapability: Send + Sync {
     fn prepare_udp_flow<'a>(
         &'a self,
@@ -165,6 +174,15 @@ pub(crate) trait ManagedUdpHandlerProvider: Send + Sync {
 }
 
 #[async_trait]
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
 pub(crate) trait UdpPacketPathCapability: Send + Sync {
     fn prepare_udp_packet_path<'a>(
         &'a self,
