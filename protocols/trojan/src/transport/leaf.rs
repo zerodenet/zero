@@ -11,7 +11,7 @@ use super::managed_udp::TrojanManagedUdpFlowResume;
 use super::outbound::{OwnedTrojanOutboundTlsPlan, TrojanTcpStreamOpen};
 
 #[derive(Clone)]
-pub struct TrojanOutboundLeaf {
+pub struct OwnedTrojanOutboundLeafConfig {
     tag: String,
     server: String,
     port: u16,
@@ -19,7 +19,8 @@ pub struct TrojanOutboundLeaf {
     protocol: crate::outbound::PreparedTrojanOutboundRequestBundle,
 }
 
-impl TrojanOutboundLeaf {
+impl OwnedTrojanOutboundLeafConfig {
+    #[allow(clippy::too_many_arguments)]
     pub fn from_config_refs(
         source_dir: Option<&Path>,
         tag: &str,
@@ -37,9 +38,26 @@ impl TrojanOutboundLeaf {
             client_fingerprint,
         );
         let transport = OwnedTrojanOutboundTlsPlan::from_parts(source_dir, server, port);
-        Self::new(tag, server, port, transport, protocol)
+        Self {
+            tag: tag.to_owned(),
+            server: server.to_owned(),
+            port,
+            transport,
+            protocol,
+        }
     }
+}
 
+#[derive(Clone)]
+pub struct TrojanOutboundLeaf {
+    tag: String,
+    server: String,
+    port: u16,
+    transport: OwnedTrojanOutboundTlsPlan,
+    protocol: crate::outbound::PreparedTrojanOutboundRequestBundle,
+}
+
+impl TrojanOutboundLeaf {
     pub fn new(
         tag: &str,
         server: &str,
@@ -107,6 +125,25 @@ impl TrojanOutboundLeaf {
             self.owned_transport_plan(),
             self.protocol.udp_relay_flow_plan(),
         )
+    }
+}
+
+impl From<OwnedTrojanOutboundLeafConfig> for TrojanOutboundLeaf {
+    fn from(config: OwnedTrojanOutboundLeafConfig) -> Self {
+        let OwnedTrojanOutboundLeafConfig {
+            tag,
+            server,
+            port,
+            transport,
+            protocol,
+        } = config;
+        Self {
+            tag,
+            server,
+            port,
+            transport,
+            protocol,
+        }
     }
 }
 

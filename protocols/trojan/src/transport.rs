@@ -8,5 +8,5 @@ mod outbound;
 
 pub use bridge::TrojanTlsBridge;
 pub use inbound::{OwnedTrojanInboundListenerConfig, TrojanInboundListenerRequest};
-pub use leaf::TrojanOutboundLeaf;
+pub use leaf::{OwnedTrojanOutboundLeafConfig, TrojanOutboundLeaf};
 pub use outbound::OwnedTrojanOutboundTlsPlan;

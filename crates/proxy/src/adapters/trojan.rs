@@ -1,6 +1,6 @@
 #[cfg(feature = "trojan")]
 mod listener;
-use ::trojan::transport::{TrojanOutboundLeaf, TrojanTlsBridge};
+use ::trojan::transport::{OwnedTrojanOutboundLeafConfig, TrojanOutboundLeaf, TrojanTlsBridge};
 #[cfg(feature = "trojan")]
 use zero_config::InboundConfig;
 use zero_config::{InboundProtocolConfig, OutboundProtocolConfig};
@@ -126,16 +126,19 @@ impl TcpOutboundCapability for TrojanAdapter {
             Some((server, port)),
             runtime,
             move |source_dir| {
-                Ok::<TrojanOutboundLeaf, zero_core::Error>(TrojanOutboundLeaf::from_config_refs(
-                    source_dir,
-                    tag,
-                    server,
-                    port,
-                    password,
-                    sni,
-                    insecure,
-                    client_fingerprint,
-                ))
+                Ok::<TrojanOutboundLeaf, zero_core::Error>(
+                    OwnedTrojanOutboundLeafConfig::from_config_refs(
+                        source_dir,
+                        tag,
+                        server,
+                        port,
+                        password,
+                        sni,
+                        insecure,
+                        client_fingerprint,
+                    )
+                    .into(),
+                )
             },
         ))
     }
@@ -164,16 +167,19 @@ impl UdpFlowCapability for TrojanAdapter {
             bridge,
             Some((server, port)),
             move |source_dir| {
-                Ok::<TrojanOutboundLeaf, zero_core::Error>(TrojanOutboundLeaf::from_config_refs(
-                    source_dir,
-                    tag,
-                    server,
-                    port,
-                    password,
-                    sni,
-                    insecure,
-                    client_fingerprint,
-                ))
+                Ok::<TrojanOutboundLeaf, zero_core::Error>(
+                    OwnedTrojanOutboundLeafConfig::from_config_refs(
+                        source_dir,
+                        tag,
+                        server,
+                        port,
+                        password,
+                        sni,
+                        insecure,
+                        client_fingerprint,
+                    )
+                    .into(),
+                )
             },
         ))
     }

@@ -16,7 +16,11 @@ pub struct OwnedTrojanOutboundTlsPlan {
 }
 
 impl OwnedTrojanOutboundTlsPlan {
-    pub fn from_parts(source_dir: Option<&Path>, server: &str, port: u16) -> Self {
+    pub(in crate::transport) fn from_parts(
+        source_dir: Option<&Path>,
+        server: &str,
+        port: u16,
+    ) -> Self {
         Self {
             server: server.to_owned(),
             port,
