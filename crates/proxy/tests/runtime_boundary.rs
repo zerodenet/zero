@@ -501,6 +501,10 @@ fn protocol_transport_roots_do_not_reexport_legacy_inbound_helper_functions() {
             "inbound_tcp_acceptor",
         ),
         (
+            "protocols/hysteria2/src/transport.rs",
+            "accept_and_dispatch_authenticated_hysteria2_quic_session",
+        ),
+        (
             "protocols/mieru/src/transport.rs",
             "inbound_listener_request_from_users",
         ),
@@ -1034,6 +1038,32 @@ fn hysteria2_listener_adapter_uses_protocol_option_refs() {
         assert!(
             listener.contains(required),
             "adapters/hysteria2/inbound.rs should project through protocol-owned hysteria2 option surface `{required}`"
+        );
+    }
+}
+
+#[test]
+fn hysteria2_protocol_inbound_surface_stops_at_authenticated_quic_connections() {
+    let inbound = read(&workspace_root().join("protocols/hysteria2/src/inbound.rs"));
+    for forbidden in [
+        "dispatch_session_with_handlers",
+        "accept_and_dispatch_authenticated_quic_session",
+        "JoinSet",
+        "tokio::select!",
+    ] {
+        assert!(
+            !inbound.contains(forbidden),
+            "protocols/hysteria2/src/inbound.rs must not own QUIC task orchestration via `{forbidden}`"
+        );
+    }
+    for required in [
+        "pub async fn accept_authenticated_quic_session",
+        "pub async fn accept_next_tcp_stream",
+        "pub fn accept_udp_session(&self)",
+    ] {
+        assert!(
+            inbound.contains(required),
+            "protocols/hysteria2/src/inbound.rs should stop at authenticated QUIC connection surfaces like `{required}`"
         );
     }
 }

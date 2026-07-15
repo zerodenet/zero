@@ -1,7 +1,5 @@
-use core::future::Future;
 use std::io;
 
-use tokio::task::JoinSet;
 use zero_core::Session;
 use zero_transport::RuntimeError;
 
@@ -34,46 +32,6 @@ pub use stream::Hysteria2Stream;
 
 pub(crate) fn quic_alpn_protocols() -> Vec<Vec<u8>> {
     vec![b"hysteria2".to_vec()]
-}
-
-pub async fn accept_and_dispatch_authenticated_hysteria2_quic_session<
-    Udp,
-    UdpFut,
-    Tcp,
-    TcpFut,
-    TaskResult,
-    TaskResultFut,
-    E,
->(
-    profile: &Hysteria2AuthenticatedInboundProfile,
-    conn: quinn::Connection,
-    on_udp_session: Udp,
-    on_tcp_stream: Tcp,
-    on_stream_task_result: TaskResult,
-) -> Result<(), E>
-where
-    Udp: FnMut(
-        std::sync::Arc<quinn::Connection>,
-        crate::udp::Hysteria2InboundUdpRelay,
-        &mut JoinSet<Result<(), E>>,
-    ) -> UdpFut,
-    UdpFut: Future<Output = Result<(), E>>,
-    Tcp: FnMut(Session, Hysteria2Stream, &mut JoinSet<Result<(), E>>) -> TcpFut,
-    TcpFut: Future<Output = Result<(), E>>,
-    TaskResult: FnMut(Result<Result<(), E>, tokio::task::JoinError>) -> TaskResultFut,
-    TaskResultFut: Future<Output = Result<(), E>>,
-    E: From<zero_core::Error> + Send + 'static,
-{
-    profile
-        .protocol
-        .accept_and_dispatch_authenticated_quic_session(
-            conn,
-            Hysteria2Stream::new,
-            on_udp_session,
-            on_tcp_stream,
-            on_stream_task_result,
-        )
-        .await
 }
 
 async fn open_authenticated_hysteria2_quic_connection(
