@@ -690,6 +690,7 @@ fn claimed_outbound_leaf_owns_capability_preparation() {
     assert!(!outbound.contains("pub(crate) struct ClaimedOutboundLeaf<'a> {\r\n    leaf:"));
     assert!(!outbound.contains("pub(crate) struct ClaimedOutboundLeaf<'a> {\n    leaf:"));
     assert!(outbound.contains("claim_tcp_outbound_leaf(leaf.clone())"));
+    assert!(outbound.contains("claim_udp_flow_leaf(leaf.clone())"));
     assert!(outbound.contains("struct ClaimedTcpHooks"));
     assert!(outbound.contains("struct ClaimedUdpHooks"));
     assert!(!outbound.contains("self.leaf"));
@@ -714,6 +715,38 @@ fn transport_bridge_adapters_offer_claim_time_tcp_projection() {
         assert!(
             source.contains("claim_transport_bridge_tcp_leaf("),
             "{relative} should project into the shared claimed transport-bridge helper"
+        );
+    }
+}
+
+#[test]
+fn transport_bridge_adapters_offer_claim_time_udp_projection() {
+    let helper = read(&proxy_src().join("adapters/transport_bridge.rs"));
+    assert!(helper.contains("struct ClaimedTransportBridgeUdpLeaf"));
+    assert!(helper.contains("claim_transport_bridge_udp_leaf"));
+    assert!(helper.contains("ClaimedRelayTwoStreamTransportBridgeUdpLeaf"));
+    assert!(helper.contains("claim_relay_two_stream_transport_bridge_udp_leaf"));
+
+    for relative in [
+        "adapters/vless.rs",
+        "adapters/vmess.rs",
+        "adapters/trojan.rs",
+    ] {
+        let source = read(&proxy_src().join(relative));
+        assert!(
+            source.contains("fn claim_udp_flow_leaf<'a>("),
+            "{relative} should expose a claim-time UDP leaf projection path"
+        );
+    }
+
+    let vless = read(&proxy_src().join("adapters/vless.rs"));
+    assert!(vless.contains("claim_relay_two_stream_transport_bridge_udp_leaf("));
+
+    for relative in ["adapters/vmess.rs", "adapters/trojan.rs"] {
+        let source = read(&proxy_src().join(relative));
+        assert!(
+            source.contains("claim_transport_bridge_udp_leaf("),
+            "{relative} should project into the shared claimed UDP transport-bridge helper"
         );
     }
 }

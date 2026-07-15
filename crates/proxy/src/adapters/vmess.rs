@@ -15,17 +15,17 @@ use crate::adapters::identity::{
     named_protocol_supports_outbound, NamedProtocolAdapter, ProtocolTransportBridgeAdapter,
 };
 use crate::adapters::transport_bridge::{
-    claim_transport_bridge_tcp_leaf, prepare_transport_bridge_leaf,
-    transport_bridge_connect_prepare_failure, transport_bridge_relay_prepare_error,
-    transport_bridge_udp_direct_prepare_failure, transport_bridge_udp_relay_final_prepare_failure,
-    ProtocolTransportLeafResolver,
+    claim_transport_bridge_tcp_leaf, claim_transport_bridge_udp_leaf,
+    prepare_transport_bridge_leaf, transport_bridge_connect_prepare_failure,
+    transport_bridge_relay_prepare_error, transport_bridge_udp_direct_prepare_failure,
+    transport_bridge_udp_relay_final_prepare_failure, ProtocolTransportLeafResolver,
 };
 use crate::protocol_registry::{
     prepare_owned_transport_bridge_udp_relay_final_hop, prepare_transport_bridge_tcp_connect,
     prepare_transport_bridge_tcp_relay, prepare_transport_bridge_udp_direct, proxy_leaf_runtime,
-    ClaimedTcpOutboundLeaf, InboundListenerCapability, ManagedUdpHandlerProvider,
-    OutboundLeafRuntime, ProtocolSupportCapability, TcpOutboundCapability, UdpFlowCapability,
-    UdpPacketPathCapability,
+    ClaimedTcpOutboundLeaf, ClaimedUdpFlowLeaf, InboundListenerCapability,
+    ManagedUdpHandlerProvider, OutboundLeafRuntime, ProtocolSupportCapability,
+    TcpOutboundCapability, UdpFlowCapability, UdpPacketPathCapability,
 };
 use crate::runtime::path::TcpPathCategory;
 #[cfg(feature = "vmess")]
@@ -237,6 +237,46 @@ impl TcpOutboundCapability for VmessAdapter {
 #[cfg(feature = "vmess")]
 #[async_trait]
 impl UdpFlowCapability for VmessAdapter {
+    fn claim_udp_flow_leaf<'a>(
+        &self,
+        leaf: ResolvedLeafOutbound<'a>,
+    ) -> Option<Box<dyn ClaimedUdpFlowLeaf<'a> + 'a>> {
+        let ResolvedLeafOutbound::Vmess {
+            tag,
+            server,
+            port,
+            id,
+            cipher,
+            mux_concurrency,
+            tls,
+            ws,
+            grpc,
+            ..
+        } = leaf
+        else {
+            return None;
+        };
+        let bridge = self.bridge.clone();
+        Some(claim_transport_bridge_udp_leaf(
+            bridge,
+            Some((server, port)),
+            move |source_dir| {
+                VmessOutboundLeaf::from_profile_refs(
+                    source_dir,
+                    tag,
+                    server,
+                    port,
+                    id,
+                    cipher,
+                    mux_concurrency,
+                    tls,
+                    ws,
+                    grpc,
+                )
+            },
+        ))
+    }
+
     fn prepare_udp_flow<'a>(
         &self,
         leaf: ResolvedLeafOutbound<'a>,

@@ -36,7 +36,7 @@ pub(crate) use capability::{
     feature = "vmess",
     feature = "mieru"
 ))]
-pub(crate) use capability::{UdpFlowCapability, UdpPacketPathCapability};
+pub(crate) use capability::{ClaimedUdpFlowLeaf, UdpFlowCapability, UdpPacketPathCapability};
 pub(crate) use context::{OutboundAdapterContext, TcpRuntimeServices};
 #[cfg(any(
     feature = "socks5",

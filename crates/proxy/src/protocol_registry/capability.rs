@@ -43,6 +43,47 @@ pub(crate) trait ClaimedTcpOutboundLeaf<'a>: Send + Sync {
     ) -> Result<Box<dyn PreparedTcpRelayOperation + 'a>, EngineError>;
 }
 
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
+pub(crate) trait ClaimedUdpFlowLeaf<'a>: Send + Sync {
+    fn prepare_udp_flow(
+        &self,
+        source_dir: Option<&std::path::Path>,
+    ) -> Result<Box<dyn PreparedUdpFlowOperation + 'a>, crate::runtime::udp_dispatch::FlowFailure>;
+
+    fn udp_relay_needs_two_streams(&self, _source_dir: Option<&std::path::Path>) -> bool {
+        false
+    }
+
+    fn prepare_owned_udp_relay_final_hop(
+        &self,
+        carrier: crate::transport::RelayCarrier,
+        _source_dir: Option<&std::path::Path>,
+    ) -> Result<Box<dyn PreparedUdpFlowOperation + 'a>, crate::runtime::udp_dispatch::FlowFailure>
+    {
+        let _ = carrier;
+        Err(super::defaults::udp_relay_final_hop_unsupported())
+    }
+
+    fn prepare_owned_udp_relay_two_stream(
+        &self,
+        post_carrier: crate::transport::RelayCarrier,
+        get_carrier: crate::transport::RelayCarrier,
+        _source_dir: Option<&std::path::Path>,
+    ) -> Result<Box<dyn PreparedUdpFlowOperation + 'a>, crate::runtime::udp_dispatch::FlowFailure>
+    {
+        let _ = (post_carrier, get_carrier);
+        Err(super::defaults::udp_two_stream_relay_unsupported())
+    }
+}
+
 pub(crate) trait ProtocolSupportCapability: ProtocolMetadata + Send + Sync {
     fn name(&self) -> &'static str;
     fn feature_name(&self) -> &'static str;
@@ -131,6 +172,13 @@ pub(crate) trait TcpOutboundCapability: Send + Sync {
     feature = "mieru"
 ))]
 pub(crate) trait UdpFlowCapability: Send + Sync {
+    fn claim_udp_flow_leaf<'a>(
+        &self,
+        _leaf: ResolvedLeafOutbound<'a>,
+    ) -> Option<Box<dyn ClaimedUdpFlowLeaf<'a> + 'a>> {
+        None
+    }
+
     fn prepare_udp_flow<'a>(
         &self,
         _leaf: ResolvedLeafOutbound<'a>,
