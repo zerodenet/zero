@@ -1,6 +1,6 @@
 #[cfg(feature = "trojan")]
 mod listener;
-use ::trojan::transport::TrojanOutboundLeaf;
+use ::trojan::transport::{TrojanOutboundLeaf, TrojanOutboundOptionsRef};
 #[cfg(feature = "trojan")]
 use zero_config::InboundConfig;
 use zero_config::{InboundProtocolConfig, OutboundProtocolConfig};
@@ -103,15 +103,17 @@ impl TcpOutboundCapability for TrojanAdapter {
             Some((server, port)),
             runtime,
             move |source_dir| {
-                Ok::<TrojanOutboundLeaf, zero_core::Error>(TrojanOutboundLeaf::from_config_refs(
+                Ok::<TrojanOutboundLeaf, zero_core::Error>(TrojanOutboundLeaf::from_options_refs(
                     source_dir,
                     tag,
                     server,
                     port,
-                    password,
-                    sni,
-                    insecure,
-                    client_fingerprint,
+                    TrojanOutboundOptionsRef {
+                        password,
+                        sni,
+                        insecure,
+                        client_fingerprint,
+                    },
                 ))
             },
         ))
@@ -139,15 +141,17 @@ impl UdpFlowCapability for TrojanAdapter {
         Some(claim_transport_udp_leaf(
             Some((server, port)),
             move |source_dir| {
-                Ok::<TrojanOutboundLeaf, zero_core::Error>(TrojanOutboundLeaf::from_config_refs(
+                Ok::<TrojanOutboundLeaf, zero_core::Error>(TrojanOutboundLeaf::from_options_refs(
                     source_dir,
                     tag,
                     server,
                     port,
-                    password,
-                    sni,
-                    insecure,
-                    client_fingerprint,
+                    TrojanOutboundOptionsRef {
+                        password,
+                        sni,
+                        insecure,
+                        client_fingerprint,
+                    },
                 ))
             },
         ))

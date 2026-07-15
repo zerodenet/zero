@@ -6,6 +6,8 @@ use zero_transport::inbound_route::{NoClientStreamRouteDefaults, OpaqueStreamRou
 use zero_transport::tls::{InboundTlsStream, TlsAcceptor};
 use zero_transport::RuntimeError;
 
+use super::options::TrojanInboundOptionsRef;
+
 type TrojanInboundTlsStream = InboundTlsStream<TokioSocket>;
 
 #[derive(Clone)]
@@ -60,6 +62,21 @@ impl TrojanInboundListenerRequest {
         TTls: ServerTlsProfile + ?Sized,
     {
         OwnedTrojanInboundListenerConfig::from_config_refs(source_dir, profile, tls).map(Into::into)
+    }
+
+    pub fn from_options_refs<TTls>(
+        source_dir: Option<&Path>,
+        options: TrojanInboundOptionsRef<'_>,
+        tls: Option<&TTls>,
+    ) -> Result<Self, RuntimeError>
+    where
+        TTls: ServerTlsProfile + ?Sized,
+    {
+        Self::from_config_refs(
+            source_dir,
+            crate::inbound::TrojanInboundProfile::from_config_password(options.password),
+            tls,
+        )
     }
 
     pub fn protocol_name(&self) -> &'static str {

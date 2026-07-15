@@ -673,6 +673,49 @@ fn vmess_listener_adapter_uses_protocol_runtime_input_refs() {
 }
 
 #[test]
+fn trojan_adapter_uses_protocol_option_refs_instead_of_direct_config_constructors() {
+    let adapter = read(&proxy_src().join("adapters/trojan.rs"));
+    for forbidden in ["TrojanOutboundLeaf::from_config_refs"] {
+        assert!(
+            !adapter.contains(forbidden),
+            "adapters/trojan.rs must not construct Trojan outbound leaves via `{forbidden}`"
+        );
+    }
+    for required in [
+        "TrojanOutboundOptionsRef",
+        "TrojanOutboundLeaf::from_options_refs",
+    ] {
+        assert!(
+            adapter.contains(required),
+            "adapters/trojan.rs should project through protocol-owned Trojan option surface `{required}`"
+        );
+    }
+}
+
+#[test]
+fn trojan_listener_adapter_uses_protocol_option_refs() {
+    let listener = read(&proxy_src().join("adapters/trojan/listener.rs"));
+    for forbidden in [
+        "TrojanInboundProfile::from_config_password",
+        "TrojanInboundListenerRequest::from_config_refs",
+    ] {
+        assert!(
+            !listener.contains(forbidden),
+            "adapters/trojan/listener.rs must not construct Trojan inbound listener state via `{forbidden}`"
+        );
+    }
+    for required in [
+        "TrojanInboundOptionsRef",
+        "TrojanInboundListenerRequest::from_options_refs",
+    ] {
+        assert!(
+            listener.contains(required),
+            "adapters/trojan/listener.rs should project through protocol-owned Trojan option surface `{required}`"
+        );
+    }
+}
+
+#[test]
 fn inventory_udp_dispatch_keeps_relay_choreography_outside_candidate_root() {
     let dispatch = read(&proxy_src().join("inventory/udp/dispatch.rs"));
     assert!(!dispatch.contains("ClaimedResolvedOutbound"));
