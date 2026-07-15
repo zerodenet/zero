@@ -89,17 +89,6 @@ pub struct MieruManagedUdpFlowPlan {
     relay_chain: bool,
 }
 
-pub fn inbound_listener_request_from_users<'a, I>(users: I) -> MieruInboundListenerRequest
-where
-    I: IntoIterator<Item = (&'a str, &'a str)>,
-{
-    MieruInboundListenerRequest::from_options_refs(
-        users
-            .into_iter()
-            .map(|(username, password)| MieruInboundUserRef { username, password }),
-    )
-}
-
 impl MieruInboundListenerRequest {
     pub fn from_options_refs<'a, I>(users: I) -> Self
     where
@@ -259,16 +248,6 @@ pub async fn establish_mieru_tcp_tunnel(
             RuntimeError::Io(std::io::Error::other(format!("mieru tcp tunnel: {error}")))
         })?;
     Ok(TcpRelayStream::new(mieru_stream))
-}
-
-pub fn udp_flow_resume_from_config(
-    server: &str,
-    port: u16,
-    username: &str,
-    password: &str,
-    relay_chain: bool,
-) -> MieruManagedStreamUdpResume {
-    MieruManagedUdpFlowConfig::new(server, port, username, password).flow_resume(relay_chain)
 }
 
 impl MieruManagedUdpFlowPlan {

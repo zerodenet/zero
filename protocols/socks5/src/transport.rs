@@ -13,7 +13,7 @@ mod options;
 mod tcp;
 mod upstream;
 
-pub use inbound::{inbound_acceptor_from_users, setup_inbound_udp_association};
+pub use inbound::setup_inbound_udp_association;
 pub use model::{
     Socks5InboundAcceptor, Socks5InboundUdpAssociationHandler, Socks5InboundUdpAssociationSetup,
     Socks5ManagedUdpAssociationTarget, Socks5ManagedUdpFlowConfig, Socks5ManagedUdpFlowPlan,
@@ -26,38 +26,6 @@ pub use upstream::{
     establish_packet_path_udp_association, establish_registered_udp_association,
     Socks5UdpAssociationRuntime, Socks5UpstreamUdpAssociation,
 };
-
-pub fn udp_association_target_from_config(
-    tag: &str,
-    server: &str,
-    port: u16,
-    username: Option<&str>,
-    password: Option<&str>,
-) -> Socks5ManagedUdpAssociationTarget {
-    Socks5ManagedUdpFlowConfig::new(tag, server, port, username, password).association_target()
-}
-
-pub fn udp_packet_path_carrier_descriptor_from_config(
-    tag: &str,
-    server: &str,
-    port: u16,
-    username: Option<&str>,
-    password: Option<&str>,
-) -> Socks5ManagedUdpPacketPathCarrierDescriptor {
-    Socks5ManagedUdpFlowConfig::new(tag, server, port, username, password)
-        .packet_path_carrier_descriptor()
-}
-
-pub fn udp_packet_path_carrier_build_from_config(
-    tag: &str,
-    server: &str,
-    port: u16,
-    username: Option<&str>,
-    password: Option<&str>,
-) -> Socks5ManagedUdpPacketPathCarrierBuild {
-    Socks5ManagedUdpFlowConfig::new(tag, server, port, username, password)
-        .packet_path_carrier_build()
-}
 
 pub async fn open_socks5_udp_association_target<
     OpenControl,

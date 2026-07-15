@@ -1,10 +1,6 @@
 //! Shadowsocks UDP socket flow transport helpers.
 
 use std::net::SocketAddr;
-use std::sync::Arc;
-
-use zero_core::Address;
-use zero_traits::DatagramCodec;
 use zero_transport::RuntimeError;
 
 mod inbound;
@@ -14,13 +10,10 @@ mod options;
 mod tcp;
 mod udp_socket;
 
-pub use inbound::{
-    inbound_listener_parts_from_cipher_password, inbound_listener_parts_from_options,
-};
 pub use model::{
-    ShadowsocksInboundTcpAcceptor, ShadowsocksManagedDatagramFlowResume,
-    ShadowsocksManagedUdpFlowConfig, ShadowsocksManagedUdpFlowPlan,
-    ShadowsocksManagedUdpPacketPathCarrierDescriptor,
+    ShadowsocksInboundBindings, ShadowsocksInboundTcpAcceptor,
+    ShadowsocksManagedDatagramFlowResume, ShadowsocksManagedUdpFlowConfig,
+    ShadowsocksManagedUdpFlowPlan, ShadowsocksManagedUdpPacketPathCarrierDescriptor,
     ShadowsocksManagedUdpPacketPathDatagramSourceBuild, ShadowsocksManagedUdpPacketPathPlan,
     ShadowsocksTransportLeaf, ShadowsocksUdpResponse,
 };
@@ -30,49 +23,6 @@ pub use udp_socket::{
     establish_shadowsocks_udp_socket_flow, establish_shadowsocks_udp_socket_flow_with_resume,
     managed_socket_flow_from_resume, ShadowsocksUdpSocketFlow,
 };
-
-pub fn udp_flow_resume_from_config(
-    tag: &str,
-    server: &str,
-    port: u16,
-    cipher: &str,
-    password: &str,
-) -> Result<ShadowsocksManagedDatagramFlowResume, zero_core::Error> {
-    ShadowsocksManagedUdpFlowConfig::new(tag, server, port, cipher, password).flow_resume()
-}
-
-pub fn udp_packet_path_carrier_descriptor_from_config(
-    tag: &str,
-    server: &str,
-    port: u16,
-    cipher: &str,
-    password: &str,
-) -> Result<ShadowsocksManagedUdpPacketPathCarrierDescriptor, zero_core::Error> {
-    ShadowsocksManagedUdpFlowConfig::new(tag, server, port, cipher, password)
-        .packet_path_carrier_descriptor()
-}
-
-pub fn udp_packet_path_carrier_codec_from_config(
-    tag: &str,
-    server: &str,
-    port: u16,
-    cipher: &str,
-    password: &str,
-) -> Result<Arc<dyn DatagramCodec<Address, Error = zero_core::Error>>, zero_core::Error> {
-    ShadowsocksManagedUdpFlowConfig::new(tag, server, port, cipher, password)
-        .packet_path_carrier_codec()
-}
-
-pub fn udp_packet_path_datagram_source_build_from_config(
-    tag: &str,
-    server: &str,
-    port: u16,
-    cipher: &str,
-    password: &str,
-) -> Result<ShadowsocksManagedUdpPacketPathDatagramSourceBuild, zero_core::Error> {
-    ShadowsocksManagedUdpFlowConfig::new(tag, server, port, cipher, password)
-        .packet_path_datagram_source_build()
-}
 
 impl zero_transport::managed_udp::ProtocolManagedDatagramUdpResumeMetadata
     for ShadowsocksManagedDatagramFlowResume

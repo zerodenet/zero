@@ -3,7 +3,7 @@
 use zero_config::InboundProtocolConfig;
 use zero_engine::EngineError;
 
-use ::hysteria2::transport::Hysteria2InboundOptionsRef;
+use ::hysteria2::transport::{Hysteria2AuthenticatedInboundProfile, Hysteria2InboundOptionsRef};
 
 use crate::runtime::inbound_operation::AuthenticatedQuicInboundListenerOperation;
 
@@ -17,9 +17,11 @@ impl crate::adapters::hysteria2::Hysteria2Adapter {
     > {
         let profile = match &inbound.protocol {
             InboundProtocolConfig::Hysteria2 { password, .. } => {
-                ::hysteria2::transport::inbound_profile_from_options(Hysteria2InboundOptionsRef {
-                    password: password.as_str(),
-                })
+                Hysteria2AuthenticatedInboundProfile::from_options_refs(
+                    Hysteria2InboundOptionsRef {
+                        password: password.as_str(),
+                    },
+                )
             }
             _ => {
                 return Err(EngineError::Io(std::io::Error::new(

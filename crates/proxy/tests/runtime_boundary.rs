@@ -486,6 +486,102 @@ fn protocol_transport_roots_do_not_reexport_internal_owned_config_intermediates(
 }
 
 #[test]
+fn protocol_transport_roots_do_not_reexport_legacy_inbound_helper_functions() {
+    for (relative, forbidden) in [
+        (
+            "protocols/hysteria2/src/transport.rs",
+            "inbound_profile_from_options",
+        ),
+        (
+            "protocols/hysteria2/src/transport.rs",
+            "inbound_profile_from_password",
+        ),
+        (
+            "protocols/hysteria2/src/transport.rs",
+            "inbound_tcp_acceptor",
+        ),
+        (
+            "protocols/mieru/src/transport.rs",
+            "inbound_listener_request_from_users",
+        ),
+        (
+            "protocols/shadowsocks/src/transport.rs",
+            "inbound_listener_parts_from_options",
+        ),
+        (
+            "protocols/shadowsocks/src/transport.rs",
+            "inbound_listener_parts_from_cipher_password",
+        ),
+        (
+            "protocols/socks5/src/transport.rs",
+            "inbound_acceptor_from_users",
+        ),
+    ] {
+        let source = read(&workspace_root().join(relative));
+        assert!(
+            !source.contains(forbidden),
+            "{relative} must expose typed inbound surfaces instead of legacy helper `{forbidden}`"
+        );
+    }
+}
+
+#[test]
+fn protocol_transport_roots_do_not_reexport_legacy_udp_config_helpers() {
+    for (relative, forbidden) in [
+        (
+            "protocols/hysteria2/src/transport.rs",
+            "udp_flow_resume_from_config",
+        ),
+        (
+            "protocols/hysteria2/src/transport.rs",
+            "udp_packet_path_carrier_descriptor_from_config",
+        ),
+        (
+            "protocols/hysteria2/src/transport.rs",
+            "udp_packet_path_carrier_build_from_config",
+        ),
+        (
+            "protocols/mieru/src/transport.rs",
+            "udp_flow_resume_from_config",
+        ),
+        (
+            "protocols/shadowsocks/src/transport.rs",
+            "udp_flow_resume_from_config",
+        ),
+        (
+            "protocols/shadowsocks/src/transport.rs",
+            "udp_packet_path_carrier_descriptor_from_config",
+        ),
+        (
+            "protocols/shadowsocks/src/transport.rs",
+            "udp_packet_path_carrier_codec_from_config",
+        ),
+        (
+            "protocols/shadowsocks/src/transport.rs",
+            "udp_packet_path_datagram_source_build_from_config",
+        ),
+        (
+            "protocols/socks5/src/transport.rs",
+            "udp_association_target_from_config",
+        ),
+        (
+            "protocols/socks5/src/transport.rs",
+            "udp_packet_path_carrier_descriptor_from_config",
+        ),
+        (
+            "protocols/socks5/src/transport.rs",
+            "udp_packet_path_carrier_build_from_config",
+        ),
+    ] {
+        let source = read(&workspace_root().join(relative));
+        assert!(
+            !source.contains(forbidden),
+            "{relative} must expose typed UDP surfaces instead of legacy helper `{forbidden}`"
+        );
+    }
+}
+
+#[test]
 fn adapters_do_not_hold_protocol_owned_config_intermediates() {
     for (relative, forbidden) in [
         ("adapters/vless.rs", "OwnedVlessOutboundLeafConfig"),
@@ -732,12 +828,15 @@ fn hysteria2_adapter_uses_protocol_outbound_option_refs() {
 #[test]
 fn hysteria2_listener_adapter_uses_protocol_option_refs() {
     let listener = read(&proxy_src().join("adapters/hysteria2/inbound.rs"));
-    let forbidden = "inbound_profile_from_password";
+    let forbidden = "inbound_profile_from_options";
     assert!(
         !listener.contains(forbidden),
         "adapters/hysteria2/inbound.rs must not construct hysteria2 inbound profile via `{forbidden}`"
     );
-    for required in ["Hysteria2InboundOptionsRef", "inbound_profile_from_options"] {
+    for required in [
+        "Hysteria2InboundOptionsRef",
+        "Hysteria2AuthenticatedInboundProfile::from_options_refs",
+    ] {
         assert!(
             listener.contains(required),
             "adapters/hysteria2/inbound.rs should project through protocol-owned hysteria2 option surface `{required}`"
@@ -805,14 +904,15 @@ fn shadowsocks_adapter_uses_protocol_outbound_option_refs() {
 #[test]
 fn shadowsocks_listener_adapter_uses_protocol_option_refs() {
     let listener = read(&proxy_src().join("adapters/shadowsocks/inbound.rs"));
-    let forbidden = "inbound_listener_parts_from_cipher_password";
+    let forbidden = "inbound_listener_parts_from_options";
     assert!(
         !listener.contains(forbidden),
         "adapters/shadowsocks/inbound.rs must not construct shadowsocks inbound listener state via `{forbidden}`"
     );
     for required in [
+        "ShadowsocksInboundBindings",
         "ShadowsocksInboundOptionsRef",
-        "inbound_listener_parts_from_options",
+        "ShadowsocksInboundBindings::from_options_refs",
     ] {
         assert!(
             listener.contains(required),

@@ -65,7 +65,7 @@ pub struct ShadowsocksInboundTcpAcceptor {
     pub(super) protocol: crate::ShadowsocksInboundTcpAcceptor,
 }
 
-pub(crate) struct ShadowsocksInboundBindings {
+pub struct ShadowsocksInboundBindings {
     pub(super) acceptor: ShadowsocksInboundTcpAcceptor,
     pub(super) udp_relay: crate::udp::ShadowsocksInboundUdpRelay,
 }

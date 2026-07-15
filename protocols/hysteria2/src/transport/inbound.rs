@@ -25,7 +25,7 @@ impl Hysteria2InboundBindPlan {
         Self::from_paths(source_dir, options.cert_path, options.key_path)
     }
 
-    pub fn from_paths(
+    fn from_paths(
         source_dir: Option<&Path>,
         cert_path: Option<&str>,
         key_path: Option<&str>,
@@ -67,25 +67,19 @@ impl zero_transport::inbound_route::ProtocolInboundBindPlan for Hysteria2Inbound
     }
 }
 
-pub fn inbound_profile_from_password(password: &str) -> Hysteria2AuthenticatedInboundProfile {
-    Hysteria2AuthenticatedInboundProfile::new(crate::inbound::inbound_profile_from_config_password(
-        password,
-    ))
-}
-
-pub fn inbound_profile_from_options(
-    options: Hysteria2InboundOptionsRef<'_>,
-) -> Hysteria2AuthenticatedInboundProfile {
-    inbound_profile_from_password(options.password)
-}
-
-pub fn inbound_tcp_acceptor() -> Hysteria2InboundTcpResponseProtocol {
+fn inbound_tcp_acceptor() -> Hysteria2InboundTcpResponseProtocol {
     Hysteria2InboundTcpResponseProtocol {
         protocol: crate::inbound::Hysteria2InboundTcpAcceptor::new(),
     }
 }
 
 impl Hysteria2AuthenticatedInboundProfile {
+    pub fn from_options_refs(options: Hysteria2InboundOptionsRef<'_>) -> Self {
+        Self::new(crate::inbound::inbound_profile_from_config_password(
+            options.password,
+        ))
+    }
+
     fn new(protocol: crate::inbound::Hysteria2InboundProfile) -> Self {
         Self { protocol }
     }

@@ -191,39 +191,6 @@ impl ProtocolSessionTcpHandshake for Hysteria2TransportLeaf {
     }
 }
 
-pub fn udp_flow_resume_from_config(
-    tag: &str,
-    server: &str,
-    port: u16,
-    password: &str,
-    client_fingerprint: Option<&str>,
-) -> Hysteria2ManagedDatagramFlowResume {
-    Hysteria2ManagedUdpFlowConfig::new(tag, server, port, password, client_fingerprint)
-        .flow_resume()
-}
-
-pub fn udp_packet_path_carrier_descriptor_from_config(
-    tag: &str,
-    server: &str,
-    port: u16,
-    password: &str,
-    client_fingerprint: Option<&str>,
-) -> Hysteria2ManagedUdpPacketPathCarrierDescriptor {
-    Hysteria2ManagedUdpFlowConfig::new(tag, server, port, password, client_fingerprint)
-        .packet_path_carrier_descriptor()
-}
-
-pub fn udp_packet_path_carrier_build_from_config(
-    tag: &str,
-    server: &str,
-    port: u16,
-    password: &str,
-    client_fingerprint: Option<&str>,
-) -> Hysteria2ManagedUdpPacketPathCarrierBuild {
-    Hysteria2ManagedUdpFlowConfig::new(tag, server, port, password, client_fingerprint)
-        .packet_path_carrier_build()
-}
-
 impl Hysteria2ManagedDatagramFlowResume {
     fn new(protocol: crate::udp::Hysteria2UdpFlowResume) -> Self {
         Self { protocol }

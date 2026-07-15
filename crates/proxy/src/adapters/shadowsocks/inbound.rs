@@ -1,6 +1,6 @@
 //! Shadowsocks inbound preparation and protocol handshake handoff.
 
-use ::shadowsocks::transport::ShadowsocksInboundOptionsRef;
+use ::shadowsocks::transport::{ShadowsocksInboundBindings, ShadowsocksInboundOptionsRef};
 use zero_config::InboundProtocolConfig;
 use zero_engine::EngineError;
 
@@ -18,15 +18,13 @@ impl crate::adapters::shadowsocks::ShadowsocksAdapter {
         Box<dyn crate::runtime::inbound_operation::PreparedInboundListenerOperation>,
         EngineError,
     > {
-        let profile = match &inbound.protocol {
+        let bindings = match &inbound.protocol {
             InboundProtocolConfig::Shadowsocks {
                 password, cipher, ..
-            } => ::shadowsocks::transport::inbound_listener_parts_from_options(
-                ShadowsocksInboundOptionsRef {
-                    cipher: cipher.as_str(),
-                    password: password.as_str(),
-                },
-            )?,
+            } => ShadowsocksInboundBindings::from_options_refs(ShadowsocksInboundOptionsRef {
+                cipher: cipher.as_str(),
+                password: password.as_str(),
+            })?,
             _ => {
                 return Err(EngineError::Io(std::io::Error::new(
                     std::io::ErrorKind::InvalidInput,
@@ -34,7 +32,7 @@ impl crate::adapters::shadowsocks::ShadowsocksAdapter {
                 )));
             }
         };
-        let (acceptor, udp_relay) = profile;
+        let (acceptor, udp_relay) = bindings.into_parts();
         Ok(Box::new(TcpAndDatagramInboundListenerOperation {
             protocol_name: "shadowsocks",
             error_protocol_name: "shadowsocks",
