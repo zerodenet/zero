@@ -9,9 +9,9 @@ use crate::runtime::udp_dispatch::FlowFailure;
 impl DirectAdapter {
     pub(super) fn prepare_udp_flow_impl<'a>(
         &self,
-        leaf: &'a ResolvedLeafOutbound<'a>,
+        leaf: ResolvedLeafOutbound<'a>,
     ) -> Result<Box<dyn PreparedUdpFlowOperation + 'a>, FlowFailure> {
-        let ResolvedLeafOutbound::Direct { tag } = leaf else {
+        let ResolvedLeafOutbound::Direct { tag } = &leaf else {
             return Err(unreachable_udp_leaf(self.name()));
         };
         Ok(Box::new(DirectUdpFlowOperation {

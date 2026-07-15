@@ -8,18 +8,18 @@ use zero_platform_tokio::TokioSocket;
 use crate::TcpRelayStream;
 
 #[derive(Debug, Clone)]
-pub struct ManagedDatagramStartPlan<'a, T> {
-    pub tag: &'a str,
-    pub server: &'a str,
+pub struct ManagedDatagramStartPlan<T> {
+    pub tag: String,
+    pub server: String,
     pub port: u16,
     pub resume: T,
 }
 
-impl<'a, T> ManagedDatagramStartPlan<'a, T> {
-    pub fn new(tag: &'a str, server: &'a str, port: u16, resume: T) -> Self {
+impl<T> ManagedDatagramStartPlan<T> {
+    pub fn new(tag: impl Into<String>, server: impl Into<String>, port: u16, resume: T) -> Self {
         Self {
-            tag,
-            server,
+            tag: tag.into(),
+            server: server.into(),
             port,
             resume,
         }

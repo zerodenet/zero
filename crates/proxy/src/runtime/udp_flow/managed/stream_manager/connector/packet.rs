@@ -23,11 +23,11 @@ where
 {
     fn connector_flow(
         &self,
-        endpoint: OutboundEndpoint<'_>,
+        endpoint: OutboundEndpoint,
         session_id: u64,
     ) -> ManagedStreamConnectorFlow {
         managed_stream_connector_flow_from_build(self.0.connector_flow_for_resume(
-            endpoint.server,
+            &endpoint.server,
             endpoint.port,
             session_id,
         ))
@@ -37,7 +37,7 @@ where
         &self,
         services: UdpRuntimeServices,
         session: &Session,
-        _endpoint: OutboundEndpoint<'_>,
+        _endpoint: OutboundEndpoint,
     ) -> Result<SharedManagedUdpConnection, EngineError> {
         let connection = self
             .0
@@ -56,7 +56,7 @@ where
         tls_server_name: Option<&str>,
         _services: Option<UdpRuntimeServices>,
         session: &Session,
-        _endpoint: OutboundEndpoint<'_>,
+        _endpoint: OutboundEndpoint,
     ) -> Result<SharedManagedUdpConnection, EngineError> {
         let connection = self
             .0

@@ -60,7 +60,7 @@ async fn inventory_invokes_fake_tcp_leaf_and_relay_capabilities() {
     let ctx = OutboundAdapterContext::new(proxy.config.source_dir());
     let claimed = proxy
         .protocols
-        .claim_outbound_leaf(&leaf)
+        .claim_outbound_leaf(leaf.clone())
         .expect("fake leaf claim");
 
     let prepared = match proxy
@@ -105,7 +105,7 @@ async fn inventory_preserves_tcp_and_relay_capability_failures() {
     let ctx = OutboundAdapterContext::new(proxy.config.source_dir());
     let claimed = proxy
         .protocols
-        .claim_outbound_leaf(&leaf)
+        .claim_outbound_leaf(leaf.clone())
         .expect("fake leaf claim");
 
     let prepared = match proxy

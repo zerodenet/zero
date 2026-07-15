@@ -77,16 +77,16 @@ pub(crate) trait TcpOutboundCapability: Send + Sync {
         false
     }
 
-    fn outbound_leaf_runtime<'a>(
+    fn outbound_leaf_runtime(
         &self,
-        _leaf: &ResolvedLeafOutbound<'a>,
-    ) -> Option<OutboundLeafRuntime<'a>> {
+        _leaf: &ResolvedLeafOutbound<'_>,
+    ) -> Option<OutboundLeafRuntime> {
         None
     }
 
     fn prepare_tcp_connect<'a>(
         &self,
-        _leaf: &'a ResolvedLeafOutbound<'a>,
+        _leaf: ResolvedLeafOutbound<'a>,
         _source_dir: Option<&std::path::Path>,
     ) -> Result<Box<dyn PreparedTcpConnectOperation + 'a>, TcpOutboundFailure> {
         Err(super::defaults::tcp_outbound_unsupported())
@@ -94,7 +94,7 @@ pub(crate) trait TcpOutboundCapability: Send + Sync {
 
     fn prepare_tcp_relay_hop<'a>(
         &self,
-        _leaf: &'a ResolvedLeafOutbound<'a>,
+        _leaf: ResolvedLeafOutbound<'a>,
         _source_dir: Option<&std::path::Path>,
     ) -> Result<Box<dyn PreparedTcpRelayOperation + 'a>, EngineError> {
         Err(super::defaults::relay_hop_unsupported())
@@ -114,7 +114,7 @@ pub(crate) trait TcpOutboundCapability: Send + Sync {
 pub(crate) trait UdpFlowCapability: Send + Sync {
     fn prepare_udp_flow<'a>(
         &self,
-        _leaf: &'a ResolvedLeafOutbound<'a>,
+        _leaf: ResolvedLeafOutbound<'a>,
         _source_dir: Option<&std::path::Path>,
     ) -> Result<Box<dyn PreparedUdpFlowOperation + 'a>, crate::runtime::udp_dispatch::FlowFailure>
     {
@@ -196,7 +196,7 @@ pub(crate) trait ManagedUdpHandlerProvider: Send + Sync {
 pub(crate) trait UdpPacketPathCapability: Send + Sync {
     fn prepare_udp_packet_path<'a>(
         &self,
-        _leaf: &'a ResolvedLeafOutbound<'a>,
+        _leaf: ResolvedLeafOutbound<'a>,
     ) -> Option<
         Box<
             dyn crate::runtime::udp_dispatch::packet_path_operation::PreparedUdpPacketPathOperation

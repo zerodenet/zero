@@ -52,9 +52,9 @@ pub(crate) fn upstream_association_handler() -> Box<dyn UpstreamAssociationHandl
 impl Socks5Adapter {
     pub(super) fn prepare_udp_packet_path_impl<'a>(
         &self,
-        leaf: &'a ResolvedLeafOutbound<'a>,
+        leaf: ResolvedLeafOutbound<'a>,
     ) -> Option<Box<dyn PreparedUdpPacketPathOperation + 'a>> {
-        let leaf = super::transport_leaf(leaf)?;
+        let leaf = super::transport_leaf(&leaf)?;
         Some(Box::new(Socks5PacketPathOperation {
             plan: leaf.udp_packet_path_plan(),
         }))
@@ -62,12 +62,12 @@ impl Socks5Adapter {
 
     pub(super) fn prepare_udp_flow_impl<'a>(
         &self,
-        leaf: &'a ResolvedLeafOutbound<'a>,
+        leaf: ResolvedLeafOutbound<'a>,
     ) -> Result<
         Box<dyn crate::runtime::udp_dispatch::operation::PreparedUdpFlowOperation + 'a>,
         FlowFailure,
     > {
-        let Some(leaf) = super::transport_leaf(leaf) else {
+        let Some(leaf) = super::transport_leaf(&leaf) else {
             return Err(FlowFailure {
                 stage: "udp_unsupported_leaf",
                 error: EngineError::Io(std::io::Error::other(format!(

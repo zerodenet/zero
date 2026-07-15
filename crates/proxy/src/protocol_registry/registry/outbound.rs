@@ -41,17 +41,8 @@ use crate::runtime::udp_dispatch::operation::PreparedUdpFlowOperation;
 use crate::transport::RelayCarrier;
 #[derive(Clone)]
 pub(crate) struct ClaimedOutboundLeaf<'a> {
-    #[cfg(any(
-        feature = "socks5",
-        feature = "vless",
-        feature = "hysteria2",
-        feature = "shadowsocks",
-        feature = "trojan",
-        feature = "vmess",
-        feature = "mieru"
-    ))]
     leaf: ResolvedLeafOutbound<'a>,
-    pub(crate) runtime: OutboundLeafRuntime<'a>,
+    pub(crate) runtime: OutboundLeafRuntime,
     pub(crate) tcp: Option<Arc<dyn TcpOutboundCapability>>,
     #[cfg(any(
         feature = "socks5",
@@ -77,21 +68,12 @@ pub(crate) struct ClaimedOutboundLeaf<'a> {
 
 impl<'a> ClaimedOutboundLeaf<'a> {
     fn new(
-        _leaf: &ResolvedLeafOutbound<'a>,
-        runtime: OutboundLeafRuntime<'a>,
+        leaf: ResolvedLeafOutbound<'a>,
+        runtime: OutboundLeafRuntime,
         entry: Option<&RegisteredProtocolEntry>,
     ) -> Self {
         Self {
-            #[cfg(any(
-                feature = "socks5",
-                feature = "vless",
-                feature = "hysteria2",
-                feature = "shadowsocks",
-                feature = "trojan",
-                feature = "vmess",
-                feature = "mieru"
-            ))]
-            leaf: _leaf.clone(),
+            leaf,
             runtime,
             tcp: entry.map(|entry| entry.tcp.clone()),
             #[cfg(any(
@@ -119,22 +101,20 @@ impl<'a> ClaimedOutboundLeaf<'a> {
 
     pub(crate) fn prepare_tcp_connect(
         &self,
-        leaf: &'a ResolvedLeafOutbound<'a>,
         source_dir: Option<&Path>,
     ) -> Result<Box<dyn PreparedTcpConnectOperation + 'a>, crate::transport::TcpOutboundFailure>
     {
         self.tcp
             .as_ref()
             .expect("non-block tcp leaf must expose a tcp capability")
-            .prepare_tcp_connect(leaf, source_dir)
+            .prepare_tcp_connect(self.leaf.clone(), source_dir)
     }
 
     pub(crate) fn prepare_tcp_relay_hop(
         &self,
-        leaf: &'a ResolvedLeafOutbound<'a>,
         source_dir: Option<&Path>,
-    ) -> Result<(&'a str, u16, Box<dyn PreparedTcpRelayOperation + 'a>), EngineError> {
-        let endpoint = self.runtime.endpoint.ok_or_else(|| {
+    ) -> Result<(String, u16, Box<dyn PreparedTcpRelayOperation + 'a>), EngineError> {
+        let endpoint = self.runtime.endpoint.clone().ok_or_else(|| {
             EngineError::Io(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
                 "relay hop resolved without upstream endpoint",
@@ -144,7 +124,7 @@ impl<'a> ClaimedOutboundLeaf<'a> {
             .tcp
             .as_ref()
             .expect("tcp relay hop must expose a tcp capability")
-            .prepare_tcp_relay_hop(leaf, source_dir)?;
+            .prepare_tcp_relay_hop(self.leaf.clone(), source_dir)?;
         Ok((endpoint.server, endpoint.port, operation))
     }
 
@@ -159,14 +139,13 @@ impl<'a> ClaimedOutboundLeaf<'a> {
     ))]
     pub(crate) fn prepare_udp_flow(
         &self,
-        leaf: &'a ResolvedLeafOutbound<'a>,
         source_dir: Option<&Path>,
     ) -> Result<Box<dyn PreparedUdpFlowOperation + 'a>, crate::runtime::udp_dispatch::FlowFailure>
     {
         self.udp
             .as_ref()
             .expect("non-block udp leaf must expose a udp-flow capability")
-            .prepare_udp_flow(leaf, source_dir)
+            .prepare_udp_flow(self.leaf.clone(), source_dir)
     }
 
     #[cfg(any(
@@ -244,20 +223,19 @@ impl<'a> ClaimedOutboundLeaf<'a> {
     ))]
     pub(crate) fn prepare_udp_packet_path(
         &self,
-        leaf: &'a ResolvedLeafOutbound<'a>,
     ) -> Option<
         Box<
             dyn crate::runtime::udp_dispatch::packet_path_operation::PreparedUdpPacketPathOperation
                 + 'a,
         >,
     > {
-        self.packet_path.as_ref()?.prepare_udp_packet_path(leaf)
+        self.packet_path
+            .as_ref()?
+            .prepare_udp_packet_path(self.leaf.clone())
     }
 }
 
-pub(crate) fn direct_leaf_runtime<'a>(
-    leaf: &ResolvedLeafOutbound<'a>,
-) -> Option<OutboundLeafRuntime<'a>> {
+pub(crate) fn direct_leaf_runtime(leaf: &ResolvedLeafOutbound<'_>) -> Option<OutboundLeafRuntime> {
     match leaf {
         ResolvedLeafOutbound::Direct { tag } => Some(OutboundLeafRuntime {
             tcp_path: TcpPathCategory::Direct,
@@ -272,7 +250,7 @@ pub(crate) fn direct_leaf_runtime<'a>(
             ))]
             health_tag: None,
             endpoint: None,
-            kernel_tag: *tag,
+            kernel_tag: (*tag).map(str::to_owned),
             #[cfg(any(
                 feature = "socks5",
                 feature = "vless",
@@ -282,7 +260,7 @@ pub(crate) fn direct_leaf_runtime<'a>(
                 feature = "vmess",
                 feature = "mieru"
             ))]
-            udp_policy_tag: *tag,
+            udp_policy_tag: (*tag).map(str::to_owned),
         }),
         _ => None,
     }
@@ -297,10 +275,10 @@ pub(crate) fn direct_leaf_runtime<'a>(
     feature = "vmess",
     feature = "mieru"
 ))]
-pub(crate) fn proxy_leaf_runtime<'a>(
-    leaf: &ResolvedLeafOutbound<'a>,
+pub(crate) fn proxy_leaf_runtime(
+    leaf: &ResolvedLeafOutbound<'_>,
     tcp_path: TcpPathCategory,
-) -> Option<OutboundLeafRuntime<'a>> {
+) -> Option<OutboundLeafRuntime> {
     let tag = leaf.tag()?;
     let (server, port) = leaf.proxy_endpoint()?;
 
@@ -315,8 +293,11 @@ pub(crate) fn proxy_leaf_runtime<'a>(
             feature = "vmess",
             feature = "mieru"
         ))]
-        health_tag: Some(tag),
-        endpoint: Some(crate::runtime::path::OutboundEndpoint { server, port }),
+        health_tag: Some(tag.to_owned()),
+        endpoint: Some(crate::runtime::path::OutboundEndpoint {
+            server: server.to_owned(),
+            port,
+        }),
         kernel_tag: None,
         #[cfg(any(
             feature = "socks5",
@@ -327,11 +308,11 @@ pub(crate) fn proxy_leaf_runtime<'a>(
             feature = "vmess",
             feature = "mieru"
         ))]
-        udp_policy_tag: Some(tag),
+        udp_policy_tag: Some(tag.to_owned()),
     })
 }
 
-pub(crate) fn block_leaf_runtime<'a>(tag: Option<&'a str>) -> OutboundLeafRuntime<'a> {
+pub(crate) fn block_leaf_runtime(tag: Option<&str>) -> OutboundLeafRuntime {
     OutboundLeafRuntime {
         tcp_path: TcpPathCategory::Block,
         #[cfg(any(
@@ -345,7 +326,7 @@ pub(crate) fn block_leaf_runtime<'a>(tag: Option<&'a str>) -> OutboundLeafRuntim
         ))]
         health_tag: None,
         endpoint: None,
-        kernel_tag: tag,
+        kernel_tag: tag.map(str::to_owned),
         #[cfg(any(
             feature = "socks5",
             feature = "vless",
@@ -355,7 +336,7 @@ pub(crate) fn block_leaf_runtime<'a>(tag: Option<&'a str>) -> OutboundLeafRuntim
             feature = "vmess",
             feature = "mieru"
         ))]
-        udp_policy_tag: tag,
+        udp_policy_tag: tag.map(str::to_owned),
     }
 }
 
@@ -380,7 +361,7 @@ impl ProtocolRegistry {
     fn claimed_runtime_and_entry<'a>(
         &self,
         leaf: &ResolvedLeafOutbound<'a>,
-    ) -> Result<(OutboundLeafRuntime<'a>, Option<&RegisteredProtocolEntry>), EngineError> {
+    ) -> Result<(OutboundLeafRuntime, Option<&RegisteredProtocolEntry>), EngineError> {
         let runtime = self.outbound_leaf_runtime(leaf)?;
         if matches!(runtime.tcp_path, TcpPathCategory::Block) {
             return Ok((runtime, None));
@@ -394,9 +375,9 @@ impl ProtocolRegistry {
     /// that own that leaf.
     pub(crate) fn claim_outbound_leaf<'a>(
         &self,
-        leaf: &ResolvedLeafOutbound<'a>,
+        leaf: ResolvedLeafOutbound<'a>,
     ) -> Result<ClaimedOutboundLeaf<'a>, EngineError> {
-        let (runtime, entry) = self.claimed_runtime_and_entry(leaf)?;
+        let (runtime, entry) = self.claimed_runtime_and_entry(&leaf)?;
         Ok(ClaimedOutboundLeaf::new(leaf, runtime, entry))
     }
 
@@ -405,10 +386,10 @@ impl ProtocolRegistry {
     /// Kernel-level `block` is handled here because no adapter owns it.
     /// Direct and proxy protocols are delegated to the adapter that claims the
     /// leaf, so runtime code does not match protocol variants.
-    pub(crate) fn outbound_leaf_runtime<'a>(
+    pub(crate) fn outbound_leaf_runtime(
         &self,
-        leaf: &ResolvedLeafOutbound<'a>,
-    ) -> Result<OutboundLeafRuntime<'a>, EngineError> {
+        leaf: &ResolvedLeafOutbound<'_>,
+    ) -> Result<OutboundLeafRuntime, EngineError> {
         if let ResolvedLeafOutbound::Block { tag } = leaf {
             return Ok(block_leaf_runtime(*tag));
         }

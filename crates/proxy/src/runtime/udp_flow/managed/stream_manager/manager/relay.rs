@@ -26,21 +26,23 @@ where
         &mut self,
         request: ManagedStreamRelayRequest<'_, T>,
     ) -> Result<usize, FlowFailure> {
-        let session_id = request.ctx.session_id;
-        let upstream = request.endpoint.upstream();
-        let (cache_key, _) = request
-            .resume
-            .connector_flow(request.endpoint, session_id)
+        let ManagedStreamRelayRequest {
+            ctx,
+            stream,
+            tls_server_name,
+            services,
+            session,
+            endpoint,
+            resume,
+            packet_ref,
+        } = request;
+        let session_id = ctx.session_id;
+        let upstream = endpoint.upstream();
+        let (cache_key, _) = resume
+            .connector_flow(endpoint.clone(), session_id)
             .into_parts();
-        let entry = request
-            .resume
-            .establish_relay(
-                request.stream,
-                request.tls_server_name,
-                request.services,
-                request.session,
-                request.endpoint,
-            )
+        let entry = resume
+            .establish_relay(stream, tls_server_name, services, session, endpoint)
             .await
             .map_err(|error| FlowFailure {
                 stage: self.relay_establish_stage,
@@ -49,13 +51,7 @@ where
             })?;
 
         self.upstreams
-            .insert_and_send_key(
-                cache_key,
-                request.ctx.chain_tasks,
-                session_id,
-                request.packet_ref,
-                entry,
-            )
+            .insert_and_send_key(cache_key, ctx.chain_tasks, session_id, packet_ref, entry)
             .await
             .map_err(|error| FlowFailure {
                 stage: self.relay_send_stage,
@@ -86,7 +82,7 @@ where
             services: request.services,
             session: request.session,
             endpoint: OutboundEndpoint {
-                server: request.server,
+                server: request.server.to_owned(),
                 port: request.port,
             },
             resume,

@@ -21,7 +21,7 @@ fn compiled_in_outbound_leaf_variants_have_expected_adapter_claims() {
             outbound_leaf_name(&leaf)
         );
 
-        let claimed = registry.claim_outbound_leaf(&leaf);
+        let claimed = registry.claim_outbound_leaf(leaf.clone());
         assert_eq!(
             claimed.as_ref().map(|claim| claim.tcp.is_some()).ok(),
             Some(expected_claims == 1),
@@ -46,7 +46,7 @@ fn block_outbound_leaf_is_kernel_fact_not_adapter_protocol() {
     assert_eq!(claim_count, 0, "block should not be claimed by adapters");
 
     let claimed = registry
-        .claim_outbound_leaf(&leaf)
+        .claim_outbound_leaf(leaf.clone())
         .expect("block should still expose claimed runtime facts");
     assert!(
         claimed.tcp.is_none(),
@@ -59,7 +59,7 @@ fn block_outbound_leaf_is_kernel_fact_not_adapter_protocol() {
     assert_eq!(runtime.tcp_path, TcpPathCategory::Block);
     assert_eq!(runtime.health_tag, None);
     assert_eq!(runtime.endpoint, None);
-    assert_eq!(runtime.kernel_tag, Some("blocked"));
+    assert_eq!(runtime.kernel_tag, Some("blocked".to_owned()));
     assert_eq!(claimed.runtime.tcp_path, TcpPathCategory::Block);
 }
 
@@ -77,7 +77,7 @@ fn udp_outbound_leaf_lookup_matches_tcp_claim_policy() {
     let registry = crate::register::protocol_registry();
 
     for (leaf, expected_claims) in compiled_in_outbound_leaves() {
-        let claimed = registry.claim_outbound_leaf(&leaf);
+        let claimed = registry.claim_outbound_leaf(leaf.clone());
         assert_eq!(
             claimed.as_ref().map(|claim| claim.udp.is_some()).ok(),
             Some(expected_claims == 1),
@@ -101,7 +101,7 @@ fn packet_path_leaf_lookup_matches_tcp_claim_policy() {
     let registry = crate::register::protocol_registry();
 
     for (leaf, expected_claims) in compiled_in_outbound_leaves() {
-        let claimed = registry.claim_outbound_leaf(&leaf);
+        let claimed = registry.claim_outbound_leaf(leaf.clone());
         assert_eq!(
             claimed.as_ref().map(|claim| claim.packet_path.is_some()).ok(),
             Some(expected_claims == 1),

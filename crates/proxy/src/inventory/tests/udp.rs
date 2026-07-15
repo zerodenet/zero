@@ -25,7 +25,7 @@ async fn inventory_invokes_fake_udp_leaf_capability() {
     let leaf = fake_direct_leaf();
     let claimed = proxy
         .protocols
-        .claim_outbound_leaf(&leaf)
+        .claim_outbound_leaf(leaf.clone())
         .expect("fake UDP claim");
 
     let prepared = match proxy
@@ -67,7 +67,7 @@ async fn inventory_preserves_fake_udp_failure_metadata() {
     let leaf = fake_direct_leaf();
     let claimed = proxy
         .protocols
-        .claim_outbound_leaf(&leaf)
+        .claim_outbound_leaf(leaf.clone())
         .expect("fake UDP claim");
 
     let prepared = match proxy
@@ -108,7 +108,7 @@ async fn inventory_invokes_fake_udp_relay_capabilities() {
     let leaf = fake_direct_leaf();
     let claimed = proxy
         .protocols
-        .claim_outbound_leaf(&leaf)
+        .claim_outbound_leaf(leaf.clone())
         .expect("fake UDP claim");
 
     assert!(claimed.udp_relay_needs_two_streams(ctx.source_dir()));
@@ -366,7 +366,7 @@ async fn inventory_composes_packet_path_roles_and_builds_carrier() {
         .expect("UDP dispatch");
     let claimed = proxy
         .protocols
-        .claim_outbound_leaf(&leaf)
+        .claim_outbound_leaf(leaf.clone())
         .expect("fake packet-path claim");
 
     let (binding, request) = proxy

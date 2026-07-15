@@ -21,16 +21,16 @@ pub struct ShadowsocksManagedUdpPacketPathDatagramSourceBuild {
 }
 
 #[derive(Debug, Clone)]
-pub struct ShadowsocksManagedUdpFlowPlan<'a> {
-    pub(super) tag: &'a str,
-    pub(super) server: &'a str,
+pub struct ShadowsocksManagedUdpFlowPlan {
+    pub(super) tag: String,
+    pub(super) server: String,
     pub(super) port: u16,
     pub(super) resume: ShadowsocksManagedDatagramFlowResume,
 }
 
 #[derive(Clone)]
-pub struct ShadowsocksManagedUdpPacketPathPlan<'a> {
-    pub(super) server: &'a str,
+pub struct ShadowsocksManagedUdpPacketPathPlan {
+    pub(super) server: String,
     pub(super) port: u16,
     pub(super) carrier_descriptor: ShadowsocksManagedUdpPacketPathCarrierDescriptor,
     pub(super) carrier_codec: Arc<dyn DatagramCodec<Address, Error = zero_core::Error>>,
@@ -46,13 +46,13 @@ pub struct ShadowsocksManagedUdpFlowConfig<'a> {
     pub(super) password: &'a str,
 }
 
-#[derive(Debug, Clone, Copy)]
-pub struct ShadowsocksTransportLeaf<'a> {
-    pub(super) tag: &'a str,
-    pub(super) server: &'a str,
+#[derive(Debug, Clone)]
+pub struct ShadowsocksTransportLeaf {
+    pub(super) tag: String,
+    pub(super) server: String,
     pub(super) port: u16,
-    pub(super) cipher: &'a str,
-    pub(super) password: &'a str,
+    pub(super) cipher: String,
+    pub(super) password: String,
 }
 
 #[derive(Debug, Clone)]
@@ -146,43 +146,41 @@ impl ShadowsocksManagedDatagramFlowResume {
     }
 }
 
-impl<'a> ShadowsocksManagedUdpFlowPlan<'a> {
+impl ShadowsocksManagedUdpFlowPlan {
     pub(super) fn new(
-        tag: &'a str,
-        server: &'a str,
+        tag: impl Into<String>,
+        server: impl Into<String>,
         port: u16,
         resume: ShadowsocksManagedDatagramFlowResume,
     ) -> Self {
         Self {
-            tag,
-            server,
+            tag: tag.into(),
+            server: server.into(),
             port,
             resume,
         }
     }
 
     pub fn tag(&self) -> &str {
-        self.tag
+        &self.tag
     }
 
     pub fn server(&self) -> &str {
-        self.server
+        &self.server
     }
 
     pub fn port(&self) -> u16 {
         self.port
     }
 
-    pub fn into_parts(self) -> (&'a str, &'a str, u16, ShadowsocksManagedDatagramFlowResume) {
+    pub fn into_parts(self) -> (String, String, u16, ShadowsocksManagedDatagramFlowResume) {
         (self.tag, self.server, self.port, self.resume)
     }
 
     pub fn into_start_plan(
         self,
-    ) -> zero_transport::managed_udp::ManagedDatagramStartPlan<
-        'a,
-        ShadowsocksManagedDatagramFlowResume,
-    > {
+    ) -> zero_transport::managed_udp::ManagedDatagramStartPlan<ShadowsocksManagedDatagramFlowResume>
+    {
         zero_transport::managed_udp::ManagedDatagramStartPlan::new(
             self.tag,
             self.server,
@@ -196,16 +194,16 @@ impl<'a> ShadowsocksManagedUdpFlowPlan<'a> {
     }
 }
 
-impl<'a> ShadowsocksManagedUdpPacketPathPlan<'a> {
+impl ShadowsocksManagedUdpPacketPathPlan {
     pub(super) fn new(
-        server: &'a str,
+        server: impl Into<String>,
         port: u16,
         carrier_descriptor: ShadowsocksManagedUdpPacketPathCarrierDescriptor,
         carrier_codec: Arc<dyn DatagramCodec<Address, Error = zero_core::Error>>,
         datagram_source: ShadowsocksManagedUdpPacketPathDatagramSourceBuild,
     ) -> Self {
         Self {
-            server,
+            server: server.into(),
             port,
             carrier_descriptor,
             carrier_codec,
@@ -214,7 +212,7 @@ impl<'a> ShadowsocksManagedUdpPacketPathPlan<'a> {
     }
 
     pub fn server(&self) -> &str {
-        self.server
+        &self.server
     }
 
     pub fn port(&self) -> u16 {

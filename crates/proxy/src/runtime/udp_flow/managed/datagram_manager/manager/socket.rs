@@ -25,13 +25,14 @@ where
         &mut self,
         ctx: UdpFlowContext<'_>,
         services: Option<UdpRuntimeServices>,
-        endpoint: OutboundEndpoint<'_>,
+        endpoint: OutboundEndpoint,
         resume: T,
         packet_ref: UdpPacketRef<'_>,
     ) -> Result<usize, FlowFailure> {
+        let upstream = endpoint.upstream();
         let cache_key = self
             .connector
-            .connector_flow(&resume, endpoint)
+            .connector_flow(&resume, endpoint.clone())
             .into_cache_key();
         let connection = self
             .upstreams
@@ -44,7 +45,7 @@ where
             .map_err(|error| FlowFailure {
                 stage: self.establish_stage,
                 error,
-                upstream: Some(endpoint.upstream()),
+                upstream: Some(upstream.clone()),
             })?;
 
         connection
@@ -59,7 +60,7 @@ where
             .map_err(|error| FlowFailure {
                 stage: self.send_stage,
                 error,
-                upstream: Some(endpoint.upstream()),
+                upstream: Some(upstream),
             })
     }
 
@@ -82,7 +83,7 @@ where
             },
             request.services,
             OutboundEndpoint {
-                server: request.server,
+                server: request.server.to_owned(),
                 port: request.port,
             },
             resume,

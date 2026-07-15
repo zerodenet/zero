@@ -18,12 +18,13 @@ where
         ctx: UdpFlowContext<'_>,
         services: UdpRuntimeServices,
         session: &zero_core::Session,
-        endpoint: OutboundEndpoint<'_>,
+        endpoint: OutboundEndpoint,
         resume: T,
         packet_ref: UdpPacketRef<'_>,
     ) -> Result<usize, FlowFailure> {
         let session_id = ctx.session_id;
-        let connector_flow = resume.connector_flow(endpoint, session_id);
+        let upstream = endpoint.upstream();
+        let connector_flow = resume.connector_flow(endpoint.clone(), session_id);
         let (cache_key, requires_relay_upstream) = connector_flow.into_parts();
         if requires_relay_upstream {
             if let Some(sent) = self
@@ -33,7 +34,7 @@ where
                 .map_err(|error| FlowFailure {
                     stage: self.relay_send_stage,
                     error,
-                    upstream: Some(endpoint.upstream()),
+                    upstream: Some(upstream.clone()),
                 })?
             {
                 return Ok(sent);
@@ -44,7 +45,7 @@ where
                     std::io::ErrorKind::NotConnected,
                     "relay upstream is not established",
                 )),
-                upstream: Some(endpoint.upstream()),
+                upstream: Some(upstream.clone()),
             });
         }
 
@@ -60,7 +61,7 @@ where
             .map_err(|error| FlowFailure {
                 stage: self.establish_stage,
                 error,
-                upstream: Some(endpoint.upstream()),
+                upstream: Some(upstream),
             })
     }
 
@@ -84,7 +85,7 @@ where
             request.services,
             request.session,
             OutboundEndpoint {
-                server: request.server,
+                server: request.server.to_owned(),
                 port: request.port,
             },
             resume,

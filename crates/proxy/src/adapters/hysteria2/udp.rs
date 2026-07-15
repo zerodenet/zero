@@ -77,9 +77,9 @@ pub(crate) fn managed_datagram_handler() -> Box<dyn ManagedDatagramFlowHandler> 
 impl Hysteria2Adapter {
     pub(super) fn prepare_udp_packet_path_impl<'a>(
         &self,
-        leaf: &'a ResolvedLeafOutbound<'a>,
+        leaf: ResolvedLeafOutbound<'a>,
     ) -> Option<Box<dyn PreparedUdpPacketPathOperation + 'a>> {
-        let leaf = super::transport_leaf(leaf)?;
+        let leaf = super::transport_leaf(&leaf)?;
         Some(Box::new(Hysteria2PacketPathOperation {
             plan: leaf.udp_packet_path_plan(),
         }))
@@ -87,12 +87,12 @@ impl Hysteria2Adapter {
 
     pub(super) fn prepare_udp_flow_impl<'a>(
         &self,
-        leaf: &'a ResolvedLeafOutbound<'a>,
+        leaf: ResolvedLeafOutbound<'a>,
     ) -> Result<
         Box<dyn crate::runtime::udp_dispatch::operation::PreparedUdpFlowOperation + 'a>,
         FlowFailure,
     > {
-        let Some(leaf) = super::transport_leaf(leaf) else {
+        let Some(leaf) = super::transport_leaf(&leaf) else {
             return Err(unreachable_udp_leaf(self.name()));
         };
         Ok(Box::new(

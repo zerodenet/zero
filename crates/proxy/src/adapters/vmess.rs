@@ -159,21 +159,21 @@ impl TcpOutboundCapability for VmessAdapter {
         named_protocol_claims_runtime_leaf::<Self>(leaf)
     }
 
-    fn outbound_leaf_runtime<'a>(
+    fn outbound_leaf_runtime(
         &self,
-        leaf: &ResolvedLeafOutbound<'a>,
-    ) -> Option<OutboundLeafRuntime<'a>> {
+        leaf: &ResolvedLeafOutbound<'_>,
+    ) -> Option<OutboundLeafRuntime> {
         proxy_leaf_runtime(leaf, Self::TCP_PATH)
     }
 
     fn prepare_tcp_connect<'a>(
         &self,
-        leaf: &'a ResolvedLeafOutbound<'a>,
+        leaf: ResolvedLeafOutbound<'a>,
         source_dir: Option<&std::path::Path>,
     ) -> Result<Box<dyn PreparedTcpConnectOperation + 'a>, TcpOutboundFailure> {
         let prepared =
-            prepare_transport_bridge_leaf(self.bridge(), source_dir, leaf).map_err(|error| {
-                transport_bridge_connect_prepare_failure::<VmessStreamBridge, _>(leaf, error)
+            prepare_transport_bridge_leaf(self.bridge(), source_dir, &leaf).map_err(|error| {
+                transport_bridge_connect_prepare_failure::<VmessStreamBridge, _>(&leaf, error)
             })?;
         Ok(prepare_transport_bridge_tcp_connect(
             self.bridge(),
@@ -183,10 +183,10 @@ impl TcpOutboundCapability for VmessAdapter {
 
     fn prepare_tcp_relay_hop<'a>(
         &self,
-        leaf: &'a ResolvedLeafOutbound<'a>,
+        leaf: ResolvedLeafOutbound<'a>,
         source_dir: Option<&std::path::Path>,
     ) -> Result<Box<dyn PreparedTcpRelayOperation + 'a>, EngineError> {
-        let prepared = prepare_transport_bridge_leaf(self.bridge(), source_dir, leaf)
+        let prepared = prepare_transport_bridge_leaf(self.bridge(), source_dir, &leaf)
             .map_err(transport_bridge_relay_prepare_error::<VmessStreamBridge, _>)?;
         Ok(prepare_transport_bridge_tcp_relay(self.bridge(), prepared))
     }
@@ -197,12 +197,12 @@ impl TcpOutboundCapability for VmessAdapter {
 impl UdpFlowCapability for VmessAdapter {
     fn prepare_udp_flow<'a>(
         &self,
-        leaf: &'a ResolvedLeafOutbound<'a>,
+        leaf: ResolvedLeafOutbound<'a>,
         source_dir: Option<&std::path::Path>,
     ) -> Result<Box<dyn PreparedUdpFlowOperation + 'a>, FlowFailure> {
         let prepared =
-            prepare_transport_bridge_leaf(self.bridge(), source_dir, leaf).map_err(|error| {
-                transport_bridge_udp_direct_prepare_failure::<VmessStreamBridge, _>(leaf, error)
+            prepare_transport_bridge_leaf(self.bridge(), source_dir, &leaf).map_err(|error| {
+                transport_bridge_udp_direct_prepare_failure::<VmessStreamBridge, _>(&leaf, error)
             })?;
         Ok(prepare_transport_bridge_udp_direct(self.bridge(), prepared))
     }

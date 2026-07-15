@@ -34,20 +34,18 @@ impl ProtocolInventory {
         claimed: &ClaimedInventoryLeaf<'a>,
     ) -> Result<PreparedUdpLeafCandidate<'a>, FlowFailure> {
         let runtime = claimed.runtime();
-        if !ctx.udp_enabled_for_outbound(runtime.udp_policy_tag) {
+        if !ctx.udp_enabled_for_outbound(runtime.udp_policy_tag.as_deref()) {
             return Err(FlowFailure {
                 stage: "udp_policy",
                 error: zero_engine::EngineError::Io(std::io::Error::other(
                     "udp disabled for outbound",
                 )),
-                upstream: runtime
-                    .endpoint
-                    .map(|endpoint| (endpoint.server.to_owned(), endpoint.port)),
+                upstream: runtime.endpoint.map(|endpoint| endpoint.upstream()),
             });
         }
         if matches!(runtime.tcp_path, TcpPathCategory::Block) {
             return Ok(PreparedUdpLeafCandidate::Block {
-                tag: runtime.kernel_tag.unwrap_or("block").to_string(),
+                tag: runtime.kernel_tag.unwrap_or_else(|| "block".to_owned()),
             });
         }
 

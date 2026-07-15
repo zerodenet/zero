@@ -31,7 +31,7 @@ pub(crate) mod udp;
 #[derive(Debug)]
 pub(crate) struct Hysteria2Adapter;
 
-fn transport_leaf<'a>(leaf: &'a ResolvedLeafOutbound<'a>) -> Option<Hysteria2TransportLeaf<'a>> {
+fn transport_leaf(leaf: &ResolvedLeafOutbound<'_>) -> Option<Hysteria2TransportLeaf> {
     let ResolvedLeafOutbound::Hysteria2 {
         tag,
         server,
@@ -44,11 +44,13 @@ fn transport_leaf<'a>(leaf: &'a ResolvedLeafOutbound<'a>) -> Option<Hysteria2Tra
         return None;
     };
     Some(Hysteria2TransportLeaf::new(
-        tag,
-        server,
+        *tag,
+        *server,
         *port,
-        password,
-        *client_fingerprint,
+        *password,
+        client_fingerprint
+            .as_ref()
+            .map(|client_fingerprint| (*client_fingerprint).to_owned()),
     ))
 }
 
@@ -62,7 +64,7 @@ impl NamedProtocolAdapter for Hysteria2Adapter {
 impl UdpPacketPathCapability for Hysteria2Adapter {
     fn prepare_udp_packet_path<'a>(
         &self,
-        leaf: &'a ResolvedLeafOutbound<'a>,
+        leaf: ResolvedLeafOutbound<'a>,
     ) -> Option<
         Box<
             dyn crate::runtime::udp_dispatch::packet_path_operation::PreparedUdpPacketPathOperation
@@ -78,7 +80,7 @@ impl UdpPacketPathCapability for Hysteria2Adapter {
 impl UdpFlowCapability for Hysteria2Adapter {
     fn prepare_udp_flow<'a>(
         &self,
-        leaf: &'a ResolvedLeafOutbound<'a>,
+        leaf: ResolvedLeafOutbound<'a>,
         _source_dir: Option<&std::path::Path>,
     ) -> Result<
         Box<dyn crate::runtime::udp_dispatch::operation::PreparedUdpFlowOperation + 'a>,
@@ -141,16 +143,16 @@ impl TcpOutboundCapability for Hysteria2Adapter {
         named_protocol_claims_runtime_leaf::<Self>(leaf)
     }
 
-    fn outbound_leaf_runtime<'a>(
+    fn outbound_leaf_runtime(
         &self,
-        leaf: &ResolvedLeafOutbound<'a>,
-    ) -> Option<OutboundLeafRuntime<'a>> {
+        leaf: &ResolvedLeafOutbound<'_>,
+    ) -> Option<OutboundLeafRuntime> {
         proxy_leaf_runtime(leaf, TcpPathCategory::TransportSession)
     }
 
     fn prepare_tcp_connect<'a>(
         &self,
-        leaf: &'a ResolvedLeafOutbound<'a>,
+        leaf: ResolvedLeafOutbound<'a>,
         _source_dir: Option<&std::path::Path>,
     ) -> Result<
         Box<dyn crate::runtime::tcp_dispatch::operation::PreparedTcpConnectOperation + 'a>,

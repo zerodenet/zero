@@ -85,10 +85,10 @@ impl ProtocolInventory {
         claimed: &ClaimedInventoryLeaf<'a>,
     ) -> Result<PreparedTcpCandidate<'a>, TcpOutboundFailure> {
         let runtime = claimed.runtime();
-        let health_tag = health_tag(runtime).map(ToOwned::to_owned);
+        let health_tag = health_tag(&runtime).map(ToOwned::to_owned);
         let execution = if matches!(runtime.tcp_path, TcpPathCategory::Block) {
             PreparedTcpCandidateExecution::Block {
-                tag: runtime.kernel_tag.unwrap_or("block").to_owned(),
+                tag: runtime.kernel_tag.unwrap_or_else(|| "block".to_owned()),
             }
         } else {
             let operation = claimed.prepare_tcp_connect(ctx.source_dir())?;
@@ -107,21 +107,21 @@ impl ProtocolInventory {
     ) -> Result<PreparedTcpRelayHop<'a>, EngineError> {
         let (server, port, operation) = claimed.prepare_tcp_relay_hop(ctx.source_dir())?;
         Ok(PreparedTcpRelayHop {
-            server: server.to_owned(),
+            server,
             port,
             operation,
         })
     }
 }
 
-fn health_tag(runtime: crate::protocol_registry::OutboundLeafRuntime<'_>) -> Option<&str> {
+fn health_tag(runtime: &crate::protocol_registry::OutboundLeafRuntime) -> Option<&str> {
     match runtime.tcp_path {
         TcpPathCategory::Direct | TcpPathCategory::Block => None,
         #[cfg(any(feature = "socks5", feature = "vless", feature = "trojan"))]
-        TcpPathCategory::Tunnel => runtime.health_tag,
+        TcpPathCategory::Tunnel => runtime.health_tag.as_deref(),
         #[cfg(any(feature = "shadowsocks", feature = "vmess", feature = "mieru"))]
-        TcpPathCategory::Session => runtime.health_tag,
+        TcpPathCategory::Session => runtime.health_tag.as_deref(),
         #[cfg(feature = "hysteria2")]
-        TcpPathCategory::TransportSession => runtime.health_tag,
+        TcpPathCategory::TransportSession => runtime.health_tag.as_deref(),
     }
 }

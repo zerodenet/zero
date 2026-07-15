@@ -41,17 +41,16 @@ use crate::transport::TcpOutboundFailure;
 
 #[derive(Clone)]
 pub(crate) struct ClaimedInventoryLeaf<'a> {
-    leaf: &'a ResolvedLeafOutbound<'a>,
     claimed: ClaimedOutboundLeaf<'a>,
 }
 
 impl<'a> ClaimedInventoryLeaf<'a> {
-    fn new(leaf: &'a ResolvedLeafOutbound<'a>, claimed: ClaimedOutboundLeaf<'a>) -> Self {
-        Self { leaf, claimed }
+    fn new(claimed: ClaimedOutboundLeaf<'a>) -> Self {
+        Self { claimed }
     }
 
-    pub(crate) fn runtime(&self) -> OutboundLeafRuntime<'a> {
-        self.claimed.runtime
+    pub(crate) fn runtime(&self) -> OutboundLeafRuntime {
+        self.claimed.runtime.clone()
     }
 
     #[cfg(any(
@@ -72,14 +71,14 @@ impl<'a> ClaimedInventoryLeaf<'a> {
         source_dir: Option<&Path>,
     ) -> Result<Box<dyn PreparedTcpConnectOperation + 'a>, crate::transport::TcpOutboundFailure>
     {
-        self.claimed.prepare_tcp_connect(self.leaf, source_dir)
+        self.claimed.prepare_tcp_connect(source_dir)
     }
 
     pub(crate) fn prepare_tcp_relay_hop(
         &self,
         source_dir: Option<&Path>,
-    ) -> Result<(&'a str, u16, Box<dyn PreparedTcpRelayOperation + 'a>), EngineError> {
-        self.claimed.prepare_tcp_relay_hop(self.leaf, source_dir)
+    ) -> Result<(String, u16, Box<dyn PreparedTcpRelayOperation + 'a>), EngineError> {
+        self.claimed.prepare_tcp_relay_hop(source_dir)
     }
 
     #[cfg(any(
@@ -96,7 +95,7 @@ impl<'a> ClaimedInventoryLeaf<'a> {
         source_dir: Option<&Path>,
     ) -> Result<Box<dyn PreparedUdpFlowOperation + 'a>, crate::runtime::udp_dispatch::FlowFailure>
     {
-        self.claimed.prepare_udp_flow(self.leaf, source_dir)
+        self.claimed.prepare_udp_flow(source_dir)
     }
 
     #[cfg(any(
@@ -129,7 +128,7 @@ impl<'a> ClaimedInventoryLeaf<'a> {
                 + 'a,
         >,
     > {
-        self.claimed.prepare_udp_packet_path(self.leaf)
+        self.claimed.prepare_udp_packet_path()
     }
 }
 
@@ -214,17 +213,17 @@ impl ProtocolInventory {
     ) -> Result<ClaimedResolvedOutbound<'a>, TcpOutboundFailure> {
         match resolved {
             ResolvedOutbound::Single(candidate) => Ok(ClaimedResolvedOutbound::Single(
-                self.claim_outbound_leaf(candidate)
+                self.claim_outbound_leaf(candidate.clone())
                     .map_err(map_tcp_outbound_leaf_runtime_failure)?,
             )),
             ResolvedOutbound::Relay { chain } => Ok(ClaimedResolvedOutbound::Relay(
-                self.claim_tcp_relay_chain(chain)?,
+                self.claim_tcp_relay_chain(chain.iter().cloned())?,
             )),
             ResolvedOutbound::Fallback { candidates } => {
                 let mut claimed = Vec::with_capacity(candidates.len());
                 let mut last_failure = None;
 
-                for candidate in candidates {
+                for candidate in candidates.iter().cloned() {
                     match self.claim_outbound_leaf(candidate) {
                         Ok(candidate) => claimed.push(candidate),
                         Err(error) => {
@@ -258,17 +257,17 @@ impl ProtocolInventory {
     ) -> Result<ClaimedResolvedOutbound<'a>, FlowFailure> {
         match resolved {
             ResolvedOutbound::Single(candidate) => Ok(ClaimedResolvedOutbound::Single(
-                self.claim_outbound_leaf(candidate)
+                self.claim_outbound_leaf(candidate.clone())
                     .map_err(map_udp_outbound_leaf_runtime_failure)?,
             )),
             ResolvedOutbound::Relay { chain } => Ok(ClaimedResolvedOutbound::Relay(
-                self.claim_udp_relay_chain(chain)?,
+                self.claim_udp_relay_chain(chain.iter().cloned())?,
             )),
             ResolvedOutbound::Fallback { candidates } => {
                 let mut claimed = Vec::with_capacity(candidates.len());
                 let mut last_failure = None;
 
-                for candidate in candidates {
+                for candidate in candidates.iter().cloned() {
                     match self.claim_outbound_leaf(candidate) {
                         Ok(candidate) => claimed.push(candidate),
                         Err(error) => {
@@ -289,10 +288,10 @@ impl ProtocolInventory {
 
     pub(crate) fn claim_outbound_leaf<'a>(
         &self,
-        leaf: &'a ResolvedLeafOutbound<'a>,
+        leaf: ResolvedLeafOutbound<'a>,
     ) -> Result<ClaimedInventoryLeaf<'a>, EngineError> {
         let claimed = self.registry.claim_outbound_leaf(leaf)?;
-        Ok(ClaimedInventoryLeaf::new(leaf, claimed))
+        Ok(ClaimedInventoryLeaf::new(claimed))
     }
 }
 

@@ -1,12 +1,12 @@
 use zero_core::Address;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct OutboundEndpoint<'a> {
-    pub(crate) server: &'a str,
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct OutboundEndpoint {
+    pub(crate) server: String,
     pub(crate) port: u16,
 }
 
-impl OutboundEndpoint<'_> {
+impl OutboundEndpoint {
     #[cfg(any(
         feature = "socks5",
         feature = "vless",
@@ -16,12 +16,12 @@ impl OutboundEndpoint<'_> {
         feature = "vmess",
         feature = "mieru"
     ))]
-    pub(crate) fn upstream(self) -> (String, u16) {
-        (self.server.to_owned(), self.port)
+    pub(crate) fn upstream(&self) -> (String, u16) {
+        (self.server.clone(), self.port)
     }
 
-    pub(crate) fn address(self) -> Address {
-        Address::Domain(self.server.to_owned())
+    pub(crate) fn address(&self) -> Address {
+        Address::Domain(self.server.clone())
     }
 }
 

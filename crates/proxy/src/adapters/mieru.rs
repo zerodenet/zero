@@ -57,7 +57,7 @@ impl NamedProtocolAdapter for MieruAdapter {
 impl UdpFlowCapability for MieruAdapter {
     fn prepare_udp_flow<'a>(
         &self,
-        leaf: &'a ResolvedLeafOutbound<'a>,
+        leaf: ResolvedLeafOutbound<'a>,
         _source_dir: Option<&std::path::Path>,
     ) -> Result<
         Box<dyn crate::runtime::udp_dispatch::operation::PreparedUdpFlowOperation + 'a>,
@@ -109,16 +109,16 @@ impl TcpOutboundCapability for MieruAdapter {
         named_protocol_claims_runtime_leaf::<Self>(leaf)
     }
 
-    fn outbound_leaf_runtime<'a>(
+    fn outbound_leaf_runtime(
         &self,
-        leaf: &ResolvedLeafOutbound<'a>,
-    ) -> Option<OutboundLeafRuntime<'a>> {
+        leaf: &ResolvedLeafOutbound<'_>,
+    ) -> Option<OutboundLeafRuntime> {
         proxy_leaf_runtime(leaf, TcpPathCategory::Session)
     }
 
     fn prepare_tcp_connect<'a>(
         &self,
-        leaf: &'a ResolvedLeafOutbound<'a>,
+        leaf: ResolvedLeafOutbound<'a>,
         _source_dir: Option<&std::path::Path>,
     ) -> Result<
         Box<dyn crate::runtime::tcp_dispatch::operation::PreparedTcpConnectOperation + 'a>,
@@ -129,7 +129,7 @@ impl TcpOutboundCapability for MieruAdapter {
 
     fn prepare_tcp_relay_hop<'a>(
         &self,
-        leaf: &'a ResolvedLeafOutbound<'a>,
+        leaf: ResolvedLeafOutbound<'a>,
         _source_dir: Option<&std::path::Path>,
     ) -> Result<
         Box<dyn crate::runtime::tcp_dispatch::operation::PreparedTcpRelayOperation + 'a>,

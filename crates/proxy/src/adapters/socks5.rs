@@ -29,7 +29,7 @@ pub(crate) mod udp;
 #[derive(Debug)]
 pub(crate) struct Socks5Adapter;
 
-fn transport_leaf<'a>(leaf: &'a ResolvedLeafOutbound<'a>) -> Option<Socks5TransportLeaf<'a>> {
+fn transport_leaf(leaf: &ResolvedLeafOutbound<'_>) -> Option<Socks5TransportLeaf> {
     let ResolvedLeafOutbound::Socks5 {
         tag,
         server,
@@ -41,7 +41,11 @@ fn transport_leaf<'a>(leaf: &'a ResolvedLeafOutbound<'a>) -> Option<Socks5Transp
         return None;
     };
     Some(Socks5TransportLeaf::new(
-        tag, server, *port, *username, *password,
+        *tag,
+        *server,
+        *port,
+        username.as_ref().map(|username| (*username).to_owned()),
+        password.as_ref().map(|password| (*password).to_owned()),
     ))
 }
 
@@ -55,7 +59,7 @@ impl NamedProtocolAdapter for Socks5Adapter {
 impl UdpPacketPathCapability for Socks5Adapter {
     fn prepare_udp_packet_path<'a>(
         &self,
-        leaf: &'a ResolvedLeafOutbound<'a>,
+        leaf: ResolvedLeafOutbound<'a>,
     ) -> Option<
         Box<
             dyn crate::runtime::udp_dispatch::packet_path_operation::PreparedUdpPacketPathOperation
@@ -71,7 +75,7 @@ impl UdpPacketPathCapability for Socks5Adapter {
 impl UdpFlowCapability for Socks5Adapter {
     fn prepare_udp_flow<'a>(
         &self,
-        leaf: &'a ResolvedLeafOutbound<'a>,
+        leaf: ResolvedLeafOutbound<'a>,
         _source_dir: Option<&std::path::Path>,
     ) -> Result<
         Box<dyn crate::runtime::udp_dispatch::operation::PreparedUdpFlowOperation + 'a>,
@@ -109,16 +113,16 @@ impl TcpOutboundCapability for Socks5Adapter {
         named_protocol_claims_runtime_leaf::<Self>(leaf)
     }
 
-    fn outbound_leaf_runtime<'a>(
+    fn outbound_leaf_runtime(
         &self,
-        leaf: &ResolvedLeafOutbound<'a>,
-    ) -> Option<OutboundLeafRuntime<'a>> {
+        leaf: &ResolvedLeafOutbound<'_>,
+    ) -> Option<OutboundLeafRuntime> {
         proxy_leaf_runtime(leaf, TcpPathCategory::Tunnel)
     }
 
     fn prepare_tcp_connect<'a>(
         &self,
-        leaf: &'a ResolvedLeafOutbound<'a>,
+        leaf: ResolvedLeafOutbound<'a>,
         _source_dir: Option<&std::path::Path>,
     ) -> Result<
         Box<dyn crate::runtime::tcp_dispatch::operation::PreparedTcpConnectOperation + 'a>,
@@ -129,7 +133,7 @@ impl TcpOutboundCapability for Socks5Adapter {
 
     fn prepare_tcp_relay_hop<'a>(
         &self,
-        leaf: &'a ResolvedLeafOutbound<'a>,
+        leaf: ResolvedLeafOutbound<'a>,
         _source_dir: Option<&std::path::Path>,
     ) -> Result<
         Box<dyn crate::runtime::tcp_dispatch::operation::PreparedTcpRelayOperation + 'a>,

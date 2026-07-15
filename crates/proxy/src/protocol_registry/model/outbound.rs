@@ -5,8 +5,8 @@ use crate::runtime::path::{OutboundEndpoint, TcpPathCategory};
 /// The proxy runtime uses this for orchestration decisions without matching on
 /// concrete protocol variants. Protocol-private fields remain owned by the
 /// adapter that claimed the leaf.
-#[derive(Debug, Clone, Copy)]
-pub(crate) struct OutboundLeafRuntime<'a> {
+#[derive(Debug, Clone)]
+pub(crate) struct OutboundLeafRuntime {
     pub(crate) tcp_path: TcpPathCategory,
     #[cfg(any(
         feature = "socks5",
@@ -17,9 +17,9 @@ pub(crate) struct OutboundLeafRuntime<'a> {
         feature = "vmess",
         feature = "mieru"
     ))]
-    pub(crate) health_tag: Option<&'a str>,
-    pub(crate) endpoint: Option<OutboundEndpoint<'a>>,
-    pub(crate) kernel_tag: Option<&'a str>,
+    pub(crate) health_tag: Option<String>,
+    pub(crate) endpoint: Option<OutboundEndpoint>,
+    pub(crate) kernel_tag: Option<String>,
     #[cfg(any(
         feature = "socks5",
         feature = "vless",
@@ -29,5 +29,5 @@ pub(crate) struct OutboundLeafRuntime<'a> {
         feature = "vmess",
         feature = "mieru"
     ))]
-    pub(crate) udp_policy_tag: Option<&'a str>,
+    pub(crate) udp_policy_tag: Option<String>,
 }

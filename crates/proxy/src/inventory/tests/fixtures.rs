@@ -425,7 +425,7 @@ impl PreparedUdpFlowOperation for FakeUdpOperation {
 impl UdpFlowCapability for FakeTcpCapability {
     fn prepare_udp_flow<'a>(
         &self,
-        _: &'a ResolvedLeafOutbound<'a>,
+        _: ResolvedLeafOutbound<'a>,
         _: Option<&std::path::Path>,
     ) -> Result<Box<dyn PreparedUdpFlowOperation + 'a>, FlowFailure> {
         Ok(Box::new(FakeUdpOperation {
@@ -565,7 +565,7 @@ impl PreparedUdpPacketPathOperation for FakePacketPathOperation {
 impl UdpPacketPathCapability for FakeTcpCapability {
     fn prepare_udp_packet_path<'a>(
         &self,
-        _: &'a ResolvedLeafOutbound<'a>,
+        _: ResolvedLeafOutbound<'a>,
     ) -> Option<Box<dyn PreparedUdpPacketPathOperation + 'a>> {
         Some(Box::new(FakePacketPathOperation {
             calls: self.calls.clone(),
@@ -637,10 +637,10 @@ impl TcpOutboundCapability for FakeTcpCapability {
         true
     }
 
-    fn outbound_leaf_runtime<'a>(
+    fn outbound_leaf_runtime(
         &self,
-        leaf: &ResolvedLeafOutbound<'a>,
-    ) -> Option<OutboundLeafRuntime<'a>> {
+        leaf: &ResolvedLeafOutbound<'_>,
+    ) -> Option<OutboundLeafRuntime> {
         let ResolvedLeafOutbound::Direct { tag } = leaf else {
             return None;
         };
@@ -657,10 +657,10 @@ impl TcpOutboundCapability for FakeTcpCapability {
             ))]
             health_tag: None,
             endpoint: Some(OutboundEndpoint {
-                server: "fake-tcp.test",
+                server: "fake-tcp.test".to_owned(),
                 port: 8443,
             }),
-            kernel_tag: *tag,
+            kernel_tag: tag.map(str::to_owned),
             #[cfg(any(
                 feature = "socks5",
                 feature = "vless",
@@ -670,13 +670,13 @@ impl TcpOutboundCapability for FakeTcpCapability {
                 feature = "vmess",
                 feature = "mieru"
             ))]
-            udp_policy_tag: *tag,
+            udp_policy_tag: tag.map(str::to_owned),
         })
     }
 
     fn prepare_tcp_connect<'a>(
         &self,
-        _: &'a ResolvedLeafOutbound<'a>,
+        _: ResolvedLeafOutbound<'a>,
         _: Option<&std::path::Path>,
     ) -> Result<Box<dyn PreparedTcpConnectOperation + 'a>, TcpOutboundFailure> {
         Ok(Box::new(FakeTcpConnectOperation {
@@ -686,7 +686,7 @@ impl TcpOutboundCapability for FakeTcpCapability {
 
     fn prepare_tcp_relay_hop<'a>(
         &self,
-        _: &'a ResolvedLeafOutbound<'a>,
+        _: ResolvedLeafOutbound<'a>,
         _: Option<&std::path::Path>,
     ) -> Result<Box<dyn PreparedTcpRelayOperation + 'a>, EngineError> {
         Ok(Box::new(FakeTcpRelayOperation {

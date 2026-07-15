@@ -29,7 +29,7 @@ pub(crate) mod udp;
 #[derive(Debug)]
 pub(crate) struct ShadowsocksAdapter;
 
-fn transport_leaf<'a>(leaf: &'a ResolvedLeafOutbound<'a>) -> Option<ShadowsocksTransportLeaf<'a>> {
+fn transport_leaf(leaf: &ResolvedLeafOutbound<'_>) -> Option<ShadowsocksTransportLeaf> {
     let ResolvedLeafOutbound::Shadowsocks {
         tag,
         server,
@@ -41,7 +41,7 @@ fn transport_leaf<'a>(leaf: &'a ResolvedLeafOutbound<'a>) -> Option<ShadowsocksT
         return None;
     };
     Some(ShadowsocksTransportLeaf::new(
-        tag, server, *port, cipher, password,
+        *tag, *server, *port, *cipher, *password,
     ))
 }
 
@@ -55,7 +55,7 @@ impl NamedProtocolAdapter for ShadowsocksAdapter {
 impl UdpPacketPathCapability for ShadowsocksAdapter {
     fn prepare_udp_packet_path<'a>(
         &self,
-        leaf: &'a ResolvedLeafOutbound<'a>,
+        leaf: ResolvedLeafOutbound<'a>,
     ) -> Option<
         Box<
             dyn crate::runtime::udp_dispatch::packet_path_operation::PreparedUdpPacketPathOperation
@@ -71,7 +71,7 @@ impl UdpPacketPathCapability for ShadowsocksAdapter {
 impl UdpFlowCapability for ShadowsocksAdapter {
     fn prepare_udp_flow<'a>(
         &self,
-        leaf: &'a ResolvedLeafOutbound<'a>,
+        leaf: ResolvedLeafOutbound<'a>,
         _source_dir: Option<&std::path::Path>,
     ) -> Result<
         Box<dyn crate::runtime::udp_dispatch::operation::PreparedUdpFlowOperation + 'a>,
@@ -109,16 +109,16 @@ impl TcpOutboundCapability for ShadowsocksAdapter {
         named_protocol_claims_runtime_leaf::<Self>(leaf)
     }
 
-    fn outbound_leaf_runtime<'a>(
+    fn outbound_leaf_runtime(
         &self,
-        leaf: &ResolvedLeafOutbound<'a>,
-    ) -> Option<OutboundLeafRuntime<'a>> {
+        leaf: &ResolvedLeafOutbound<'_>,
+    ) -> Option<OutboundLeafRuntime> {
         proxy_leaf_runtime(leaf, TcpPathCategory::Session)
     }
 
     fn prepare_tcp_connect<'a>(
         &self,
-        leaf: &'a ResolvedLeafOutbound<'a>,
+        leaf: ResolvedLeafOutbound<'a>,
         _source_dir: Option<&std::path::Path>,
     ) -> Result<
         Box<dyn crate::runtime::tcp_dispatch::operation::PreparedTcpConnectOperation + 'a>,
@@ -129,7 +129,7 @@ impl TcpOutboundCapability for ShadowsocksAdapter {
 
     fn prepare_tcp_relay_hop<'a>(
         &self,
-        leaf: &'a ResolvedLeafOutbound<'a>,
+        leaf: ResolvedLeafOutbound<'a>,
         _source_dir: Option<&std::path::Path>,
     ) -> Result<
         Box<dyn crate::runtime::tcp_dispatch::operation::PreparedTcpRelayOperation + 'a>,

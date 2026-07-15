@@ -12,9 +12,9 @@ use crate::transport::TcpOutboundFailure;
 impl Socks5Adapter {
     pub(super) fn prepare_tcp_connect_impl<'a>(
         &self,
-        leaf: &'a ResolvedLeafOutbound<'a>,
+        leaf: ResolvedLeafOutbound<'a>,
     ) -> Result<Box<dyn PreparedTcpConnectOperation + 'a>, TcpOutboundFailure> {
-        let Some(leaf) = super::transport_leaf(leaf) else {
+        let Some(leaf) = super::transport_leaf(&leaf) else {
             return Err(unreachable_leaf(self.name()));
         };
         Ok(Box::new(SocketTcpConnectOperation { handshake: leaf }))
@@ -22,9 +22,9 @@ impl Socks5Adapter {
 
     pub(super) fn prepare_tcp_relay_hop_impl<'a>(
         &self,
-        leaf: &'a ResolvedLeafOutbound<'a>,
+        leaf: ResolvedLeafOutbound<'a>,
     ) -> Result<Box<dyn PreparedTcpRelayOperation + 'a>, EngineError> {
-        let Some(leaf) = super::transport_leaf(leaf) else {
+        let Some(leaf) = super::transport_leaf(&leaf) else {
             return Err(unreachable_leaf(self.name()).error);
         };
         Ok(Box::new(SocketTcpRelayOperation { handshake: leaf }))

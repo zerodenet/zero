@@ -46,9 +46,9 @@ pub struct Socks5ManagedUdpPacketPathCarrierDescriptor {
 }
 
 #[derive(Debug, Clone)]
-pub struct Socks5ManagedUdpFlowPlan<'a> {
-    pub(super) tag: &'a str,
-    pub(super) server: &'a str,
+pub struct Socks5ManagedUdpFlowPlan {
+    pub(super) tag: String,
+    pub(super) server: String,
     pub(super) port: u16,
     pub(super) association_target: Socks5ManagedUdpAssociationTarget,
 }
@@ -59,13 +59,13 @@ pub struct Socks5ManagedUdpPacketPathPlan {
     pub(super) carrier_build: Socks5ManagedUdpPacketPathCarrierBuild,
 }
 
-#[derive(Debug, Clone, Copy)]
-pub struct Socks5TransportLeaf<'a> {
-    pub(super) tag: &'a str,
-    pub(super) server: &'a str,
+#[derive(Debug, Clone)]
+pub struct Socks5TransportLeaf {
+    pub(super) tag: String,
+    pub(super) server: String,
     pub(super) port: u16,
-    pub(super) username: Option<&'a str>,
-    pub(super) password: Option<&'a str>,
+    pub(super) username: Option<String>,
+    pub(super) password: Option<String>,
 }
 
 impl<'a> Socks5ManagedUdpFlowConfig<'a> {
@@ -136,34 +136,34 @@ impl Socks5ManagedUdpPacketPathCarrierDescriptor {
     }
 }
 
-impl<'a> Socks5ManagedUdpFlowPlan<'a> {
+impl Socks5ManagedUdpFlowPlan {
     pub(super) fn new(
-        tag: &'a str,
-        server: &'a str,
+        tag: impl Into<String>,
+        server: impl Into<String>,
         port: u16,
         association_target: Socks5ManagedUdpAssociationTarget,
     ) -> Self {
         Self {
-            tag,
-            server,
+            tag: tag.into(),
+            server: server.into(),
             port,
             association_target,
         }
     }
 
     pub fn tag(&self) -> &str {
-        self.tag
+        &self.tag
     }
 
     pub fn server(&self) -> &str {
-        self.server
+        &self.server
     }
 
     pub fn port(&self) -> u16 {
         self.port
     }
 
-    pub fn into_parts(self) -> (&'a str, &'a str, u16, Socks5ManagedUdpAssociationTarget) {
+    pub fn into_parts(self) -> (String, String, u16, Socks5ManagedUdpAssociationTarget) {
         (self.tag, self.server, self.port, self.association_target)
     }
 

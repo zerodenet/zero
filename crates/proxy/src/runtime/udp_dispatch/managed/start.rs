@@ -143,18 +143,24 @@ impl UdpDispatch {
         services: Option<crate::protocol_registry::UdpRuntimeServices>,
         session: &zero_core::Session,
         payload: &[u8],
-        plan: zero_transport::managed_udp::ManagedDatagramStartPlan<'_, T>,
+        plan: zero_transport::managed_udp::ManagedDatagramStartPlan<T>,
     ) -> Result<FlowStartResult, FlowFailure>
     where
         T: std::any::Any + Send + Sync + std::fmt::Debug,
     {
+        let zero_transport::managed_udp::ManagedDatagramStartPlan {
+            tag,
+            server,
+            port,
+            resume,
+        } = plan;
         self.start_tracked_managed_datagram(ManagedDatagramStart {
             services,
-            tag: plan.tag,
+            tag: &tag,
             session,
-            server: plan.server,
-            port: plan.port,
-            resume: plan.resume,
+            server: &server,
+            port,
+            resume,
             payload,
         })
         .await

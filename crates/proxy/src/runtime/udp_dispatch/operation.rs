@@ -64,13 +64,13 @@ impl PreparedUdpFlowOperation for DirectUdpFlowOperation {
 }
 
 #[cfg(any(feature = "hysteria2", feature = "shadowsocks"))]
-pub(crate) struct ManagedDatagramUdpOperation<'a, T> {
-    pub(crate) plan: zero_transport::managed_udp::ManagedDatagramStartPlan<'a, T>,
+pub(crate) struct ManagedDatagramUdpOperation<T> {
+    pub(crate) plan: zero_transport::managed_udp::ManagedDatagramStartPlan<T>,
     pub(crate) needs_proxy: bool,
 }
 
 #[cfg(any(feature = "hysteria2", feature = "shadowsocks"))]
-impl<T> PreparedUdpFlowOperation for ManagedDatagramUdpOperation<'_, T>
+impl<T> PreparedUdpFlowOperation for ManagedDatagramUdpOperation<T>
 where
     T: std::any::Any + Send + Sync + std::fmt::Debug,
 {
@@ -93,15 +93,15 @@ where
 }
 
 #[cfg(feature = "socks5")]
-pub(crate) struct RegisteredAssociationUdpOperation<'a, T> {
-    pub(crate) tag: &'a str,
-    pub(crate) server: &'a str,
+pub(crate) struct RegisteredAssociationUdpOperation<T> {
+    pub(crate) tag: String,
+    pub(crate) server: String,
     pub(crate) port: u16,
     pub(crate) resume: T,
 }
 
 #[cfg(feature = "socks5")]
-impl<T> PreparedUdpFlowOperation for RegisteredAssociationUdpOperation<'_, T>
+impl<T> PreparedUdpFlowOperation for RegisteredAssociationUdpOperation<T>
 where
     T: std::any::Any + Send + Sync + std::fmt::Debug,
 {
@@ -122,8 +122,8 @@ where
                 payload,
                 PreparedRegisteredAssociationOperation {
                     services: Some(ctx.runtime_services()),
-                    tag: self.tag,
-                    server: self.server,
+                    tag: &self.tag,
+                    server: &self.server,
                     port: self.port,
                     resume: self.resume,
                 },
@@ -184,7 +184,7 @@ pub(crate) async fn execute_direct_udp_operation(
         .await
         .map_err(|error| FlowFailure {
             stage: "resolve_udp_target",
-            error: error.into(),
+            error,
             upstream: None,
         })?;
     let sent = dispatch
@@ -210,7 +210,7 @@ pub(crate) async fn execute_managed_datagram_operation<T>(
     services: Option<UdpRuntimeServices>,
     session: &Session,
     payload: &[u8],
-    operation: zero_transport::managed_udp::ManagedDatagramStartPlan<'_, T>,
+    operation: zero_transport::managed_udp::ManagedDatagramStartPlan<T>,
 ) -> Result<FlowStartResult, FlowFailure>
 where
     T: std::any::Any + Send + Sync + std::fmt::Debug,

@@ -16,13 +16,13 @@ pub(crate) trait ManagedDatagramSocketFlowConnector<T>: Send + Sync {
     fn connector_flow(
         &self,
         resume: &T,
-        endpoint: OutboundEndpoint<'_>,
+        endpoint: OutboundEndpoint,
     ) -> ManagedDatagramSocketConnectorFlow;
 
     async fn establish(
         &self,
         services: Option<UdpRuntimeServices>,
-        endpoint: OutboundEndpoint<'_>,
+        endpoint: OutboundEndpoint,
         resume: T,
         initial_packet: UdpPacketRef<'_>,
     ) -> Result<SharedManagedDatagramUdpConnection, EngineError>;
@@ -82,17 +82,17 @@ where
     fn connector_flow(
         &self,
         resume: &T,
-        endpoint: OutboundEndpoint<'_>,
+        endpoint: OutboundEndpoint,
     ) -> ManagedDatagramSocketConnectorFlow {
         managed_datagram_socket_connector_flow_from_build(
-            resume.connector_flow_cache_key(endpoint.server, endpoint.port),
+            resume.connector_flow_cache_key(&endpoint.server, endpoint.port),
         )
     }
 
     async fn establish(
         &self,
         services: Option<UdpRuntimeServices>,
-        endpoint: OutboundEndpoint<'_>,
+        endpoint: OutboundEndpoint,
         resume: T,
         _initial_packet: UdpPacketRef<'_>,
     ) -> Result<SharedManagedDatagramUdpConnection, EngineError> {

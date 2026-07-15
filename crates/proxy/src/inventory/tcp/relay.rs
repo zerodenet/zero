@@ -1,5 +1,4 @@
 use zero_core::Session;
-use zero_engine::ResolvedLeafOutbound;
 
 use super::super::{ClaimedRelayChain, ProtocolInventory};
 use super::dispatch_prepared_tcp_candidate;
@@ -125,15 +124,11 @@ impl PreparedTcpRelayChain<'_> {
 impl ProtocolInventory {
     pub(in crate::inventory) fn claim_tcp_relay_chain<'a>(
         &self,
-        chain: &'a [ResolvedLeafOutbound<'a>],
+        chain: impl IntoIterator<Item = zero_engine::ResolvedLeafOutbound<'a>>,
     ) -> Result<ClaimedRelayChain<'a>, TcpOutboundFailure> {
-        let first = chain
-            .first()
-            .expect("relay chain must have at least 2 hops");
-        let relay_hops = &chain[1..];
-        relay_hops
-            .first()
-            .expect("relay chain must have at least 2 hops");
+        let mut chain = chain.into_iter();
+        let first = chain.next().expect("relay chain must have at least 2 hops");
+        let second = chain.next().expect("relay chain must have at least 2 hops");
 
         let first = self
             .claim_outbound_leaf(first)
@@ -142,8 +137,8 @@ impl ProtocolInventory {
                 error,
                 upstream_endpoint: None,
             })?;
-        let relay_hops = relay_hops
-            .iter()
+        let relay_hops = std::iter::once(second)
+            .chain(chain)
             .map(|next_hop| {
                 self.claim_outbound_leaf(next_hop)
                     .map_err(|error| TcpOutboundFailure {

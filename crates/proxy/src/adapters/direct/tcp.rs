@@ -11,9 +11,9 @@ use crate::transport::TcpOutboundFailure;
 impl DirectAdapter {
     pub(super) fn prepare_tcp_connect_impl<'a>(
         &self,
-        leaf: &'a ResolvedLeafOutbound<'a>,
+        leaf: ResolvedLeafOutbound<'a>,
     ) -> Result<Box<dyn PreparedTcpConnectOperation + 'a>, TcpOutboundFailure> {
-        let ResolvedLeafOutbound::Direct { tag } = leaf else {
+        let ResolvedLeafOutbound::Direct { tag } = &leaf else {
             return Err(unreachable_leaf(self.name()));
         };
         Ok(Box::new(DirectTcpConnectOperation {

@@ -16,7 +16,7 @@ pub(crate) trait ManagedStreamFlowConnector:
 {
     fn connector_flow(
         &self,
-        endpoint: OutboundEndpoint<'_>,
+        endpoint: OutboundEndpoint,
         session_id: u64,
     ) -> ManagedStreamConnectorFlow;
 
@@ -24,7 +24,7 @@ pub(crate) trait ManagedStreamFlowConnector:
         &self,
         services: UdpRuntimeServices,
         session: &Session,
-        endpoint: OutboundEndpoint<'_>,
+        endpoint: OutboundEndpoint,
     ) -> Result<SharedManagedUdpConnection, EngineError>;
 
     async fn establish_relay(
@@ -33,7 +33,7 @@ pub(crate) trait ManagedStreamFlowConnector:
         tls_server_name: Option<&str>,
         services: Option<UdpRuntimeServices>,
         session: &Session,
-        endpoint: OutboundEndpoint<'_>,
+        endpoint: OutboundEndpoint,
     ) -> Result<SharedManagedUdpConnection, EngineError>;
 }
 

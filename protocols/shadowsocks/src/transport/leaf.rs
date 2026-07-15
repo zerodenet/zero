@@ -16,7 +16,7 @@ use super::{
     ShadowsocksTransportLeaf,
 };
 
-impl ProtocolTransportLeaf for ShadowsocksTransportLeaf<'_> {
+impl ProtocolTransportLeaf for ShadowsocksTransportLeaf {
     fn tag(&self) -> &str {
         self.tag()
     }
@@ -29,7 +29,7 @@ impl ProtocolTransportLeaf for ShadowsocksTransportLeaf<'_> {
 }
 
 #[async_trait::async_trait]
-impl ProtocolSocketTcpHandshake for ShadowsocksTransportLeaf<'_> {
+impl ProtocolSocketTcpHandshake for ShadowsocksTransportLeaf {
     fn connect_stage(&self) -> &'static str {
         "connect_upstream_shadowsocks"
     }
@@ -40,7 +40,7 @@ impl ProtocolSocketTcpHandshake for ShadowsocksTransportLeaf<'_> {
         session: &Session,
     ) -> Result<(TcpRelayStream, StreamTraffic), RuntimeError> {
         let metered = MeteredStream::new(TcpRelayStream::from(socket));
-        establish_shadowsocks_tcp_connect(metered, session, self.cipher, self.password).await
+        establish_shadowsocks_tcp_connect(metered, session, &self.cipher, &self.password).await
     }
 
     async fn handshake_relay(
@@ -48,33 +48,33 @@ impl ProtocolSocketTcpHandshake for ShadowsocksTransportLeaf<'_> {
         stream: TcpRelayStream,
         session: &Session,
     ) -> Result<TcpRelayStream, RuntimeError> {
-        apply_shadowsocks_tcp_relay_hop(stream, session, self.cipher, self.password).await
+        apply_shadowsocks_tcp_relay_hop(stream, session, &self.cipher, &self.password).await
     }
 }
 
-impl<'a> ShadowsocksTransportLeaf<'a> {
+impl ShadowsocksTransportLeaf {
     pub fn new(
-        tag: &'a str,
-        server: &'a str,
+        tag: impl Into<String>,
+        server: impl Into<String>,
         port: u16,
-        cipher: &'a str,
-        password: &'a str,
+        cipher: impl Into<String>,
+        password: impl Into<String>,
     ) -> Self {
         Self {
-            tag,
-            server,
+            tag: tag.into(),
+            server: server.into(),
             port,
-            cipher,
-            password,
+            cipher: cipher.into(),
+            password: password.into(),
         }
     }
 
     pub fn tag(&self) -> &str {
-        self.tag
+        &self.tag
     }
 
     pub fn server(&self) -> &str {
-        self.server
+        &self.server
     }
 
     pub fn port(&self) -> u16 {
@@ -82,11 +82,11 @@ impl<'a> ShadowsocksTransportLeaf<'a> {
     }
 
     pub fn cipher(&self) -> &str {
-        self.cipher
+        &self.cipher
     }
 
     pub fn password(&self) -> &str {
-        self.password
+        &self.password
     }
 
     pub fn flow_resume(&self) -> Result<ShadowsocksManagedDatagramFlowResume, zero_core::Error> {
@@ -111,10 +111,10 @@ impl<'a> ShadowsocksTransportLeaf<'a> {
         self.flow_config().packet_path_datagram_source_build()
     }
 
-    pub fn udp_flow_plan(&self) -> Result<ShadowsocksManagedUdpFlowPlan<'a>, zero_core::Error> {
+    pub fn udp_flow_plan(&self) -> Result<ShadowsocksManagedUdpFlowPlan, zero_core::Error> {
         Ok(ShadowsocksManagedUdpFlowPlan::new(
-            self.tag,
-            self.server,
+            self.tag.clone(),
+            self.server.clone(),
             self.port,
             self.flow_resume()?,
         ))
@@ -122,9 +122,9 @@ impl<'a> ShadowsocksTransportLeaf<'a> {
 
     pub fn udp_packet_path_plan(
         &self,
-    ) -> Result<ShadowsocksManagedUdpPacketPathPlan<'a>, zero_core::Error> {
+    ) -> Result<ShadowsocksManagedUdpPacketPathPlan, zero_core::Error> {
         Ok(ShadowsocksManagedUdpPacketPathPlan::new(
-            self.server,
+            self.server.clone(),
             self.port,
             self.packet_path_carrier_descriptor()?,
             self.packet_path_carrier_codec()?,
@@ -142,11 +142,11 @@ impl<'a> ShadowsocksTransportLeaf<'a> {
         OpenSocketFut: Future<Output = Result<TokioSocket, E>> + Send,
         E: Into<RuntimeError>,
     {
-        let upstream = open_socket(self.server, self.port)
+        let upstream = open_socket(&self.server, self.port)
             .await
             .map_err(Into::into)?;
         let metered = MeteredStream::new(TcpRelayStream::from(upstream));
-        establish_shadowsocks_tcp_connect(metered, session, self.cipher, self.password).await
+        establish_shadowsocks_tcp_connect(metered, session, &self.cipher, &self.password).await
     }
 
     pub async fn open_tcp_relay_hop(
@@ -154,16 +154,16 @@ impl<'a> ShadowsocksTransportLeaf<'a> {
         stream: TcpRelayStream,
         session: &Session,
     ) -> Result<TcpRelayStream, RuntimeError> {
-        apply_shadowsocks_tcp_relay_hop(stream, session, self.cipher, self.password).await
+        apply_shadowsocks_tcp_relay_hop(stream, session, &self.cipher, &self.password).await
     }
 
-    fn flow_config(&self) -> ShadowsocksManagedUdpFlowConfig<'a> {
+    fn flow_config(&self) -> ShadowsocksManagedUdpFlowConfig<'_> {
         ShadowsocksManagedUdpFlowConfig::new(
-            self.tag,
-            self.server,
+            &self.tag,
+            &self.server,
             self.port,
-            self.cipher,
-            self.password,
+            &self.cipher,
+            &self.password,
         )
     }
 }

@@ -20,9 +20,9 @@ pub(crate) fn managed_stream_handler() -> ManagedStreamHandlerPair {
 impl MieruAdapter {
     pub(super) fn prepare_udp_flow_impl<'a>(
         &self,
-        leaf: &'a ResolvedLeafOutbound<'a>,
+        leaf: ResolvedLeafOutbound<'a>,
     ) -> Result<Box<dyn PreparedUdpFlowOperation + 'a>, FlowFailure> {
-        let Some(leaf) = super::transport_leaf(leaf) else {
+        let Some(leaf) = super::transport_leaf(&leaf) else {
             return Err(unreachable_udp_leaf("mieru"));
         };
         Ok(Box::new(ManagedStreamPacketUdpOperation {

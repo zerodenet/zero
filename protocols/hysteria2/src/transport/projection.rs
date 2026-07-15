@@ -68,29 +68,29 @@ impl<'a> Hysteria2ManagedUdpFlowConfig<'a> {
     }
 }
 
-impl<'a> Hysteria2TransportLeaf<'a> {
+impl Hysteria2TransportLeaf {
     pub fn new(
-        tag: &'a str,
-        server: &'a str,
+        tag: impl Into<String>,
+        server: impl Into<String>,
         port: u16,
-        password: &'a str,
-        client_fingerprint: Option<&'a str>,
+        password: impl Into<String>,
+        client_fingerprint: Option<String>,
     ) -> Self {
         Self {
-            tag,
-            server,
+            tag: tag.into(),
+            server: server.into(),
             port,
-            password,
+            password: password.into(),
             client_fingerprint,
         }
     }
 
     pub fn tag(&self) -> &str {
-        self.tag
+        &self.tag
     }
 
     pub fn server(&self) -> &str {
-        self.server
+        &self.server
     }
 
     pub fn port(&self) -> u16 {
@@ -98,40 +98,24 @@ impl<'a> Hysteria2TransportLeaf<'a> {
     }
 
     pub fn flow_resume(&self) -> Hysteria2ManagedDatagramFlowResume {
-        Hysteria2ManagedUdpFlowConfig::new(
-            self.tag,
-            self.server,
-            self.port,
-            self.password,
-            self.client_fingerprint,
-        )
-        .flow_resume()
+        self.flow_config().flow_resume()
     }
 
     pub fn packet_path_carrier_descriptor(&self) -> Hysteria2ManagedUdpPacketPathCarrierDescriptor {
-        Hysteria2ManagedUdpFlowConfig::new(
-            self.tag,
-            self.server,
-            self.port,
-            self.password,
-            self.client_fingerprint,
-        )
-        .packet_path_carrier_descriptor()
+        self.flow_config().packet_path_carrier_descriptor()
     }
 
     pub fn packet_path_carrier_build(&self) -> Hysteria2ManagedUdpPacketPathCarrierBuild {
-        Hysteria2ManagedUdpFlowConfig::new(
-            self.tag,
-            self.server,
-            self.port,
-            self.password,
-            self.client_fingerprint,
-        )
-        .packet_path_carrier_build()
+        self.flow_config().packet_path_carrier_build()
     }
 
-    pub fn udp_flow_plan(&self) -> Hysteria2ManagedUdpFlowPlan<'a> {
-        Hysteria2ManagedUdpFlowPlan::new(self.tag, self.server, self.port, self.flow_resume())
+    pub fn udp_flow_plan(&self) -> Hysteria2ManagedUdpFlowPlan {
+        Hysteria2ManagedUdpFlowPlan::new(
+            self.tag.clone(),
+            self.server.clone(),
+            self.port,
+            self.flow_resume(),
+        )
     }
 
     pub fn udp_packet_path_plan(&self) -> Hysteria2ManagedUdpPacketPathPlan {
@@ -147,16 +131,26 @@ impl<'a> Hysteria2TransportLeaf<'a> {
     ) -> Result<zero_transport::TcpRelayStream, RuntimeError> {
         connect_hysteria2_tcp_outbound(
             session,
-            self.server,
+            &self.server,
             self.port,
-            self.password,
-            self.client_fingerprint,
+            &self.password,
+            self.client_fingerprint.as_deref(),
         )
         .await
     }
+
+    fn flow_config(&self) -> Hysteria2ManagedUdpFlowConfig<'_> {
+        Hysteria2ManagedUdpFlowConfig::new(
+            &self.tag,
+            &self.server,
+            self.port,
+            &self.password,
+            self.client_fingerprint.as_deref(),
+        )
+    }
 }
 
-impl ProtocolTransportLeaf for Hysteria2TransportLeaf<'_> {
+impl ProtocolTransportLeaf for Hysteria2TransportLeaf {
     fn tag(&self) -> &str {
         self.tag()
     }
@@ -169,7 +163,7 @@ impl ProtocolTransportLeaf for Hysteria2TransportLeaf<'_> {
 }
 
 #[async_trait::async_trait]
-impl ProtocolSessionTcpHandshake for Hysteria2TransportLeaf<'_> {
+impl ProtocolSessionTcpHandshake for Hysteria2TransportLeaf {
     fn connect_stage(&self) -> &'static str {
         "connect_upstream_hysteria2"
     }
@@ -233,40 +227,40 @@ impl Hysteria2ManagedDatagramFlowResume {
     }
 }
 
-impl<'a> Hysteria2ManagedUdpFlowPlan<'a> {
+impl Hysteria2ManagedUdpFlowPlan {
     fn new(
-        tag: &'a str,
-        server: &'a str,
+        tag: impl Into<String>,
+        server: impl Into<String>,
         port: u16,
         resume: Hysteria2ManagedDatagramFlowResume,
     ) -> Self {
         Self {
-            tag,
-            server,
+            tag: tag.into(),
+            server: server.into(),
             port,
             resume,
         }
     }
 
     pub fn tag(&self) -> &str {
-        self.tag
+        &self.tag
     }
 
     pub fn server(&self) -> &str {
-        self.server
+        &self.server
     }
 
     pub fn port(&self) -> u16 {
         self.port
     }
 
-    pub fn into_parts(self) -> (&'a str, &'a str, u16, Hysteria2ManagedDatagramFlowResume) {
+    pub fn into_parts(self) -> (String, String, u16, Hysteria2ManagedDatagramFlowResume) {
         (self.tag, self.server, self.port, self.resume)
     }
 
     pub fn into_start_plan(
         self,
-    ) -> zero_transport::managed_udp::ManagedDatagramStartPlan<'a, Hysteria2ManagedDatagramFlowResume>
+    ) -> zero_transport::managed_udp::ManagedDatagramStartPlan<Hysteria2ManagedDatagramFlowResume>
     {
         zero_transport::managed_udp::ManagedDatagramStartPlan::new(
             self.tag,

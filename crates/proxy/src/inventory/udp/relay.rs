@@ -149,15 +149,13 @@ impl ProtocolInventory {
     ) -> Result<(), FlowFailure> {
         for leaf in chain.leaves() {
             let runtime = leaf.runtime();
-            if !ctx.udp_enabled_for_outbound(runtime.udp_policy_tag) {
+            if !ctx.udp_enabled_for_outbound(runtime.udp_policy_tag.as_deref()) {
                 return Err(FlowFailure {
                     stage: "udp_policy",
                     error: EngineError::Io(std::io::Error::other(
                         "udp disabled for relay chain outbound",
                     )),
-                    upstream: runtime
-                        .endpoint
-                        .map(|endpoint| (endpoint.server.to_owned(), endpoint.port)),
+                    upstream: runtime.endpoint.map(|endpoint| endpoint.upstream()),
                 });
             }
         }
@@ -185,13 +183,11 @@ impl ProtocolInventory {
 
     pub(in crate::inventory) fn claim_udp_relay_chain<'a>(
         &self,
-        chain: &'a [zero_engine::ResolvedLeafOutbound<'a>],
+        chain: impl IntoIterator<Item = zero_engine::ResolvedLeafOutbound<'a>>,
     ) -> Result<ClaimedRelayChain<'a>, FlowFailure> {
-        let first = chain.first().expect("relay chain has at least 2 hops");
-        let relay_hops = &chain[1..];
-        relay_hops
-            .first()
-            .expect("relay chain must have at least 2 hops");
+        let mut chain = chain.into_iter();
+        let first = chain.next().expect("relay chain has at least 2 hops");
+        let second = chain.next().expect("relay chain must have at least 2 hops");
         let first = self
             .claim_outbound_leaf(first)
             .map_err(|error| FlowFailure {
@@ -199,8 +195,8 @@ impl ProtocolInventory {
                 error,
                 upstream: None,
             })?;
-        let relay_hops = relay_hops
-            .iter()
+        let relay_hops = std::iter::once(second)
+            .chain(chain)
             .map(|leaf| {
                 self.claim_outbound_leaf(leaf).map_err(|error| FlowFailure {
                     stage: "outbound_leaf_runtime",

@@ -36,7 +36,7 @@ pub(super) struct ManagedStreamRelayRequest<'a, T> {
     pub(super) tls_server_name: Option<&'a str>,
     pub(super) services: Option<UdpRuntimeServices>,
     pub(super) session: &'a Session,
-    pub(super) endpoint: OutboundEndpoint<'a>,
+    pub(super) endpoint: OutboundEndpoint,
     pub(super) resume: T,
     pub(super) packet_ref: UdpPacketRef<'a>,
 }

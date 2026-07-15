@@ -1,4 +1,5 @@
 use alloc::boxed::Box;
+use alloc::string::String;
 
 use std::future::Future;
 
@@ -15,7 +16,7 @@ use super::{
     Socks5TransportLeaf,
 };
 
-impl ProtocolTransportLeaf for Socks5TransportLeaf<'_> {
+impl ProtocolTransportLeaf for Socks5TransportLeaf {
     fn tag(&self) -> &str {
         self.tag()
     }
@@ -28,7 +29,7 @@ impl ProtocolTransportLeaf for Socks5TransportLeaf<'_> {
 }
 
 #[async_trait::async_trait]
-impl ProtocolSocketTcpHandshake for Socks5TransportLeaf<'_> {
+impl ProtocolSocketTcpHandshake for Socks5TransportLeaf {
     fn connect_stage(&self) -> &'static str {
         "connect_upstream_socks5"
     }
@@ -39,7 +40,13 @@ impl ProtocolSocketTcpHandshake for Socks5TransportLeaf<'_> {
         session: &Session,
     ) -> Result<(TcpRelayStream, StreamTraffic), RuntimeError> {
         let metered = MeteredStream::new(TcpRelayStream::from(socket));
-        establish_socks5_tcp_connect(metered, session, self.username, self.password).await
+        establish_socks5_tcp_connect(
+            metered,
+            session,
+            self.username.as_deref(),
+            self.password.as_deref(),
+        )
+        .await
     }
 
     async fn handshake_relay(
@@ -47,21 +54,27 @@ impl ProtocolSocketTcpHandshake for Socks5TransportLeaf<'_> {
         stream: TcpRelayStream,
         session: &Session,
     ) -> Result<TcpRelayStream, RuntimeError> {
-        apply_socks5_tcp_relay_hop(stream, session, self.username, self.password).await
+        apply_socks5_tcp_relay_hop(
+            stream,
+            session,
+            self.username.as_deref(),
+            self.password.as_deref(),
+        )
+        .await
     }
 }
 
-impl<'a> Socks5TransportLeaf<'a> {
+impl Socks5TransportLeaf {
     pub fn new(
-        tag: &'a str,
-        server: &'a str,
+        tag: impl Into<String>,
+        server: impl Into<String>,
         port: u16,
-        username: Option<&'a str>,
-        password: Option<&'a str>,
+        username: Option<String>,
+        password: Option<String>,
     ) -> Self {
         Self {
-            tag,
-            server,
+            tag: tag.into(),
+            server: server.into(),
             port,
             username,
             password,
@@ -69,11 +82,11 @@ impl<'a> Socks5TransportLeaf<'a> {
     }
 
     pub fn tag(&self) -> &str {
-        self.tag
+        &self.tag
     }
 
     pub fn server(&self) -> &str {
-        self.server
+        &self.server
     }
 
     pub fn port(&self) -> u16 {
@@ -92,8 +105,13 @@ impl<'a> Socks5TransportLeaf<'a> {
         self.flow_config().packet_path_carrier_build()
     }
 
-    pub fn udp_flow_plan(&self) -> Socks5ManagedUdpFlowPlan<'a> {
-        Socks5ManagedUdpFlowPlan::new(self.tag, self.server, self.port, self.association_target())
+    pub fn udp_flow_plan(&self) -> Socks5ManagedUdpFlowPlan {
+        Socks5ManagedUdpFlowPlan::new(
+            self.tag.clone(),
+            self.server.clone(),
+            self.port,
+            self.association_target(),
+        )
     }
 
     pub fn udp_packet_path_plan(&self) -> Socks5ManagedUdpPacketPathPlan {
@@ -113,11 +131,17 @@ impl<'a> Socks5TransportLeaf<'a> {
         OpenSocketFut: Future<Output = Result<TokioSocket, E>>,
         E: Into<RuntimeError>,
     {
-        let upstream = open_socket(self.server, self.port)
+        let upstream = open_socket(&self.server, self.port)
             .await
             .map_err(Into::into)?;
         let metered = MeteredStream::new(TcpRelayStream::from(upstream));
-        establish_socks5_tcp_connect(metered, session, self.username, self.password).await
+        establish_socks5_tcp_connect(
+            metered,
+            session,
+            self.username.as_deref(),
+            self.password.as_deref(),
+        )
+        .await
     }
 
     pub async fn open_tcp_relay_hop(
@@ -125,16 +149,22 @@ impl<'a> Socks5TransportLeaf<'a> {
         stream: TcpRelayStream,
         session: &Session,
     ) -> Result<TcpRelayStream, RuntimeError> {
-        apply_socks5_tcp_relay_hop(stream, session, self.username, self.password).await
+        apply_socks5_tcp_relay_hop(
+            stream,
+            session,
+            self.username.as_deref(),
+            self.password.as_deref(),
+        )
+        .await
     }
 
-    fn flow_config(&self) -> Socks5ManagedUdpFlowConfig<'a> {
+    fn flow_config(&self) -> Socks5ManagedUdpFlowConfig<'_> {
         Socks5ManagedUdpFlowConfig::new(
-            self.tag,
-            self.server,
+            &self.tag,
+            &self.server,
             self.port,
-            self.username,
-            self.password,
+            self.username.as_deref(),
+            self.password.as_deref(),
         )
     }
 }

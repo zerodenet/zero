@@ -36,9 +36,9 @@ pub struct Hysteria2ManagedUdpPacketPathCarrierBuild {
 }
 
 #[derive(Debug, Clone)]
-pub struct Hysteria2ManagedUdpFlowPlan<'a> {
-    pub(super) tag: &'a str,
-    pub(super) server: &'a str,
+pub struct Hysteria2ManagedUdpFlowPlan {
+    pub(super) tag: String,
+    pub(super) server: String,
     pub(super) port: u16,
     pub(super) resume: Hysteria2ManagedDatagramFlowResume,
 }
@@ -58,13 +58,13 @@ pub struct Hysteria2ManagedUdpFlowConfig<'a> {
     pub(super) client_fingerprint: Option<&'a str>,
 }
 
-#[derive(Debug, Clone, Copy)]
-pub struct Hysteria2TransportLeaf<'a> {
-    pub(super) tag: &'a str,
-    pub(super) server: &'a str,
+#[derive(Debug, Clone)]
+pub struct Hysteria2TransportLeaf {
+    pub(super) tag: String,
+    pub(super) server: String,
     pub(super) port: u16,
-    pub(super) password: &'a str,
-    pub(super) client_fingerprint: Option<&'a str>,
+    pub(super) password: String,
+    pub(super) client_fingerprint: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
