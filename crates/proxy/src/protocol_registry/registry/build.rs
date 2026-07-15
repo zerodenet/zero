@@ -13,7 +13,8 @@ use crate::protocol_registry::ManagedUdpHandlerProvider;
 #[cfg(feature = "socks5")]
 use crate::protocol_registry::UpstreamUdpHandlerProvider;
 use crate::protocol_registry::{
-    InboundListenerCapability, ProtocolSupportCapability, TcpOutboundCapability,
+    InboundListenerCapability, OutboundLeafClaimCapability, ProtocolSupportCapability,
+    TcpOutboundCapability,
 };
 #[cfg(any(
     feature = "socks5",
@@ -42,20 +43,29 @@ impl ProtocolRegistry {
     ))]
     pub(crate) fn register_core_capability<T>(&mut self, adapter: Arc<T>)
     where
-        T: ProtocolSupportCapability + InboundListenerCapability + TcpOutboundCapability + 'static,
+        T: ProtocolSupportCapability
+            + InboundListenerCapability
+            + OutboundLeafClaimCapability
+            + TcpOutboundCapability
+            + 'static,
     {
         self.entries.push(super::RegisteredProtocolEntry {
             support: adapter.clone(),
             inbound: adapter.clone(),
+            outbound: adapter.clone(),
+            #[cfg(test)]
             tcp: adapter,
-            #[cfg(any(
-                feature = "socks5",
-                feature = "vless",
-                feature = "hysteria2",
-                feature = "shadowsocks",
-                feature = "trojan",
-                feature = "vmess",
-                feature = "mieru"
+            #[cfg(all(
+                test,
+                any(
+                    feature = "socks5",
+                    feature = "vless",
+                    feature = "hysteria2",
+                    feature = "shadowsocks",
+                    feature = "trojan",
+                    feature = "vmess",
+                    feature = "mieru"
+                )
             ))]
             udp: None,
             #[cfg(any(
@@ -69,14 +79,17 @@ impl ProtocolRegistry {
             managed_udp_handlers: None,
             #[cfg(feature = "socks5")]
             upstream_udp_handler: None,
-            #[cfg(any(
-                feature = "socks5",
-                feature = "vless",
-                feature = "hysteria2",
-                feature = "shadowsocks",
-                feature = "trojan",
-                feature = "vmess",
-                feature = "mieru"
+            #[cfg(all(
+                test,
+                any(
+                    feature = "socks5",
+                    feature = "vless",
+                    feature = "hysteria2",
+                    feature = "shadowsocks",
+                    feature = "trojan",
+                    feature = "vmess",
+                    feature = "mieru"
+                )
             ))]
             packet_path: None,
         });
@@ -95,6 +108,7 @@ impl ProtocolRegistry {
     where
         T: ProtocolSupportCapability
             + InboundListenerCapability
+            + OutboundLeafClaimCapability
             + TcpOutboundCapability
             + UdpFlowCapability
             + UdpPacketPathCapability
@@ -103,7 +117,21 @@ impl ProtocolRegistry {
         self.entries.push(super::RegisteredProtocolEntry {
             support: adapter.clone(),
             inbound: adapter.clone(),
+            outbound: adapter.clone(),
+            #[cfg(test)]
             tcp: adapter.clone(),
+            #[cfg(all(
+                test,
+                any(
+                    feature = "socks5",
+                    feature = "vless",
+                    feature = "hysteria2",
+                    feature = "shadowsocks",
+                    feature = "trojan",
+                    feature = "vmess",
+                    feature = "mieru"
+                )
+            ))]
             udp: Some(adapter.clone()),
             #[cfg(any(
                 feature = "hysteria2",
@@ -116,6 +144,18 @@ impl ProtocolRegistry {
             managed_udp_handlers: None,
             #[cfg(feature = "socks5")]
             upstream_udp_handler: None,
+            #[cfg(all(
+                test,
+                any(
+                    feature = "socks5",
+                    feature = "vless",
+                    feature = "hysteria2",
+                    feature = "shadowsocks",
+                    feature = "trojan",
+                    feature = "vmess",
+                    feature = "mieru"
+                )
+            ))]
             packet_path: Some(adapter),
         });
     }
@@ -125,6 +165,7 @@ impl ProtocolRegistry {
     where
         T: ProtocolSupportCapability
             + InboundListenerCapability
+            + OutboundLeafClaimCapability
             + TcpOutboundCapability
             + UdpFlowCapability
             + UdpPacketPathCapability
@@ -134,7 +175,21 @@ impl ProtocolRegistry {
         self.entries.push(super::RegisteredProtocolEntry {
             support: adapter.clone(),
             inbound: adapter.clone(),
+            outbound: adapter.clone(),
+            #[cfg(test)]
             tcp: adapter.clone(),
+            #[cfg(all(
+                test,
+                any(
+                    feature = "socks5",
+                    feature = "vless",
+                    feature = "hysteria2",
+                    feature = "shadowsocks",
+                    feature = "trojan",
+                    feature = "vmess",
+                    feature = "mieru"
+                )
+            ))]
             udp: Some(adapter.clone()),
             #[cfg(any(
                 feature = "hysteria2",
@@ -146,6 +201,18 @@ impl ProtocolRegistry {
             ))]
             managed_udp_handlers: None,
             upstream_udp_handler: Some(adapter.clone()),
+            #[cfg(all(
+                test,
+                any(
+                    feature = "socks5",
+                    feature = "vless",
+                    feature = "hysteria2",
+                    feature = "shadowsocks",
+                    feature = "trojan",
+                    feature = "vmess",
+                    feature = "mieru"
+                )
+            ))]
             packet_path: Some(adapter),
         });
     }
@@ -162,6 +229,7 @@ impl ProtocolRegistry {
     where
         T: ProtocolSupportCapability
             + InboundListenerCapability
+            + OutboundLeafClaimCapability
             + TcpOutboundCapability
             + UdpFlowCapability
             + UdpPacketPathCapability
@@ -171,11 +239,37 @@ impl ProtocolRegistry {
         self.entries.push(super::RegisteredProtocolEntry {
             support: adapter.clone(),
             inbound: adapter.clone(),
+            outbound: adapter.clone(),
+            #[cfg(test)]
             tcp: adapter.clone(),
+            #[cfg(all(
+                test,
+                any(
+                    feature = "socks5",
+                    feature = "vless",
+                    feature = "hysteria2",
+                    feature = "shadowsocks",
+                    feature = "trojan",
+                    feature = "vmess",
+                    feature = "mieru"
+                )
+            ))]
             udp: Some(adapter.clone()),
             managed_udp_handlers: Some(adapter.clone()),
             #[cfg(feature = "socks5")]
             upstream_udp_handler: None,
+            #[cfg(all(
+                test,
+                any(
+                    feature = "socks5",
+                    feature = "vless",
+                    feature = "hysteria2",
+                    feature = "shadowsocks",
+                    feature = "trojan",
+                    feature = "vmess",
+                    feature = "mieru"
+                )
+            ))]
             packet_path: Some(adapter),
         });
     }

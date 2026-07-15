@@ -138,7 +138,8 @@ fn registry_executes_adapter_claimed_tcp_leaf_operations() {
     use crate::protocol_registry::TcpRuntimeServices;
     use crate::protocol_registry::{
         proxy_leaf_runtime, ClaimedTcpOutboundLeaf, ClaimedUdpFlowLeaf, InboundListenerCapability,
-        OutboundLeafRuntime, ProtocolSupportCapability, TcpOutboundCapability, UdpFlowCapability,
+        OutboundLeafClaim, OutboundLeafClaimCapability, OutboundLeafRuntime,
+        ProtocolSupportCapability, TcpOutboundCapability, UdpFlowCapability,
         UdpPacketPathCapability,
     };
     use crate::runtime::tcp_dispatch::operation::{
@@ -269,6 +270,21 @@ fn registry_executes_adapter_claimed_tcp_leaf_operations() {
     }
     impl UdpPacketPathCapability for FakeClaimedAdapter {}
 
+    impl OutboundLeafClaimCapability for FakeClaimedAdapter {
+        fn claim_outbound_leaf<'a>(
+            &self,
+            leaf: ResolvedLeafOutbound<'a>,
+        ) -> Option<OutboundLeafClaim<'a>> {
+            let tcp = self.claim_tcp_outbound_leaf(leaf.clone())?;
+            Some(OutboundLeafClaim {
+                runtime: tcp.runtime(),
+                tcp,
+                udp: Some(self.claim_udp_flow_leaf(leaf)?),
+                packet_path: None,
+            })
+        }
+    }
+
     let mut registry = super::super::ProtocolRegistry::default();
     registry.register_capability(Arc::new(FakeClaimedAdapter));
 
@@ -306,7 +322,8 @@ fn registry_executes_adapter_claimed_udp_leaf_operations() {
     use crate::protocol_catalog::protocol_descriptor;
     use crate::protocol_registry::{
         proxy_leaf_runtime, ClaimedTcpOutboundLeaf, ClaimedUdpFlowLeaf, InboundListenerCapability,
-        OutboundLeafRuntime, ProtocolSupportCapability, TcpOutboundCapability, UdpFlowCapability,
+        OutboundLeafClaim, OutboundLeafClaimCapability, OutboundLeafRuntime,
+        ProtocolSupportCapability, TcpOutboundCapability, UdpFlowCapability,
         UdpPacketPathCapability,
     };
     use crate::runtime::tcp_dispatch::operation::{
@@ -440,6 +457,21 @@ fn registry_executes_adapter_claimed_udp_leaf_operations() {
 
     impl UdpPacketPathCapability for FakeClaimedUdpAdapter {}
 
+    impl OutboundLeafClaimCapability for FakeClaimedUdpAdapter {
+        fn claim_outbound_leaf<'a>(
+            &self,
+            leaf: ResolvedLeafOutbound<'a>,
+        ) -> Option<OutboundLeafClaim<'a>> {
+            let tcp = self.claim_tcp_outbound_leaf(leaf.clone())?;
+            Some(OutboundLeafClaim {
+                runtime: tcp.runtime(),
+                tcp,
+                udp: Some(self.claim_udp_flow_leaf(leaf)?),
+                packet_path: None,
+            })
+        }
+    }
+
     let mut registry = super::super::ProtocolRegistry::default();
     registry.register_capability(Arc::new(FakeClaimedUdpAdapter));
 
@@ -483,8 +515,9 @@ fn registry_executes_adapter_claimed_udp_packet_path_operations() {
     use crate::protocol_catalog::protocol_descriptor;
     use crate::protocol_registry::{
         proxy_leaf_runtime, ClaimedTcpOutboundLeaf, ClaimedUdpFlowLeaf, ClaimedUdpPacketPathLeaf,
-        InboundListenerCapability, OutboundLeafRuntime, ProtocolSupportCapability,
-        TcpOutboundCapability, UdpFlowCapability, UdpPacketPathCapability,
+        InboundListenerCapability, OutboundLeafClaim, OutboundLeafClaimCapability,
+        OutboundLeafRuntime, ProtocolSupportCapability, TcpOutboundCapability, UdpFlowCapability,
+        UdpPacketPathCapability,
     };
     use crate::runtime::tcp_dispatch::operation::{
         DirectTcpConnectOperation, PreparedTcpConnectOperation,
@@ -640,6 +673,21 @@ fn registry_executes_adapter_claimed_udp_packet_path_operations() {
                 ResolvedLeafOutbound::Socks5 { .. } => Some(Box::new(FakeClaimedUdpPacketPathLeaf)),
                 _ => None,
             }
+        }
+    }
+
+    impl OutboundLeafClaimCapability for FakeClaimedUdpPacketPathAdapter {
+        fn claim_outbound_leaf<'a>(
+            &self,
+            leaf: ResolvedLeafOutbound<'a>,
+        ) -> Option<OutboundLeafClaim<'a>> {
+            let tcp = self.claim_tcp_outbound_leaf(leaf.clone())?;
+            Some(OutboundLeafClaim {
+                runtime: tcp.runtime(),
+                tcp,
+                udp: Some(self.claim_udp_flow_leaf(leaf.clone())?),
+                packet_path: Some(self.claim_udp_packet_path_leaf(leaf)?),
+            })
         }
     }
 

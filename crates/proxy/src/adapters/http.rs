@@ -1,12 +1,13 @@
 use zero_config::{InboundConfig, InboundProtocolConfig, OutboundProtocolConfig};
-use zero_engine::EngineError;
+use zero_engine::{EngineError, ResolvedLeafOutbound};
 use zero_traits::{ProtocolCapabilityDescriptor, ProtocolMetadata};
 
 use crate::adapters::identity::{
     named_protocol_supports_inbound, named_protocol_supports_outbound, NamedProtocolAdapter,
 };
 use crate::protocol_registry::{
-    InboundListenerCapability, ProtocolSupportCapability, TcpOutboundCapability,
+    InboundListenerCapability, OutboundLeafClaim, OutboundLeafClaimCapability,
+    ProtocolSupportCapability, TcpOutboundCapability,
 };
 
 #[cfg(feature = "http")]
@@ -39,6 +40,16 @@ impl InboundListenerCapability for HttpConnectAdapter {
 
 #[cfg(feature = "http")]
 impl TcpOutboundCapability for HttpConnectAdapter {}
+
+#[cfg(feature = "http")]
+impl OutboundLeafClaimCapability for HttpConnectAdapter {
+    fn claim_outbound_leaf<'a>(
+        &self,
+        _leaf: ResolvedLeafOutbound<'a>,
+    ) -> Option<OutboundLeafClaim<'a>> {
+        None
+    }
+}
 
 #[cfg(feature = "http")]
 impl ProtocolSupportCapability for HttpConnectAdapter {

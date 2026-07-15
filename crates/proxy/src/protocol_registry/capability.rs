@@ -108,6 +108,40 @@ pub(crate) trait ClaimedUdpPacketPathLeaf<'a>: Send + Sync {
     >;
 }
 
+pub(crate) struct OutboundLeafClaim<'a> {
+    pub(crate) runtime: OutboundLeafRuntime,
+    pub(crate) tcp: Box<dyn ClaimedTcpOutboundLeaf<'a> + 'a>,
+    #[cfg(any(
+        feature = "socks5",
+        feature = "vless",
+        feature = "hysteria2",
+        feature = "shadowsocks",
+        feature = "trojan",
+        feature = "vmess",
+        feature = "mieru"
+    ))]
+    pub(crate) udp: Option<Box<dyn ClaimedUdpFlowLeaf<'a> + 'a>>,
+    #[cfg(any(
+        feature = "socks5",
+        feature = "vless",
+        feature = "hysteria2",
+        feature = "shadowsocks",
+        feature = "trojan",
+        feature = "vmess",
+        feature = "mieru"
+    ))]
+    pub(crate) packet_path: Option<Box<dyn ClaimedUdpPacketPathLeaf<'a> + 'a>>,
+}
+
+pub(crate) trait OutboundLeafClaimCapability: Send + Sync {
+    fn claim_outbound_leaf<'a>(
+        &self,
+        _leaf: ResolvedLeafOutbound<'a>,
+    ) -> Option<OutboundLeafClaim<'a>> {
+        None
+    }
+}
+
 pub(crate) trait ProtocolSupportCapability: ProtocolMetadata + Send + Sync {
     fn name(&self) -> &'static str;
     fn feature_name(&self) -> &'static str;

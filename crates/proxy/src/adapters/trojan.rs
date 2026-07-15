@@ -18,8 +18,9 @@ use crate::adapters::identity::{
 };
 use crate::protocol_registry::{
     claim_transport_tcp_leaf, claim_transport_udp_leaf, proxy_leaf_runtime, ClaimedTcpOutboundLeaf,
-    ClaimedUdpFlowLeaf, InboundListenerCapability, ManagedUdpHandlerProvider,
-    ProtocolSupportCapability, TcpOutboundCapability, UdpFlowCapability, UdpPacketPathCapability,
+    ClaimedUdpFlowLeaf, InboundListenerCapability, ManagedUdpHandlerProvider, OutboundLeafClaim,
+    OutboundLeafClaimCapability, ProtocolSupportCapability, TcpOutboundCapability,
+    UdpFlowCapability, UdpPacketPathCapability,
 };
 use crate::runtime::path::TcpPathCategory;
 #[cfg(feature = "trojan")]
@@ -94,6 +95,30 @@ impl<'a> TrojanOutboundProjection<'a> {
 const TCP_PATH: TcpPathCategory = TcpPathCategory::Tunnel;
 
 #[cfg(feature = "trojan")]
+impl TrojanAdapter {
+    fn claim_outbound_leaf_impl<'a>(
+        &self,
+        leaf: ResolvedLeafOutbound<'a>,
+    ) -> Option<OutboundLeafClaim<'a>> {
+        let runtime = proxy_leaf_runtime(&leaf, TCP_PATH)?;
+        let projection = TrojanOutboundProjection::from_leaf(leaf)?;
+        let endpoint = Some(projection.endpoint());
+        let tcp_runtime = self.runtime.clone();
+        let udp_runtime = self.runtime.clone();
+        Some(OutboundLeafClaim {
+            runtime: runtime.clone(),
+            tcp: claim_transport_tcp_leaf(endpoint, runtime, move |source_dir| {
+                tcp_runtime.build_outbound_leaf(source_dir, projection.build_options())
+            }),
+            udp: Some(claim_transport_udp_leaf(endpoint, move |source_dir| {
+                udp_runtime.build_outbound_leaf(source_dir, projection.build_options())
+            })),
+            packet_path: None,
+        })
+    }
+}
+
+#[cfg(feature = "trojan")]
 impl NamedProtocolAdapter for TrojanAdapter {
     const PROTOCOL_NAME: &'static str = "trojan";
     const FEATURE_NAME: &'static str = "trojan";
@@ -148,16 +173,8 @@ impl TcpOutboundCapability for TrojanAdapter {
         &self,
         leaf: ResolvedLeafOutbound<'a>,
     ) -> Option<Box<dyn ClaimedTcpOutboundLeaf<'a> + 'a>> {
-        let runtime = proxy_leaf_runtime(&leaf, TCP_PATH)?;
-        let projection = TrojanOutboundProjection::from_leaf(leaf)?;
-        let transport_runtime = self.runtime.clone();
-        Some(claim_transport_tcp_leaf(
-            Some(projection.endpoint()),
-            runtime,
-            move |source_dir| {
-                transport_runtime.build_outbound_leaf(source_dir, projection.build_options())
-            },
-        ))
+        self.claim_outbound_leaf_impl(leaf)
+            .map(|claimed| claimed.tcp)
     }
 }
 
@@ -167,14 +184,18 @@ impl UdpFlowCapability for TrojanAdapter {
         &self,
         leaf: ResolvedLeafOutbound<'a>,
     ) -> Option<Box<dyn ClaimedUdpFlowLeaf<'a> + 'a>> {
-        let projection = TrojanOutboundProjection::from_leaf(leaf)?;
-        let transport_runtime = self.runtime.clone();
-        Some(claim_transport_udp_leaf(
-            Some(projection.endpoint()),
-            move |source_dir| {
-                transport_runtime.build_outbound_leaf(source_dir, projection.build_options())
-            },
-        ))
+        self.claim_outbound_leaf_impl(leaf)
+            .and_then(|claimed| claimed.udp)
+    }
+}
+
+#[cfg(feature = "trojan")]
+impl OutboundLeafClaimCapability for TrojanAdapter {
+    fn claim_outbound_leaf<'a>(
+        &self,
+        leaf: ResolvedLeafOutbound<'a>,
+    ) -> Option<OutboundLeafClaim<'a>> {
+        self.claim_outbound_leaf_impl(leaf)
     }
 }
 

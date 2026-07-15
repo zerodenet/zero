@@ -17,6 +17,7 @@ fn focused_capability_views_share_one_adapter_instance() {
     let pointers = [
         Arc::as_ptr(&entry.support) as *const (),
         Arc::as_ptr(&entry.inbound) as *const (),
+        Arc::as_ptr(&entry.outbound) as *const (),
         Arc::as_ptr(&entry.tcp) as *const (),
         Arc::as_ptr(entry.udp.as_ref().expect("UDP view")) as *const (),
         Arc::as_ptr(entry.packet_path.as_ref().expect("packet-path view")) as *const (),
@@ -43,6 +44,7 @@ fn managed_handler_provider_shares_the_registered_adapter_instance() {
         .expect("managed UDP handler provider view");
 
     assert_eq!(Arc::as_ptr(provider) as *const (), expected);
+    assert_eq!(Arc::as_ptr(&entry.outbound) as *const (), expected);
     assert_eq!(
         Arc::as_ptr(entry.udp.as_ref().expect("UDP view")) as *const (),
         expected
@@ -63,6 +65,7 @@ fn upstream_handler_provider_shares_the_registered_adapter_instance() {
         .as_ref()
         .expect("upstream UDP handler provider view");
     assert_eq!(Arc::as_ptr(provider) as *const (), expected);
+    assert_eq!(Arc::as_ptr(&entry.outbound) as *const (), expected);
     assert_eq!(
         Arc::as_ptr(entry.udp.as_ref().expect("UDP view")) as *const (),
         expected

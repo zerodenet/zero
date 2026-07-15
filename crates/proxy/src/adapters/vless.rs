@@ -23,8 +23,9 @@ use crate::adapters::identity::{
 use crate::protocol_registry::{
     bind_transport_inbound, claim_relay_two_stream_transport_udp_leaf, claim_transport_tcp_leaf,
     proxy_leaf_runtime, BoundInbound, ClaimedTcpOutboundLeaf, ClaimedUdpFlowLeaf,
-    InboundListenerCapability, ManagedUdpHandlerProvider, ProtocolSupportCapability,
-    TcpOutboundCapability, UdpFlowCapability, UdpPacketPathCapability,
+    InboundListenerCapability, ManagedUdpHandlerProvider, OutboundLeafClaim,
+    OutboundLeafClaimCapability, ProtocolSupportCapability, TcpOutboundCapability,
+    UdpFlowCapability, UdpPacketPathCapability,
 };
 use crate::runtime::path::TcpPathCategory;
 #[cfg(feature = "vless")]
@@ -147,6 +148,33 @@ impl<'a> VlessOutboundProjection<'a> {
 const TCP_PATH: TcpPathCategory = TcpPathCategory::Tunnel;
 
 #[cfg(feature = "vless")]
+impl VlessAdapter {
+    fn claim_outbound_leaf_impl<'a>(
+        &self,
+        leaf: ResolvedLeafOutbound<'a>,
+    ) -> Option<OutboundLeafClaim<'a>> {
+        let runtime = proxy_leaf_runtime(&leaf, TCP_PATH)?;
+        let projection = VlessOutboundProjection::from_leaf(leaf)?;
+        let endpoint = Some(projection.endpoint());
+        let tcp_runtime = self.runtime.clone();
+        let udp_runtime = self.runtime.clone();
+        Some(OutboundLeafClaim {
+            runtime: runtime.clone(),
+            tcp: claim_transport_tcp_leaf(endpoint, runtime, move |source_dir| {
+                tcp_runtime.build_outbound_leaf(source_dir, projection.build_options())
+            }),
+            udp: Some(claim_relay_two_stream_transport_udp_leaf(
+                endpoint,
+                move |source_dir| {
+                    udp_runtime.build_outbound_leaf(source_dir, projection.build_options())
+                },
+            )),
+            packet_path: None,
+        })
+    }
+}
+
+#[cfg(feature = "vless")]
 impl NamedProtocolAdapter for VlessAdapter {
     const PROTOCOL_NAME: &'static str = "vless";
     const FEATURE_NAME: &'static str = "vless";
@@ -227,18 +255,8 @@ impl TcpOutboundCapability for VlessAdapter {
         &self,
         leaf: ResolvedLeafOutbound<'a>,
     ) -> Option<Box<dyn ClaimedTcpOutboundLeaf<'a> + 'a>> {
-        let runtime = proxy_leaf_runtime(&leaf, TCP_PATH)?;
-        let projection = VlessOutboundProjection::from_leaf(leaf)?;
-        Some(claim_transport_tcp_leaf(
-            Some(projection.endpoint()),
-            runtime,
-            {
-                let transport_runtime = self.runtime.clone();
-                move |source_dir| {
-                    transport_runtime.build_outbound_leaf(source_dir, projection.build_options())
-                }
-            },
-        ))
+        self.claim_outbound_leaf_impl(leaf)
+            .map(|claimed| claimed.tcp)
     }
 }
 
@@ -248,16 +266,18 @@ impl UdpFlowCapability for VlessAdapter {
         &self,
         leaf: ResolvedLeafOutbound<'a>,
     ) -> Option<Box<dyn ClaimedUdpFlowLeaf<'a> + 'a>> {
-        let projection = VlessOutboundProjection::from_leaf(leaf)?;
-        Some(claim_relay_two_stream_transport_udp_leaf(
-            Some(projection.endpoint()),
-            {
-                let transport_runtime = self.runtime.clone();
-                move |source_dir| {
-                    transport_runtime.build_outbound_leaf(source_dir, projection.build_options())
-                }
-            },
-        ))
+        self.claim_outbound_leaf_impl(leaf)
+            .and_then(|claimed| claimed.udp)
+    }
+}
+
+#[cfg(feature = "vless")]
+impl OutboundLeafClaimCapability for VlessAdapter {
+    fn claim_outbound_leaf<'a>(
+        &self,
+        leaf: ResolvedLeafOutbound<'a>,
+    ) -> Option<OutboundLeafClaim<'a>> {
+        self.claim_outbound_leaf_impl(leaf)
     }
 }
 

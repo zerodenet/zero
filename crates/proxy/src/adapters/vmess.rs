@@ -17,8 +17,9 @@ use crate::adapters::identity::{
 };
 use crate::protocol_registry::{
     claim_transport_tcp_leaf, claim_transport_udp_leaf, proxy_leaf_runtime, ClaimedTcpOutboundLeaf,
-    ClaimedUdpFlowLeaf, InboundListenerCapability, ManagedUdpHandlerProvider,
-    ProtocolSupportCapability, TcpOutboundCapability, UdpFlowCapability, UdpPacketPathCapability,
+    ClaimedUdpFlowLeaf, InboundListenerCapability, ManagedUdpHandlerProvider, OutboundLeafClaim,
+    OutboundLeafClaimCapability, ProtocolSupportCapability, TcpOutboundCapability,
+    UdpFlowCapability, UdpPacketPathCapability,
 };
 use crate::runtime::path::TcpPathCategory;
 #[cfg(feature = "vmess")]
@@ -109,6 +110,30 @@ impl<'a> VmessOutboundProjection<'a> {
 const TCP_PATH: TcpPathCategory = TcpPathCategory::Session;
 
 #[cfg(feature = "vmess")]
+impl VmessAdapter {
+    fn claim_outbound_leaf_impl<'a>(
+        &self,
+        leaf: ResolvedLeafOutbound<'a>,
+    ) -> Option<OutboundLeafClaim<'a>> {
+        let runtime = proxy_leaf_runtime(&leaf, TCP_PATH)?;
+        let projection = VmessOutboundProjection::from_leaf(leaf)?;
+        let endpoint = Some(projection.endpoint());
+        let tcp_runtime = self.runtime.clone();
+        let udp_runtime = self.runtime.clone();
+        Some(OutboundLeafClaim {
+            runtime: runtime.clone(),
+            tcp: claim_transport_tcp_leaf(endpoint, runtime, move |source_dir| {
+                tcp_runtime.build_outbound_leaf(source_dir, projection.build_options())
+            }),
+            udp: Some(claim_transport_udp_leaf(endpoint, move |source_dir| {
+                udp_runtime.build_outbound_leaf(source_dir, projection.build_options())
+            })),
+            packet_path: None,
+        })
+    }
+}
+
+#[cfg(feature = "vmess")]
 impl NamedProtocolAdapter for VmessAdapter {
     const PROTOCOL_NAME: &'static str = "vmess";
     const FEATURE_NAME: &'static str = "vmess";
@@ -167,18 +192,8 @@ impl TcpOutboundCapability for VmessAdapter {
         &self,
         leaf: ResolvedLeafOutbound<'a>,
     ) -> Option<Box<dyn ClaimedTcpOutboundLeaf<'a> + 'a>> {
-        let runtime = proxy_leaf_runtime(&leaf, TCP_PATH)?;
-        let projection = VmessOutboundProjection::from_leaf(leaf)?;
-        Some(claim_transport_tcp_leaf(
-            Some(projection.endpoint()),
-            runtime,
-            {
-                let transport_runtime = self.runtime.clone();
-                move |source_dir| {
-                    transport_runtime.build_outbound_leaf(source_dir, projection.build_options())
-                }
-            },
-        ))
+        self.claim_outbound_leaf_impl(leaf)
+            .map(|claimed| claimed.tcp)
     }
 }
 
@@ -188,13 +203,18 @@ impl UdpFlowCapability for VmessAdapter {
         &self,
         leaf: ResolvedLeafOutbound<'a>,
     ) -> Option<Box<dyn ClaimedUdpFlowLeaf<'a> + 'a>> {
-        let projection = VmessOutboundProjection::from_leaf(leaf)?;
-        Some(claim_transport_udp_leaf(Some(projection.endpoint()), {
-            let transport_runtime = self.runtime.clone();
-            move |source_dir| {
-                transport_runtime.build_outbound_leaf(source_dir, projection.build_options())
-            }
-        }))
+        self.claim_outbound_leaf_impl(leaf)
+            .and_then(|claimed| claimed.udp)
+    }
+}
+
+#[cfg(feature = "vmess")]
+impl OutboundLeafClaimCapability for VmessAdapter {
+    fn claim_outbound_leaf<'a>(
+        &self,
+        leaf: ResolvedLeafOutbound<'a>,
+    ) -> Option<OutboundLeafClaim<'a>> {
+        self.claim_outbound_leaf_impl(leaf)
     }
 }
 

@@ -10,19 +10,24 @@ use std::sync::Arc;
     feature = "mieru"
 ))]
 use crate::protocol_registry::ManagedUdpHandlerProvider;
+#[cfg(test)]
+use crate::protocol_registry::TcpOutboundCapability;
 #[cfg(feature = "socks5")]
 use crate::protocol_registry::UpstreamUdpHandlerProvider;
 use crate::protocol_registry::{
-    InboundListenerCapability, ProtocolSupportCapability, TcpOutboundCapability,
+    InboundListenerCapability, OutboundLeafClaimCapability, ProtocolSupportCapability,
 };
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
+#[cfg(all(
+    test,
+    any(
+        feature = "socks5",
+        feature = "vless",
+        feature = "hysteria2",
+        feature = "shadowsocks",
+        feature = "trojan",
+        feature = "vmess",
+        feature = "mieru"
+    )
 ))]
 use crate::protocol_registry::{UdpFlowCapability, UdpPacketPathCapability};
 
@@ -59,15 +64,20 @@ pub(crate) struct ProtocolRegistry {
 struct RegisteredProtocolEntry {
     support: Arc<dyn ProtocolSupportCapability>,
     inbound: Arc<dyn InboundListenerCapability>,
+    outbound: Arc<dyn OutboundLeafClaimCapability>,
+    #[cfg(test)]
     tcp: Arc<dyn TcpOutboundCapability>,
-    #[cfg(any(
-        feature = "socks5",
-        feature = "vless",
-        feature = "hysteria2",
-        feature = "shadowsocks",
-        feature = "trojan",
-        feature = "vmess",
-        feature = "mieru"
+    #[cfg(all(
+        test,
+        any(
+            feature = "socks5",
+            feature = "vless",
+            feature = "hysteria2",
+            feature = "shadowsocks",
+            feature = "trojan",
+            feature = "vmess",
+            feature = "mieru"
+        )
     ))]
     udp: Option<Arc<dyn UdpFlowCapability>>,
     #[cfg(any(
@@ -81,14 +91,17 @@ struct RegisteredProtocolEntry {
     managed_udp_handlers: Option<Arc<dyn ManagedUdpHandlerProvider>>,
     #[cfg(feature = "socks5")]
     upstream_udp_handler: Option<Arc<dyn UpstreamUdpHandlerProvider>>,
-    #[cfg(any(
-        feature = "socks5",
-        feature = "vless",
-        feature = "hysteria2",
-        feature = "shadowsocks",
-        feature = "trojan",
-        feature = "vmess",
-        feature = "mieru"
+    #[cfg(all(
+        test,
+        any(
+            feature = "socks5",
+            feature = "vless",
+            feature = "hysteria2",
+            feature = "shadowsocks",
+            feature = "trojan",
+            feature = "vmess",
+            feature = "mieru"
+        )
     ))]
     packet_path: Option<Arc<dyn UdpPacketPathCapability>>,
 }

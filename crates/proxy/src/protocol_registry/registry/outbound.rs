@@ -4,7 +4,7 @@ use std::sync::Arc;
 use zero_engine::{EngineError, ResolvedLeafOutbound};
 
 use super::{ProtocolRegistry, RegisteredProtocolEntry};
-use crate::protocol_registry::{ClaimedTcpOutboundLeaf, OutboundLeafRuntime};
+use crate::protocol_registry::{ClaimedTcpOutboundLeaf, OutboundLeafClaim, OutboundLeafRuntime};
 #[cfg(any(
     feature = "socks5",
     feature = "vless",
@@ -280,54 +280,68 @@ impl<'a> ClaimedOutboundLeaf<'a> {
     }
 }
 
-fn claim_tcp_hooks<'a>(
+fn claim_outbound_hooks<'a>(
     entry: &RegisteredProtocolEntry,
     leaf: ResolvedLeafOutbound<'a>,
-) -> Result<(OutboundLeafRuntime, ClaimedTcpHooks<'a>), EngineError> {
-    let Some(claimed) = entry.tcp.claim_tcp_outbound_leaf(leaf.clone()) else {
-        return Err(missing_claimed_tcp_leaf(entry.support.name(), &leaf));
-    };
-    let capability = Arc::from(claimed) as Arc<dyn ClaimedTcpOutboundLeaf<'a> + 'a>;
-    let runtime = capability.runtime();
-    Ok((
+) -> Result<ClaimedOutboundLeaf<'a>, EngineError> {
+    let Some(OutboundLeafClaim {
         runtime,
-        ClaimedTcpHooks {
-            capability: Some(capability),
-        },
-    ))
-}
-
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
-))]
-fn claim_udp_hooks<'a>(
-    entry: &RegisteredProtocolEntry,
-    leaf: ResolvedLeafOutbound<'a>,
-) -> Result<ClaimedUdpHooks<'a>, EngineError> {
-    let packet_path = entry
-        .packet_path
-        .as_ref()
-        .and_then(|packet_path| packet_path.claim_udp_packet_path_leaf(leaf.clone()))
-        .map(|claimed| Arc::from(claimed) as Arc<dyn ClaimedUdpPacketPathLeaf<'a> + 'a>);
-    let Some(udp) = entry.udp.clone() else {
-        return Ok(ClaimedUdpHooks {
-            packet_path,
-            ..ClaimedUdpHooks::default()
-        });
+        tcp,
+        #[cfg(any(
+            feature = "socks5",
+            feature = "vless",
+            feature = "hysteria2",
+            feature = "shadowsocks",
+            feature = "trojan",
+            feature = "vmess",
+            feature = "mieru"
+        ))]
+        udp,
+        #[cfg(any(
+            feature = "socks5",
+            feature = "vless",
+            feature = "hysteria2",
+            feature = "shadowsocks",
+            feature = "trojan",
+            feature = "vmess",
+            feature = "mieru"
+        ))]
+        packet_path,
+    }) = entry.outbound.claim_outbound_leaf(leaf.clone())
+    else {
+        return Err(missing_claimed_outbound_leaf(entry.support.name(), &leaf));
     };
-    if let Some(claimed) = udp.claim_udp_flow_leaf(leaf.clone()) {
-        return Ok(ClaimedUdpHooks {
-            capability: Some(Arc::from(claimed)),
-            packet_path,
-        });
-    }
-    Err(missing_claimed_udp_leaf(entry.support.name(), &leaf))
+    let tcp = ClaimedTcpHooks {
+        capability: Some(Arc::from(tcp) as Arc<dyn ClaimedTcpOutboundLeaf<'a> + 'a>),
+    };
+    #[cfg(any(
+        feature = "socks5",
+        feature = "vless",
+        feature = "hysteria2",
+        feature = "shadowsocks",
+        feature = "trojan",
+        feature = "vmess",
+        feature = "mieru"
+    ))]
+    let udp = ClaimedUdpHooks {
+        capability: udp.map(|claimed| Arc::from(claimed) as Arc<dyn ClaimedUdpFlowLeaf<'a> + 'a>),
+        packet_path: packet_path
+            .map(|claimed| Arc::from(claimed) as Arc<dyn ClaimedUdpPacketPathLeaf<'a> + 'a>),
+    };
+    Ok(ClaimedOutboundLeaf::new(
+        runtime,
+        tcp,
+        #[cfg(any(
+            feature = "socks5",
+            feature = "vless",
+            feature = "hysteria2",
+            feature = "shadowsocks",
+            feature = "trojan",
+            feature = "vmess",
+            feature = "mieru"
+        ))]
+        udp,
+    ))
 }
 
 pub(crate) fn direct_leaf_runtime(leaf: &ResolvedLeafOutbound<'_>) -> Option<OutboundLeafRuntime> {
@@ -480,41 +494,7 @@ impl ProtocolRegistry {
         let entry = self
             .outbound_protocol_entry(protocol)
             .ok_or_else(|| unsupported_outbound_leaf(protocol))?;
-        let (runtime, tcp) = claim_tcp_hooks(entry, leaf.clone())?;
-        #[cfg(any(
-            feature = "socks5",
-            feature = "vless",
-            feature = "hysteria2",
-            feature = "shadowsocks",
-            feature = "trojan",
-            feature = "vmess",
-            feature = "mieru"
-        ))]
-        let udp = claim_udp_hooks(entry, leaf.clone())?;
-        #[cfg(not(any(
-            feature = "socks5",
-            feature = "vless",
-            feature = "hysteria2",
-            feature = "shadowsocks",
-            feature = "trojan",
-            feature = "vmess",
-            feature = "mieru"
-        )))]
-        let _ = entry;
-        Ok(ClaimedOutboundLeaf::new(
-            runtime,
-            tcp,
-            #[cfg(any(
-                feature = "socks5",
-                feature = "vless",
-                feature = "hysteria2",
-                feature = "shadowsocks",
-                feature = "trojan",
-                feature = "vmess",
-                feature = "mieru"
-            ))]
-            udp,
-        ))
+        claim_outbound_hooks(entry, leaf)
     }
 }
 
@@ -545,25 +525,9 @@ fn missing_udp_relay_capability() -> crate::runtime::udp_dispatch::FlowFailure {
     }
 }
 
-fn missing_claimed_tcp_leaf(protocol: &str, leaf: &ResolvedLeafOutbound<'_>) -> EngineError {
+fn missing_claimed_outbound_leaf(protocol: &str, leaf: &ResolvedLeafOutbound<'_>) -> EngineError {
     EngineError::Io(std::io::Error::other(format!(
-        "{protocol} adapter owns outbound leaf `{}` but did not provide a claimed TCP leaf",
-        leaf.protocol_name()
-    )))
-}
-
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
-))]
-fn missing_claimed_udp_leaf(protocol: &str, leaf: &ResolvedLeafOutbound<'_>) -> EngineError {
-    EngineError::Io(std::io::Error::other(format!(
-        "{protocol} adapter claims outbound leaf `{}` but did not provide a claimed UDP leaf",
+        "{protocol} adapter owns outbound leaf `{}` but did not provide a claimed outbound leaf",
         leaf.protocol_name()
     )))
 }
