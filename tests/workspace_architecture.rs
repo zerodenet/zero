@@ -258,6 +258,24 @@ fn generic_transport_carriers_do_not_depend_on_protocol_crates() {
 }
 
 #[test]
+fn transport_does_not_hardcode_protocol_service_or_alpn_defaults() {
+    let transport = workspace_root().join("crates/transport/src");
+    for path in rust_sources(&transport) {
+        let source = read(&path);
+        for forbidden in [
+            "/v2ray.core.proxy.vless.encap.GrpcService/Tun",
+            "b\"hysteria2\".to_vec()",
+        ] {
+            assert!(
+                !source.contains(forbidden),
+                "{} must not own protocol default `{forbidden}`",
+                path.display()
+            );
+        }
+    }
+}
+
+#[test]
 fn transport_does_not_depend_on_config_protocol_adts() {
     let transport = workspace_root().join("crates/transport/src");
     for path in rust_sources(&transport) {

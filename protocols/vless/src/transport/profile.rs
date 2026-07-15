@@ -1,3 +1,5 @@
+const VLESS_QUIC_ALPN: &[u8] = b"h3";
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OwnedVlessRealityClientProfile {
     pub public_key: String,
@@ -37,6 +39,10 @@ impl OwnedVlessQuicClientProfile {
             ca_cert_path,
         }
     }
+
+    pub fn alpn_protocols(&self) -> Vec<Vec<u8>> {
+        vec![VLESS_QUIC_ALPN.to_vec()]
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -51,5 +57,9 @@ impl OwnedVlessQuicBindProfile {
             cert_path,
             key_path,
         }
+    }
+
+    pub fn alpn_protocols(&self) -> Vec<Vec<u8>> {
+        vec![VLESS_QUIC_ALPN.to_vec()]
     }
 }

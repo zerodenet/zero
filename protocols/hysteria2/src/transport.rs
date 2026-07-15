@@ -33,6 +33,10 @@ pub use projection::{
 };
 pub use stream::Hysteria2Stream;
 
+pub(crate) fn quic_alpn_protocols() -> Vec<Vec<u8>> {
+    vec![b"hysteria2".to_vec()]
+}
+
 pub async fn accept_and_dispatch_authenticated_hysteria2_quic_session<
     Udp,
     UdpFut,
@@ -82,7 +86,7 @@ async fn open_authenticated_hysteria2_quic_connection(
     let conn = open_quic_connection(QuicConnectionOptions {
         server,
         port,
-        alpn: vec![b"hysteria2".to_vec()],
+        alpn: quic_alpn_protocols(),
         quic_profile,
         datagram_receive_buffer_size: Some(65536),
     })

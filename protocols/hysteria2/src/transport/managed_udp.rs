@@ -8,7 +8,7 @@ use zero_transport::RuntimeError;
 use zero_transport::managed_udp::ManagedTupleUdpConnectionOps;
 
 use super::{
-    open_quic_connection, Hysteria2ManagedDatagramFlowResume,
+    open_quic_connection, quic_alpn_protocols, Hysteria2ManagedDatagramFlowResume,
     Hysteria2ManagedUdpPacketPathCarrierBuild, Hysteria2QuicProfile, Hysteria2Stream,
     QuicConnectionOptions,
 };
@@ -71,7 +71,7 @@ async fn open_udp_profile_connection(
     let connection = open_quic_connection(QuicConnectionOptions {
         server,
         port,
-        alpn: vec![b"hysteria2".to_vec()],
+        alpn: quic_alpn_protocols(),
         quic_profile,
         datagram_receive_buffer_size: Some(65536),
     })

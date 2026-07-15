@@ -10,6 +10,7 @@ use zero_transport::quic;
 pub struct OwnedVlessInboundBindPlan {
     quic_cert_path: Option<String>,
     quic_key_path: Option<String>,
+    quic_alpn_protocols: Vec<Vec<u8>>,
     source_dir: Option<PathBuf>,
 }
 
@@ -21,6 +22,9 @@ impl OwnedVlessInboundBindPlan {
         Self {
             quic_cert_path: quic.and_then(|config| config.cert_path.clone()),
             quic_key_path: quic.and_then(|config| config.key_path.clone()),
+            quic_alpn_protocols: quic
+                .map(OwnedVlessQuicBindProfile::alpn_protocols)
+                .unwrap_or_default(),
             source_dir: source_dir.map(PathBuf::from),
         }
     }
@@ -36,6 +40,7 @@ impl OwnedVlessInboundBindPlan {
                     cert_path,
                     key_path,
                     self.source_dir.as_deref(),
+                    &self.quic_alpn_protocols,
                 )
                 .await?,
             )),

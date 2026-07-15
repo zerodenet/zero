@@ -35,6 +35,7 @@ pub async fn connect_quic(
     server_name: &str,
     port: u16,
     _insecure: bool,
+    alpn_protocols: &[Vec<u8>],
 ) -> Result<QuicStream, RuntimeError> {
     use quinn::crypto::rustls::QuicClientConfig;
 
@@ -43,7 +44,7 @@ pub async fn connect_quic(
         .with_custom_certificate_verifier(SkipServerVerification::new())
         .with_no_client_auth();
 
-    tls_config.alpn_protocols = vec![b"h3".to_vec()];
+    tls_config.alpn_protocols = alpn_protocols.to_vec();
 
     let quic_cfg = QuicClientConfig::try_from(tls_config)
         .map_err(|e| RuntimeError::Io(io::Error::other(format!("quic cfg: {e}"))))?;
@@ -99,6 +100,7 @@ impl QuicInbound {
         cert_path: &str,
         key_path: &str,
         base_dir: Option<&Path>,
+        alpn_protocols: &[Vec<u8>],
     ) -> Result<Self, RuntimeError> {
         use std::fs::File;
         use std::io::BufReader;
@@ -135,7 +137,7 @@ impl QuicInbound {
             .with_no_client_auth()
             .with_single_cert(certs, key)
             .map_err(|e| RuntimeError::Io(io::Error::other(format!("quic server tls cfg: {e}"))))?;
-        tls_config.alpn_protocols = vec![b"h3".to_vec(), b"hysteria2".to_vec()];
+        tls_config.alpn_protocols = alpn_protocols.to_vec();
 
         let quic_cfg = quinn::crypto::rustls::QuicServerConfig::try_from(tls_config)
             .map_err(|e| RuntimeError::Io(io::Error::other(format!("quic server cfg: {e}"))))?;

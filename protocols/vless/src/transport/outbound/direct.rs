@@ -18,8 +18,9 @@ pub(super) async fn open_vless_quic_transport(
     quic_config: &OwnedVlessQuicClientProfile,
 ) -> Result<TcpRelayStream, RuntimeError> {
     let server_name = quic_config.server_name.as_deref().unwrap_or(server);
+    let alpn_protocols = quic_config.alpn_protocols();
     Ok(TcpRelayStream::new(
-        quic::connect_quic(server_name, port, quic_config.insecure).await?,
+        quic::connect_quic(server_name, port, quic_config.insecure, &alpn_protocols).await?,
     ))
 }
 

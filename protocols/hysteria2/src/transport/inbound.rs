@@ -5,8 +5,8 @@ use zero_traits::AsyncSocket;
 use zero_transport::RuntimeError;
 
 use super::{
-    Hysteria2AuthenticatedQuicConnection, Hysteria2Stream, OwnedHysteria2InboundProfile,
-    OwnedHysteria2InboundTcpResponseProtocol,
+    quic_alpn_protocols, Hysteria2AuthenticatedQuicConnection, Hysteria2Stream,
+    OwnedHysteria2InboundProfile, OwnedHysteria2InboundTcpResponseProtocol,
 };
 
 #[derive(Debug, Clone)]
@@ -33,11 +33,13 @@ impl OwnedHysteria2InboundBindPlan {
         &self,
         listen_addr: &str,
     ) -> Result<zero_transport::quic::QuicInbound, RuntimeError> {
+        let alpn_protocols = quic_alpn_protocols();
         zero_transport::quic::QuicInbound::bind(
             listen_addr,
             &self.cert_path,
             &self.key_path,
             self.source_dir.as_deref(),
+            &alpn_protocols,
         )
         .await
     }

@@ -38,6 +38,27 @@ fn parse_grpc_frame_header(header: &[u8; GRPC_HEADER_LEN]) -> (bool, usize) {
     (compressed, len)
 }
 
+fn require_grpc_service_names(
+    service_names: &[String],
+    context: &'static str,
+) -> Result<(), RuntimeError> {
+    if service_names.is_empty() {
+        return Err(RuntimeError::Io(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("grpc {context} requires at least one service name"),
+        )));
+    }
+    Ok(())
+}
+
+fn choose_grpc_service_name(service_names: &[String]) -> Result<&str, RuntimeError> {
+    require_grpc_service_names(service_names, "outbound")?;
+    Ok(service_names
+        .choose(&mut rand::rng())
+        .expect("non-empty grpc service names")
+        .as_str())
+}
+
 /// Bidirectional gRPC stream wrapping h2 send/recv halves via internal channels.
 pub struct GrpcStream {
     read_rx: mpsc::Receiver<Vec<u8>>,
@@ -68,6 +89,7 @@ pub async fn connect_grpc<S>(
 where
     S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
+    let name = choose_grpc_service_name(service_names)?;
     let (mut h2, conn) = h2::client::handshake(stream)
         .await
         .map_err(|e| RuntimeError::Io(io::Error::other(format!("h2 client handshake: {e}"))))?;
@@ -77,12 +99,6 @@ where
             tracing::warn!(error = %e, "h2 client connection error");
         }
     });
-
-    // Pick a random service name
-    let name = service_names
-        .choose(&mut rand::rng())
-        .map(|s| s.as_str())
-        .unwrap_or("/v2ray.core.proxy.vless.encap.GrpcService/Tun");
 
     let request = Request::builder()
         .method(Method::POST)
@@ -121,6 +137,7 @@ where
     H: FnMut(GrpcStream) -> F + Send + 'static,
     F: std::future::Future<Output = Result<(), RuntimeError>> + Send + 'static,
 {
+    require_grpc_service_names(expected_services, "inbound")?;
     let mut conn = h2::server::handshake(stream)
         .await
         .map_err(|e| RuntimeError::Io(io::Error::other(format!("h2 server handshake: {e}"))))?;
@@ -189,6 +206,7 @@ pub async fn accept_grpc<S>(
 where
     S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
+    require_grpc_service_names(expected_services, "inbound")?;
     let mut conn = h2::server::handshake(stream)
         .await
         .map_err(|e| RuntimeError::Io(io::Error::other(format!("h2 server handshake: {e}"))))?;
