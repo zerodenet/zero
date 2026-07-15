@@ -1,8 +1,7 @@
 use zero_config::{InboundConfig, InboundProtocolConfig};
 use zero_engine::EngineError;
-use zero_transport::inbound_stack::build_required_tls_acceptor;
 
-use ::trojan::transport::TrojanInboundListenerRequest;
+use ::trojan::transport::{OwnedTrojanInboundListenerConfig, TrojanInboundListenerRequest};
 
 use crate::runtime::inbound_operation::TcpInboundListenerOperation;
 
@@ -11,12 +10,11 @@ pub(super) fn prepare(
     source_dir: Option<&std::path::Path>,
 ) -> Result<Box<dyn crate::runtime::inbound_operation::PreparedInboundListenerOperation>, EngineError>
 {
-    let request = match &inbound.protocol {
+    let request: TrojanInboundListenerRequest = match &inbound.protocol {
         InboundProtocolConfig::Trojan { password, tls, .. } => {
             let profile = ::trojan::inbound::TrojanInboundProfile::from_config_password(password);
-            let tls_acceptor =
-                build_required_tls_acceptor(source_dir, tls.as_ref(), "trojan requires TLS")?;
-            TrojanInboundListenerRequest::new(profile, tls_acceptor)
+            OwnedTrojanInboundListenerConfig::from_config_refs(source_dir, profile, tls.as_ref())?
+                .into()
         }
         _ => {
             return Err(EngineError::Io(std::io::Error::new(

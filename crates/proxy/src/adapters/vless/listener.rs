@@ -1,4 +1,4 @@
-use ::vless::transport::VlessInboundListenerRequest;
+use ::vless::transport::{OwnedVlessInboundListenerConfig, VlessInboundListenerRequest};
 use zero_config::{InboundConfig, InboundProtocolConfig};
 use zero_engine::EngineError;
 
@@ -13,7 +13,7 @@ pub(super) fn prepare(
     source_dir: Option<&std::path::Path>,
 ) -> Result<Box<dyn crate::runtime::inbound_operation::PreparedInboundListenerOperation>, EngineError>
 {
-    let request = match &inbound.protocol {
+    let request: VlessInboundListenerRequest = match &inbound.protocol {
         InboundProtocolConfig::Vless {
             users,
             reality,
@@ -46,7 +46,7 @@ pub(super) fn prepare(
                     reality.cipher_suites.clone(),
                 )
             });
-            VlessInboundListenerRequest::from_profiles(
+            OwnedVlessInboundListenerConfig::from_config_refs(
                 source_dir,
                 profile,
                 reality,
@@ -58,6 +58,7 @@ pub(super) fn prepare(
                 split_http.as_deref(),
                 fallback.as_deref(),
             )?
+            .into()
         }
         _ => {
             return Err(EngineError::Io(std::io::Error::new(

@@ -1,9 +1,38 @@
+use std::path::Path;
+
 use zero_platform_tokio::TokioSocket;
+use zero_traits::ServerTlsProfile;
 use zero_transport::inbound_route::{NoClientStreamRouteDefaults, OpaqueStreamRoute};
 use zero_transport::tls::{InboundTlsStream, TlsAcceptor};
 use zero_transport::RuntimeError;
 
 type TrojanInboundTlsStream = InboundTlsStream<TokioSocket>;
+
+#[derive(Clone)]
+pub struct OwnedTrojanInboundListenerConfig {
+    profile: crate::inbound::TrojanInboundProfile,
+    tls_acceptor: TlsAcceptor,
+}
+
+impl OwnedTrojanInboundListenerConfig {
+    pub fn from_config_refs<TTls>(
+        source_dir: Option<&Path>,
+        profile: crate::inbound::TrojanInboundProfile,
+        tls: Option<&TTls>,
+    ) -> Result<Self, RuntimeError>
+    where
+        TTls: ServerTlsProfile + ?Sized,
+    {
+        Ok(Self {
+            profile,
+            tls_acceptor: zero_transport::inbound_stack::build_required_tls_acceptor(
+                source_dir,
+                tls,
+                "trojan requires TLS",
+            )?,
+        })
+    }
+}
 
 #[derive(Clone)]
 pub struct TrojanInboundListenerRequest {
@@ -15,7 +44,7 @@ impl TrojanInboundListenerRequest {
     pub const ERROR_PROTOCOL_NAME: &'static str = "trojan";
     pub const UDP_PROTOCOL: &'static str = "trojan_udp";
 
-    pub fn new(profile: crate::inbound::TrojanInboundProfile, tls_acceptor: TlsAcceptor) -> Self {
+    fn new(profile: crate::inbound::TrojanInboundProfile, tls_acceptor: TlsAcceptor) -> Self {
         Self {
             profile,
             tls_acceptor,
@@ -51,5 +80,15 @@ impl TrojanInboundListenerRequest {
             .await
             .map(OpaqueStreamRoute::new)
             .map_err(RuntimeError::from)
+    }
+}
+
+impl From<OwnedTrojanInboundListenerConfig> for TrojanInboundListenerRequest {
+    fn from(config: OwnedTrojanInboundListenerConfig) -> Self {
+        let OwnedTrojanInboundListenerConfig {
+            profile,
+            tls_acceptor,
+        } = config;
+        Self::new(profile, tls_acceptor)
     }
 }

@@ -12,7 +12,9 @@ mod outbound;
 mod profile;
 
 pub use bridge::VlessStreamBridge;
-pub use inbound::{OwnedVlessInboundBindPlan, VlessInboundListenerRequest};
+pub use inbound::{
+    OwnedVlessInboundBindPlan, OwnedVlessInboundListenerConfig, VlessInboundListenerRequest,
+};
 pub use leaf::{OwnedVlessOutboundLeafConfig, VlessOutboundLeaf};
 pub use outbound::OwnedVlessOutboundTransportPlan;
 pub use profile::{

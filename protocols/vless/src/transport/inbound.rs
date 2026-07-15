@@ -26,33 +26,15 @@ where
     zero_transport::MeteredStream::new(zero_transport::RecordingStream::new(stream))
 }
 #[derive(Clone)]
-pub struct VlessInboundListenerRequest {
+pub struct OwnedVlessInboundListenerConfig {
     profile: crate::inbound::VlessInboundProfile,
     transport: OwnedVlessInboundTransportPlan,
     fallback: Option<OwnedInboundFallbackProfile>,
 }
 
-impl VlessInboundListenerRequest {
-    pub const ERROR_PROTOCOL_NAME: &'static str = "vless";
-    pub const UDP_PROTOCOL: &'static str = "vless_udp";
-    pub const MUX_PROTOCOL: &'static str = "vless_mux";
-    pub const PANIC_MESSAGE: &'static str = "vless mux task panicked";
-    pub const ABORT_ON_END: bool = true;
-
-    fn new(
-        profile: crate::inbound::VlessInboundProfile,
-        transport: OwnedVlessInboundTransportPlan,
-        fallback: Option<OwnedInboundFallbackProfile>,
-    ) -> Self {
-        Self {
-            profile,
-            transport,
-            fallback,
-        }
-    }
-
+impl OwnedVlessInboundListenerConfig {
     #[allow(clippy::too_many_arguments)]
-    pub fn from_profiles<TTls, TWs, TGrpc, TH2, THttp, TSplit, TFallback>(
+    pub fn from_config_refs<TTls, TWs, TGrpc, TH2, THttp, TSplit, TFallback>(
         source_dir: Option<&Path>,
         profile: crate::inbound::VlessInboundProfile,
         reality: Option<crate::reality::VlessRealityServerProfile>,
@@ -85,11 +67,38 @@ impl VlessInboundListenerRequest {
             fallback,
         )?;
 
-        Ok(Self::new(
+        Ok(Self {
             profile,
             transport,
-            fallback.map(OwnedInboundFallbackProfile::from_profile),
-        ))
+            fallback: fallback.map(OwnedInboundFallbackProfile::from_profile),
+        })
+    }
+}
+
+#[derive(Clone)]
+pub struct VlessInboundListenerRequest {
+    profile: crate::inbound::VlessInboundProfile,
+    transport: OwnedVlessInboundTransportPlan,
+    fallback: Option<OwnedInboundFallbackProfile>,
+}
+
+impl VlessInboundListenerRequest {
+    pub const ERROR_PROTOCOL_NAME: &'static str = "vless";
+    pub const UDP_PROTOCOL: &'static str = "vless_udp";
+    pub const MUX_PROTOCOL: &'static str = "vless_mux";
+    pub const PANIC_MESSAGE: &'static str = "vless mux task panicked";
+    pub const ABORT_ON_END: bool = true;
+
+    fn new(
+        profile: crate::inbound::VlessInboundProfile,
+        transport: OwnedVlessInboundTransportPlan,
+        fallback: Option<OwnedInboundFallbackProfile>,
+    ) -> Self {
+        Self {
+            profile,
+            transport,
+            fallback,
+        }
     }
 
     pub fn protocol_name(&self) -> &'static str {
@@ -207,5 +216,16 @@ impl VlessInboundListenerRequest {
     {
         self.accept_stream_route(stream, None, record_client_stream)
             .await
+    }
+}
+
+impl From<OwnedVlessInboundListenerConfig> for VlessInboundListenerRequest {
+    fn from(config: OwnedVlessInboundListenerConfig) -> Self {
+        let OwnedVlessInboundListenerConfig {
+            profile,
+            transport,
+            fallback,
+        } = config;
+        Self::new(profile, transport, fallback)
     }
 }

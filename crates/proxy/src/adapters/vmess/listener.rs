@@ -1,4 +1,4 @@
-use ::vmess::transport::VmessInboundListenerRequest;
+use ::vmess::transport::{OwnedVmessInboundListenerConfig, VmessInboundListenerRequest};
 use zero_config::{InboundConfig, InboundProtocolConfig};
 use zero_engine::EngineError;
 
@@ -10,7 +10,7 @@ pub(super) fn prepare(
     source_dir: Option<&std::path::Path>,
 ) -> Result<Box<dyn crate::runtime::inbound_operation::PreparedInboundListenerOperation>, EngineError>
 {
-    let request = match &inbound.protocol {
+    let request: VmessInboundListenerRequest = match &inbound.protocol {
         InboundProtocolConfig::Vmess {
             users,
             tls,
@@ -32,13 +32,14 @@ pub(super) fn prepare(
             .map_err(|error| {
                 EngineError::Io(std::io::Error::new(std::io::ErrorKind::InvalidInput, error))
             })?;
-            VmessInboundListenerRequest::from_profile_refs(
+            OwnedVmessInboundListenerConfig::from_config_refs(
                 source_dir,
                 profile,
                 tls.as_deref(),
                 ws.as_deref(),
                 grpc.as_deref(),
             )?
+            .into()
         }
         _ => {
             return Err(EngineError::Io(std::io::Error::new(

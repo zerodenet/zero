@@ -363,6 +363,30 @@ fn protocol_adapter_roots_do_not_construct_transport_plans_or_request_bundles_in
 }
 
 #[test]
+fn protocol_adapter_listener_modules_do_not_construct_transport_listener_requests_inline() {
+    for relative in [
+        "adapters/vless/listener.rs",
+        "adapters/vmess/listener.rs",
+        "adapters/trojan/listener.rs",
+    ] {
+        let source = read(&proxy_src().join(relative));
+        for forbidden in [
+            "VlessInboundListenerRequest::from_profiles",
+            "VmessInboundListenerRequest::from_profile_refs",
+            "TrojanInboundListenerRequest::new",
+            "build_required_tls_acceptor",
+            "build_optional_tls_acceptor",
+            "OwnedVlessInboundTransportPlan::from_profile_refs",
+        ] {
+            assert!(
+                !source.contains(forbidden),
+                "{relative} must delegate protocol-owned inbound listener construction instead of building `{forbidden}` inline"
+            );
+        }
+    }
+}
+
+#[test]
 fn inventory_udp_dispatch_keeps_relay_choreography_outside_candidate_root() {
     let dispatch = read(&proxy_src().join("inventory/udp/dispatch.rs"));
     assert!(!dispatch.contains("ClaimedResolvedOutbound"));

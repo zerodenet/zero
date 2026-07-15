@@ -7,6 +7,6 @@ mod managed_udp;
 mod outbound;
 
 pub use bridge::TrojanTlsBridge;
-pub use inbound::TrojanInboundListenerRequest;
+pub use inbound::{OwnedTrojanInboundListenerConfig, TrojanInboundListenerRequest};
 pub use leaf::TrojanOutboundLeaf;
 pub use outbound::OwnedTrojanOutboundTlsPlan;
