@@ -2,10 +2,11 @@ use core::future::Future;
 use std::boxed::Box;
 
 use crate::shared::{
-    establish_outbound_session, establish_outbound_session_with_request_len, parse_uuid,
-    VmessCipher, VmessOutboundSession, CMD_TCP,
+    establish_outbound_session, establish_outbound_session_with_request_len, VmessOutboundSession,
+    CMD_TCP,
 };
 use crate::stream::VmessAeadStream;
+use crate::{parse_uuid, VmessCipher};
 use tokio::io::{AsyncRead, AsyncWrite};
 use zero_core::{Error, Session};
 use zero_traits::{AsyncSocket, StreamMuxTransportHints};

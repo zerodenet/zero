@@ -15,9 +15,9 @@ use zero_core::{
 use zero_traits::AsyncSocket;
 
 use crate::outbound::VmessOutbound;
-use crate::shared::VmessCipher;
 use crate::shared::{parse_address_from_bytes, write_address};
 use crate::stream::VmessAeadStream;
+use crate::VmessCipher;
 
 #[cfg(test)]
 mod tests;
@@ -1613,7 +1613,7 @@ impl VmessMuxStream {
 async fn establish_mux_outbound_stream<S>(
     mut stream: S,
     uuid: &[u8; 16],
-    cipher: crate::shared::VmessCipher,
+    cipher: VmessCipher,
 ) -> Result<VmessAeadStream<S>, Error>
 where
     S: AsyncSocket,

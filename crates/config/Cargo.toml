@@ -18,5 +18,5 @@ zero-router = { path = "../router" }
 zero-traits = { path = "../traits" }
 shadowsocks = { path = "../../protocols/shadowsocks", default-features = false, features = ["blake3"] }
 socks5 = { path = "../../protocols/socks5", default-features = false }
-vmess = { path = "../../protocols/vmess", default-features = false }
+vmess = { path = "../../protocols/vmess", default-features = false, features = ["validation"] }
 vless = { path = "../../protocols/vless", default-features = false, features = ["validation"] }

@@ -5,10 +5,8 @@ use crate::crypto::{
     derive_xray_cmd_key, hex, open_xray_aead_header_length, open_xray_aead_header_payload,
     seal_xray_response_header, GCM_TAG_LEN,
 };
-use crate::shared::{
-    parse_address_from_bytes, parse_uuid, read_exact, VmessCipher, AUTH_ID_LEN, CMD_TCP, CMD_UDP,
-    VERSION,
-};
+use crate::shared::{parse_address_from_bytes, read_exact, AUTH_ID_LEN, CMD_TCP, CMD_UDP, VERSION};
+use crate::{parse_uuid, VmessCipher};
 
 #[derive(Clone)]
 pub struct VmessUser {

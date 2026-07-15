@@ -5,6 +5,7 @@ use zero_traits::AsyncSocket;
 use crate::crypto::{
     create_xray_auth_id, current_timestamp, derive_xray_cmd_key, seal_xray_aead_header,
 };
+use crate::VmessCipher;
 
 pub const VERSION: u8 = 0x01;
 pub const CMD_TCP: u8 = 0x01;
@@ -61,58 +62,6 @@ impl PendingVmessSession {
             length_key_source,
             length_nonce_source,
             response_header: Some(self.response_header),
-        }
-    }
-}
-
-/// AEAD cipher variants for VMess header encryption.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum VmessCipher {
-    Aes128Gcm,
-    Chacha20Poly1305,
-    None,
-    Zero,
-}
-
-impl VmessCipher {
-    pub fn key_len(self) -> usize {
-        match self {
-            VmessCipher::Aes128Gcm => 16,
-            VmessCipher::Chacha20Poly1305 => 32,
-            VmessCipher::None | VmessCipher::Zero => 16,
-        }
-    }
-
-    pub fn name(self) -> &'static str {
-        match self {
-            VmessCipher::Aes128Gcm => "aes-128-gcm",
-            VmessCipher::Chacha20Poly1305 => "chacha20-poly1305",
-            VmessCipher::None => "none",
-            VmessCipher::Zero => "zero",
-        }
-    }
-
-    pub fn from_name(name: &str) -> Option<Self> {
-        match name {
-            "auto" => Some(VmessCipher::Aes128Gcm),
-            "aes-128-gcm" => Some(VmessCipher::Aes128Gcm),
-            "chacha20-poly1305" => Some(VmessCipher::Chacha20Poly1305),
-            "none" => Some(VmessCipher::None),
-            "zero" => Some(VmessCipher::Zero),
-            _ => None,
-        }
-    }
-
-    pub fn uses_plain_body(self) -> bool {
-        matches!(self, VmessCipher::None | VmessCipher::Zero)
-    }
-
-    pub(crate) fn aead_algorithm(self) -> &'static ring::aead::Algorithm {
-        match self {
-            VmessCipher::Aes128Gcm | VmessCipher::None | VmessCipher::Zero => {
-                &ring::aead::AES_128_GCM
-            }
-            VmessCipher::Chacha20Poly1305 => &ring::aead::CHACHA20_POLY1305,
         }
     }
 }
@@ -185,19 +134,6 @@ pub fn parse_address_from_bytes(atyp: u8, bytes: &[u8]) -> Result<Address, Error
         }
         _ => Err(Error::Protocol("vmess unexpected address type")),
     }
-}
-
-pub fn parse_uuid(input: &str) -> Result<[u8; 16], Error> {
-    let hex = input.replace('-', "");
-    if hex.len() != 32 {
-        return Err(Error::Protocol("vmess uuid must be 32 hex characters"));
-    }
-    let mut bytes = [0u8; 16];
-    for i in 0..16 {
-        bytes[i] = u8::from_str_radix(&hex[i * 2..i * 2 + 2], 16)
-            .map_err(|_| Error::Protocol("vmess uuid contains invalid hex characters"))?;
-    }
-    Ok(bytes)
 }
 
 pub(crate) async fn establish_outbound_session<S: AsyncSocket>(

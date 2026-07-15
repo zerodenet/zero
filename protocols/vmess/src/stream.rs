@@ -10,6 +10,7 @@ use crate::crypto::{
 };
 use crate::inbound::VmessAccept;
 use crate::shared::VmessOutboundSession;
+use crate::VmessCipher;
 
 enum ReadState {
     ResponseHeaderLength {
@@ -63,7 +64,7 @@ struct BodyCodecConfig {
     nonce: Vec<u8>,
     length_key_source: Vec<u8>,
     length_nonce_source: Vec<u8>,
-    cipher: crate::shared::VmessCipher,
+    cipher: VmessCipher,
     authenticated_length: bool,
     chunk_masking: bool,
     global_padding: bool,
@@ -79,7 +80,7 @@ struct VmessAeadStreamConfig<S> {
     write_nonce: Vec<u8>,
     write_length_key_source: Vec<u8>,
     write_length_nonce_source: Vec<u8>,
-    cipher: crate::shared::VmessCipher,
+    cipher: VmessCipher,
     authenticated_length: bool,
     chunk_masking: bool,
     global_padding: bool,
@@ -95,7 +96,7 @@ impl BodyCodec {
                     nonce_prefix: config.nonce,
                     length_key_source: config.length_key_source,
                     length_nonce_prefix: config.length_nonce_source,
-                    cipher: crate::shared::VmessCipher::None,
+                    cipher: VmessCipher::None,
                     authenticated_length: false,
                     chunk_masking: config.chunk_masking,
                     global_padding: config.global_padding,

@@ -10,7 +10,18 @@ use sha3::{
 
 use zero_core::Error;
 
-use crate::shared::VmessCipher;
+use crate::VmessCipher;
+
+impl VmessCipher {
+    pub(crate) fn aead_algorithm(self) -> &'static ring::aead::Algorithm {
+        match self {
+            VmessCipher::Aes128Gcm | VmessCipher::None | VmessCipher::Zero => {
+                &ring::aead::AES_128_GCM
+            }
+            VmessCipher::Chacha20Poly1305 => &ring::aead::CHACHA20_POLY1305,
+        }
+    }
+}
 
 pub(crate) const GCM_TAG_LEN: usize = 16;
 pub(crate) const NONCE_LEN: usize = 12;

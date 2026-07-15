@@ -8,10 +8,11 @@ use zero_traits::{AsyncSocket, UdpPacketFraming, UdpPacketTunnelProtocol};
 
 use crate::outbound::VmessOutbound;
 use crate::shared::{
-    establish_outbound_session, parse_address_from_bytes, write_address, VmessCipher,
-    VmessOutboundSession, CMD_UDP,
+    establish_outbound_session, parse_address_from_bytes, write_address, VmessOutboundSession,
+    CMD_UDP,
 };
 use crate::stream::VmessAeadStream;
+use crate::{parse_uuid, VmessCipher};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum VmessUdpPayloadMode {
@@ -331,7 +332,7 @@ fn udp_relay_flow_resume_from_config(id: &str, cipher: &str) -> Result<VmessUdpF
 }
 
 fn parse_udp_identity(id: &str, cipher: &str) -> Result<VmessUdpIdentity, Error> {
-    let uuid = crate::shared::parse_uuid(id)?;
+    let uuid = parse_uuid(id)?;
     let cipher = VmessCipher::from_name(cipher).ok_or(Error::Protocol("vmess unknown cipher"))?;
     Ok(VmessUdpIdentity { uuid, cipher })
 }

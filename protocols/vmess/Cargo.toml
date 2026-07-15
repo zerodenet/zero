@@ -9,22 +9,31 @@ repository.workspace = true
 homepage.workspace = true
 
 [features]
-default = []
+default = ["runtime"]
 runtime = [
+    "validation",
+    "dep:async-trait",
+    "dep:rand",
+    "dep:ring",
+    "dep:md5",
+    "dep:crc32fast",
+    "dep:aes",
+    "dep:sha3",
+    "dep:tokio",
     "dep:zero-platform-tokio",
     "dep:zero-transport",
 ]
+validation = []
 
 [dependencies]
-async-trait = "0.1"
-rand = "0.9"
-ring = "0.17"
-md5 = "0.7"
-crc32fast = "1"
-aes = "0.8"
-sha2 = "0.10"
-sha3 = "0.10"
-tokio.workspace = true
+async-trait = { version = "0.1", optional = true }
+rand = { version = "0.9", optional = true }
+ring = { version = "0.17", optional = true }
+md5 = { version = "0.7", optional = true }
+crc32fast = { version = "1", optional = true }
+aes = { version = "0.8", optional = true }
+sha3 = { version = "0.10", optional = true }
+tokio = { workspace = true, optional = true }
 zero-core = { path = "../../crates/core" }
 zero-platform-tokio = { path = "../../crates/platform/tokio", optional = true }
 zero-transport = { path = "../../crates/transport", optional = true, features = ["grpc", "tls", "ws"] }
@@ -32,3 +41,7 @@ zero-traits = { path = "../../crates/traits" }
 
 [dev-dependencies]
 tokio.workspace = true
+
+[[test]]
+name = "tcp_stream"
+required-features = ["runtime"]
