@@ -71,7 +71,7 @@ pub struct OwnedVmessOutboundTransportPlan {
 }
 
 impl OwnedVmessOutboundTransportPlan {
-    pub fn from_profile_refs<TTls, TWs, TGrpc>(
+    pub(in crate::transport) fn from_profile_refs<TTls, TWs, TGrpc>(
         source_dir: Option<&Path>,
         server: &str,
         port: u16,

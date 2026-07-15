@@ -1,6 +1,6 @@
 #[cfg(feature = "vmess")]
 mod listener;
-use ::vmess::transport::{VmessOutboundLeaf, VmessStreamBridge};
+use ::vmess::transport::{OwnedVmessOutboundLeafConfig, VmessOutboundLeaf, VmessStreamBridge};
 #[cfg(feature = "vmess")]
 use zero_config::InboundConfig;
 use zero_config::{InboundProtocolConfig, OutboundProtocolConfig};
@@ -120,7 +120,7 @@ impl TcpOutboundCapability for VmessAdapter {
             Some((server, port)),
             runtime,
             move |source_dir| {
-                VmessOutboundLeaf::from_profile_refs(
+                OwnedVmessOutboundLeafConfig::from_config_refs(
                     source_dir,
                     tag,
                     server,
@@ -132,6 +132,7 @@ impl TcpOutboundCapability for VmessAdapter {
                     ws,
                     grpc,
                 )
+                .map(VmessOutboundLeaf::from)
             },
         ))
     }
@@ -163,7 +164,7 @@ impl UdpFlowCapability for VmessAdapter {
             bridge,
             Some((server, port)),
             move |source_dir| {
-                VmessOutboundLeaf::from_profile_refs(
+                OwnedVmessOutboundLeafConfig::from_config_refs(
                     source_dir,
                     tag,
                     server,
@@ -175,6 +176,7 @@ impl UdpFlowCapability for VmessAdapter {
                     ws,
                     grpc,
                 )
+                .map(VmessOutboundLeaf::from)
             },
         ))
     }

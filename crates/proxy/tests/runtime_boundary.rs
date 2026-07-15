@@ -348,6 +348,8 @@ fn protocol_adapter_roots_do_not_construct_transport_plans_or_request_bundles_in
             "PreparedVlessOutboundRequestBundle",
             "PreparedVmessOutboundRequestBundle",
             "PreparedTrojanOutboundRequestBundle",
+            "VlessOutboundLeaf::from_profile_refs",
+            "VmessOutboundLeaf::from_profile_refs",
             "OwnedVlessOutboundTransportPlan::from_profile_refs",
             "OwnedVmessOutboundTransportPlan::from_profile_refs",
             "OwnedTrojanOutboundTlsPlan::from_parts",

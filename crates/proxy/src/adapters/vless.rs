@@ -1,7 +1,8 @@
 #[cfg(feature = "vless")]
 use ::vless::transport::{
-    OwnedVlessInboundBindPlan, OwnedVlessQuicBindProfile, OwnedVlessQuicClientProfile,
-    OwnedVlessRealityClientProfile, VlessOutboundLeaf, VlessStreamBridge,
+    OwnedVlessInboundBindPlan, OwnedVlessOutboundLeafConfig, OwnedVlessQuicBindProfile,
+    OwnedVlessQuicClientProfile, OwnedVlessRealityClientProfile, VlessOutboundLeaf,
+    VlessStreamBridge,
 };
 #[cfg(feature = "vless")]
 use async_trait::async_trait;
@@ -180,7 +181,7 @@ impl TcpOutboundCapability for VlessAdapter {
             Some((server, port)),
             runtime,
             move |source_dir| {
-                VlessOutboundLeaf::from_profile_refs(
+                OwnedVlessOutboundLeafConfig::from_config_refs(
                     source_dir,
                     tag,
                     server,
@@ -197,6 +198,7 @@ impl TcpOutboundCapability for VlessAdapter {
                     split_http,
                     quic.as_ref(),
                 )
+                .map(VlessOutboundLeaf::from)
             },
         ))
     }
@@ -235,7 +237,7 @@ impl UdpFlowCapability for VlessAdapter {
             bridge,
             Some((server, port)),
             move |source_dir| {
-                VlessOutboundLeaf::from_profile_refs(
+                OwnedVlessOutboundLeafConfig::from_config_refs(
                     source_dir,
                     tag,
                     server,
@@ -252,6 +254,7 @@ impl UdpFlowCapability for VlessAdapter {
                     split_http,
                     quic.as_ref(),
                 )
+                .map(VlessOutboundLeaf::from)
             },
         ))
     }

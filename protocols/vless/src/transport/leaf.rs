@@ -21,7 +21,7 @@ use super::outbound::OwnedVlessOutboundTransportPlan;
 use super::profile::{OwnedVlessQuicClientProfile, OwnedVlessRealityClientProfile};
 
 #[derive(Clone)]
-pub struct VlessOutboundLeaf {
+pub struct OwnedVlessOutboundLeafConfig {
     tag: String,
     server: String,
     port: u16,
@@ -29,9 +29,9 @@ pub struct VlessOutboundLeaf {
     protocol: crate::outbound::PreparedVlessOutboundRequestBundle,
 }
 
-impl VlessOutboundLeaf {
+impl OwnedVlessOutboundLeafConfig {
     #[allow(clippy::too_many_arguments)]
-    pub fn from_profile_refs<TTls, TWs, TGrpc, TH2, THttp, TSplit>(
+    pub fn from_config_refs<TTls, TWs, TGrpc, TH2, THttp, TSplit>(
         source_dir: Option<&Path>,
         tag: &str,
         server: &str,
@@ -76,9 +76,26 @@ impl VlessOutboundLeaf {
                 mux_concurrency,
                 transport.mux_transport_hints(),
             )?;
-        Ok(Self::new(tag, server, port, transport, protocol))
+        Ok(Self {
+            tag: tag.to_owned(),
+            server: server.to_owned(),
+            port,
+            transport,
+            protocol,
+        })
     }
+}
 
+#[derive(Clone)]
+pub struct VlessOutboundLeaf {
+    tag: String,
+    server: String,
+    port: u16,
+    transport: OwnedVlessOutboundTransportPlan,
+    protocol: crate::outbound::PreparedVlessOutboundRequestBundle,
+}
+
+impl VlessOutboundLeaf {
     pub fn new(
         tag: &str,
         server: &str,
@@ -192,6 +209,25 @@ impl VlessOutboundLeaf {
             self.protocol.udp_relay_final_hop_plan(),
             self.owned_transport_plan(),
         )
+    }
+}
+
+impl From<OwnedVlessOutboundLeafConfig> for VlessOutboundLeaf {
+    fn from(config: OwnedVlessOutboundLeafConfig) -> Self {
+        let OwnedVlessOutboundLeafConfig {
+            tag,
+            server,
+            port,
+            transport,
+            protocol,
+        } = config;
+        Self {
+            tag,
+            server,
+            port,
+            transport,
+            protocol,
+        }
     }
 }
 

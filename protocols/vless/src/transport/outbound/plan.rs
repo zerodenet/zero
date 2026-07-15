@@ -167,7 +167,7 @@ pub struct OwnedVlessOutboundTransportPlan {
 
 impl OwnedVlessOutboundTransportPlan {
     #[allow(clippy::too_many_arguments)]
-    pub fn from_profile_refs<TTls, TWs, TGrpc, TH2, THttp, TSplit>(
+    pub(in crate::transport) fn from_profile_refs<TTls, TWs, TGrpc, TH2, THttp, TSplit>(
         source_dir: Option<&Path>,
         server: &str,
         port: u16,

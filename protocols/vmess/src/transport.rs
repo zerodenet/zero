@@ -8,5 +8,5 @@ mod outbound;
 
 pub use bridge::VmessStreamBridge;
 pub use inbound::VmessInboundListenerRequest;
-pub use leaf::VmessOutboundLeaf;
+pub use leaf::{OwnedVmessOutboundLeafConfig, VmessOutboundLeaf};
 pub use outbound::OwnedVmessOutboundTransportPlan;
