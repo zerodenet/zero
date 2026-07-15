@@ -11,15 +11,14 @@ use zero_transport::RuntimeError;
 use zero_transport::{ClientStream, MeteredStream};
 
 use super::{
-    OwnedSocks5InboundAcceptor, Socks5InboundUdpAssociationHandler,
-    Socks5InboundUdpAssociationSetup,
+    Socks5InboundAcceptor, Socks5InboundUdpAssociationHandler, Socks5InboundUdpAssociationSetup,
 };
 
-pub fn inbound_acceptor_from_users<'a, I>(users: I) -> OwnedSocks5InboundAcceptor
+pub fn inbound_acceptor_from_users<'a, I>(users: I) -> Socks5InboundAcceptor
 where
     I: IntoIterator<Item = (&'a str, &'a str, Option<&'a str>, Option<u64>, Option<u64>)>,
 {
-    OwnedSocks5InboundAcceptor::new(crate::Socks5InboundTcpAcceptor::from_config_users(users))
+    Socks5InboundAcceptor::new(crate::Socks5InboundTcpAcceptor::from_config_users(users))
 }
 
 pub async fn setup_inbound_udp_association<S>(
@@ -48,7 +47,7 @@ where
     })
 }
 
-impl OwnedSocks5InboundAcceptor {
+impl Socks5InboundAcceptor {
     fn new(protocol: crate::Socks5InboundTcpAcceptor) -> Self {
         Self { protocol }
     }
@@ -82,7 +81,7 @@ impl OwnedSocks5InboundAcceptor {
     }
 }
 
-impl<S> InboundClientResponse<S> for OwnedSocks5InboundAcceptor
+impl<S> InboundClientResponse<S> for Socks5InboundAcceptor
 where
     S: AsyncSocket,
 {

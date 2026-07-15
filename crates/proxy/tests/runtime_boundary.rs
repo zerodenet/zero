@@ -485,9 +485,12 @@ fn simpler_protocol_surfaces_do_not_expose_owned_inbound_intermediate_names() {
             "protocols/hysteria2/src/transport.rs",
             "OwnedHysteria2Inbound",
         ),
+        ("protocols/socks5/src/transport.rs", "OwnedSocks5Inbound"),
         ("adapters/shadowsocks/inbound.rs", "OwnedShadowsocksInbound"),
         ("adapters/mieru/inbound.rs", "OwnedMieruInbound"),
         ("adapters/hysteria2.rs", "OwnedHysteria2Inbound"),
+        ("adapters/socks5/inbound.rs", "OwnedSocks5Inbound"),
+        ("adapters/mixed/inbound.rs", "OwnedSocks5Inbound"),
     ] {
         let source = if relative.starts_with("protocols/") {
             read(&workspace_root().join(relative))

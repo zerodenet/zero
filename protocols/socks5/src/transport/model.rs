@@ -16,7 +16,7 @@ pub struct Socks5ManagedUdpFlowConfig<'a> {
 }
 
 #[derive(Clone)]
-pub struct OwnedSocks5InboundAcceptor {
+pub struct Socks5InboundAcceptor {
     pub(super) protocol: crate::Socks5InboundTcpAcceptor,
 }
 

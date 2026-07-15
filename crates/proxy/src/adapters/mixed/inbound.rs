@@ -1,4 +1,4 @@
-use ::socks5::transport::{inbound_acceptor_from_users, OwnedSocks5InboundAcceptor};
+use ::socks5::transport::{inbound_acceptor_from_users, Socks5InboundAcceptor};
 use zero_engine::EngineError;
 use zero_traits::AsyncSocket;
 
@@ -9,7 +9,7 @@ use crate::transport::{MeteredStream, PrefixedSocket, TcpRelayStream};
 
 #[derive(Clone)]
 pub(crate) struct MixedInboundRequest {
-    pub(crate) socks5_acceptor: OwnedSocks5InboundAcceptor,
+    pub(crate) socks5_acceptor: Socks5InboundAcceptor,
     pub(crate) http_handler: HttpConnectInboundHandler,
 }
 

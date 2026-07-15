@@ -14,11 +14,10 @@ mod upstream;
 
 pub use inbound::{inbound_acceptor_from_users, setup_inbound_udp_association};
 pub use model::{
-    OwnedSocks5InboundAcceptor, Socks5InboundUdpAssociationHandler,
-    Socks5InboundUdpAssociationSetup, Socks5ManagedUdpAssociationTarget,
-    Socks5ManagedUdpFlowConfig, Socks5ManagedUdpFlowPlan, Socks5ManagedUdpPacketPathCarrierBuild,
-    Socks5ManagedUdpPacketPathCarrierDescriptor, Socks5ManagedUdpPacketPathPlan,
-    Socks5TransportLeaf, Socks5UpstreamAssociationCloseReason,
+    Socks5InboundAcceptor, Socks5InboundUdpAssociationHandler, Socks5InboundUdpAssociationSetup,
+    Socks5ManagedUdpAssociationTarget, Socks5ManagedUdpFlowConfig, Socks5ManagedUdpFlowPlan,
+    Socks5ManagedUdpPacketPathCarrierBuild, Socks5ManagedUdpPacketPathCarrierDescriptor,
+    Socks5ManagedUdpPacketPathPlan, Socks5TransportLeaf, Socks5UpstreamAssociationCloseReason,
 };
 pub use tcp::{apply_socks5_tcp_relay_hop, establish_socks5_tcp_connect};
 pub use upstream::{

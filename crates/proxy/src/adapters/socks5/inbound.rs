@@ -1,6 +1,6 @@
 mod listener;
 
-use ::socks5::transport::{inbound_acceptor_from_users, OwnedSocks5InboundAcceptor};
+use ::socks5::transport::{inbound_acceptor_from_users, Socks5InboundAcceptor};
 use zero_config::{InboundConfig, InboundProtocolConfig};
 use zero_engine::EngineError;
 
@@ -43,7 +43,7 @@ impl Socks5Adapter {
             protocol_name: "socks5",
             error_protocol_name: "socks5",
             request: acceptor,
-            dispatch: |acceptor: OwnedSocks5InboundAcceptor,
+            dispatch: |acceptor: Socks5InboundAcceptor,
                        socket,
                        context: InboundConnectionContext| async move {
                 listener::handle_socks5_connection(
