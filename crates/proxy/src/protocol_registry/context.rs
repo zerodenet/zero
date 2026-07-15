@@ -5,7 +5,6 @@ use zero_dns::DnsSystem;
 use zero_engine::Engine;
 
 use crate::inventory::ProtocolInventory;
-use crate::runtime::Proxy;
 
 #[derive(Clone)]
 pub(crate) struct TcpRuntimeServices {
@@ -28,15 +27,6 @@ impl TcpRuntimeServices {
             resolver,
             protocols,
         }
-    }
-
-    pub(crate) fn from_proxy(proxy: &Proxy) -> Self {
-        Self::new(
-            proxy.engine().clone(),
-            proxy.config.clone(),
-            proxy.resolver.clone(),
-            proxy.protocols.clone(),
-        )
     }
 
     pub(crate) fn engine(&self) -> &Engine {
@@ -216,11 +206,6 @@ pub(crate) enum UdpAssociationCloseKind {
 impl UdpRuntimeServices {
     pub(crate) fn new(tcp: TcpRuntimeServices) -> Self {
         Self { tcp }
-    }
-
-    #[cfg(test)]
-    pub(crate) fn from_proxy(proxy: &Proxy) -> Self {
-        Self::new(TcpRuntimeServices::from_proxy(proxy))
     }
 
     pub(crate) async fn connect_upstream(

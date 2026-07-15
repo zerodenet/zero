@@ -95,9 +95,7 @@ fn proxy() -> Proxy {
 }
 
 fn shared_services(proxy: &Proxy) -> SharedIngressRuntimeServices {
-    SharedIngressRuntimeServices::new(crate::protocol_registry::TcpRuntimeServices::from_proxy(
-        proxy,
-    ))
+    SharedIngressRuntimeServices::new(proxy.tcp_runtime_services())
 }
 
 #[tokio::test]

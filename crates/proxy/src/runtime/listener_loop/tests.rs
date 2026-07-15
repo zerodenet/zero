@@ -5,7 +5,6 @@ use tokio::sync::{watch, Notify};
 use zero_config::RuntimeConfig;
 
 use super::{run_tcp_listener_loop, TcpListenerLoopRequest};
-use crate::protocol_registry::TcpRuntimeServices;
 use crate::runtime::route_runtime::{InboundRouteRuntimeFactory, SharedIngressRuntimeServices};
 
 #[tokio::test]
@@ -27,7 +26,7 @@ async fn tcp_listener_accepts_connection_and_stops_on_shutdown() {
         tokio::spawn(async move {
             run_tcp_listener_loop(TcpListenerLoopRequest {
                 runtime_factory: InboundRouteRuntimeFactory::new(
-                    SharedIngressRuntimeServices::new(TcpRuntimeServices::from_proxy(&proxy)),
+                    SharedIngressRuntimeServices::new(proxy.tcp_runtime_services()),
                     "listener-test".to_owned(),
                 ),
                 protocol_name: "test",

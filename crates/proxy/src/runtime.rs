@@ -153,6 +153,20 @@ impl Proxy {
         &self.engine
     }
 
+    pub(crate) fn tcp_runtime_services(&self) -> TcpRuntimeServices {
+        TcpRuntimeServices::new(
+            self.engine().clone(),
+            self.config.clone(),
+            self.resolver.clone(),
+            self.protocols.clone(),
+        )
+    }
+
+    #[cfg(test)]
+    pub(crate) fn udp_runtime_services(&self) -> crate::protocol_registry::UdpRuntimeServices {
+        crate::protocol_registry::UdpRuntimeServices::new(self.tcp_runtime_services())
+    }
+
     pub fn with_udp_upstream_idle_timeout(mut self, timeout: std::time::Duration) -> Self {
         self.engine = self.engine.with_udp_upstream_idle_timeout(timeout);
         self
@@ -202,7 +216,7 @@ impl Proxy {
         target_tag: &str,
         url: &str,
     ) -> Result<u64, EngineError> {
-        crate::groups::UrlTestRuntime::new(TcpRuntimeServices::from_proxy(self))
+        crate::groups::UrlTestRuntime::new(self.tcp_runtime_services())
             .probe_outbound_single(target_tag, url)
             .await
     }

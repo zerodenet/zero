@@ -4,7 +4,6 @@ use zero_config::{InboundConfig, RuntimeConfig};
 
 use super::fixtures::TcpCapabilityCalls;
 use super::tcp::proxy_with_fake_tcp;
-use crate::protocol_registry::TcpRuntimeServices;
 
 fn fake_inbound() -> InboundConfig {
     RuntimeConfig::parse(
@@ -54,7 +53,7 @@ async fn inventory_binds_before_spawning_the_same_inbound_capability() {
             proxy.config.source_dir(),
             crate::runtime::route_runtime::InboundListenerRuntime::new(
                 crate::runtime::route_runtime::SharedIngressRuntimeServices::new(
-                    TcpRuntimeServices::from_proxy(&proxy),
+                    proxy.tcp_runtime_services(),
                 ),
                 inbound.tag,
             ),

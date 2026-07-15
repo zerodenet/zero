@@ -5,9 +5,7 @@ use zero_core::{Address, Network, ProtocolType, Session};
 
 use super::fixtures::{FakeTcpCapability, TcpCapabilityCalls};
 use crate::inventory::ProtocolInventory;
-use crate::protocol_registry::{
-    fake_direct_leaf, OutboundAdapterContext, ProtocolRegistry, TcpRuntimeServices,
-};
+use crate::protocol_registry::{fake_direct_leaf, OutboundAdapterContext, ProtocolRegistry};
 use crate::runtime::Proxy;
 use crate::transport::TcpRelayStream;
 
@@ -71,7 +69,7 @@ async fn inventory_invokes_fake_tcp_leaf_and_relay_capabilities() {
         Err(_) => panic!("fake leaf prepare failed"),
     };
     let established = match prepared
-        .execute(TcpRuntimeServices::from_proxy(&proxy), &session())
+        .execute(proxy.tcp_runtime_services(), &session())
         .await
     {
         Ok(established) => established,
@@ -85,7 +83,7 @@ async fn inventory_invokes_fake_tcp_leaf_and_relay_capabilities() {
         .prepare_claimed_tcp_relay_hop(ctx, &claimed)
         .expect("fake relay prepare")
         .execute(
-            TcpRuntimeServices::from_proxy(&proxy),
+            proxy.tcp_runtime_services(),
             TcpRelayStream::new(stream),
             &session(),
         )
@@ -116,7 +114,7 @@ async fn inventory_preserves_tcp_and_relay_capability_failures() {
         Err(_) => panic!("fake leaf prepare failed"),
     };
     let failure = match prepared
-        .execute(TcpRuntimeServices::from_proxy(&proxy), &session())
+        .execute(proxy.tcp_runtime_services(), &session())
         .await
     {
         Ok(_) => panic!("fake TCP connect unexpectedly succeeded"),
@@ -137,7 +135,7 @@ async fn inventory_preserves_tcp_and_relay_capability_failures() {
         .prepare_claimed_tcp_relay_hop(ctx, &claimed)
         .expect("fake relay prepare")
         .execute(
-            TcpRuntimeServices::from_proxy(&proxy),
+            proxy.tcp_runtime_services(),
             TcpRelayStream::new(stream),
             &session(),
         )

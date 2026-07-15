@@ -332,6 +332,8 @@ fn adapter_runtime_service_access_does_not_expose_proxy() {
     assert!(context.contains("struct TcpRuntimeServices"));
     assert!(context.contains("struct UdpRuntimeServices"));
     assert!(context.contains("fn runtime_services"));
+    assert!(!context.contains("use crate::runtime::Proxy"));
+    assert!(!context.contains("from_proxy("));
     assert!(!context.contains("proxy: Proxy"));
     let adapters = rust_sources(&proxy_src().join("adapters"))
         .into_iter()

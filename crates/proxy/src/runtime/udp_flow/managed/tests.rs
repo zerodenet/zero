@@ -135,7 +135,7 @@ async fn registered_udp_state_forwards_with_restored_opaque_resume() {
     let sent = match state
         .forward_existing_managed_flow(
             &mut chain_tasks,
-            crate::protocol_registry::UdpRuntimeServices::from_proxy(&proxy),
+            proxy.udp_runtime_services(),
             (&flow, payload),
         )
         .await

@@ -6,14 +6,12 @@ use super::fixtures::FakeProviderResume;
 use super::fixtures::FakeUpstreamResume;
 use super::fixtures::{FakeTcpCapability, TcpCapabilityCalls};
 use super::tcp::{proxy_with_fake_tcp, session};
-use crate::protocol_registry::{
-    fake_direct_leaf, TcpRuntimeServices, UdpAdapterContext, UdpRuntimeServices,
-};
+use crate::protocol_registry::{fake_direct_leaf, UdpAdapterContext};
 use crate::runtime::udp_dispatch::FlowStartResult;
 use crate::transport::{RelayCarrier, TcpRelayStream};
 
 fn udp_runtime(proxy: &crate::runtime::Proxy) -> crate::runtime::udp_ingress::UdpIngressRuntime {
-    crate::runtime::udp_ingress::UdpIngressRuntime::new(TcpRuntimeServices::from_proxy(proxy))
+    crate::runtime::udp_ingress::UdpIngressRuntime::new(proxy.tcp_runtime_services())
 }
 
 #[tokio::test]
@@ -24,10 +22,7 @@ async fn inventory_invokes_fake_udp_leaf_capability() {
         .new_dispatch("fake-inbound")
         .await
         .expect("UDP dispatch");
-    let ctx = UdpAdapterContext::new(
-        proxy.config.source_dir(),
-        UdpRuntimeServices::from_proxy(&proxy),
-    );
+    let ctx = UdpAdapterContext::new(proxy.config.source_dir(), proxy.udp_runtime_services());
     let payload = b"capability payload";
     let leaf = fake_direct_leaf();
     let claimed = proxy
@@ -68,10 +63,7 @@ async fn inventory_preserves_fake_udp_failure_metadata() {
         .new_dispatch("fake-inbound")
         .await
         .expect("UDP dispatch");
-    let ctx = UdpAdapterContext::new(
-        proxy.config.source_dir(),
-        UdpRuntimeServices::from_proxy(&proxy),
-    );
+    let ctx = UdpAdapterContext::new(proxy.config.source_dir(), proxy.udp_runtime_services());
     let leaf = fake_direct_leaf();
     let claimed = proxy
         .protocols
@@ -110,10 +102,7 @@ async fn inventory_invokes_fake_udp_relay_capabilities() {
         .new_dispatch("fake-inbound")
         .await
         .expect("UDP dispatch");
-    let ctx = UdpAdapterContext::new(
-        proxy.config.source_dir(),
-        UdpRuntimeServices::from_proxy(&proxy),
-    );
+    let ctx = UdpAdapterContext::new(proxy.config.source_dir(), proxy.udp_runtime_services());
     let leaf = fake_direct_leaf();
     let claimed = proxy
         .protocols
@@ -228,7 +217,7 @@ async fn inventory_executes_handler_produced_by_registered_provider() {
     let sent = match state
         .forward_existing_managed_flow(
             &mut chain_tasks,
-            crate::protocol_registry::UdpRuntimeServices::from_proxy(&proxy),
+            proxy.udp_runtime_services(),
             (&flow, payload),
         )
         .await
@@ -277,7 +266,7 @@ async fn reload_invalidates_provider_resumes_before_new_generation_flows() {
     assert!(state
         .forward_existing_managed_flow(
             &mut chain_tasks,
-            crate::protocol_registry::UdpRuntimeServices::from_proxy(&proxy),
+            proxy.udp_runtime_services(),
             (&old_flow, payload),
         )
         .await
@@ -286,7 +275,7 @@ async fn reload_invalidates_provider_resumes_before_new_generation_flows() {
     let stale = state
         .forward_existing_managed_flow(
             &mut chain_tasks,
-            crate::protocol_registry::UdpRuntimeServices::from_proxy(&proxy),
+            proxy.udp_runtime_services(),
             (&old_flow, payload),
         )
         .await;
@@ -308,7 +297,7 @@ async fn reload_invalidates_provider_resumes_before_new_generation_flows() {
     assert!(state
         .forward_existing_managed_flow(
             &mut chain_tasks,
-            crate::protocol_registry::UdpRuntimeServices::from_proxy(&proxy),
+            proxy.udp_runtime_services(),
             (&new_flow, payload),
         )
         .await
@@ -343,9 +332,7 @@ async fn inventory_executes_handler_produced_by_upstream_provider() {
         .start_upstream_udp_flow(
             "fake-inbound",
             UpstreamAssociationSend {
-                services: Some(crate::protocol_registry::UdpRuntimeServices::from_proxy(
-                    &proxy,
-                )),
+                services: Some(proxy.udp_runtime_services()),
                 session: &session,
                 server: "upstream-provider.test",
                 port: 1080,
@@ -406,7 +393,7 @@ async fn inventory_composes_packet_path_roles_and_builds_carrier() {
         .send_packet_path_chain(
             crate::protocol_registry::UdpAdapterContext::new(
                 proxy.config.source_dir(),
-                crate::protocol_registry::UdpRuntimeServices::from_proxy(&proxy),
+                proxy.udp_runtime_services(),
             ),
             request,
         )

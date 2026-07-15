@@ -27,7 +27,6 @@ use zero_stack::{UserNetworkStack, UserTcpStream};
 use zero_traits::{NetworkStack, SocketAddress as TraitsSocketAddr, TcpStack, UdpStack};
 use zero_tun::TunDevice;
 
-use crate::protocol_registry::TcpRuntimeServices;
 use crate::runtime::tcp_ingress::{InboundProtocol, TcpIngressRuntime};
 use crate::runtime::{Proxy, TunInfo};
 
@@ -109,11 +108,8 @@ async fn tun_loop<S: NetworkStack + Send + Sync + 'static>(
                 let p = proxy.clone();
                 let t = tag.clone();
                 tokio::spawn(async move {
-                    let runtime = TcpIngressRuntime::new(
-                        TcpRuntimeServices::from_proxy(&p),
-                        t,
-                        Some(src_addr),
-                    );
+                    let runtime =
+                        TcpIngressRuntime::new(p.tcp_runtime_services(), t, Some(src_addr));
                     let _ = runtime.serve(session, stream, &TunProtocol).await;
                 });
             }
