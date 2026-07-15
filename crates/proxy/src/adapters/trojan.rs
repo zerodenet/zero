@@ -34,6 +34,63 @@ pub(crate) struct TrojanAdapter {
 }
 
 #[cfg(feature = "trojan")]
+#[derive(Clone, Copy)]
+struct TrojanOutboundProjection<'a> {
+    tag: &'a str,
+    server: &'a str,
+    port: u16,
+    password: &'a str,
+    sni: Option<&'a str>,
+    insecure: bool,
+    client_fingerprint: Option<&'a str>,
+}
+
+#[cfg(feature = "trojan")]
+impl<'a> TrojanOutboundProjection<'a> {
+    fn from_leaf(leaf: ResolvedLeafOutbound<'a>) -> Option<Self> {
+        let ResolvedLeafOutbound::Trojan {
+            tag,
+            server,
+            port,
+            password,
+            sni,
+            insecure,
+            client_fingerprint,
+        } = leaf
+        else {
+            return None;
+        };
+        Some(Self {
+            tag,
+            server,
+            port,
+            password,
+            sni,
+            insecure,
+            client_fingerprint,
+        })
+    }
+
+    fn endpoint(&self) -> (&'a str, u16) {
+        (self.server, self.port)
+    }
+
+    fn build_options(&self) -> TrojanOutboundBuildOptionsRef<'a> {
+        TrojanOutboundBuildOptionsRef {
+            tag: self.tag,
+            server: self.server,
+            port: self.port,
+            protocol: TrojanOutboundOptionsRef {
+                password: self.password,
+                sni: self.sni,
+                insecure: self.insecure,
+                client_fingerprint: self.client_fingerprint,
+            },
+        }
+    }
+}
+
+#[cfg(feature = "trojan")]
 const TCP_PATH: TcpPathCategory = TcpPathCategory::Tunnel;
 
 #[cfg(feature = "trojan")]
@@ -92,37 +149,13 @@ impl TcpOutboundCapability for TrojanAdapter {
         leaf: ResolvedLeafOutbound<'a>,
     ) -> Option<Box<dyn ClaimedTcpOutboundLeaf<'a> + 'a>> {
         let runtime = proxy_leaf_runtime(&leaf, TCP_PATH)?;
-        let ResolvedLeafOutbound::Trojan {
-            tag,
-            server,
-            port,
-            password,
-            sni,
-            insecure,
-            client_fingerprint,
-        } = leaf
-        else {
-            return None;
-        };
+        let projection = TrojanOutboundProjection::from_leaf(leaf)?;
         let transport_runtime = self.runtime.clone();
         Some(claim_transport_tcp_leaf(
-            Some((server, port)),
+            Some(projection.endpoint()),
             runtime,
             move |source_dir| {
-                transport_runtime.build_outbound_leaf(
-                    source_dir,
-                    TrojanOutboundBuildOptionsRef {
-                        tag,
-                        server,
-                        port,
-                        protocol: TrojanOutboundOptionsRef {
-                            password,
-                            sni,
-                            insecure,
-                            client_fingerprint,
-                        },
-                    },
-                )
+                transport_runtime.build_outbound_leaf(source_dir, projection.build_options())
             },
         ))
     }
@@ -134,36 +167,12 @@ impl UdpFlowCapability for TrojanAdapter {
         &self,
         leaf: ResolvedLeafOutbound<'a>,
     ) -> Option<Box<dyn ClaimedUdpFlowLeaf<'a> + 'a>> {
-        let ResolvedLeafOutbound::Trojan {
-            tag,
-            server,
-            port,
-            password,
-            sni,
-            insecure,
-            client_fingerprint,
-        } = leaf
-        else {
-            return None;
-        };
+        let projection = TrojanOutboundProjection::from_leaf(leaf)?;
         let transport_runtime = self.runtime.clone();
         Some(claim_transport_udp_leaf(
-            Some((server, port)),
+            Some(projection.endpoint()),
             move |source_dir| {
-                transport_runtime.build_outbound_leaf(
-                    source_dir,
-                    TrojanOutboundBuildOptionsRef {
-                        tag,
-                        server,
-                        port,
-                        protocol: TrojanOutboundOptionsRef {
-                            password,
-                            sni,
-                            insecure,
-                            client_fingerprint,
-                        },
-                    },
-                )
+                transport_runtime.build_outbound_leaf(source_dir, projection.build_options())
             },
         ))
     }

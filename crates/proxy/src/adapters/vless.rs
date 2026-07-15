@@ -39,6 +39,111 @@ pub(crate) struct VlessAdapter {
 }
 
 #[cfg(feature = "vless")]
+#[derive(Clone, Copy)]
+struct VlessOutboundProjection<'a> {
+    tag: &'a str,
+    server: &'a str,
+    port: u16,
+    id: &'a str,
+    flow: Option<&'a str>,
+    mux_concurrency: Option<u32>,
+    tls: Option<&'a zero_config::ClientTlsConfig>,
+    reality: Option<&'a zero_config::RealityConfig>,
+    ws: Option<&'a zero_config::WebSocketConfig>,
+    grpc: Option<&'a zero_config::GrpcConfig>,
+    h2: Option<&'a zero_config::H2Config>,
+    http_upgrade: Option<&'a zero_config::HttpUpgradeConfig>,
+    split_http: Option<&'a zero_config::SplitHttpConfig>,
+    quic: Option<&'a zero_config::QuicConfig>,
+}
+
+#[cfg(feature = "vless")]
+impl<'a> VlessOutboundProjection<'a> {
+    fn from_leaf(leaf: ResolvedLeafOutbound<'a>) -> Option<Self> {
+        let ResolvedLeafOutbound::Vless {
+            tag,
+            server,
+            port,
+            id,
+            flow,
+            mux_concurrency,
+            tls,
+            reality,
+            ws,
+            grpc,
+            h2,
+            http_upgrade,
+            split_http,
+            quic,
+            ..
+        } = leaf
+        else {
+            return None;
+        };
+        Some(Self {
+            tag,
+            server,
+            port,
+            id,
+            flow,
+            mux_concurrency,
+            tls,
+            reality,
+            ws,
+            grpc,
+            h2,
+            http_upgrade,
+            split_http,
+            quic,
+        })
+    }
+
+    fn endpoint(&self) -> (&'a str, u16) {
+        (self.server, self.port)
+    }
+
+    fn build_options(
+        &self,
+    ) -> VlessOutboundBuildOptionsRef<
+        'a,
+        zero_config::ClientTlsConfig,
+        zero_config::WebSocketConfig,
+        zero_config::GrpcConfig,
+        zero_config::H2Config,
+        zero_config::HttpUpgradeConfig,
+        zero_config::SplitHttpConfig,
+    > {
+        VlessOutboundBuildOptionsRef {
+            tag: self.tag,
+            server: self.server,
+            port: self.port,
+            protocol: VlessOutboundOptionsRef {
+                id: self.id,
+                flow: self.flow,
+                mux_concurrency: self.mux_concurrency,
+                reality: self.reality.map(|reality| VlessRealityClientOptionsRef {
+                    public_key: reality.public_key.as_str(),
+                    short_id: reality.short_id.as_str(),
+                    server_name: reality.server_name.as_deref(),
+                    cipher_suites: reality.cipher_suites.as_slice(),
+                }),
+                quic: self.quic.map(|quic| VlessQuicClientOptionsRef {
+                    server_name: quic.server_name.as_deref(),
+                    insecure: quic.insecure,
+                    ca_cert_path: quic.ca_cert_path.as_deref(),
+                }),
+            },
+            tls: self.tls,
+            ws: self.ws,
+            grpc: self.grpc,
+            h2: self.h2,
+            http_upgrade: self.http_upgrade,
+            split_http: self.split_http,
+        }
+    }
+}
+
+#[cfg(feature = "vless")]
 const TCP_PATH: TcpPathCategory = TcpPathCategory::Tunnel;
 
 #[cfg(feature = "vless")]
@@ -123,61 +228,17 @@ impl TcpOutboundCapability for VlessAdapter {
         leaf: ResolvedLeafOutbound<'a>,
     ) -> Option<Box<dyn ClaimedTcpOutboundLeaf<'a> + 'a>> {
         let runtime = proxy_leaf_runtime(&leaf, TCP_PATH)?;
-        let ResolvedLeafOutbound::Vless {
-            tag,
-            server,
-            port,
-            id,
-            flow,
-            mux_concurrency,
-            tls,
-            reality,
-            ws,
-            grpc,
-            h2,
-            http_upgrade,
-            split_http,
-            quic,
-            ..
-        } = leaf
-        else {
-            return None;
-        };
-        Some(claim_transport_tcp_leaf(Some((server, port)), runtime, {
-            let transport_runtime = self.runtime.clone();
-            move |source_dir| {
-                transport_runtime.build_outbound_leaf(
-                    source_dir,
-                    VlessOutboundBuildOptionsRef {
-                        tag,
-                        server,
-                        port,
-                        protocol: VlessOutboundOptionsRef {
-                            id,
-                            flow,
-                            mux_concurrency,
-                            reality: reality.map(|reality| VlessRealityClientOptionsRef {
-                                public_key: reality.public_key.as_str(),
-                                short_id: reality.short_id.as_str(),
-                                server_name: reality.server_name.as_deref(),
-                                cipher_suites: reality.cipher_suites.as_slice(),
-                            }),
-                            quic: quic.map(|quic| VlessQuicClientOptionsRef {
-                                server_name: quic.server_name.as_deref(),
-                                insecure: quic.insecure,
-                                ca_cert_path: quic.ca_cert_path.as_deref(),
-                            }),
-                        },
-                        tls,
-                        ws,
-                        grpc,
-                        h2,
-                        http_upgrade,
-                        split_http,
-                    },
-                )
-            }
-        }))
+        let projection = VlessOutboundProjection::from_leaf(leaf)?;
+        Some(claim_transport_tcp_leaf(
+            Some(projection.endpoint()),
+            runtime,
+            {
+                let transport_runtime = self.runtime.clone();
+                move |source_dir| {
+                    transport_runtime.build_outbound_leaf(source_dir, projection.build_options())
+                }
+            },
+        ))
     }
 }
 
@@ -187,61 +248,13 @@ impl UdpFlowCapability for VlessAdapter {
         &self,
         leaf: ResolvedLeafOutbound<'a>,
     ) -> Option<Box<dyn ClaimedUdpFlowLeaf<'a> + 'a>> {
-        let ResolvedLeafOutbound::Vless {
-            tag,
-            server,
-            port,
-            id,
-            flow,
-            mux_concurrency,
-            tls,
-            reality,
-            ws,
-            grpc,
-            h2,
-            http_upgrade,
-            split_http,
-            quic,
-            ..
-        } = leaf
-        else {
-            return None;
-        };
+        let projection = VlessOutboundProjection::from_leaf(leaf)?;
         Some(claim_relay_two_stream_transport_udp_leaf(
-            Some((server, port)),
+            Some(projection.endpoint()),
             {
                 let transport_runtime = self.runtime.clone();
                 move |source_dir| {
-                    transport_runtime.build_outbound_leaf(
-                        source_dir,
-                        VlessOutboundBuildOptionsRef {
-                            tag,
-                            server,
-                            port,
-                            protocol: VlessOutboundOptionsRef {
-                                id,
-                                flow,
-                                mux_concurrency,
-                                reality: reality.map(|reality| VlessRealityClientOptionsRef {
-                                    public_key: reality.public_key.as_str(),
-                                    short_id: reality.short_id.as_str(),
-                                    server_name: reality.server_name.as_deref(),
-                                    cipher_suites: reality.cipher_suites.as_slice(),
-                                }),
-                                quic: quic.map(|quic| VlessQuicClientOptionsRef {
-                                    server_name: quic.server_name.as_deref(),
-                                    insecure: quic.insecure,
-                                    ca_cert_path: quic.ca_cert_path.as_deref(),
-                                }),
-                            },
-                            tls,
-                            ws,
-                            grpc,
-                            h2,
-                            http_upgrade,
-                            split_http,
-                        },
-                    )
+                    transport_runtime.build_outbound_leaf(source_dir, projection.build_options())
                 }
             },
         ))

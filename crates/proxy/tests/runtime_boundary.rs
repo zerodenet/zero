@@ -1199,6 +1199,54 @@ fn trojan_listener_adapter_uses_protocol_option_refs() {
 }
 
 #[test]
+fn heavy_transport_bridge_adapters_centralize_outbound_projection() {
+    for (relative, helper, variant, build_options) in [
+        (
+            "adapters/vless.rs",
+            "VlessOutboundProjection",
+            "ResolvedLeafOutbound::Vless {",
+            "VlessOutboundBuildOptionsRef {",
+        ),
+        (
+            "adapters/vmess.rs",
+            "VmessOutboundProjection",
+            "ResolvedLeafOutbound::Vmess {",
+            "VmessOutboundBuildOptionsRef {",
+        ),
+        (
+            "adapters/trojan.rs",
+            "TrojanOutboundProjection",
+            "ResolvedLeafOutbound::Trojan {",
+            "TrojanOutboundBuildOptionsRef {",
+        ),
+    ] {
+        let source = read(&proxy_src().join(relative));
+        assert!(
+            source.contains(&format!("struct {helper}")),
+            "{relative} should keep one named outbound projection helper `{helper}`"
+        );
+        assert!(
+            source.contains("fn from_leaf("),
+            "{relative} should centralize outbound leaf matching behind `from_leaf`"
+        );
+        assert!(
+            source.contains("fn build_options("),
+            "{relative} should centralize protocol-owned outbound build bundle construction"
+        );
+        assert_eq!(
+            source.matches(variant).count(),
+            1,
+            "{relative} should match its heavy outbound leaf variant in one projection helper"
+        );
+        assert_eq!(
+            source.matches(build_options).count(),
+            1,
+            "{relative} should construct one outbound build bundle shape and reuse it across TCP and UDP"
+        );
+    }
+}
+
+#[test]
 fn inventory_udp_dispatch_keeps_relay_choreography_outside_candidate_root() {
     let dispatch = read(&proxy_src().join("inventory/udp/dispatch.rs"));
     assert!(!dispatch.contains("ClaimedResolvedOutbound"));

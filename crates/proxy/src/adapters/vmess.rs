@@ -33,6 +33,79 @@ pub(crate) struct VmessAdapter {
 }
 
 #[cfg(feature = "vmess")]
+#[derive(Clone, Copy)]
+struct VmessOutboundProjection<'a> {
+    tag: &'a str,
+    server: &'a str,
+    port: u16,
+    id: &'a str,
+    cipher: &'a str,
+    mux_concurrency: Option<u32>,
+    tls: Option<&'a zero_config::ClientTlsConfig>,
+    ws: Option<&'a zero_config::WebSocketConfig>,
+    grpc: Option<&'a zero_config::GrpcConfig>,
+}
+
+#[cfg(feature = "vmess")]
+impl<'a> VmessOutboundProjection<'a> {
+    fn from_leaf(leaf: ResolvedLeafOutbound<'a>) -> Option<Self> {
+        let ResolvedLeafOutbound::Vmess {
+            tag,
+            server,
+            port,
+            id,
+            cipher,
+            mux_concurrency,
+            tls,
+            ws,
+            grpc,
+            ..
+        } = leaf
+        else {
+            return None;
+        };
+        Some(Self {
+            tag,
+            server,
+            port,
+            id,
+            cipher,
+            mux_concurrency,
+            tls,
+            ws,
+            grpc,
+        })
+    }
+
+    fn endpoint(&self) -> (&'a str, u16) {
+        (self.server, self.port)
+    }
+
+    fn build_options(
+        &self,
+    ) -> VmessOutboundBuildOptionsRef<
+        'a,
+        zero_config::ClientTlsConfig,
+        zero_config::WebSocketConfig,
+        zero_config::GrpcConfig,
+    > {
+        VmessOutboundBuildOptionsRef {
+            tag: self.tag,
+            server: self.server,
+            port: self.port,
+            protocol: VmessOutboundOptionsRef {
+                id: self.id,
+                cipher: self.cipher,
+                mux_concurrency: self.mux_concurrency,
+            },
+            tls: self.tls,
+            ws: self.ws,
+            grpc: self.grpc,
+        }
+    }
+}
+
+#[cfg(feature = "vmess")]
 const TCP_PATH: TcpPathCategory = TcpPathCategory::Session;
 
 #[cfg(feature = "vmess")]
@@ -95,42 +168,17 @@ impl TcpOutboundCapability for VmessAdapter {
         leaf: ResolvedLeafOutbound<'a>,
     ) -> Option<Box<dyn ClaimedTcpOutboundLeaf<'a> + 'a>> {
         let runtime = proxy_leaf_runtime(&leaf, TCP_PATH)?;
-        let ResolvedLeafOutbound::Vmess {
-            tag,
-            server,
-            port,
-            id,
-            cipher,
-            mux_concurrency,
-            tls,
-            ws,
-            grpc,
-            ..
-        } = leaf
-        else {
-            return None;
-        };
-        Some(claim_transport_tcp_leaf(Some((server, port)), runtime, {
-            let transport_runtime = self.runtime.clone();
-            move |source_dir| {
-                transport_runtime.build_outbound_leaf(
-                    source_dir,
-                    VmessOutboundBuildOptionsRef {
-                        tag,
-                        server,
-                        port,
-                        protocol: VmessOutboundOptionsRef {
-                            id,
-                            cipher,
-                            mux_concurrency,
-                        },
-                        tls,
-                        ws,
-                        grpc,
-                    },
-                )
-            }
-        }))
+        let projection = VmessOutboundProjection::from_leaf(leaf)?;
+        Some(claim_transport_tcp_leaf(
+            Some(projection.endpoint()),
+            runtime,
+            {
+                let transport_runtime = self.runtime.clone();
+                move |source_dir| {
+                    transport_runtime.build_outbound_leaf(source_dir, projection.build_options())
+                }
+            },
+        ))
     }
 }
 
@@ -140,40 +188,11 @@ impl UdpFlowCapability for VmessAdapter {
         &self,
         leaf: ResolvedLeafOutbound<'a>,
     ) -> Option<Box<dyn ClaimedUdpFlowLeaf<'a> + 'a>> {
-        let ResolvedLeafOutbound::Vmess {
-            tag,
-            server,
-            port,
-            id,
-            cipher,
-            mux_concurrency,
-            tls,
-            ws,
-            grpc,
-            ..
-        } = leaf
-        else {
-            return None;
-        };
-        Some(claim_transport_udp_leaf(Some((server, port)), {
+        let projection = VmessOutboundProjection::from_leaf(leaf)?;
+        Some(claim_transport_udp_leaf(Some(projection.endpoint()), {
             let transport_runtime = self.runtime.clone();
             move |source_dir| {
-                transport_runtime.build_outbound_leaf(
-                    source_dir,
-                    VmessOutboundBuildOptionsRef {
-                        tag,
-                        server,
-                        port,
-                        protocol: VmessOutboundOptionsRef {
-                            id,
-                            cipher,
-                            mux_concurrency,
-                        },
-                        tls,
-                        ws,
-                        grpc,
-                    },
-                )
+                transport_runtime.build_outbound_leaf(source_dir, projection.build_options())
             }
         }))
     }
