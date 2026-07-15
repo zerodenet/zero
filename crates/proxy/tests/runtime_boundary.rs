@@ -691,6 +691,7 @@ fn claimed_outbound_leaf_owns_capability_preparation() {
     assert!(!outbound.contains("pub(crate) struct ClaimedOutboundLeaf<'a> {\n    leaf:"));
     assert!(outbound.contains("claim_tcp_outbound_leaf(leaf.clone())"));
     assert!(outbound.contains("claim_udp_flow_leaf(leaf.clone())"));
+    assert!(outbound.contains("claim_udp_packet_path_leaf(leaf.clone())"));
     assert!(outbound.contains("struct ClaimedTcpHooks"));
     assert!(outbound.contains("struct ClaimedUdpHooks"));
     assert!(!outbound.contains("self.leaf"));

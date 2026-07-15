@@ -84,6 +84,26 @@ pub(crate) trait ClaimedUdpFlowLeaf<'a>: Send + Sync {
     }
 }
 
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
+pub(crate) trait ClaimedUdpPacketPathLeaf<'a>: Send + Sync {
+    fn prepare_udp_packet_path(
+        &self,
+    ) -> Option<
+        Box<
+            dyn crate::runtime::udp_dispatch::packet_path_operation::PreparedUdpPacketPathOperation
+                + 'a,
+        >,
+    >;
+}
+
 pub(crate) trait ProtocolSupportCapability: ProtocolMetadata + Send + Sync {
     fn name(&self) -> &'static str;
     fn feature_name(&self) -> &'static str;
@@ -261,6 +281,13 @@ pub(crate) trait ManagedUdpHandlerProvider: Send + Sync {
     feature = "mieru"
 ))]
 pub(crate) trait UdpPacketPathCapability: Send + Sync {
+    fn claim_udp_packet_path_leaf<'a>(
+        &self,
+        _leaf: ResolvedLeafOutbound<'a>,
+    ) -> Option<Box<dyn ClaimedUdpPacketPathLeaf<'a> + 'a>> {
+        None
+    }
+
     fn prepare_udp_packet_path<'a>(
         &self,
         _leaf: ResolvedLeafOutbound<'a>,
