@@ -820,6 +820,8 @@ fn udp_ingress_runtime_collapses_proxy_and_services_for_session_loops() {
         "runtime/udp_association/lifecycle.rs",
         "runtime/datagram_udp/lifecycle.rs",
         "runtime/packet_session_udp/lifecycle.rs",
+        "runtime/stream_udp.rs",
+        "runtime/mux_udp.rs",
     ] {
         let source = read(&proxy_src().join(relative));
         assert!(
@@ -833,6 +835,19 @@ fn udp_ingress_runtime_collapses_proxy_and_services_for_session_loops() {
         assert!(
             !source.contains("dispatch_inbound_udp_packet(proxy"),
             "{relative} must not call the raw inbound UDP helper directly"
+        );
+    }
+
+    for relative in [
+        "runtime/datagram_udp/lifecycle.rs",
+        "runtime/packet_session_udp/lifecycle.rs",
+        "runtime/stream_udp.rs",
+        "runtime/mux_udp.rs",
+    ] {
+        let source = read(&proxy_src().join(relative));
+        assert!(
+            !source.contains("&Proxy"),
+            "{relative} must not borrow raw Proxy references for outer UDP session loops"
         );
     }
 

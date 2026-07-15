@@ -7,7 +7,7 @@ use crate::runtime::packet_session_udp::{
     PacketSessionUdpReadFailure, PacketSessionUdpReadFailureAction, PacketSessionUdpReadResult,
     PacketSessionUdpRelayRequest,
 };
-use crate::runtime::Proxy;
+use crate::runtime::udp_ingress::UdpIngressRuntime;
 
 pub(crate) struct StreamUdpRelayRequest<'a, S, R> {
     pub(crate) client: S,
@@ -16,17 +16,17 @@ pub(crate) struct StreamUdpRelayRequest<'a, S, R> {
     pub(crate) inbound_tag: &'a str,
     pub(crate) protocol: &'static str,
     pub(crate) auth: Option<SessionAuth>,
-    pub(crate) record_client_io: Option<fn(&Proxy, u64, &mut S)>,
+    pub(crate) record_client_io: Option<fn(&UdpIngressRuntime, u64, &mut S)>,
 }
 
 pub(crate) async fn run_mapped_protocol_stream_udp_relay<R, S, F>(
-    proxy: &Proxy,
+    runtime: UdpIngressRuntime,
     session: &Session,
     relay: R,
     inbound_tag: &str,
     protocol: &'static str,
     map_client: F,
-    record_client_io: Option<fn(&Proxy, u64, &mut S)>,
+    record_client_io: Option<fn(&UdpIngressRuntime, u64, &mut S)>,
 ) -> Result<(), EngineError>
 where
     R: InboundStreamUdpRelay,
@@ -36,7 +36,7 @@ where
 {
     let (client, responder, auth) = relay.into_stream_udp_parts();
     run_stream_udp_relay(
-        proxy,
+        runtime,
         StreamUdpRelayRequest {
             client: map_client(client),
             responder,
@@ -50,15 +50,15 @@ where
     .await
 }
 
-struct StreamPacketSessionUdpHandler<'a, S, R> {
-    proxy: &'a Proxy,
+struct StreamPacketSessionUdpHandler<S, R> {
+    runtime: UdpIngressRuntime,
     client: S,
     responder: R,
     stream_session_id: u64,
-    record_client_io: Option<fn(&Proxy, u64, &mut S)>,
+    record_client_io: Option<fn(&UdpIngressRuntime, u64, &mut S)>,
 }
 
-impl<S, R> PacketSessionUdpHandler for StreamPacketSessionUdpHandler<'_, S, R>
+impl<S, R> PacketSessionUdpHandler for StreamPacketSessionUdpHandler<S, R>
 where
     S: Send,
     R: StreamUdpResponder<S>,
@@ -69,7 +69,7 @@ where
         match self.responder.read_inbound_dispatch(&mut self.client).await {
             Ok(Some(inbound_dispatch)) => {
                 record_stream_udp_client_io(
-                    self.proxy,
+                    &self.runtime,
                     self.record_client_io,
                     self.stream_session_id,
                     &mut self.client,
@@ -95,7 +95,7 @@ where
             .write_response_for_target(&mut self.client, target, port, payload)
             .await?;
         record_stream_udp_client_io(
-            self.proxy,
+            &self.runtime,
             self.record_client_io,
             self.stream_session_id,
             &mut self.client,
@@ -105,7 +105,7 @@ where
 }
 
 pub(crate) async fn run_stream_udp_relay<S, R>(
-    proxy: &Proxy,
+    runtime: UdpIngressRuntime,
     request: StreamUdpRelayRequest<'_, S, R>,
 ) -> Result<(), EngineError>
 where
@@ -129,7 +129,7 @@ where
     );
 
     let handler = StreamPacketSessionUdpHandler {
-        proxy,
+        runtime: runtime.clone(),
         client,
         responder,
         stream_session_id: session.id,
@@ -137,7 +137,7 @@ where
     };
 
     run_packet_session_udp_relay(
-        proxy,
+        runtime,
         PacketSessionUdpRelayRequest {
             handler,
             inbound_tag,
@@ -158,12 +158,12 @@ where
 }
 
 fn record_stream_udp_client_io<S>(
-    proxy: &Proxy,
-    record_client_io: Option<fn(&Proxy, u64, &mut S)>,
+    runtime: &UdpIngressRuntime,
+    record_client_io: Option<fn(&UdpIngressRuntime, u64, &mut S)>,
     session_id: u64,
     client: &mut S,
 ) {
     if let Some(record_client_io) = record_client_io {
-        record_client_io(proxy, session_id, client);
+        record_client_io(runtime, session_id, client);
     }
 }

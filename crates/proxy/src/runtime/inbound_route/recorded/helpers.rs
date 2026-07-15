@@ -6,6 +6,7 @@ use zero_engine::EngineError;
 use super::model::RecordedProtocolMuxRouteDefaults;
 use crate::runtime::mux_session::{run_protocol_mux_session, MuxSessionLoop};
 use crate::runtime::stream_udp::run_mapped_protocol_stream_udp_relay;
+use crate::runtime::udp_ingress::UdpIngressRuntime;
 use crate::runtime::Proxy;
 use crate::transport::{ClientStream, MeteredStream, RecordingStream, TcpRelayStream};
 
@@ -19,13 +20,13 @@ where
 }
 
 pub(crate) fn record_metered_inbound_traffic<S>(
-    proxy: &Proxy,
+    runtime: &UdpIngressRuntime,
     session_id: u64,
     client: &mut MeteredStream<S>,
 ) where
     S: ClientStream,
 {
-    proxy.record_session_inbound_traffic(session_id, client.drain_traffic());
+    runtime.record_session_inbound_traffic(session_id, client.drain_traffic());
 }
 
 pub(crate) async fn run_recorded_protocol_stream_udp_relay<S, R>(
@@ -41,15 +42,16 @@ where
     R::Responder: StreamUdpResponder<MeteredStream<S>>,
 {
     let session_id = session.id;
-    let record_proxy = proxy.clone();
+    let runtime = UdpIngressRuntime::from_proxy(&proxy);
+    let record_runtime = runtime.clone();
     run_mapped_protocol_stream_udp_relay(
-        &proxy,
+        runtime,
         &session,
         relay,
         &inbound_tag,
         protocol,
         move |mut client| {
-            record_proxy.record_session_inbound_traffic(session_id, client.drain_traffic());
+            record_runtime.record_session_inbound_traffic(session_id, client.drain_traffic());
             MeteredStream::new(client.into_unrecorded_inner())
         },
         Some(record_metered_inbound_traffic::<S>),
@@ -74,7 +76,7 @@ where
     FUdp: FnMut(Proxy, M::UdpRelay, String) -> FUdpFut + Send,
     FUdpFut: Future<Output = ()> + Send + 'static,
 {
-    record_metered_inbound_traffic(&proxy, 0, &mut reader);
+    record_metered_inbound_traffic(&UdpIngressRuntime::from_proxy(&proxy), 0, &mut reader);
     let client = MeteredStream::new(reader.into_unrecorded_inner());
     run_protocol_mux_session(
         &proxy,

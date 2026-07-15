@@ -13,7 +13,6 @@ use crate::runtime::udp_delivery::{record_upstream_udp_response_received, wait_f
 use crate::runtime::udp_delivery::{write_optional_chain_response, write_optional_direct_response};
 use crate::runtime::udp_dispatch::UdpDispatch;
 use crate::runtime::udp_ingress::UdpIngressRuntime;
-use crate::runtime::Proxy;
 
 type ChainUdpResponseResult = Result<
     Result<(zero_core::Address, u16, Vec<u8>, Option<u64>), EngineError>,
@@ -21,7 +20,7 @@ type ChainUdpResponseResult = Result<
 >;
 
 pub(crate) async fn run_protocol_datagram_udp_relay<S, R>(
-    proxy: &Proxy,
+    runtime: UdpIngressRuntime,
     source: S,
     relay: R,
     inbound_tag: &str,
@@ -33,7 +32,7 @@ where
 {
     let (responder, auth) = relay.into_datagram_udp_parts();
     run_datagram_udp_relay(
-        proxy,
+        runtime,
         DatagramUdpRelayRequest {
             source,
             responder,
@@ -46,7 +45,7 @@ where
 }
 
 pub(crate) async fn run_datagram_udp_relay<S, R>(
-    proxy: &Proxy,
+    runtime: UdpIngressRuntime,
     request: DatagramUdpRelayRequest<'_, S, R>,
 ) -> Result<(), EngineError>
 where
@@ -60,7 +59,6 @@ where
         poll_upstream,
         auth,
     } = request;
-    let runtime = UdpIngressRuntime::from_proxy(proxy);
     let mut dispatch = runtime.new_dispatch(inbound_tag).await?;
     let mut direct_buf = vec![0_u8; 64 * 1024];
     #[cfg(feature = "socks5")]

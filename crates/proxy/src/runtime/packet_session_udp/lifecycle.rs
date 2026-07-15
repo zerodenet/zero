@@ -16,10 +16,9 @@ use crate::runtime::udp_delivery::{
 use crate::runtime::udp_delivery::{record_upstream_udp_response_received, wait_for_upstream_idle};
 use crate::runtime::udp_delivery::{write_chain_response, write_direct_response};
 use crate::runtime::udp_ingress::UdpIngressRuntime;
-use crate::runtime::Proxy;
 
 pub(crate) async fn run_packet_session_udp_relay<H>(
-    proxy: &Proxy,
+    runtime: UdpIngressRuntime,
     request: PacketSessionUdpRelayRequest<'_, H>,
 ) -> Result<(), EngineError>
 where
@@ -33,7 +32,6 @@ where
         failure_policy,
     } = request;
 
-    let runtime = UdpIngressRuntime::from_proxy(proxy);
     let mut dispatch = match runtime.new_dispatch(inbound_tag).await {
         Ok(dispatch) => dispatch,
         Err(error) => {

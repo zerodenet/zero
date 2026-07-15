@@ -111,7 +111,7 @@ impl InboundConnectionContext {
         R::Responder: zero_core::StreamUdpResponder<R::Stream>,
     {
         crate::runtime::stream_udp::run_mapped_protocol_stream_udp_relay(
-            &self.proxy,
+            crate::runtime::udp_ingress::UdpIngressRuntime::from_proxy(&self.proxy),
             &session,
             relay,
             &self.inbound_tag,
@@ -388,12 +388,12 @@ where
                 }
             };
             let udp_task = udp_socket.as_ref().map(|socket| {
-                let proxy = proxy.clone();
+                let runtime = crate::runtime::udp_ingress::UdpIngressRuntime::from_proxy(&proxy);
                 let inbound_tag = inbound_tag.clone();
                 let socket = socket.clone();
                 tokio::spawn(async move {
                     crate::runtime::datagram_udp::run_protocol_datagram_udp_relay(
-                        &proxy,
+                        runtime,
                         socket,
                         udp_relay,
                         &inbound_tag,
@@ -497,11 +497,15 @@ where
     let mut tasks = tokio::task::JoinSet::new();
     let udp_source = connection.datagram_source();
     let udp_relay = connection.udp_relay();
-    let udp_proxy = proxy.clone();
+    let udp_runtime = crate::runtime::udp_ingress::UdpIngressRuntime::from_proxy(&proxy);
     let udp_tag = inbound_tag.clone();
     tasks.spawn(async move {
         crate::runtime::datagram_udp::run_protocol_datagram_udp_relay(
-            &udp_proxy, udp_source, udp_relay, &udp_tag, false,
+            udp_runtime,
+            udp_source,
+            udp_relay,
+            &udp_tag,
+            false,
         )
         .await
     });

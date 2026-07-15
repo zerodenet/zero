@@ -38,7 +38,7 @@ where
                            relay: R::UdpRelay,
                            inbound_tag: String| async move {
                 run_mapped_protocol_stream_udp_relay(
-                    &proxy,
+                    crate::runtime::udp_ingress::UdpIngressRuntime::from_proxy(&proxy),
                     &session,
                     relay,
                     &inbound_tag,

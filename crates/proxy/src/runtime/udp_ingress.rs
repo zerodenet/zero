@@ -76,6 +76,16 @@ impl UdpIngressRuntime {
         self.proxy.set_session_outbound(session);
     }
 
+    #[cfg(any(feature = "socks5", feature = "vless"))]
+    pub(crate) fn record_session_inbound_traffic(
+        &self,
+        session_id: u64,
+        traffic: crate::transport::StreamTraffic,
+    ) {
+        self.services
+            .record_session_inbound_traffic(session_id, traffic);
+    }
+
     pub(crate) fn source_dir(&self) -> Option<&Path> {
         self.proxy.config.source_dir()
     }
