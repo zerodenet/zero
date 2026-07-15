@@ -107,26 +107,17 @@ impl MieruInboundListenerRequest {
         MieruInboundResponseProtocol::default()
     }
 
-    pub async fn accept_and_dispatch_client<S, Tcp, TcpFut, Udp, UdpFut, E>(
+    pub async fn accept_client<S>(
         &self,
         stream: S,
-        tcp: Tcp,
-        udp: Udp,
-    ) -> Result<(), E>
+    ) -> Result<
+        crate::inbound::MieruInboundAcceptedSession<crate::inbound::MieruInboundStream<S>>,
+        zero_core::Error,
+    >
     where
         S: AsyncSocket + AsyncRead + AsyncWrite + Unpin,
-        Tcp: FnOnce(Session, crate::inbound::MieruInboundStream<S>) -> TcpFut,
-        TcpFut: core::future::Future<Output = Result<(), E>>,
-        Udp: FnOnce(
-            Session,
-            crate::inbound::MieruInboundUdpRelay<crate::inbound::MieruInboundStream<S>>,
-        ) -> UdpFut,
-        UdpFut: core::future::Future<Output = Result<(), E>>,
-        E: From<zero_core::Error>,
     {
-        self.protocol
-            .accept_and_dispatch_client(stream, tcp, udp)
-            .await
+        self.protocol.accept_client(stream).await
     }
 }
 

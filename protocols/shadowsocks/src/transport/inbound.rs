@@ -1,5 +1,3 @@
-use core::future::Future;
-
 use zero_core::Session;
 use zero_traits::AsyncSocket;
 use zero_transport::RuntimeError;
@@ -28,20 +26,14 @@ impl ShadowsocksInboundTcpAcceptor {
         Self { protocol }
     }
 
-    pub async fn accept_and_dispatch_stream<S, H, HFut, E>(
+    pub async fn accept_stream<S>(
         &self,
         stream: S,
-        handoff: H,
-    ) -> Result<(), E>
+    ) -> Result<(Session, crate::ShadowsocksAeadStream<S>), zero_core::Error>
     where
         S: AsyncSocket,
-        H: FnOnce(Session, crate::ShadowsocksAeadStream<S>) -> HFut,
-        HFut: Future<Output = Result<(), E>>,
-        E: From<zero_core::Error>,
     {
-        self.protocol
-            .accept_and_dispatch_stream(stream, handoff)
-            .await
+        self.protocol.accept_stream(stream).await
     }
 }
 

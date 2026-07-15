@@ -1,9 +1,8 @@
-use std::future::Future;
 use std::net::SocketAddr;
 
 use zero_core::{
     Address, InboundClientResponse, InboundUdpAssociation, InboundUdpAssociationDispatcher,
-    InboundUdpAssociationResponder, InboundUdpAssociationResponse, Session,
+    InboundUdpAssociationResponder, InboundUdpAssociationResponse,
 };
 use zero_platform_tokio::TokioDatagramSocket;
 use zero_traits::{AsyncSocket, SocketAddress};
@@ -63,32 +62,14 @@ impl Socks5InboundAcceptor {
         Self { protocol }
     }
 
-    pub async fn accept_and_dispatch_command<S, Connect, ConnectFut, Udp, UdpFut, E>(
+    pub async fn accept_command<S>(
         &self,
-        stream: MeteredStream<S>,
-        on_connect: Connect,
-        on_udp_associate: Udp,
-    ) -> Result<(), E>
+        stream: &mut S,
+    ) -> Result<crate::Socks5Request, zero_core::Error>
     where
-        S: ClientStream,
-        Connect: FnOnce(Session, S) -> ConnectFut,
-        ConnectFut: Future<Output = Result<(), E>>,
-        Udp: FnOnce(Socks5InboundUdpAssociationSetup, MeteredStream<S>) -> UdpFut,
-        UdpFut: Future<Output = Result<(), E>>,
-        E: From<zero_core::Error> + From<RuntimeError>,
+        S: AsyncSocket,
     {
-        self.protocol
-            .accept_and_dispatch_command_with(
-                stream,
-                |session, stream| async move { on_connect(session, stream.into_inner()).await },
-                |request, mut stream| async move {
-                    let setup = setup_inbound_udp_association(&mut stream, request)
-                        .await
-                        .map_err(E::from)?;
-                    on_udp_associate(setup, stream).await
-                },
-            )
-            .await
+        self.protocol.accept_command(stream).await
     }
 }
 

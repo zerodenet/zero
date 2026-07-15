@@ -42,13 +42,11 @@ impl crate::adapters::shadowsocks::ShadowsocksAdapter {
             tcp_dispatch: |acceptor: ::shadowsocks::transport::ShadowsocksInboundTcpAcceptor,
                            socket,
                            context: InboundConnectionContext| async move {
-                acceptor
-                    .accept_and_dispatch_stream(
-                        MeteredStream::new(TcpRelayStream::from(socket)),
-                        |session, client| {
-                            context.serve(session, client, NoClientResponseStreamProtocol::new())
-                        },
-                    )
+                let (session, client) = acceptor
+                    .accept_stream(MeteredStream::new(TcpRelayStream::from(socket)))
+                    .await?;
+                context
+                    .serve(session, client, NoClientResponseStreamProtocol::new())
                     .await
             },
             udp_relay,

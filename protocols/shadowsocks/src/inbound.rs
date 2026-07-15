@@ -6,8 +6,6 @@ use alloc::string::String;
 use alloc::sync::Arc;
 #[cfg(feature = "crypto")]
 use alloc::vec::Vec;
-#[cfg(feature = "crypto")]
-use core::future::Future;
 use zero_core::ProtocolType;
 #[cfg(feature = "crypto")]
 use zero_core::{Error, Network, Session, SessionAuth};
@@ -133,21 +131,6 @@ impl ShadowsocksInboundTcpAcceptor {
         let client = self.profile.into_aead_stream(accept, stream)?;
 
         Ok((session, client))
-    }
-
-    pub async fn accept_and_dispatch_stream<S, H, HFut, E>(
-        &self,
-        stream: S,
-        handoff: H,
-    ) -> Result<(), E>
-    where
-        S: zero_traits::AsyncSocket,
-        H: FnOnce(Session, super::stream::ShadowsocksAeadStream<S>) -> HFut,
-        HFut: Future<Output = Result<(), E>>,
-        E: From<Error>,
-    {
-        let (session, client) = self.accept_stream(stream).await.map_err(E::from)?;
-        handoff(session, client).await
     }
 }
 

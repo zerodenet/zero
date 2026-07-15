@@ -86,27 +86,6 @@ impl MieruInboundProfile {
             session, client,
         ))
     }
-
-    pub async fn accept_and_dispatch_client<S, Tcp, TcpFut, Udp, UdpFut, E>(
-        &self,
-        stream: S,
-        tcp: Tcp,
-        udp: Udp,
-    ) -> Result<(), E>
-    where
-        S: AsyncSocket + AsyncRead + AsyncWrite + Unpin,
-        Tcp: FnOnce(Session, MieruInboundStream<S>) -> TcpFut,
-        TcpFut: core::future::Future<Output = Result<(), E>>,
-        Udp: FnOnce(Session, MieruInboundUdpRelay<MieruInboundStream<S>>) -> UdpFut,
-        UdpFut: core::future::Future<Output = Result<(), E>>,
-        E: From<Error>,
-    {
-        self.accept_client(stream)
-            .await
-            .map_err(E::from)?
-            .dispatch(tcp, udp)
-            .await
-    }
 }
 
 pub fn inbound_profile_from_config_users<I, U>(users: I) -> MieruInboundProfile

@@ -1069,6 +1069,67 @@ fn hysteria2_protocol_inbound_surface_stops_at_authenticated_quic_connections() 
 }
 
 #[test]
+fn shadowsocks_adapter_accepts_protocol_stream_before_runtime_handoff() {
+    let listener = read(&proxy_src().join("adapters/shadowsocks/inbound.rs"));
+    assert!(
+        listener.contains(".accept_stream("),
+        "adapters/shadowsocks/inbound.rs should accept a protocol-owned stream surface before runtime handoff"
+    );
+    assert!(
+        !listener.contains("accept_and_dispatch_stream"),
+        "adapters/shadowsocks/inbound.rs must not use legacy accept-and-dispatch helpers"
+    );
+
+    let inbound = read(&workspace_root().join("protocols/shadowsocks/src/inbound.rs"));
+    assert!(
+        !inbound.contains("accept_and_dispatch_stream"),
+        "protocols/shadowsocks/src/inbound.rs must stop at accept_stream instead of owning runtime handoff helpers"
+    );
+}
+
+#[test]
+fn mieru_adapter_accepts_protocol_session_before_runtime_handoff() {
+    let listener = read(&proxy_src().join("adapters/mieru/inbound.rs"));
+    assert!(
+        listener.contains(".accept_client("),
+        "adapters/mieru/inbound.rs should accept a protocol-owned session surface before runtime handoff"
+    );
+    assert!(
+        !listener.contains("accept_and_dispatch_client"),
+        "adapters/mieru/inbound.rs must not use legacy accept-and-dispatch helpers"
+    );
+
+    let inbound = read(&workspace_root().join("protocols/mieru/src/inbound.rs"));
+    assert!(
+        !inbound.contains("accept_and_dispatch_client"),
+        "protocols/mieru/src/inbound.rs must stop at accepted session surfaces instead of owning runtime handoff helpers"
+    );
+}
+
+#[test]
+fn socks5_adapter_accepts_protocol_request_before_runtime_handoff() {
+    let listener = read(&proxy_src().join("adapters/socks5/inbound/listener.rs"));
+    assert!(
+        listener.contains(".accept_command(&mut metered)"),
+        "adapters/socks5/inbound/listener.rs should accept a protocol-owned request surface before runtime handoff"
+    );
+    assert!(
+        !listener.contains("accept_and_dispatch_command"),
+        "adapters/socks5/inbound/listener.rs must not use legacy accept-and-dispatch helpers"
+    );
+    assert!(
+        listener.contains("setup_inbound_udp_association(&mut stream, request)"),
+        "adapters/socks5/inbound/listener.rs should keep SOCKS5 UDP associate setup explicit at the adapter/runtime boundary"
+    );
+
+    let inbound = read(&workspace_root().join("protocols/socks5/src/inbound.rs"));
+    assert!(
+        !inbound.contains("accept_and_dispatch_command_with"),
+        "protocols/socks5/src/inbound.rs must stop at accepted request surfaces instead of owning runtime handoff helpers"
+    );
+}
+
+#[test]
 fn mieru_adapter_uses_protocol_outbound_option_refs() {
     let adapter = read(&proxy_src().join("adapters/mieru.rs"));
     let forbidden = "MieruTransportLeaf::new(";
