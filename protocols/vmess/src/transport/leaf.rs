@@ -15,7 +15,7 @@ use super::managed_udp::VmessManagedUdpFlowResume;
 use super::outbound::OwnedVmessOutboundTransportPlan;
 
 #[derive(Clone)]
-pub struct OwnedVmessOutboundLeafConfig {
+struct OwnedVmessOutboundLeafConfig {
     tag: String,
     server: String,
     port: u16,
@@ -25,7 +25,7 @@ pub struct OwnedVmessOutboundLeafConfig {
 
 impl OwnedVmessOutboundLeafConfig {
     #[allow(clippy::too_many_arguments)]
-    pub fn from_config_refs<TTls, TWs, TGrpc>(
+    fn from_config_refs<TTls, TWs, TGrpc>(
         source_dir: Option<&Path>,
         tag: &str,
         server: &str,
@@ -72,7 +72,40 @@ pub struct VmessOutboundLeaf {
 }
 
 impl VmessOutboundLeaf {
-    pub fn new(
+    #[allow(clippy::too_many_arguments)]
+    pub fn from_config_refs<TTls, TWs, TGrpc>(
+        source_dir: Option<&Path>,
+        tag: &str,
+        server: &str,
+        port: u16,
+        id: &str,
+        cipher: &str,
+        mux_concurrency: Option<u32>,
+        tls: Option<&TTls>,
+        ws: Option<&TWs>,
+        grpc: Option<&TGrpc>,
+    ) -> Result<Self, zero_core::Error>
+    where
+        TTls: ClientTlsProfile + ?Sized,
+        TWs: WebSocketTransportProfile + ?Sized,
+        TGrpc: GrpcTransportProfile + ?Sized,
+    {
+        OwnedVmessOutboundLeafConfig::from_config_refs(
+            source_dir,
+            tag,
+            server,
+            port,
+            id,
+            cipher,
+            mux_concurrency,
+            tls,
+            ws,
+            grpc,
+        )
+        .map(Into::into)
+    }
+
+    pub(super) fn new(
         tag: &str,
         server: &str,
         port: u16,
@@ -162,13 +195,7 @@ impl From<OwnedVmessOutboundLeafConfig> for VmessOutboundLeaf {
             transport,
             protocol,
         } = config;
-        Self {
-            tag,
-            server,
-            port,
-            transport,
-            protocol,
-        }
+        Self::new(&tag, &server, port, transport, protocol)
     }
 }
 

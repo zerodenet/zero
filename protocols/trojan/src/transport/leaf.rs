@@ -11,7 +11,7 @@ use super::managed_udp::TrojanManagedUdpFlowResume;
 use super::outbound::{OwnedTrojanOutboundTlsPlan, TrojanTcpStreamOpen};
 
 #[derive(Clone)]
-pub struct OwnedTrojanOutboundLeafConfig {
+struct OwnedTrojanOutboundLeafConfig {
     tag: String,
     server: String,
     port: u16,
@@ -21,7 +21,7 @@ pub struct OwnedTrojanOutboundLeafConfig {
 
 impl OwnedTrojanOutboundLeafConfig {
     #[allow(clippy::too_many_arguments)]
-    pub fn from_config_refs(
+    fn from_config_refs(
         source_dir: Option<&Path>,
         tag: &str,
         server: &str,
@@ -58,7 +58,31 @@ pub struct TrojanOutboundLeaf {
 }
 
 impl TrojanOutboundLeaf {
-    pub fn new(
+    #[allow(clippy::too_many_arguments)]
+    pub fn from_config_refs(
+        source_dir: Option<&Path>,
+        tag: &str,
+        server: &str,
+        port: u16,
+        password: &str,
+        sni: Option<&str>,
+        insecure: bool,
+        client_fingerprint: Option<&str>,
+    ) -> Self {
+        OwnedTrojanOutboundLeafConfig::from_config_refs(
+            source_dir,
+            tag,
+            server,
+            port,
+            password,
+            sni,
+            insecure,
+            client_fingerprint,
+        )
+        .into()
+    }
+
+    pub(super) fn new(
         tag: &str,
         server: &str,
         port: u16,
@@ -137,13 +161,7 @@ impl From<OwnedTrojanOutboundLeafConfig> for TrojanOutboundLeaf {
             transport,
             protocol,
         } = config;
-        Self {
-            tag,
-            server,
-            port,
-            transport,
-            protocol,
-        }
+        Self::new(&tag, &server, port, transport, protocol)
     }
 }
 

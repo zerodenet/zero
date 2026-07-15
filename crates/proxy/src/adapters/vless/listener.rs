@@ -1,4 +1,4 @@
-use ::vless::transport::{OwnedVlessInboundListenerConfig, VlessInboundListenerRequest};
+use ::vless::transport::VlessInboundListenerRequest;
 use zero_config::{InboundConfig, InboundProtocolConfig};
 use zero_engine::EngineError;
 
@@ -46,7 +46,7 @@ pub(super) fn prepare(
                     reality.cipher_suites.clone(),
                 )
             });
-            OwnedVlessInboundListenerConfig::from_config_refs(
+            VlessInboundListenerRequest::from_config_refs(
                 source_dir,
                 profile,
                 reality,
@@ -58,7 +58,6 @@ pub(super) fn prepare(
                 split_http.as_deref(),
                 fallback.as_deref(),
             )?
-            .into()
         }
         _ => {
             return Err(EngineError::Io(std::io::Error::new(

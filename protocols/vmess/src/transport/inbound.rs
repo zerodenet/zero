@@ -10,7 +10,7 @@ use zero_transport::tls;
 use zero_transport::RuntimeError;
 
 #[derive(Clone)]
-pub struct OwnedVmessInboundListenerConfig {
+struct OwnedVmessInboundListenerConfig {
     profile: crate::inbound::VmessInboundProfile,
     tls_acceptor: tls::TlsAcceptor,
     ws: Option<OwnedWebSocketProfile>,
@@ -20,7 +20,7 @@ pub struct OwnedVmessInboundListenerConfig {
 
 impl OwnedVmessInboundListenerConfig {
     #[allow(clippy::too_many_arguments)]
-    pub fn from_config_refs<TTls, TWs, TGrpc>(
+    fn from_config_refs<TTls, TWs, TGrpc>(
         source_dir: Option<&Path>,
         profile: crate::inbound::VmessInboundProfile,
         tls: Option<&TTls>,
@@ -74,6 +74,22 @@ impl VmessInboundListenerRequest {
     pub const PANIC_MESSAGE: &'static str = "vmess mux task panicked";
     pub const ABORT_ON_END: bool = false;
     pub const READ_ERROR_LOG: &'static str = "vmess mux frame read failed";
+
+    pub fn from_config_refs<TTls, TWs, TGrpc>(
+        source_dir: Option<&Path>,
+        profile: crate::inbound::VmessInboundProfile,
+        tls: Option<&TTls>,
+        ws: Option<&TWs>,
+        grpc: Option<&TGrpc>,
+    ) -> Result<Self, RuntimeError>
+    where
+        TTls: ServerTlsProfile + ?Sized,
+        TWs: WebSocketTransportProfile + ?Sized,
+        TGrpc: GrpcTransportProfile + ?Sized,
+    {
+        OwnedVmessInboundListenerConfig::from_config_refs(source_dir, profile, tls, ws, grpc)
+            .map(Into::into)
+    }
 
     pub fn protocol_name(&self) -> &'static str {
         self.protocol_name

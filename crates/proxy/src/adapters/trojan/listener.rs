@@ -1,7 +1,7 @@
 use zero_config::{InboundConfig, InboundProtocolConfig};
 use zero_engine::EngineError;
 
-use ::trojan::transport::{OwnedTrojanInboundListenerConfig, TrojanInboundListenerRequest};
+use ::trojan::transport::TrojanInboundListenerRequest;
 
 use crate::runtime::inbound_operation::TcpInboundListenerOperation;
 
@@ -13,8 +13,7 @@ pub(super) fn prepare(
     let request: TrojanInboundListenerRequest = match &inbound.protocol {
         InboundProtocolConfig::Trojan { password, tls, .. } => {
             let profile = ::trojan::inbound::TrojanInboundProfile::from_config_password(password);
-            OwnedTrojanInboundListenerConfig::from_config_refs(source_dir, profile, tls.as_ref())?
-                .into()
+            TrojanInboundListenerRequest::from_config_refs(source_dir, profile, tls.as_ref())?
         }
         _ => {
             return Err(EngineError::Io(std::io::Error::new(

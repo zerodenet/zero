@@ -26,7 +26,7 @@ where
     zero_transport::MeteredStream::new(zero_transport::RecordingStream::new(stream))
 }
 #[derive(Clone)]
-pub struct OwnedVlessInboundListenerConfig {
+struct OwnedVlessInboundListenerConfig {
     profile: crate::inbound::VlessInboundProfile,
     transport: OwnedVlessInboundTransportPlan,
     fallback: Option<OwnedInboundFallbackProfile>,
@@ -34,7 +34,7 @@ pub struct OwnedVlessInboundListenerConfig {
 
 impl OwnedVlessInboundListenerConfig {
     #[allow(clippy::too_many_arguments)]
-    pub fn from_config_refs<TTls, TWs, TGrpc, TH2, THttp, TSplit, TFallback>(
+    fn from_config_refs<TTls, TWs, TGrpc, TH2, THttp, TSplit, TFallback>(
         source_dir: Option<&Path>,
         profile: crate::inbound::VlessInboundProfile,
         reality: Option<crate::reality::VlessRealityServerProfile>,
@@ -99,6 +99,43 @@ impl VlessInboundListenerRequest {
             transport,
             fallback,
         }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn from_config_refs<TTls, TWs, TGrpc, TH2, THttp, TSplit, TFallback>(
+        source_dir: Option<&Path>,
+        profile: crate::inbound::VlessInboundProfile,
+        reality: Option<crate::reality::VlessRealityServerProfile>,
+        tls: Option<&TTls>,
+        ws: Option<&TWs>,
+        grpc: Option<&TGrpc>,
+        h2: Option<&TH2>,
+        http_upgrade: Option<&THttp>,
+        split_http: Option<&TSplit>,
+        fallback: Option<&TFallback>,
+    ) -> Result<Self, RuntimeError>
+    where
+        TTls: ServerTlsProfile + ?Sized,
+        TWs: WebSocketTransportProfile + ?Sized,
+        TGrpc: GrpcTransportProfile + ?Sized,
+        TH2: H2TransportProfile + ?Sized,
+        THttp: HttpUpgradeTransportProfile + ?Sized,
+        TSplit: SplitHttpTransportProfile + ?Sized,
+        TFallback: InboundFallbackProfile + ?Sized,
+    {
+        OwnedVlessInboundListenerConfig::from_config_refs(
+            source_dir,
+            profile,
+            reality,
+            tls,
+            ws,
+            grpc,
+            h2,
+            http_upgrade,
+            split_http,
+            fallback,
+        )
+        .map(Into::into)
     }
 
     pub fn protocol_name(&self) -> &'static str {

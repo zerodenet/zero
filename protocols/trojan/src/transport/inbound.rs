@@ -9,13 +9,13 @@ use zero_transport::RuntimeError;
 type TrojanInboundTlsStream = InboundTlsStream<TokioSocket>;
 
 #[derive(Clone)]
-pub struct OwnedTrojanInboundListenerConfig {
+struct OwnedTrojanInboundListenerConfig {
     profile: crate::inbound::TrojanInboundProfile,
     tls_acceptor: TlsAcceptor,
 }
 
 impl OwnedTrojanInboundListenerConfig {
-    pub fn from_config_refs<TTls>(
+    fn from_config_refs<TTls>(
         source_dir: Option<&Path>,
         profile: crate::inbound::TrojanInboundProfile,
         tls: Option<&TTls>,
@@ -49,6 +49,17 @@ impl TrojanInboundListenerRequest {
             profile,
             tls_acceptor,
         }
+    }
+
+    pub fn from_config_refs<TTls>(
+        source_dir: Option<&Path>,
+        profile: crate::inbound::TrojanInboundProfile,
+        tls: Option<&TTls>,
+    ) -> Result<Self, RuntimeError>
+    where
+        TTls: ServerTlsProfile + ?Sized,
+    {
+        OwnedTrojanInboundListenerConfig::from_config_refs(source_dir, profile, tls).map(Into::into)
     }
 
     pub fn protocol_name(&self) -> &'static str {

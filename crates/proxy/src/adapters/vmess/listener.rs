@@ -1,4 +1,4 @@
-use ::vmess::transport::{OwnedVmessInboundListenerConfig, VmessInboundListenerRequest};
+use ::vmess::transport::VmessInboundListenerRequest;
 use zero_config::{InboundConfig, InboundProtocolConfig};
 use zero_engine::EngineError;
 
@@ -32,14 +32,13 @@ pub(super) fn prepare(
             .map_err(|error| {
                 EngineError::Io(std::io::Error::new(std::io::ErrorKind::InvalidInput, error))
             })?;
-            OwnedVmessInboundListenerConfig::from_config_refs(
+            VmessInboundListenerRequest::from_config_refs(
                 source_dir,
                 profile,
                 tls.as_deref(),
                 ws.as_deref(),
                 grpc.as_deref(),
             )?
-            .into()
         }
         _ => {
             return Err(EngineError::Io(std::io::Error::new(

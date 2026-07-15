@@ -350,7 +350,6 @@ fn protocol_adapter_roots_do_not_construct_transport_plans_or_request_bundles_in
             "PreparedTrojanOutboundRequestBundle",
             "VlessOutboundLeaf::from_profile_refs",
             "VmessOutboundLeaf::from_profile_refs",
-            "TrojanOutboundLeaf::from_config_refs",
             "OwnedVlessOutboundTransportPlan::from_profile_refs",
             "OwnedVmessOutboundTransportPlan::from_profile_refs",
             "OwnedTrojanOutboundTlsPlan::from_parts",
@@ -407,6 +406,69 @@ fn protocol_transport_roots_do_not_reexport_internal_outbound_plan_types() {
         assert!(
             !source.contains(forbidden),
             "{relative} must keep transport plan internals behind leaf-owned entrypoints instead of re-exporting `{forbidden}`"
+        );
+    }
+}
+
+#[test]
+fn protocol_transport_roots_do_not_reexport_internal_owned_config_intermediates() {
+    for (relative, forbidden) in [
+        (
+            "protocols/vless/src/transport.rs",
+            "OwnedVlessInboundListenerConfig",
+        ),
+        (
+            "protocols/vless/src/transport.rs",
+            "OwnedVlessOutboundLeafConfig",
+        ),
+        (
+            "protocols/vmess/src/transport.rs",
+            "OwnedVmessInboundListenerConfig",
+        ),
+        (
+            "protocols/vmess/src/transport.rs",
+            "OwnedVmessOutboundLeafConfig",
+        ),
+        (
+            "protocols/trojan/src/transport.rs",
+            "OwnedTrojanInboundListenerConfig",
+        ),
+        (
+            "protocols/trojan/src/transport.rs",
+            "OwnedTrojanOutboundLeafConfig",
+        ),
+    ] {
+        let source = read(&workspace_root().join(relative));
+        assert!(
+            !source.contains(forbidden),
+            "{relative} must keep `{forbidden}` internal instead of re-exporting protocol-owned config intermediates"
+        );
+    }
+}
+
+#[test]
+fn adapters_do_not_hold_protocol_owned_config_intermediates() {
+    for (relative, forbidden) in [
+        ("adapters/vless.rs", "OwnedVlessOutboundLeafConfig"),
+        (
+            "adapters/vless/listener.rs",
+            "OwnedVlessInboundListenerConfig",
+        ),
+        ("adapters/vmess.rs", "OwnedVmessOutboundLeafConfig"),
+        (
+            "adapters/vmess/listener.rs",
+            "OwnedVmessInboundListenerConfig",
+        ),
+        ("adapters/trojan.rs", "OwnedTrojanOutboundLeafConfig"),
+        (
+            "adapters/trojan/listener.rs",
+            "OwnedTrojanInboundListenerConfig",
+        ),
+    ] {
+        let source = read(&proxy_src().join(relative));
+        assert!(
+            !source.contains(forbidden),
+            "{relative} must construct final protocol-owned leaves/requests without retaining `{forbidden}`"
         );
     }
 }

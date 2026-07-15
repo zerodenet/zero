@@ -21,7 +21,7 @@ use super::outbound::OwnedVlessOutboundTransportPlan;
 use super::profile::{OwnedVlessQuicClientProfile, OwnedVlessRealityClientProfile};
 
 #[derive(Clone)]
-pub struct OwnedVlessOutboundLeafConfig {
+struct OwnedVlessOutboundLeafConfig {
     tag: String,
     server: String,
     port: u16,
@@ -31,7 +31,7 @@ pub struct OwnedVlessOutboundLeafConfig {
 
 impl OwnedVlessOutboundLeafConfig {
     #[allow(clippy::too_many_arguments)]
-    pub fn from_config_refs<TTls, TWs, TGrpc, TH2, THttp, TSplit>(
+    fn from_config_refs<TTls, TWs, TGrpc, TH2, THttp, TSplit>(
         source_dir: Option<&Path>,
         tag: &str,
         server: &str,
@@ -96,7 +96,53 @@ pub struct VlessOutboundLeaf {
 }
 
 impl VlessOutboundLeaf {
-    pub fn new(
+    #[allow(clippy::too_many_arguments)]
+    pub fn from_config_refs<TTls, TWs, TGrpc, TH2, THttp, TSplit>(
+        source_dir: Option<&Path>,
+        tag: &str,
+        server: &str,
+        port: u16,
+        id: &str,
+        flow: Option<&str>,
+        mux_concurrency: Option<u32>,
+        tls: Option<&TTls>,
+        reality: Option<&OwnedVlessRealityClientProfile>,
+        ws: Option<&TWs>,
+        grpc: Option<&TGrpc>,
+        h2: Option<&TH2>,
+        http_upgrade: Option<&THttp>,
+        split_http: Option<&TSplit>,
+        quic: Option<&OwnedVlessQuicClientProfile>,
+    ) -> Result<Self, zero_core::Error>
+    where
+        TTls: ClientTlsProfile + ?Sized,
+        TWs: WebSocketTransportProfile + ?Sized,
+        TGrpc: GrpcTransportProfile + ?Sized,
+        TH2: H2TransportProfile + ?Sized,
+        THttp: HttpUpgradeTransportProfile + ?Sized,
+        TSplit: SplitHttpTransportProfile + ?Sized,
+    {
+        OwnedVlessOutboundLeafConfig::from_config_refs(
+            source_dir,
+            tag,
+            server,
+            port,
+            id,
+            flow,
+            mux_concurrency,
+            tls,
+            reality,
+            ws,
+            grpc,
+            h2,
+            http_upgrade,
+            split_http,
+            quic,
+        )
+        .map(Into::into)
+    }
+
+    pub(super) fn new(
         tag: &str,
         server: &str,
         port: u16,
@@ -221,13 +267,7 @@ impl From<OwnedVlessOutboundLeafConfig> for VlessOutboundLeaf {
             transport,
             protocol,
         } = config;
-        Self {
-            tag,
-            server,
-            port,
-            transport,
-            protocol,
-        }
+        Self::new(&tag, &server, port, transport, protocol)
     }
 }
 
