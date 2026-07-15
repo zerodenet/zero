@@ -2,8 +2,9 @@ use zero_engine::{EngineError, ResolvedLeafOutbound};
 
 use crate::adapters::hysteria2::Hysteria2Adapter;
 use crate::protocol_registry::{
-    unreachable_udp_leaf, ClaimedUdpPacketPathLeaf, ProtocolSupportCapability,
+    unreachable_udp_leaf, ClaimedUdpFlowLeaf, ClaimedUdpPacketPathLeaf, ProtocolSupportCapability,
 };
+use crate::runtime::udp_dispatch::operation::PreparedUdpFlowOperation;
 use crate::runtime::udp_dispatch::packet_path_operation::PreparedUdpPacketPathOperation;
 use crate::runtime::udp_dispatch::FlowFailure;
 use crate::runtime::udp_flow::managed::{
@@ -52,6 +53,24 @@ struct ClaimedHysteria2PacketPathLeaf {
     plan: Hysteria2ManagedUdpPacketPathPlan,
 }
 
+struct ClaimedHysteria2UdpLeaf {
+    leaf: ::hysteria2::transport::Hysteria2TransportLeaf,
+}
+
+impl<'a> ClaimedUdpFlowLeaf<'a> for ClaimedHysteria2UdpLeaf {
+    fn prepare_udp_flow(
+        &self,
+        _source_dir: Option<&std::path::Path>,
+    ) -> Result<Box<dyn PreparedUdpFlowOperation + 'a>, FlowFailure> {
+        Ok(Box::new(
+            crate::runtime::udp_dispatch::operation::ManagedDatagramUdpOperation {
+                plan: self.leaf.clone().udp_flow_plan().into_start_plan(),
+                needs_proxy: false,
+            },
+        ))
+    }
+}
+
 impl<'a> ClaimedUdpPacketPathLeaf<'a> for ClaimedHysteria2PacketPathLeaf {
     fn prepare_udp_packet_path(&self) -> Option<Box<dyn PreparedUdpPacketPathOperation + 'a>> {
         Some(Box::new(Hysteria2PacketPathOperation {
@@ -88,6 +107,15 @@ pub(crate) fn managed_datagram_handler() -> Box<dyn ManagedDatagramFlowHandler> 
 }
 
 impl Hysteria2Adapter {
+    pub(super) fn claim_udp_flow_leaf_impl<'a>(
+        &self,
+        leaf: ResolvedLeafOutbound<'a>,
+    ) -> Option<Box<dyn ClaimedUdpFlowLeaf<'a> + 'a>> {
+        Some(Box::new(ClaimedHysteria2UdpLeaf {
+            leaf: super::transport_leaf(&leaf)?,
+        }))
+    }
+
     pub(super) fn claim_udp_packet_path_leaf_impl<'a>(
         &self,
         leaf: ResolvedLeafOutbound<'a>,

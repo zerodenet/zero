@@ -2,8 +2,9 @@ use zero_engine::{EngineError, ResolvedLeafOutbound};
 
 use crate::adapters::shadowsocks::ShadowsocksAdapter;
 use crate::protocol_registry::{
-    unreachable_udp_leaf, ClaimedUdpPacketPathLeaf, ProtocolSupportCapability,
+    unreachable_udp_leaf, ClaimedUdpFlowLeaf, ClaimedUdpPacketPathLeaf, ProtocolSupportCapability,
 };
+use crate::runtime::udp_dispatch::operation::PreparedUdpFlowOperation;
 use crate::runtime::udp_dispatch::packet_path_operation::PreparedUdpPacketPathOperation;
 use crate::runtime::udp_dispatch::FlowFailure;
 use crate::runtime::udp_flow::managed::{
@@ -71,6 +72,33 @@ struct ClaimedShadowsocksPacketPathLeaf {
     plan: ShadowsocksManagedUdpPacketPathPlan,
 }
 
+struct ClaimedShadowsocksUdpLeaf {
+    leaf: ::shadowsocks::transport::ShadowsocksTransportLeaf,
+}
+
+impl<'a> ClaimedUdpFlowLeaf<'a> for ClaimedShadowsocksUdpLeaf {
+    fn prepare_udp_flow(
+        &self,
+        _source_dir: Option<&std::path::Path>,
+    ) -> Result<Box<dyn PreparedUdpFlowOperation + 'a>, FlowFailure> {
+        let plan = self
+            .leaf
+            .clone()
+            .udp_flow_plan()
+            .map_err(|error| FlowFailure {
+                stage: "udp_shadowsocks_resume",
+                error: EngineError::Io(std::io::Error::other(error.to_string())),
+                upstream: Some((self.leaf.server().to_string(), self.leaf.port())),
+            })?;
+        Ok(Box::new(
+            crate::runtime::udp_dispatch::operation::ManagedDatagramUdpOperation {
+                plan: plan.into_start_plan(),
+                needs_proxy: true,
+            },
+        ))
+    }
+}
+
 impl<'a> ClaimedUdpPacketPathLeaf<'a> for ClaimedShadowsocksPacketPathLeaf {
     fn prepare_udp_packet_path(&self) -> Option<Box<dyn PreparedUdpPacketPathOperation + 'a>> {
         Some(Box::new(ShadowsocksPacketPathOperation {
@@ -113,6 +141,15 @@ pub(crate) fn managed_datagram_handler() -> Box<dyn ManagedDatagramFlowHandler> 
 }
 
 impl ShadowsocksAdapter {
+    pub(super) fn claim_udp_flow_leaf_impl<'a>(
+        &self,
+        leaf: ResolvedLeafOutbound<'a>,
+    ) -> Option<Box<dyn ClaimedUdpFlowLeaf<'a> + 'a>> {
+        Some(Box::new(ClaimedShadowsocksUdpLeaf {
+            leaf: super::transport_leaf(&leaf)?,
+        }))
+    }
+
     pub(super) fn claim_udp_packet_path_leaf_impl<'a>(
         &self,
         leaf: ResolvedLeafOutbound<'a>,

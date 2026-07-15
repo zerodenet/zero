@@ -784,6 +784,76 @@ fn packet_path_adapters_offer_claim_time_projection() {
 }
 
 #[test]
+fn non_transport_bridge_adapters_offer_claim_time_tcp_projection() {
+    for relative in [
+        "adapters/direct.rs",
+        "adapters/socks5.rs",
+        "adapters/shadowsocks.rs",
+        "adapters/hysteria2.rs",
+        "adapters/mieru.rs",
+    ] {
+        let source = read(&proxy_src().join(relative));
+        assert!(
+            source.contains("fn claim_tcp_outbound_leaf<'a>("),
+            "{relative} should expose a claim-time TCP leaf projection path"
+        );
+    }
+
+    for relative in [
+        "adapters/direct/tcp.rs",
+        "adapters/socks5/tcp.rs",
+        "adapters/shadowsocks/tcp.rs",
+        "adapters/hysteria2/tcp.rs",
+        "adapters/mieru/tcp.rs",
+    ] {
+        let source = read(&proxy_src().join(relative));
+        assert!(
+            source.contains("ClaimedTcpOutboundLeaf"),
+            "{relative} should materialize TCP leaves into claimed projections"
+        );
+        assert!(
+            source.contains("claim_tcp_outbound_leaf_impl"),
+            "{relative} should own the TCP claim-time projection helper"
+        );
+    }
+}
+
+#[test]
+fn non_transport_bridge_adapters_offer_claim_time_udp_projection() {
+    for relative in [
+        "adapters/direct.rs",
+        "adapters/socks5.rs",
+        "adapters/shadowsocks.rs",
+        "adapters/hysteria2.rs",
+        "adapters/mieru.rs",
+    ] {
+        let source = read(&proxy_src().join(relative));
+        assert!(
+            source.contains("fn claim_udp_flow_leaf<'a>("),
+            "{relative} should expose a claim-time UDP leaf projection path"
+        );
+    }
+
+    for relative in [
+        "adapters/direct/udp.rs",
+        "adapters/socks5/udp.rs",
+        "adapters/shadowsocks/udp.rs",
+        "adapters/hysteria2/udp.rs",
+        "adapters/mieru/udp.rs",
+    ] {
+        let source = read(&proxy_src().join(relative));
+        assert!(
+            source.contains("ClaimedUdpFlowLeaf"),
+            "{relative} should materialize UDP flow plans into claimed projections"
+        );
+        assert!(
+            source.contains("claim_udp_flow_leaf_impl"),
+            "{relative} should own the UDP claim-time projection helper"
+        );
+    }
+}
+
+#[test]
 fn urltest_probe_uses_generic_tcp_outbound_dispatch() {
     let urltest = read(&proxy_src().join("groups/urltest.rs"));
     assert!(urltest.contains("dispatch_tcp_outbound("));

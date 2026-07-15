@@ -11,8 +11,9 @@ use crate::adapters::identity::{
     named_protocol_supports_outbound, NamedProtocolAdapter,
 };
 use crate::protocol_registry::{
-    proxy_leaf_runtime, InboundListenerCapability, ManagedUdpHandlerProvider, OutboundLeafRuntime,
-    ProtocolSupportCapability, TcpOutboundCapability, UdpFlowCapability, UdpPacketPathCapability,
+    proxy_leaf_runtime, ClaimedTcpOutboundLeaf, ClaimedUdpFlowLeaf, InboundListenerCapability,
+    ManagedUdpHandlerProvider, OutboundLeafRuntime, ProtocolSupportCapability,
+    TcpOutboundCapability, UdpFlowCapability, UdpPacketPathCapability,
 };
 use crate::runtime::path::TcpPathCategory;
 use crate::runtime::udp_dispatch::FlowFailure;
@@ -55,6 +56,13 @@ impl NamedProtocolAdapter for MieruAdapter {
 #[cfg(feature = "mieru")]
 #[async_trait]
 impl UdpFlowCapability for MieruAdapter {
+    fn claim_udp_flow_leaf<'a>(
+        &self,
+        leaf: ResolvedLeafOutbound<'a>,
+    ) -> Option<Box<dyn ClaimedUdpFlowLeaf<'a> + 'a>> {
+        self.claim_udp_flow_leaf_impl(leaf)
+    }
+
     fn prepare_udp_flow<'a>(
         &self,
         leaf: ResolvedLeafOutbound<'a>,
@@ -107,6 +115,13 @@ impl InboundListenerCapability for MieruAdapter {
 impl TcpOutboundCapability for MieruAdapter {
     fn claims_outbound_leaf(&self, leaf: &ResolvedLeafOutbound<'_>) -> bool {
         named_protocol_claims_runtime_leaf::<Self>(leaf)
+    }
+
+    fn claim_tcp_outbound_leaf<'a>(
+        &self,
+        leaf: ResolvedLeafOutbound<'a>,
+    ) -> Option<Box<dyn ClaimedTcpOutboundLeaf<'a> + 'a>> {
+        self.claim_tcp_outbound_leaf_impl(leaf)
     }
 
     fn outbound_leaf_runtime(

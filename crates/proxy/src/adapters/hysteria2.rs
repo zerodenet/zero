@@ -11,9 +11,10 @@ use crate::adapters::identity::{
     named_protocol_supports_outbound, NamedProtocolAdapter,
 };
 use crate::protocol_registry::{
-    bind_transport_inbound, proxy_leaf_runtime, BoundInbound, ClaimedUdpPacketPathLeaf,
-    InboundListenerCapability, ManagedUdpHandlerProvider, OutboundLeafRuntime,
-    ProtocolSupportCapability, TcpOutboundCapability, UdpFlowCapability, UdpPacketPathCapability,
+    bind_transport_inbound, proxy_leaf_runtime, BoundInbound, ClaimedTcpOutboundLeaf,
+    ClaimedUdpFlowLeaf, ClaimedUdpPacketPathLeaf, InboundListenerCapability,
+    ManagedUdpHandlerProvider, OutboundLeafRuntime, ProtocolSupportCapability,
+    TcpOutboundCapability, UdpFlowCapability, UdpPacketPathCapability,
 };
 use crate::runtime::path::TcpPathCategory;
 use crate::runtime::udp_dispatch::FlowFailure;
@@ -85,6 +86,13 @@ impl UdpPacketPathCapability for Hysteria2Adapter {
 #[cfg(feature = "hysteria2")]
 #[async_trait]
 impl UdpFlowCapability for Hysteria2Adapter {
+    fn claim_udp_flow_leaf<'a>(
+        &self,
+        leaf: ResolvedLeafOutbound<'a>,
+    ) -> Option<Box<dyn ClaimedUdpFlowLeaf<'a> + 'a>> {
+        self.claim_udp_flow_leaf_impl(leaf)
+    }
+
     fn prepare_udp_flow<'a>(
         &self,
         leaf: ResolvedLeafOutbound<'a>,
@@ -148,6 +156,13 @@ impl InboundListenerCapability for Hysteria2Adapter {
 impl TcpOutboundCapability for Hysteria2Adapter {
     fn claims_outbound_leaf(&self, leaf: &ResolvedLeafOutbound<'_>) -> bool {
         named_protocol_claims_runtime_leaf::<Self>(leaf)
+    }
+
+    fn claim_tcp_outbound_leaf<'a>(
+        &self,
+        leaf: ResolvedLeafOutbound<'a>,
+    ) -> Option<Box<dyn ClaimedTcpOutboundLeaf<'a> + 'a>> {
+        self.claim_tcp_outbound_leaf_impl(leaf)
     }
 
     fn outbound_leaf_runtime(
