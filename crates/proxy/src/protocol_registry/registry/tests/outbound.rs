@@ -100,18 +100,24 @@ fn udp_outbound_leaf_lookup_matches_tcp_claim_policy() {
     feature = "mieru"
 ))]
 #[test]
-fn packet_path_leaf_lookup_matches_tcp_claim_policy() {
+fn packet_path_leaf_lookup_matches_claim_time_packet_path_projection() {
     let registry = crate::register::protocol_registry();
 
-    for (leaf, expected_claims) in compiled_in_outbound_leaves() {
+    for (leaf, _) in compiled_in_outbound_leaves() {
+        let expected_packet_path = matches!(
+            leaf,
+            ResolvedLeafOutbound::Socks5 { .. }
+                | ResolvedLeafOutbound::Hysteria2 { .. }
+                | ResolvedLeafOutbound::Shadowsocks { .. }
+        );
         let claimed = registry.claim_outbound_leaf(leaf.clone());
         assert_eq!(
             claimed
                 .as_ref()
                 .map(|claim| claim.has_udp_packet_path_capability())
                 .ok(),
-            Some(expected_claims == 1),
-            "{} claimed packet-path lookup should follow the same claim policy as tcp outbound lookup",
+            Some(expected_packet_path),
+            "{} claimed packet-path lookup should only expose adapters with packet-path claim-time projection",
             outbound_leaf_name(&leaf)
         );
     }
@@ -643,15 +649,6 @@ fn registry_executes_adapter_claimed_udp_packet_path_operations() {
                 ResolvedLeafOutbound::Socks5 { .. } => Some(Box::new(FakeClaimedUdpPacketPathLeaf)),
                 _ => None,
             }
-        }
-
-        fn prepare_udp_packet_path<'a>(
-            &self,
-            _leaf: ResolvedLeafOutbound<'a>,
-        ) -> Option<Box<dyn PreparedUdpPacketPathOperation + 'a>> {
-            panic!(
-                "fallback packet-path prepare should not run once the adapter provides a claimed leaf"
-            )
         }
     }
 

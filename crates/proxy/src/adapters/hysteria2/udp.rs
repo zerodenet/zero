@@ -123,14 +123,4 @@ impl Hysteria2Adapter {
             plan: leaf.udp_packet_path_plan(),
         }))
     }
-
-    pub(super) fn prepare_udp_packet_path_impl<'a>(
-        &self,
-        leaf: ResolvedLeafOutbound<'a>,
-    ) -> Option<Box<dyn PreparedUdpPacketPathOperation + 'a>> {
-        let leaf = super::transport_leaf(&leaf)?;
-        Some(Box::new(Hysteria2PacketPathOperation {
-            plan: leaf.udp_packet_path_plan(),
-        }))
-    }
 }

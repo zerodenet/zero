@@ -56,18 +56,6 @@ impl UdpPacketPathCapability for ShadowsocksAdapter {
     ) -> Option<Box<dyn ClaimedUdpPacketPathLeaf<'a> + 'a>> {
         self.claim_udp_packet_path_leaf_impl(leaf)
     }
-
-    fn prepare_udp_packet_path<'a>(
-        &self,
-        leaf: ResolvedLeafOutbound<'a>,
-    ) -> Option<
-        Box<
-            dyn crate::runtime::udp_dispatch::packet_path_operation::PreparedUdpPacketPathOperation
-                + 'a,
-        >,
-    > {
-        self.prepare_udp_packet_path_impl(leaf)
-    }
 }
 
 #[cfg(feature = "shadowsocks")]

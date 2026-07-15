@@ -9,9 +9,9 @@ use zero_traits::{ProtocolCapabilityDescriptor, ProtocolMetadata};
 
 use crate::protocol_catalog::protocol_descriptor;
 use crate::protocol_registry::{
-    ClaimedTcpOutboundLeaf, ClaimedUdpFlowLeaf, InboundListenerCapability, OutboundLeafRuntime,
-    ProtocolSupportCapability, TcpOutboundCapability, TcpRuntimeServices, UdpFlowCapability,
-    UdpPacketPathCapability,
+    ClaimedTcpOutboundLeaf, ClaimedUdpFlowLeaf, ClaimedUdpPacketPathLeaf,
+    InboundListenerCapability, OutboundLeafRuntime, ProtocolSupportCapability,
+    TcpOutboundCapability, TcpRuntimeServices, UdpFlowCapability, UdpPacketPathCapability,
 };
 use crate::runtime::path::{OutboundEndpoint, TcpPathCategory};
 use crate::runtime::tcp_dispatch::operation::{
@@ -517,6 +517,18 @@ struct FakePacketPathOperation {
     calls: Arc<TcpCapabilityCalls>,
 }
 
+struct FakeClaimedUdpPacketPathLeaf {
+    calls: Arc<TcpCapabilityCalls>,
+}
+
+impl<'a> ClaimedUdpPacketPathLeaf<'a> for FakeClaimedUdpPacketPathLeaf {
+    fn prepare_udp_packet_path(&self) -> Option<Box<dyn PreparedUdpPacketPathOperation + 'a>> {
+        Some(Box::new(FakePacketPathOperation {
+            calls: self.calls.clone(),
+        }))
+    }
+}
+
 impl PreparedUdpPacketPathOperation for FakePacketPathOperation {
     fn carrier_descriptor(
         &self,
@@ -572,11 +584,11 @@ impl PreparedUdpPacketPathOperation for FakePacketPathOperation {
 }
 
 impl UdpPacketPathCapability for FakeTcpCapability {
-    fn prepare_udp_packet_path<'a>(
+    fn claim_udp_packet_path_leaf<'a>(
         &self,
         _: ResolvedLeafOutbound<'a>,
-    ) -> Option<Box<dyn PreparedUdpPacketPathOperation + 'a>> {
-        Some(Box::new(FakePacketPathOperation {
+    ) -> Option<Box<dyn ClaimedUdpPacketPathLeaf<'a> + 'a>> {
+        Some(Box::new(FakeClaimedUdpPacketPathLeaf {
             calls: self.calls.clone(),
         }))
     }

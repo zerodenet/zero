@@ -214,7 +214,6 @@ pub(crate) trait ManagedUdpHandlerProvider: Send + Sync {
     }
 }
 
-#[async_trait]
 #[cfg(any(
     feature = "socks5",
     feature = "vless",
@@ -229,18 +228,6 @@ pub(crate) trait UdpPacketPathCapability: Send + Sync {
         &self,
         _leaf: ResolvedLeafOutbound<'a>,
     ) -> Option<Box<dyn ClaimedUdpPacketPathLeaf<'a> + 'a>> {
-        None
-    }
-
-    fn prepare_udp_packet_path<'a>(
-        &self,
-        _leaf: ResolvedLeafOutbound<'a>,
-    ) -> Option<
-        Box<
-            dyn crate::runtime::udp_dispatch::packet_path_operation::PreparedUdpPacketPathOperation
-                + 'a,
-        >,
-    > {
         None
     }
 }

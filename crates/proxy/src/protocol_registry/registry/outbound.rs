@@ -40,24 +40,6 @@ use crate::runtime::udp_dispatch::operation::PreparedUdpFlowOperation;
 ))]
 use crate::transport::RelayCarrier;
 
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
-))]
-type UdpPacketPathPrepareHook<'a> = dyn Fn() -> Option<
-        Box<
-            dyn crate::runtime::udp_dispatch::packet_path_operation::PreparedUdpPacketPathOperation
-                + 'a,
-        >,
-    > + Send
-    + Sync
-    + 'a;
-
 #[derive(Clone, Default)]
 struct ClaimedTcpHooks<'a> {
     capability: Option<Arc<dyn ClaimedTcpOutboundLeaf<'a> + 'a>>,
@@ -289,41 +271,6 @@ impl<'a> ClaimedOutboundLeaf<'a> {
     }
 }
 
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
-))]
-struct HookClaimedUdpPacketPathLeaf<'a> {
-    prepare: Arc<UdpPacketPathPrepareHook<'a>>,
-}
-
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
-))]
-impl<'a> ClaimedUdpPacketPathLeaf<'a> for HookClaimedUdpPacketPathLeaf<'a> {
-    fn prepare_udp_packet_path(
-        &self,
-    ) -> Option<
-        Box<
-            dyn crate::runtime::udp_dispatch::packet_path_operation::PreparedUdpPacketPathOperation
-                + 'a,
-        >,
-    > {
-        (self.prepare)()
-    }
-}
-
 fn build_tcp_hooks<'a>(
     entry: Option<&RegisteredProtocolEntry>,
     leaf: ResolvedLeafOutbound<'a>,
@@ -356,18 +303,11 @@ fn build_udp_hooks<'a>(
     let Some(entry) = entry else {
         return Ok(ClaimedUdpHooks::default());
     };
-    let packet_path = entry.packet_path.as_ref().map(|packet_path| {
-        if let Some(claimed) = packet_path.claim_udp_packet_path_leaf(leaf.clone()) {
-            Arc::from(claimed) as Arc<dyn ClaimedUdpPacketPathLeaf<'a> + 'a>
-        } else {
-            let packet_path = packet_path.clone();
-            let leaf = leaf.clone();
-            Arc::new(HookClaimedUdpPacketPathLeaf {
-                prepare: Arc::new(move || packet_path.prepare_udp_packet_path(leaf.clone()))
-                    as Arc<UdpPacketPathPrepareHook<'a>>,
-            }) as Arc<dyn ClaimedUdpPacketPathLeaf<'a> + 'a>
-        }
-    });
+    let packet_path = entry
+        .packet_path
+        .as_ref()
+        .and_then(|packet_path| packet_path.claim_udp_packet_path_leaf(leaf.clone()))
+        .map(|claimed| Arc::from(claimed) as Arc<dyn ClaimedUdpPacketPathLeaf<'a> + 'a>);
     let Some(udp) = entry.udp.clone() else {
         return Ok(ClaimedUdpHooks {
             packet_path,

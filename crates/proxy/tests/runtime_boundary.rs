@@ -698,12 +698,16 @@ fn claimed_outbound_leaf_owns_capability_preparation() {
     assert!(outbound.contains("struct ClaimedUdpHooks"));
     assert!(!outbound.contains("HookClaimedTcpLeaf"));
     assert!(!outbound.contains("HookClaimedUdpLeaf"));
+    assert!(!outbound.contains("HookClaimedUdpPacketPathLeaf"));
     assert!(!outbound.contains("self.leaf"));
     assert!(!capability.contains(
         "fn prepare_tcp_connect<'a>(\n        &self,\n        _leaf: ResolvedLeafOutbound<'a>,"
     ));
     assert!(!capability.contains(
         "fn prepare_udp_flow<'a>(\n        &self,\n        _leaf: ResolvedLeafOutbound<'a>,"
+    ));
+    assert!(!capability.contains(
+        "fn prepare_udp_packet_path<'a>(\n        &self,\n        _leaf: ResolvedLeafOutbound<'a>,"
     ));
 }
 

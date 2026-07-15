@@ -157,14 +157,4 @@ impl ShadowsocksAdapter {
             plan: leaf.udp_packet_path_plan().ok()?,
         }))
     }
-
-    pub(super) fn prepare_udp_packet_path_impl<'a>(
-        &self,
-        leaf: ResolvedLeafOutbound<'a>,
-    ) -> Option<Box<dyn PreparedUdpPacketPathOperation + 'a>> {
-        let leaf = super::transport_leaf(&leaf)?;
-        Some(Box::new(ShadowsocksPacketPathOperation {
-            plan: leaf.udp_packet_path_plan().ok()?,
-        }))
-    }
 }
