@@ -9,6 +9,7 @@ use zero_transport::RuntimeError;
 mod inbound;
 mod leaf;
 mod model;
+mod options;
 mod tcp;
 mod upstream;
 
@@ -19,6 +20,7 @@ pub use model::{
     Socks5ManagedUdpPacketPathCarrierBuild, Socks5ManagedUdpPacketPathCarrierDescriptor,
     Socks5ManagedUdpPacketPathPlan, Socks5TransportLeaf, Socks5UpstreamAssociationCloseReason,
 };
+pub use options::{Socks5InboundUserRef, Socks5OutboundOptionsRef};
 pub use tcp::{apply_socks5_tcp_relay_hop, establish_socks5_tcp_connect};
 pub use upstream::{
     establish_packet_path_udp_association, establish_registered_udp_association,

@@ -5,6 +5,7 @@ use zero_traits::AsyncSocket;
 use zero_transport::RuntimeError;
 
 use super::{
+    options::{Hysteria2InboundBindOptionsRef, Hysteria2InboundOptionsRef},
     quic_alpn_protocols, Hysteria2AuthenticatedInboundProfile,
     Hysteria2AuthenticatedQuicConnection, Hysteria2InboundTcpResponseProtocol, Hysteria2Stream,
 };
@@ -17,6 +18,13 @@ pub struct Hysteria2InboundBindPlan {
 }
 
 impl Hysteria2InboundBindPlan {
+    pub fn from_options_refs(
+        source_dir: Option<&Path>,
+        options: Hysteria2InboundBindOptionsRef<'_>,
+    ) -> Self {
+        Self::from_paths(source_dir, options.cert_path, options.key_path)
+    }
+
     pub fn from_paths(
         source_dir: Option<&Path>,
         cert_path: Option<&str>,
@@ -63,6 +71,12 @@ pub fn inbound_profile_from_password(password: &str) -> Hysteria2AuthenticatedIn
     Hysteria2AuthenticatedInboundProfile::new(crate::inbound::inbound_profile_from_config_password(
         password,
     ))
+}
+
+pub fn inbound_profile_from_options(
+    options: Hysteria2InboundOptionsRef<'_>,
+) -> Hysteria2AuthenticatedInboundProfile {
+    inbound_profile_from_password(options.password)
 }
 
 pub fn inbound_tcp_acceptor() -> Hysteria2InboundTcpResponseProtocol {

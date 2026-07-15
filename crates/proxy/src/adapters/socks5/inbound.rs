@@ -1,6 +1,6 @@
 mod listener;
 
-use ::socks5::transport::{inbound_acceptor_from_users, Socks5InboundAcceptor};
+use ::socks5::transport::{Socks5InboundAcceptor, Socks5InboundUserRef};
 use zero_config::{InboundConfig, InboundProtocolConfig};
 use zero_engine::EngineError;
 
@@ -21,14 +21,14 @@ impl Socks5Adapter {
     > {
         let acceptor = match &inbound.protocol {
             InboundProtocolConfig::Socks5 { users } => {
-                inbound_acceptor_from_users(users.iter().map(|user| {
-                    (
-                        user.username.as_str(),
-                        user.password.as_str(),
-                        user.principal_key.as_deref(),
-                        user.up_bps,
-                        user.down_bps,
-                    )
+                Socks5InboundAcceptor::from_options_refs(users.iter().map(|user| {
+                    Socks5InboundUserRef {
+                        username: user.username.as_str(),
+                        password: user.password.as_str(),
+                        principal_key: user.principal_key.as_deref(),
+                        up_bps: user.up_bps,
+                        down_bps: user.down_bps,
+                    }
                 }))
             }
             _ => {

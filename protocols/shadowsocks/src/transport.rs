@@ -10,10 +10,13 @@ use zero_transport::RuntimeError;
 mod inbound;
 mod leaf;
 mod model;
+mod options;
 mod tcp;
 mod udp_socket;
 
-pub use inbound::inbound_listener_parts_from_cipher_password;
+pub use inbound::{
+    inbound_listener_parts_from_cipher_password, inbound_listener_parts_from_options,
+};
 pub use model::{
     ShadowsocksInboundTcpAcceptor, ShadowsocksManagedDatagramFlowResume,
     ShadowsocksManagedUdpFlowConfig, ShadowsocksManagedUdpFlowPlan,
@@ -21,6 +24,7 @@ pub use model::{
     ShadowsocksManagedUdpPacketPathDatagramSourceBuild, ShadowsocksManagedUdpPacketPathPlan,
     ShadowsocksTransportLeaf, ShadowsocksUdpResponse,
 };
+pub use options::{ShadowsocksInboundOptionsRef, ShadowsocksOutboundOptionsRef};
 pub use tcp::{apply_shadowsocks_tcp_relay_hop, establish_shadowsocks_tcp_connect};
 pub use udp_socket::{
     establish_shadowsocks_udp_socket_flow, establish_shadowsocks_udp_socket_flow_with_resume,

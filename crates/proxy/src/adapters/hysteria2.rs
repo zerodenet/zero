@@ -1,7 +1,9 @@
 use async_trait::async_trait;
 
-use ::hysteria2::transport::Hysteria2InboundBindPlan;
-use ::hysteria2::transport::Hysteria2TransportLeaf;
+use ::hysteria2::transport::{
+    Hysteria2InboundBindOptionsRef, Hysteria2InboundBindPlan, Hysteria2OutboundOptionsRef,
+    Hysteria2TransportLeaf,
+};
 use zero_config::{InboundConfig, InboundProtocolConfig, OutboundProtocolConfig};
 use zero_engine::{EngineError, ResolvedLeafOutbound};
 use zero_traits::{ProtocolCapabilityDescriptor, ProtocolMetadata};
@@ -39,14 +41,14 @@ fn transport_leaf(leaf: &ResolvedLeafOutbound<'_>) -> Option<Hysteria2TransportL
     else {
         return None;
     };
-    Some(Hysteria2TransportLeaf::new(
-        *tag,
-        *server,
+    Some(Hysteria2TransportLeaf::from_options_refs(
+        tag,
+        server,
         *port,
-        *password,
-        client_fingerprint
-            .as_ref()
-            .map(|client_fingerprint| (*client_fingerprint).to_owned()),
+        Hysteria2OutboundOptionsRef {
+            password,
+            client_fingerprint: client_fingerprint.as_deref(),
+        },
     ))
 }
 
@@ -102,10 +104,12 @@ impl InboundListenerCapability for Hysteria2Adapter {
                 "hysteria2 inbound bind received non-hysteria2 inbound config",
             )));
         };
-        let plan = Hysteria2InboundBindPlan::from_paths(
+        let plan = Hysteria2InboundBindPlan::from_options_refs(
             source_dir,
-            cert_path.as_deref(),
-            key_path.as_deref(),
+            Hysteria2InboundBindOptionsRef {
+                cert_path: cert_path.as_deref(),
+                key_path: key_path.as_deref(),
+            },
         );
         bind_transport_inbound(inbound, plan).await
     }

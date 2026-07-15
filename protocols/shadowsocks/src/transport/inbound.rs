@@ -7,6 +7,7 @@ use zero_transport::RuntimeError;
 use super::model::{
     ShadowsocksInboundBindings, ShadowsocksInboundProfile, ShadowsocksInboundTcpAcceptor,
 };
+use super::ShadowsocksInboundOptionsRef;
 
 pub fn inbound_listener_parts_from_cipher_password(
     cipher: &str,
@@ -27,6 +28,18 @@ pub fn inbound_listener_parts_from_cipher_password(
                 format!("invalid shadowsocks inbound profile: {error}"),
             ))
         })
+}
+
+pub fn inbound_listener_parts_from_options(
+    options: ShadowsocksInboundOptionsRef<'_>,
+) -> Result<
+    (
+        ShadowsocksInboundTcpAcceptor,
+        crate::udp::ShadowsocksInboundUdpRelay,
+    ),
+    RuntimeError,
+> {
+    inbound_listener_parts_from_cipher_password(options.cipher, options.password)
 }
 
 impl ShadowsocksInboundProfile {

@@ -6,7 +6,7 @@ use super::{
     connect_hysteria2_tcp_outbound, Hysteria2ManagedDatagramFlowResume,
     Hysteria2ManagedUdpFlowConfig, Hysteria2ManagedUdpFlowPlan,
     Hysteria2ManagedUdpPacketPathCarrierBuild, Hysteria2ManagedUdpPacketPathCarrierDescriptor,
-    Hysteria2ManagedUdpPacketPathPlan, Hysteria2TransportLeaf,
+    Hysteria2ManagedUdpPacketPathPlan, Hysteria2OutboundOptionsRef, Hysteria2TransportLeaf,
 };
 
 impl<'a> Hysteria2ManagedUdpFlowConfig<'a> {
@@ -69,6 +69,21 @@ impl<'a> Hysteria2ManagedUdpFlowConfig<'a> {
 }
 
 impl Hysteria2TransportLeaf {
+    pub fn from_options_refs(
+        tag: &str,
+        server: &str,
+        port: u16,
+        options: Hysteria2OutboundOptionsRef<'_>,
+    ) -> Self {
+        Self::new(
+            tag,
+            server,
+            port,
+            options.password,
+            options.client_fingerprint.map(String::from),
+        )
+    }
+
     pub fn new(
         tag: impl Into<String>,
         server: impl Into<String>,

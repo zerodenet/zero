@@ -1,6 +1,7 @@
 //! Mieru transport-owned UDP bridge helpers.
 
 mod managed_udp;
+mod options;
 
 use core::future::Future;
 
@@ -14,6 +15,7 @@ use zero_transport::RuntimeError;
 use zero_transport::StreamTraffic;
 
 pub use managed_udp::{MieruManagedStreamUdpResume, MieruManagedUdpFlowConfig};
+pub use options::{MieruInboundUserRef, MieruOutboundOptionsRef};
 
 #[derive(Debug, Clone)]
 pub struct MieruInboundListenerRequest {
@@ -91,10 +93,23 @@ pub fn inbound_listener_request_from_users<'a, I>(users: I) -> MieruInboundListe
 where
     I: IntoIterator<Item = (&'a str, &'a str)>,
 {
-    MieruInboundListenerRequest::new(crate::inbound::inbound_profile_from_config_users(users))
+    MieruInboundListenerRequest::from_options_refs(
+        users
+            .into_iter()
+            .map(|(username, password)| MieruInboundUserRef { username, password }),
+    )
 }
 
 impl MieruInboundListenerRequest {
+    pub fn from_options_refs<'a, I>(users: I) -> Self
+    where
+        I: IntoIterator<Item = MieruInboundUserRef<'a>>,
+    {
+        Self::new(crate::inbound::inbound_profile_from_config_users(
+            users.into_iter().map(|user| (user.username, user.password)),
+        ))
+    }
+
     fn new(protocol: crate::inbound::MieruInboundProfile) -> Self {
         Self { protocol }
     }
@@ -154,6 +169,15 @@ where
 }
 
 impl MieruTransportLeaf {
+    pub fn from_options_refs(
+        tag: &str,
+        server: &str,
+        port: u16,
+        options: MieruOutboundOptionsRef<'_>,
+    ) -> Self {
+        Self::new(tag, server, port, options.username, options.password)
+    }
+
     pub fn new(tag: &str, server: &str, port: u16, username: &str, password: &str) -> Self {
         Self {
             tag: tag.to_owned(),

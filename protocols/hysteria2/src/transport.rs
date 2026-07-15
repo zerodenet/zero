@@ -9,12 +9,15 @@ mod connection;
 mod inbound;
 mod managed_udp;
 mod model;
+mod options;
 mod projection;
 mod stream;
 
 pub use connection::open_quic_connection;
 pub use inbound::Hysteria2InboundBindPlan;
-pub use inbound::{inbound_profile_from_password, inbound_tcp_acceptor};
+pub use inbound::{
+    inbound_profile_from_options, inbound_profile_from_password, inbound_tcp_acceptor,
+};
 pub use managed_udp::{
     establish_hysteria2_udp_flow_connection, managed_datagram_connector_flow_from_resume,
     open_hysteria2_udp_packet_path_build,
@@ -27,6 +30,9 @@ pub use model::{
     Hysteria2ManagedUdpPacketPathPlan, Hysteria2TransportLeaf,
 };
 pub use model::{Hysteria2QuicProfile, QuicConnectionOptions};
+pub use options::{
+    Hysteria2InboundBindOptionsRef, Hysteria2InboundOptionsRef, Hysteria2OutboundOptionsRef,
+};
 pub use projection::{
     udp_flow_resume_from_config, udp_packet_path_carrier_build_from_config,
     udp_packet_path_carrier_descriptor_from_config,

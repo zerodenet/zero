@@ -1,4 +1,4 @@
-use ::mieru::transport::MieruTransportLeaf;
+use ::mieru::transport::{MieruOutboundOptionsRef, MieruTransportLeaf};
 
 use zero_config::{InboundConfig, InboundProtocolConfig, OutboundProtocolConfig};
 use zero_engine::{EngineError, ResolvedLeafOutbound};
@@ -36,8 +36,11 @@ fn transport_leaf(leaf: &ResolvedLeafOutbound<'_>) -> Option<MieruTransportLeaf>
     else {
         return None;
     };
-    Some(MieruTransportLeaf::new(
-        tag, server, *port, username, password,
+    Some(MieruTransportLeaf::from_options_refs(
+        tag,
+        server,
+        *port,
+        MieruOutboundOptionsRef { username, password },
     ))
 }
 

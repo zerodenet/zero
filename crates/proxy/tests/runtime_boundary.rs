@@ -675,12 +675,11 @@ fn vmess_listener_adapter_uses_protocol_runtime_input_refs() {
 #[test]
 fn trojan_adapter_uses_protocol_option_refs_instead_of_direct_config_constructors() {
     let adapter = read(&proxy_src().join("adapters/trojan.rs"));
-    for forbidden in ["TrojanOutboundLeaf::from_config_refs"] {
-        assert!(
-            !adapter.contains(forbidden),
-            "adapters/trojan.rs must not construct Trojan outbound leaves via `{forbidden}`"
-        );
-    }
+    let forbidden = "TrojanOutboundLeaf::from_config_refs";
+    assert!(
+        !adapter.contains(forbidden),
+        "adapters/trojan.rs must not construct Trojan outbound leaves via `{forbidden}`"
+    );
     for required in [
         "TrojanOutboundOptionsRef",
         "TrojanOutboundLeaf::from_options_refs",
@@ -688,6 +687,193 @@ fn trojan_adapter_uses_protocol_option_refs_instead_of_direct_config_constructor
         assert!(
             adapter.contains(required),
             "adapters/trojan.rs should project through protocol-owned Trojan option surface `{required}`"
+        );
+    }
+}
+
+#[test]
+fn hysteria2_adapter_uses_protocol_bind_option_refs() {
+    let adapter = read(&proxy_src().join("adapters/hysteria2.rs"));
+    let forbidden = "Hysteria2InboundBindPlan::from_paths";
+    assert!(
+        !adapter.contains(forbidden),
+        "adapters/hysteria2.rs must not build hysteria2 bind plans via `{forbidden}`"
+    );
+    for required in [
+        "Hysteria2InboundBindOptionsRef",
+        "Hysteria2InboundBindPlan::from_options_refs",
+    ] {
+        assert!(
+            adapter.contains(required),
+            "adapters/hysteria2.rs should project through protocol-owned hysteria2 bind option surface `{required}`"
+        );
+    }
+}
+
+#[test]
+fn hysteria2_adapter_uses_protocol_outbound_option_refs() {
+    let adapter = read(&proxy_src().join("adapters/hysteria2.rs"));
+    let forbidden = "Hysteria2TransportLeaf::new(";
+    assert!(
+        !adapter.contains(forbidden),
+        "adapters/hysteria2.rs must not construct hysteria2 transport leaves via `{forbidden}`"
+    );
+    for required in [
+        "Hysteria2OutboundOptionsRef",
+        "Hysteria2TransportLeaf::from_options_refs",
+    ] {
+        assert!(
+            adapter.contains(required),
+            "adapters/hysteria2.rs should project outbound through protocol-owned hysteria2 option surface `{required}`"
+        );
+    }
+}
+
+#[test]
+fn hysteria2_listener_adapter_uses_protocol_option_refs() {
+    let listener = read(&proxy_src().join("adapters/hysteria2/inbound.rs"));
+    let forbidden = "inbound_profile_from_password";
+    assert!(
+        !listener.contains(forbidden),
+        "adapters/hysteria2/inbound.rs must not construct hysteria2 inbound profile via `{forbidden}`"
+    );
+    for required in ["Hysteria2InboundOptionsRef", "inbound_profile_from_options"] {
+        assert!(
+            listener.contains(required),
+            "adapters/hysteria2/inbound.rs should project through protocol-owned hysteria2 option surface `{required}`"
+        );
+    }
+}
+
+#[test]
+fn mieru_adapter_uses_protocol_outbound_option_refs() {
+    let adapter = read(&proxy_src().join("adapters/mieru.rs"));
+    let forbidden = "MieruTransportLeaf::new(";
+    assert!(
+        !adapter.contains(forbidden),
+        "adapters/mieru.rs must not construct mieru transport leaves via `{forbidden}`"
+    );
+    for required in [
+        "MieruOutboundOptionsRef",
+        "MieruTransportLeaf::from_options_refs",
+    ] {
+        assert!(
+            adapter.contains(required),
+            "adapters/mieru.rs should project outbound through protocol-owned mieru option surface `{required}`"
+        );
+    }
+}
+
+#[test]
+fn mieru_listener_adapter_uses_protocol_option_refs() {
+    let listener = read(&proxy_src().join("adapters/mieru/inbound.rs"));
+    let forbidden = "inbound_listener_request_from_users";
+    assert!(
+        !listener.contains(forbidden),
+        "adapters/mieru/inbound.rs must not construct mieru inbound listener state via `{forbidden}`"
+    );
+    for required in [
+        "MieruInboundUserRef",
+        "MieruInboundListenerRequest::from_options_refs",
+    ] {
+        assert!(
+            listener.contains(required),
+            "adapters/mieru/inbound.rs should project through protocol-owned mieru option surface `{required}`"
+        );
+    }
+}
+
+#[test]
+fn shadowsocks_adapter_uses_protocol_outbound_option_refs() {
+    let adapter = read(&proxy_src().join("adapters/shadowsocks.rs"));
+    let forbidden = "ShadowsocksTransportLeaf::new(";
+    assert!(
+        !adapter.contains(forbidden),
+        "adapters/shadowsocks.rs must not construct shadowsocks transport leaves via `{forbidden}`"
+    );
+    for required in [
+        "ShadowsocksOutboundOptionsRef",
+        "ShadowsocksTransportLeaf::from_options_refs",
+    ] {
+        assert!(
+            adapter.contains(required),
+            "adapters/shadowsocks.rs should project outbound through protocol-owned shadowsocks option surface `{required}`"
+        );
+    }
+}
+
+#[test]
+fn shadowsocks_listener_adapter_uses_protocol_option_refs() {
+    let listener = read(&proxy_src().join("adapters/shadowsocks/inbound.rs"));
+    let forbidden = "inbound_listener_parts_from_cipher_password";
+    assert!(
+        !listener.contains(forbidden),
+        "adapters/shadowsocks/inbound.rs must not construct shadowsocks inbound listener state via `{forbidden}`"
+    );
+    for required in [
+        "ShadowsocksInboundOptionsRef",
+        "inbound_listener_parts_from_options",
+    ] {
+        assert!(
+            listener.contains(required),
+            "adapters/shadowsocks/inbound.rs should project through protocol-owned shadowsocks option surface `{required}`"
+        );
+    }
+}
+
+#[test]
+fn socks5_adapter_uses_protocol_outbound_option_refs() {
+    let adapter = read(&proxy_src().join("adapters/socks5.rs"));
+    let forbidden = "Socks5TransportLeaf::new(";
+    assert!(
+        !adapter.contains(forbidden),
+        "adapters/socks5.rs must not construct socks5 transport leaves via `{forbidden}`"
+    );
+    for required in [
+        "Socks5OutboundOptionsRef",
+        "Socks5TransportLeaf::from_options_refs",
+    ] {
+        assert!(
+            adapter.contains(required),
+            "adapters/socks5.rs should project outbound through protocol-owned socks5 option surface `{required}`"
+        );
+    }
+}
+
+#[test]
+fn socks5_listener_adapter_uses_protocol_option_refs() {
+    let listener = read(&proxy_src().join("adapters/socks5/inbound.rs"));
+    let forbidden = "inbound_acceptor_from_users";
+    assert!(
+        !listener.contains(forbidden),
+        "adapters/socks5/inbound.rs must not construct socks5 inbound acceptors via `{forbidden}`"
+    );
+    for required in [
+        "Socks5InboundUserRef",
+        "Socks5InboundAcceptor::from_options_refs",
+    ] {
+        assert!(
+            listener.contains(required),
+            "adapters/socks5/inbound.rs should project through protocol-owned socks5 option surface `{required}`"
+        );
+    }
+}
+
+#[test]
+fn mixed_listener_adapter_uses_protocol_socks5_option_refs() {
+    let listener = read(&proxy_src().join("adapters/mixed/inbound.rs"));
+    let forbidden = "inbound_acceptor_from_users";
+    assert!(
+        !listener.contains(forbidden),
+        "adapters/mixed/inbound.rs must not construct mixed socks5 acceptors via `{forbidden}`"
+    );
+    for required in [
+        "Socks5InboundUserRef",
+        "Socks5InboundAcceptor::from_options_refs",
+    ] {
+        assert!(
+            listener.contains(required),
+            "adapters/mixed/inbound.rs should project through protocol-owned socks5 option surface `{required}`"
         );
     }
 }

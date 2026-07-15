@@ -1,4 +1,4 @@
-use ::socks5::transport::{inbound_acceptor_from_users, Socks5InboundAcceptor};
+use ::socks5::transport::{Socks5InboundAcceptor, Socks5InboundUserRef};
 use zero_engine::EngineError;
 use zero_traits::AsyncSocket;
 
@@ -91,15 +91,15 @@ impl crate::adapters::mixed::MixedAdapter {
             )));
         };
         let request = MixedInboundRequest {
-            socks5_acceptor: inbound_acceptor_from_users(socks5_users.iter().map(|user| {
-                (
-                    user.username.as_str(),
-                    user.password.as_str(),
-                    user.principal_key.as_deref(),
-                    user.up_bps,
-                    user.down_bps,
-                )
-            })),
+            socks5_acceptor: Socks5InboundAcceptor::from_options_refs(socks5_users.iter().map(
+                |user| Socks5InboundUserRef {
+                    username: user.username.as_str(),
+                    password: user.password.as_str(),
+                    principal_key: user.principal_key.as_deref(),
+                    up_bps: user.up_bps,
+                    down_bps: user.down_bps,
+                },
+            )),
             http_handler: HttpConnectInboundHandler::default(),
         };
         Ok(Box::new(TcpInboundListenerOperation {

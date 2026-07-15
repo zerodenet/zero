@@ -12,13 +12,22 @@ use zero_transport::{ClientStream, MeteredStream};
 
 use super::{
     Socks5InboundAcceptor, Socks5InboundUdpAssociationHandler, Socks5InboundUdpAssociationSetup,
+    Socks5InboundUserRef,
 };
 
 pub fn inbound_acceptor_from_users<'a, I>(users: I) -> Socks5InboundAcceptor
 where
     I: IntoIterator<Item = (&'a str, &'a str, Option<&'a str>, Option<u64>, Option<u64>)>,
 {
-    Socks5InboundAcceptor::new(crate::Socks5InboundTcpAcceptor::from_config_users(users))
+    Socks5InboundAcceptor::from_options_refs(users.into_iter().map(
+        |(username, password, principal_key, up_bps, down_bps)| Socks5InboundUserRef {
+            username,
+            password,
+            principal_key,
+            up_bps,
+            down_bps,
+        },
+    ))
 }
 
 pub async fn setup_inbound_udp_association<S>(
@@ -48,6 +57,23 @@ where
 }
 
 impl Socks5InboundAcceptor {
+    pub fn from_options_refs<'a, I>(users: I) -> Self
+    where
+        I: IntoIterator<Item = Socks5InboundUserRef<'a>>,
+    {
+        Self::new(crate::Socks5InboundTcpAcceptor::from_config_users(
+            users.into_iter().map(|user| {
+                (
+                    user.username,
+                    user.password,
+                    user.principal_key,
+                    user.up_bps,
+                    user.down_bps,
+                )
+            }),
+        ))
+    }
+
     fn new(protocol: crate::Socks5InboundTcpAcceptor) -> Self {
         Self { protocol }
     }

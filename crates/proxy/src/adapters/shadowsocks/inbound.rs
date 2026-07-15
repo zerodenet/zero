@@ -1,5 +1,6 @@
 //! Shadowsocks inbound preparation and protocol handshake handoff.
 
+use ::shadowsocks::transport::ShadowsocksInboundOptionsRef;
 use zero_config::InboundProtocolConfig;
 use zero_engine::EngineError;
 
@@ -20,8 +21,11 @@ impl crate::adapters::shadowsocks::ShadowsocksAdapter {
         let profile = match &inbound.protocol {
             InboundProtocolConfig::Shadowsocks {
                 password, cipher, ..
-            } => ::shadowsocks::transport::inbound_listener_parts_from_cipher_password(
-                cipher, password,
+            } => ::shadowsocks::transport::inbound_listener_parts_from_options(
+                ShadowsocksInboundOptionsRef {
+                    cipher: cipher.as_str(),
+                    password: password.as_str(),
+                },
             )?,
             _ => {
                 return Err(EngineError::Io(std::io::Error::new(

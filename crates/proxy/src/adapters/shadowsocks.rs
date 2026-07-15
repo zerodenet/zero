@@ -1,4 +1,4 @@
-use ::shadowsocks::transport::ShadowsocksTransportLeaf;
+use ::shadowsocks::transport::{ShadowsocksOutboundOptionsRef, ShadowsocksTransportLeaf};
 use zero_config::{InboundConfig, InboundProtocolConfig, OutboundProtocolConfig};
 use zero_engine::{EngineError, ResolvedLeafOutbound};
 use zero_traits::{ProtocolCapabilityDescriptor, ProtocolMetadata};
@@ -35,8 +35,11 @@ fn transport_leaf(leaf: &ResolvedLeafOutbound<'_>) -> Option<ShadowsocksTranspor
     else {
         return None;
     };
-    Some(ShadowsocksTransportLeaf::new(
-        *tag, *server, *port, *cipher, *password,
+    Some(ShadowsocksTransportLeaf::from_options_refs(
+        tag,
+        server,
+        *port,
+        ShadowsocksOutboundOptionsRef { cipher, password },
     ))
 }
 

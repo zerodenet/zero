@@ -1,4 +1,4 @@
-use ::socks5::transport::Socks5TransportLeaf;
+use ::socks5::transport::{Socks5OutboundOptionsRef, Socks5TransportLeaf};
 use zero_config::{InboundConfig, InboundProtocolConfig, OutboundProtocolConfig};
 use zero_engine::{EngineError, ResolvedLeafOutbound};
 use zero_traits::{ProtocolCapabilityDescriptor, ProtocolMetadata};
@@ -35,12 +35,14 @@ fn transport_leaf(leaf: &ResolvedLeafOutbound<'_>) -> Option<Socks5TransportLeaf
     else {
         return None;
     };
-    Some(Socks5TransportLeaf::new(
-        *tag,
-        *server,
+    Some(Socks5TransportLeaf::from_options_refs(
+        tag,
+        server,
         *port,
-        username.as_ref().map(|username| (*username).to_owned()),
-        password.as_ref().map(|password| (*password).to_owned()),
+        Socks5OutboundOptionsRef {
+            username: username.as_deref(),
+            password: password.as_deref(),
+        },
     ))
 }
 

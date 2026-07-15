@@ -13,7 +13,7 @@ use super::{
     ShadowsocksManagedDatagramFlowResume, ShadowsocksManagedUdpFlowConfig,
     ShadowsocksManagedUdpFlowPlan, ShadowsocksManagedUdpPacketPathCarrierDescriptor,
     ShadowsocksManagedUdpPacketPathDatagramSourceBuild, ShadowsocksManagedUdpPacketPathPlan,
-    ShadowsocksTransportLeaf,
+    ShadowsocksOutboundOptionsRef, ShadowsocksTransportLeaf,
 };
 
 impl ProtocolTransportLeaf for ShadowsocksTransportLeaf {
@@ -53,6 +53,15 @@ impl ProtocolSocketTcpHandshake for ShadowsocksTransportLeaf {
 }
 
 impl ShadowsocksTransportLeaf {
+    pub fn from_options_refs(
+        tag: &str,
+        server: &str,
+        port: u16,
+        options: ShadowsocksOutboundOptionsRef<'_>,
+    ) -> Self {
+        Self::new(tag, server, port, options.cipher, options.password)
+    }
+
     pub fn new(
         tag: impl Into<String>,
         server: impl Into<String>,

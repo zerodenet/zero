@@ -13,7 +13,7 @@ use super::{
     apply_socks5_tcp_relay_hop, establish_socks5_tcp_connect, Socks5ManagedUdpFlowConfig,
     Socks5ManagedUdpFlowPlan, Socks5ManagedUdpPacketPathCarrierBuild,
     Socks5ManagedUdpPacketPathCarrierDescriptor, Socks5ManagedUdpPacketPathPlan,
-    Socks5TransportLeaf,
+    Socks5OutboundOptionsRef, Socks5TransportLeaf,
 };
 
 impl ProtocolTransportLeaf for Socks5TransportLeaf {
@@ -65,6 +65,21 @@ impl ProtocolSocketTcpHandshake for Socks5TransportLeaf {
 }
 
 impl Socks5TransportLeaf {
+    pub fn from_options_refs(
+        tag: &str,
+        server: &str,
+        port: u16,
+        options: Socks5OutboundOptionsRef<'_>,
+    ) -> Self {
+        Self::new(
+            tag,
+            server,
+            port,
+            options.username.map(String::from),
+            options.password.map(String::from),
+        )
+    }
+
     pub fn new(
         tag: impl Into<String>,
         server: impl Into<String>,
