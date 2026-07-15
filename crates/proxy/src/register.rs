@@ -66,7 +66,7 @@ fn compiled_protocol_registry() -> ProtocolRegistry {
     #[cfg(feature = "shadowsocks")]
     registry.register_managed_capability(Arc::new(ShadowsocksAdapter));
     #[cfg(feature = "trojan")]
-    registry.register_managed_capability(Arc::new(TrojanAdapter::default()));
+    registry.register_managed_capability(Arc::new(TrojanAdapter));
     #[cfg(feature = "vmess")]
     registry.register_managed_capability(Arc::new(VmessAdapter::default()));
     #[cfg(feature = "mieru")]
