@@ -695,9 +695,12 @@ fn claimed_outbound_leaf_owns_capability_preparation() {
     }
     assert!(!outbound.contains("pub(crate) struct ClaimedOutboundLeaf<'a> {\r\n    leaf:"));
     assert!(!outbound.contains("pub(crate) struct ClaimedOutboundLeaf<'a> {\n    leaf:"));
+    assert!(!outbound.contains("fn new(\n        _leaf: ResolvedLeafOutbound<'a>,"));
+    assert!(!outbound.contains("fn new(\r\n        _leaf: ResolvedLeafOutbound<'a>,"));
     assert!(outbound.contains("claim_tcp_outbound_leaf(leaf.clone())"));
     assert!(outbound.contains("claim_udp_flow_leaf(leaf.clone())"));
     assert!(outbound.contains("claim_udp_packet_path_leaf(leaf.clone())"));
+    assert!(outbound.contains("fn claim_udp_hooks<'a>("));
     assert!(outbound.contains("struct ClaimedTcpHooks"));
     assert!(outbound.contains("struct ClaimedUdpHooks"));
     assert!(!outbound.contains("HookClaimedTcpLeaf"));
@@ -705,6 +708,7 @@ fn claimed_outbound_leaf_owns_capability_preparation() {
     assert!(!outbound.contains("HookClaimedUdpPacketPathLeaf"));
     assert!(!outbound.contains("self.leaf"));
     assert!(outbound.contains("let runtime = claimed_tcp.runtime();"));
+    assert!(!outbound.contains("udp: build_udp_hooks("));
     assert!(!capability.contains(
         "fn prepare_tcp_connect<'a>(\n        &self,\n        _leaf: ResolvedLeafOutbound<'a>,"
     ));

@@ -78,12 +78,20 @@ pub(crate) struct ClaimedOutboundLeaf<'a> {
 
 impl<'a> ClaimedOutboundLeaf<'a> {
     fn new(
-        _leaf: ResolvedLeafOutbound<'a>,
         runtime: OutboundLeafRuntime,
         tcp: ClaimedTcpHooks<'a>,
-        _entry: Option<&RegisteredProtocolEntry>,
-    ) -> Result<Self, EngineError> {
-        Ok(Self {
+        #[cfg(any(
+            feature = "socks5",
+            feature = "vless",
+            feature = "hysteria2",
+            feature = "shadowsocks",
+            feature = "trojan",
+            feature = "vmess",
+            feature = "mieru"
+        ))]
+        udp: ClaimedUdpHooks<'a>,
+    ) -> Self {
+        Self {
             runtime,
             tcp,
             #[cfg(any(
@@ -95,8 +103,8 @@ impl<'a> ClaimedOutboundLeaf<'a> {
                 feature = "vmess",
                 feature = "mieru"
             ))]
-            udp: build_udp_hooks(_entry, _leaf)?,
-        })
+            udp,
+        }
     }
 
     #[cfg(test)]
@@ -281,7 +289,7 @@ impl<'a> ClaimedOutboundLeaf<'a> {
     feature = "vmess",
     feature = "mieru"
 ))]
-fn build_udp_hooks<'a>(
+fn claim_udp_hooks<'a>(
     entry: Option<&RegisteredProtocolEntry>,
     leaf: ResolvedLeafOutbound<'a>,
 ) -> Result<ClaimedUdpHooks<'a>, EngineError> {
@@ -440,12 +448,30 @@ impl ProtocolRegistry {
         leaf: ResolvedLeafOutbound<'a>,
     ) -> Result<ClaimedOutboundLeaf<'a>, EngineError> {
         if let ResolvedLeafOutbound::Block { tag } = leaf.clone() {
-            return ClaimedOutboundLeaf::new(
-                leaf,
+            #[cfg(any(
+                feature = "socks5",
+                feature = "vless",
+                feature = "hysteria2",
+                feature = "shadowsocks",
+                feature = "trojan",
+                feature = "vmess",
+                feature = "mieru"
+            ))]
+            let udp = ClaimedUdpHooks::default();
+            return Ok(ClaimedOutboundLeaf::new(
                 block_leaf_runtime(tag),
                 ClaimedTcpHooks::default(),
-                None,
-            );
+                #[cfg(any(
+                    feature = "socks5",
+                    feature = "vless",
+                    feature = "hysteria2",
+                    feature = "shadowsocks",
+                    feature = "trojan",
+                    feature = "vmess",
+                    feature = "mieru"
+                ))]
+                udp,
+            ));
         }
 
         let (entry, claimed_tcp) = self.claimed_tcp_entry(leaf.clone())?;
@@ -453,7 +479,40 @@ impl ProtocolRegistry {
         let tcp = ClaimedTcpHooks {
             capability: Some(Arc::from(claimed_tcp)),
         };
-        ClaimedOutboundLeaf::new(leaf, runtime, tcp, Some(entry))
+        #[cfg(any(
+            feature = "socks5",
+            feature = "vless",
+            feature = "hysteria2",
+            feature = "shadowsocks",
+            feature = "trojan",
+            feature = "vmess",
+            feature = "mieru"
+        ))]
+        let udp = claim_udp_hooks(Some(entry), leaf.clone())?;
+        #[cfg(not(any(
+            feature = "socks5",
+            feature = "vless",
+            feature = "hysteria2",
+            feature = "shadowsocks",
+            feature = "trojan",
+            feature = "vmess",
+            feature = "mieru"
+        )))]
+        let _ = entry;
+        Ok(ClaimedOutboundLeaf::new(
+            runtime,
+            tcp,
+            #[cfg(any(
+                feature = "socks5",
+                feature = "vless",
+                feature = "hysteria2",
+                feature = "shadowsocks",
+                feature = "trojan",
+                feature = "vmess",
+                feature = "mieru"
+            ))]
+            udp,
+        ))
     }
 }
 
