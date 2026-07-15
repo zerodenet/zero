@@ -6,19 +6,8 @@ use crate::adapters::identity::{
     named_protocol_supports_inbound, named_protocol_supports_outbound, NamedProtocolAdapter,
 };
 use crate::protocol_catalog::protocol_descriptor;
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
-))]
-use crate::protocol_registry::ClaimedUdpFlowLeaf;
 use crate::protocol_registry::{
-    ClaimedTcpOutboundLeaf, InboundListenerCapability, ProtocolSupportCapability,
-    TcpOutboundCapability,
+    InboundListenerCapability, OutboundLeafClaim, ProtocolSupportCapability, TcpOutboundCapability,
 };
 #[cfg(any(
     feature = "socks5",
@@ -54,6 +43,39 @@ impl NamedProtocolAdapter for DirectAdapter {
     const HAS_OUTBOUND: bool = false;
 }
 
+impl DirectAdapter {
+    pub(crate) fn claim_outbound_leaf_impl<'a>(
+        &self,
+        leaf: ResolvedLeafOutbound<'a>,
+    ) -> Option<OutboundLeafClaim<'a>> {
+        let tcp = self.claim_tcp_outbound_leaf_impl(leaf.clone())?;
+        Some(OutboundLeafClaim {
+            runtime: tcp.runtime(),
+            tcp,
+            #[cfg(any(
+                feature = "socks5",
+                feature = "vless",
+                feature = "hysteria2",
+                feature = "shadowsocks",
+                feature = "trojan",
+                feature = "vmess",
+                feature = "mieru"
+            ))]
+            udp: self.claim_udp_flow_leaf_impl(leaf.clone()),
+            #[cfg(any(
+                feature = "socks5",
+                feature = "vless",
+                feature = "hysteria2",
+                feature = "shadowsocks",
+                feature = "trojan",
+                feature = "vmess",
+                feature = "mieru"
+            ))]
+            packet_path: None,
+        })
+    }
+}
+
 #[cfg(any(
     feature = "socks5",
     feature = "vless",
@@ -63,14 +85,7 @@ impl NamedProtocolAdapter for DirectAdapter {
     feature = "vmess",
     feature = "mieru"
 ))]
-impl UdpFlowCapability for DirectAdapter {
-    fn claim_udp_flow_leaf<'a>(
-        &self,
-        leaf: ResolvedLeafOutbound<'a>,
-    ) -> Option<Box<dyn ClaimedUdpFlowLeaf<'a> + 'a>> {
-        self.claim_udp_flow_leaf_impl(leaf)
-    }
-}
+impl UdpFlowCapability for DirectAdapter {}
 
 #[cfg(any(
     feature = "socks5",
@@ -96,14 +111,7 @@ impl InboundListenerCapability for DirectAdapter {
     }
 }
 
-impl TcpOutboundCapability for DirectAdapter {
-    fn claim_tcp_outbound_leaf<'a>(
-        &self,
-        leaf: ResolvedLeafOutbound<'a>,
-    ) -> Option<Box<dyn ClaimedTcpOutboundLeaf<'a> + 'a>> {
-        self.claim_tcp_outbound_leaf_impl(leaf)
-    }
-}
+impl TcpOutboundCapability for DirectAdapter {}
 
 impl ProtocolSupportCapability for DirectAdapter {
     fn name(&self) -> &'static str {

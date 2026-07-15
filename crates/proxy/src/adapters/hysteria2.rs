@@ -12,9 +12,9 @@ use crate::adapters::identity::{
     named_protocol_supports_inbound, named_protocol_supports_outbound, NamedProtocolAdapter,
 };
 use crate::protocol_registry::{
-    bind_transport_inbound, BoundInbound, ClaimedTcpOutboundLeaf, ClaimedUdpFlowLeaf,
-    ClaimedUdpPacketPathLeaf, InboundListenerCapability, ManagedUdpHandlerProvider,
-    ProtocolSupportCapability, TcpOutboundCapability, UdpFlowCapability, UdpPacketPathCapability,
+    bind_transport_inbound, BoundInbound, InboundListenerCapability, ManagedUdpHandlerProvider,
+    OutboundLeafClaim, ProtocolSupportCapability, TcpOutboundCapability, UdpFlowCapability,
+    UdpPacketPathCapability,
 };
 use crate::runtime::udp_flow::managed::ManagedDatagramFlowHandler;
 
@@ -59,24 +59,26 @@ impl NamedProtocolAdapter for Hysteria2Adapter {
 }
 
 #[cfg(feature = "hysteria2")]
-impl UdpPacketPathCapability for Hysteria2Adapter {
-    fn claim_udp_packet_path_leaf<'a>(
+impl Hysteria2Adapter {
+    pub(crate) fn claim_outbound_leaf_impl<'a>(
         &self,
         leaf: ResolvedLeafOutbound<'a>,
-    ) -> Option<Box<dyn ClaimedUdpPacketPathLeaf<'a> + 'a>> {
-        self.claim_udp_packet_path_leaf_impl(leaf)
+    ) -> Option<OutboundLeafClaim<'a>> {
+        let tcp = self.claim_tcp_outbound_leaf_impl(leaf.clone())?;
+        Some(OutboundLeafClaim {
+            runtime: tcp.runtime(),
+            tcp,
+            udp: self.claim_udp_flow_leaf_impl(leaf.clone()),
+            packet_path: self.claim_udp_packet_path_leaf_impl(leaf),
+        })
     }
 }
 
 #[cfg(feature = "hysteria2")]
-impl UdpFlowCapability for Hysteria2Adapter {
-    fn claim_udp_flow_leaf<'a>(
-        &self,
-        leaf: ResolvedLeafOutbound<'a>,
-    ) -> Option<Box<dyn ClaimedUdpFlowLeaf<'a> + 'a>> {
-        self.claim_udp_flow_leaf_impl(leaf)
-    }
-}
+impl UdpPacketPathCapability for Hysteria2Adapter {}
+
+#[cfg(feature = "hysteria2")]
+impl UdpFlowCapability for Hysteria2Adapter {}
 
 #[cfg(feature = "hysteria2")]
 impl ManagedUdpHandlerProvider for Hysteria2Adapter {
@@ -142,14 +144,7 @@ impl InboundListenerCapability for Hysteria2Adapter {
 }
 
 #[cfg(feature = "hysteria2")]
-impl TcpOutboundCapability for Hysteria2Adapter {
-    fn claim_tcp_outbound_leaf<'a>(
-        &self,
-        leaf: ResolvedLeafOutbound<'a>,
-    ) -> Option<Box<dyn ClaimedTcpOutboundLeaf<'a> + 'a>> {
-        self.claim_tcp_outbound_leaf_impl(leaf)
-    }
-}
+impl TcpOutboundCapability for Hysteria2Adapter {}
 
 #[cfg(feature = "hysteria2")]
 impl ProtocolSupportCapability for Hysteria2Adapter {

@@ -10,9 +10,8 @@ use crate::adapters::identity::{
     named_protocol_supports_inbound, named_protocol_supports_outbound, NamedProtocolAdapter,
 };
 use crate::protocol_registry::{
-    ClaimedTcpOutboundLeaf, ClaimedUdpFlowLeaf, ClaimedUdpPacketPathLeaf,
-    InboundListenerCapability, ManagedUdpHandlerProvider, ProtocolSupportCapability,
-    TcpOutboundCapability, UdpFlowCapability, UdpPacketPathCapability,
+    InboundListenerCapability, ManagedUdpHandlerProvider, OutboundLeafClaim,
+    ProtocolSupportCapability, TcpOutboundCapability, UdpFlowCapability, UdpPacketPathCapability,
 };
 use crate::runtime::udp_flow::managed::ManagedDatagramFlowHandler;
 
@@ -53,24 +52,26 @@ impl NamedProtocolAdapter for ShadowsocksAdapter {
 }
 
 #[cfg(feature = "shadowsocks")]
-impl UdpPacketPathCapability for ShadowsocksAdapter {
-    fn claim_udp_packet_path_leaf<'a>(
+impl ShadowsocksAdapter {
+    pub(crate) fn claim_outbound_leaf_impl<'a>(
         &self,
         leaf: ResolvedLeafOutbound<'a>,
-    ) -> Option<Box<dyn ClaimedUdpPacketPathLeaf<'a> + 'a>> {
-        self.claim_udp_packet_path_leaf_impl(leaf)
+    ) -> Option<OutboundLeafClaim<'a>> {
+        let tcp = self.claim_tcp_outbound_leaf_impl(leaf.clone())?;
+        Some(OutboundLeafClaim {
+            runtime: tcp.runtime(),
+            tcp,
+            udp: self.claim_udp_flow_leaf_impl(leaf.clone()),
+            packet_path: self.claim_udp_packet_path_leaf_impl(leaf),
+        })
     }
 }
 
 #[cfg(feature = "shadowsocks")]
-impl UdpFlowCapability for ShadowsocksAdapter {
-    fn claim_udp_flow_leaf<'a>(
-        &self,
-        leaf: ResolvedLeafOutbound<'a>,
-    ) -> Option<Box<dyn ClaimedUdpFlowLeaf<'a> + 'a>> {
-        self.claim_udp_flow_leaf_impl(leaf)
-    }
-}
+impl UdpPacketPathCapability for ShadowsocksAdapter {}
+
+#[cfg(feature = "shadowsocks")]
+impl UdpFlowCapability for ShadowsocksAdapter {}
 
 #[cfg(feature = "shadowsocks")]
 impl ManagedUdpHandlerProvider for ShadowsocksAdapter {
@@ -112,14 +113,7 @@ impl InboundListenerCapability for ShadowsocksAdapter {
 }
 
 #[cfg(feature = "shadowsocks")]
-impl TcpOutboundCapability for ShadowsocksAdapter {
-    fn claim_tcp_outbound_leaf<'a>(
-        &self,
-        leaf: ResolvedLeafOutbound<'a>,
-    ) -> Option<Box<dyn ClaimedTcpOutboundLeaf<'a> + 'a>> {
-        self.claim_tcp_outbound_leaf_impl(leaf)
-    }
-}
+impl TcpOutboundCapability for ShadowsocksAdapter {}
 
 #[cfg(feature = "shadowsocks")]
 impl ProtocolSupportCapability for ShadowsocksAdapter {

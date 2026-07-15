@@ -26,7 +26,10 @@ pub(super) fn proxy_with_fake_tcp(calls: Arc<TcpCapabilityCalls>) -> Proxy {
         feature = "vmess",
         feature = "mieru"
     ))]
-    registry.register_managed_capability(Arc::new(FakeTcpCapability::new(calls.clone())));
+    registry.register_managed_capability(
+        Arc::new(FakeTcpCapability::new(calls.clone())),
+        FakeTcpCapability::claim_outbound_leaf_impl,
+    );
     #[cfg(not(any(
         feature = "vless",
         feature = "hysteria2",
@@ -35,7 +38,10 @@ pub(super) fn proxy_with_fake_tcp(calls: Arc<TcpCapabilityCalls>) -> Proxy {
         feature = "vmess",
         feature = "mieru"
     )))]
-    registry.register_capability(Arc::new(FakeTcpCapability::new(calls)));
+    registry.register_capability(
+        Arc::new(FakeTcpCapability::new(calls)),
+        FakeTcpCapability::claim_outbound_leaf_impl,
+    );
     proxy.protocols = ProtocolInventory { registry };
     proxy
 }

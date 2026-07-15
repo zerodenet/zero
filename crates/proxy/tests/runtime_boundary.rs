@@ -218,6 +218,9 @@ fn capability_surface_is_split_and_context_is_narrow() {
     }
     assert!(!capability.contains("trait ProtocolAdapter"));
     assert!(!capability.contains("proxy: &Proxy"));
+    assert!(!capability.contains("fn claim_tcp_outbound_leaf"));
+    assert!(!capability.contains("fn claim_udp_flow_leaf"));
+    assert!(!capability.contains("fn claim_udp_packet_path_leaf"));
     assert!(capability.contains("BoundInbound"));
     assert!(capability.contains("fn runtime(&self) -> OutboundLeafRuntime;"));
     assert!(!capability.contains("fn claims_outbound_leaf("));
@@ -2130,6 +2133,7 @@ fn registry_outbound_claim_surface_replaces_lookup_only_helpers() {
 fn claimed_outbound_leaf_owns_capability_preparation() {
     let outbound = read(&proxy_src().join("protocol_registry/registry/outbound.rs"));
     let capability = read(&proxy_src().join("protocol_registry/capability.rs"));
+    let build = read(&proxy_src().join("protocol_registry/registry/build.rs"));
     let registry_mod = read(&proxy_src().join("protocol_registry/registry/mod.rs"));
     for method in [
         "fn prepare_tcp_connect(",
@@ -2156,6 +2160,7 @@ fn claimed_outbound_leaf_owns_capability_preparation() {
     assert!(capability.contains("struct OutboundLeafClaim<'a>"));
     assert!(!capability.contains("trait OutboundLeafClaimCapability"));
     assert!(registry_mod.contains("trait OutboundLeafClaimer"));
+    assert!(build.contains("type OutboundLeafClaimFn"));
     assert!(outbound.contains("entry.outbound.claim_outbound_leaf(leaf.clone())"));
     assert!(outbound.contains("fn claim_outbound_hooks<'a>("));
     assert!(!outbound.contains("claim_tcp_outbound_leaf(leaf.clone())"));
@@ -2180,6 +2185,9 @@ fn claimed_outbound_leaf_owns_capability_preparation() {
     assert!(!capability.contains(
         "fn prepare_udp_packet_path<'a>(\n        &self,\n        _leaf: ResolvedLeafOutbound<'a>,"
     ));
+    assert!(!build.contains("adapter.claim_tcp_outbound_leaf("));
+    assert!(!build.contains("adapter.claim_udp_flow_leaf("));
+    assert!(!build.contains("adapter.claim_udp_packet_path_leaf("));
 }
 
 #[test]
@@ -2195,8 +2203,8 @@ fn transport_bridge_adapters_offer_claim_time_tcp_projection() {
     ] {
         let source = read(&proxy_src().join(relative));
         assert!(
-            source.contains("fn claim_tcp_outbound_leaf<'a>("),
-            "{relative} should expose a claim-time TCP leaf projection path"
+            source.contains("fn claim_outbound_leaf_impl<'a>("),
+            "{relative} should expose a unified claim-time outbound projection path"
         );
         assert!(
             source.contains("claim_transport_tcp_leaf("),
@@ -2220,8 +2228,8 @@ fn transport_bridge_adapters_offer_claim_time_udp_projection() {
     ] {
         let source = read(&proxy_src().join(relative));
         assert!(
-            source.contains("fn claim_udp_flow_leaf<'a>("),
-            "{relative} should expose a claim-time UDP leaf projection path"
+            source.contains("fn claim_outbound_leaf_impl<'a>("),
+            "{relative} should expose a unified claim-time outbound projection path"
         );
     }
 
@@ -2336,8 +2344,8 @@ fn packet_path_adapters_offer_claim_time_projection() {
     ] {
         let source = read(&proxy_src().join(relative));
         assert!(
-            source.contains("fn claim_udp_packet_path_leaf<'a>("),
-            "{relative} should expose a claim-time packet-path leaf projection path"
+            source.contains("fn claim_outbound_leaf_impl<'a>("),
+            "{relative} should expose a unified claim-time outbound projection path"
         );
     }
 
@@ -2369,8 +2377,8 @@ fn non_transport_bridge_adapters_offer_claim_time_tcp_projection() {
     ] {
         let source = read(&proxy_src().join(relative));
         assert!(
-            source.contains("fn claim_tcp_outbound_leaf<'a>("),
-            "{relative} should expose a claim-time TCP leaf projection path"
+            source.contains("fn claim_outbound_leaf_impl<'a>("),
+            "{relative} should expose a unified claim-time outbound projection path"
         );
     }
 
@@ -2404,8 +2412,8 @@ fn non_transport_bridge_adapters_offer_claim_time_udp_projection() {
     ] {
         let source = read(&proxy_src().join(relative));
         assert!(
-            source.contains("fn claim_udp_flow_leaf<'a>("),
-            "{relative} should expose a claim-time UDP leaf projection path"
+            source.contains("fn claim_outbound_leaf_impl<'a>("),
+            "{relative} should expose a unified claim-time outbound projection path"
         );
     }
 

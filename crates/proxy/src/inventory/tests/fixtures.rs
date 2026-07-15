@@ -10,7 +10,7 @@ use zero_traits::{ProtocolCapabilityDescriptor, ProtocolMetadata};
 use crate::protocol_catalog::protocol_descriptor;
 use crate::protocol_registry::{
     ClaimedTcpOutboundLeaf, ClaimedUdpFlowLeaf, ClaimedUdpPacketPathLeaf,
-    InboundListenerCapability, OutboundLeafRuntime, ProtocolSupportCapability,
+    InboundListenerCapability, OutboundLeafClaim, OutboundLeafRuntime, ProtocolSupportCapability,
     TcpOutboundCapability, TcpRuntimeServices, UdpFlowCapability, UdpPacketPathCapability,
 };
 use crate::runtime::path::{OutboundEndpoint, TcpPathCategory};
@@ -468,16 +468,7 @@ impl PreparedUdpFlowOperation for FakeUdpOperation {
     }
 }
 
-impl UdpFlowCapability for FakeTcpCapability {
-    fn claim_udp_flow_leaf<'a>(
-        &self,
-        _: ResolvedLeafOutbound<'a>,
-    ) -> Option<Box<dyn ClaimedUdpFlowLeaf<'a> + 'a>> {
-        Some(Box::new(FakeClaimedUdpLeaf {
-            calls: self.calls.clone(),
-        }))
-    }
-}
+impl UdpFlowCapability for FakeTcpCapability {}
 struct FakeDatagramCodec;
 
 impl zero_traits::DatagramCodec<zero_core::Address> for FakeDatagramCodec {
@@ -583,16 +574,7 @@ impl PreparedUdpPacketPathOperation for FakePacketPathOperation {
     }
 }
 
-impl UdpPacketPathCapability for FakeTcpCapability {
-    fn claim_udp_packet_path_leaf<'a>(
-        &self,
-        _: ResolvedLeafOutbound<'a>,
-    ) -> Option<Box<dyn ClaimedUdpPacketPathLeaf<'a> + 'a>> {
-        Some(Box::new(FakeClaimedUdpPacketPathLeaf {
-            calls: self.calls.clone(),
-        }))
-    }
-}
+impl UdpPacketPathCapability for FakeTcpCapability {}
 
 struct FakeTcpConnectOperation {
     calls: Arc<TcpCapabilityCalls>,
@@ -682,15 +664,15 @@ impl PreparedTcpRelayOperation for FakeTcpRelayOperation {
     }
 }
 
-impl TcpOutboundCapability for FakeTcpCapability {
-    fn claim_tcp_outbound_leaf<'a>(
+impl FakeTcpCapability {
+    pub(crate) fn claim_outbound_leaf_impl<'a>(
         &self,
         leaf: ResolvedLeafOutbound<'a>,
-    ) -> Option<Box<dyn ClaimedTcpOutboundLeaf<'a> + 'a>> {
+    ) -> Option<OutboundLeafClaim<'a>> {
         let ResolvedLeafOutbound::Direct { tag } = leaf else {
             return None;
         };
-        Some(Box::new(FakeClaimedTcpLeaf {
+        let tcp: Box<dyn ClaimedTcpOutboundLeaf<'a> + 'a> = Box::new(FakeClaimedTcpLeaf {
             calls: self.calls.clone(),
             runtime: OutboundLeafRuntime {
                 tcp_path: TcpPathCategory::Direct,
@@ -720,6 +702,36 @@ impl TcpOutboundCapability for FakeTcpCapability {
                 ))]
                 udp_policy_tag: tag.map(str::to_owned),
             },
-        }))
+        });
+        Some(OutboundLeafClaim {
+            runtime: tcp.runtime(),
+            tcp,
+            #[cfg(any(
+                feature = "socks5",
+                feature = "vless",
+                feature = "hysteria2",
+                feature = "shadowsocks",
+                feature = "trojan",
+                feature = "vmess",
+                feature = "mieru"
+            ))]
+            udp: Some(Box::new(FakeClaimedUdpLeaf {
+                calls: self.calls.clone(),
+            })),
+            #[cfg(any(
+                feature = "socks5",
+                feature = "vless",
+                feature = "hysteria2",
+                feature = "shadowsocks",
+                feature = "trojan",
+                feature = "vmess",
+                feature = "mieru"
+            ))]
+            packet_path: Some(Box::new(FakeClaimedUdpPacketPathLeaf {
+                calls: self.calls.clone(),
+            })),
+        })
     }
 }
+
+impl TcpOutboundCapability for FakeTcpCapability {}

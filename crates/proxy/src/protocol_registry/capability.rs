@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 
 use zero_config::{InboundConfig, InboundProtocolConfig, OutboundProtocolConfig};
-use zero_engine::{EngineError, ResolvedLeafOutbound};
+use zero_engine::EngineError;
 use zero_traits::ProtocolMetadata;
 
 use super::{BoundInbound, OutboundLeafRuntime};
@@ -173,14 +173,7 @@ pub(crate) trait InboundListenerCapability: Send + Sync {
     }
 }
 
-pub(crate) trait TcpOutboundCapability: Send + Sync {
-    fn claim_tcp_outbound_leaf<'a>(
-        &self,
-        _leaf: ResolvedLeafOutbound<'a>,
-    ) -> Option<Box<dyn ClaimedTcpOutboundLeaf<'a> + 'a>> {
-        None
-    }
-}
+pub(crate) trait TcpOutboundCapability: Send + Sync {}
 
 #[cfg(any(
     feature = "socks5",
@@ -191,14 +184,7 @@ pub(crate) trait TcpOutboundCapability: Send + Sync {
     feature = "vmess",
     feature = "mieru"
 ))]
-pub(crate) trait UdpFlowCapability: Send + Sync {
-    fn claim_udp_flow_leaf<'a>(
-        &self,
-        _leaf: ResolvedLeafOutbound<'a>,
-    ) -> Option<Box<dyn ClaimedUdpFlowLeaf<'a> + 'a>> {
-        None
-    }
-}
+pub(crate) trait UdpFlowCapability: Send + Sync {}
 
 #[cfg(feature = "socks5")]
 pub(crate) trait UpstreamUdpHandlerProvider: Send + Sync {
@@ -239,11 +225,4 @@ pub(crate) trait ManagedUdpHandlerProvider: Send + Sync {
     feature = "vmess",
     feature = "mieru"
 ))]
-pub(crate) trait UdpPacketPathCapability: Send + Sync {
-    fn claim_udp_packet_path_leaf<'a>(
-        &self,
-        _leaf: ResolvedLeafOutbound<'a>,
-    ) -> Option<Box<dyn ClaimedUdpPacketPathLeaf<'a> + 'a>> {
-        None
-    }
-}
+pub(crate) trait UdpPacketPathCapability: Send + Sync {}

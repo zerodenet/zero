@@ -10,9 +10,8 @@ use crate::adapters::identity::{
     named_protocol_supports_inbound, named_protocol_supports_outbound, NamedProtocolAdapter,
 };
 use crate::protocol_registry::{
-    ClaimedTcpOutboundLeaf, ClaimedUdpFlowLeaf, InboundListenerCapability,
-    ManagedUdpHandlerProvider, ProtocolSupportCapability, TcpOutboundCapability, UdpFlowCapability,
-    UdpPacketPathCapability,
+    InboundListenerCapability, ManagedUdpHandlerProvider, OutboundLeafClaim,
+    ProtocolSupportCapability, TcpOutboundCapability, UdpFlowCapability, UdpPacketPathCapability,
 };
 use crate::runtime::udp_flow::managed::ManagedStreamHandlerPair;
 
@@ -53,14 +52,23 @@ impl NamedProtocolAdapter for MieruAdapter {
 }
 
 #[cfg(feature = "mieru")]
-impl UdpFlowCapability for MieruAdapter {
-    fn claim_udp_flow_leaf<'a>(
+impl MieruAdapter {
+    pub(crate) fn claim_outbound_leaf_impl<'a>(
         &self,
         leaf: ResolvedLeafOutbound<'a>,
-    ) -> Option<Box<dyn ClaimedUdpFlowLeaf<'a> + 'a>> {
-        self.claim_udp_flow_leaf_impl(leaf)
+    ) -> Option<OutboundLeafClaim<'a>> {
+        let tcp = self.claim_tcp_outbound_leaf_impl(leaf.clone())?;
+        Some(OutboundLeafClaim {
+            runtime: tcp.runtime(),
+            tcp,
+            udp: self.claim_udp_flow_leaf_impl(leaf),
+            packet_path: None,
+        })
     }
 }
+
+#[cfg(feature = "mieru")]
+impl UdpFlowCapability for MieruAdapter {}
 
 #[cfg(feature = "mieru")]
 impl ManagedUdpHandlerProvider for MieruAdapter {
@@ -103,14 +111,7 @@ impl InboundListenerCapability for MieruAdapter {
 }
 
 #[cfg(feature = "mieru")]
-impl TcpOutboundCapability for MieruAdapter {
-    fn claim_tcp_outbound_leaf<'a>(
-        &self,
-        leaf: ResolvedLeafOutbound<'a>,
-    ) -> Option<Box<dyn ClaimedTcpOutboundLeaf<'a> + 'a>> {
-        self.claim_tcp_outbound_leaf_impl(leaf)
-    }
-}
+impl TcpOutboundCapability for MieruAdapter {}
 
 #[cfg(feature = "mieru")]
 impl ProtocolSupportCapability for MieruAdapter {

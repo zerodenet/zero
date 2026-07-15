@@ -322,7 +322,10 @@ async fn inventory_executes_handler_produced_by_upstream_provider() {
             .expect("minimal runtime config");
     let mut proxy = crate::runtime::Proxy::new(config).expect("minimal proxy");
     let mut registry = ProtocolRegistry::default();
-    registry.register_upstream_capability(Arc::new(FakeTcpCapability::new(calls.clone())));
+    registry.register_upstream_capability(
+        Arc::new(FakeTcpCapability::new(calls.clone())),
+        FakeTcpCapability::claim_outbound_leaf_impl,
+    );
     proxy.protocols = ProtocolInventory { registry };
 
     let mut state = RegisteredUdpState::new(proxy.protocols.registered_udp_handlers());

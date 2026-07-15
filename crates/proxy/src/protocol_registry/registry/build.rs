@@ -28,6 +28,9 @@ use crate::protocol_registry::{
 ))]
 use crate::protocol_registry::{UdpFlowCapability, UdpPacketPathCapability};
 
+type OutboundLeafClaimFn<T> =
+    for<'a> fn(&T, ResolvedLeafOutbound<'a>) -> Option<OutboundLeafClaim<'a>>;
+
 #[cfg(any(
     not(any(
         feature = "socks5",
@@ -41,7 +44,7 @@ use crate::protocol_registry::{UdpFlowCapability, UdpPacketPathCapability};
     feature = "http",
     feature = "mixed"
 ))]
-struct CoreOutboundClaimer<T> {
+struct NoOutboundClaimer<T> {
     adapter: Arc<T>,
 }
 
@@ -58,89 +61,34 @@ struct CoreOutboundClaimer<T> {
     feature = "http",
     feature = "mixed"
 ))]
-impl<T> super::OutboundLeafClaimer for CoreOutboundClaimer<T>
+impl<T> super::OutboundLeafClaimer for NoOutboundClaimer<T>
 where
     T: TcpOutboundCapability + Send + Sync + 'static,
 {
     fn claim_outbound_leaf<'a>(
         &self,
-        leaf: ResolvedLeafOutbound<'a>,
+        _leaf: ResolvedLeafOutbound<'a>,
     ) -> Option<OutboundLeafClaim<'a>> {
-        let tcp = self.adapter.claim_tcp_outbound_leaf(leaf)?;
-        Some(OutboundLeafClaim {
-            runtime: tcp.runtime(),
-            tcp,
-            #[cfg(any(
-                feature = "socks5",
-                feature = "vless",
-                feature = "hysteria2",
-                feature = "shadowsocks",
-                feature = "trojan",
-                feature = "vmess",
-                feature = "mieru"
-            ))]
-            udp: None,
-            #[cfg(any(
-                feature = "socks5",
-                feature = "vless",
-                feature = "hysteria2",
-                feature = "shadowsocks",
-                feature = "trojan",
-                feature = "vmess",
-                feature = "mieru"
-            ))]
-            packet_path: None,
-        })
+        let _ = &self.adapter;
+        None
     }
 }
 
 #[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
+    not(any(feature = "http", feature = "mixed")),
+    feature = "http",
+    feature = "mixed"
 ))]
-struct ComposedOutboundClaimer<T> {
-    adapter: Arc<T>,
-}
-
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
-))]
-impl<T> super::OutboundLeafClaimer for ComposedOutboundClaimer<T>
-where
-    T: TcpOutboundCapability + UdpFlowCapability + UdpPacketPathCapability + Send + Sync + 'static,
-{
-    fn claim_outbound_leaf<'a>(
-        &self,
-        leaf: ResolvedLeafOutbound<'a>,
-    ) -> Option<OutboundLeafClaim<'a>> {
-        let tcp = self.adapter.claim_tcp_outbound_leaf(leaf.clone())?;
-        Some(OutboundLeafClaim {
-            runtime: tcp.runtime(),
-            tcp,
-            udp: self.adapter.claim_udp_flow_leaf(leaf.clone()),
-            packet_path: self.adapter.claim_udp_packet_path_leaf(leaf),
-        })
-    }
-}
-
-#[cfg(any(feature = "vless", feature = "vmess", feature = "trojan"))]
 struct ProjectedOutboundClaimer<T> {
     adapter: Arc<T>,
-    claim: for<'a> fn(&T, ResolvedLeafOutbound<'a>) -> Option<OutboundLeafClaim<'a>>,
+    claim: OutboundLeafClaimFn<T>,
 }
 
-#[cfg(any(feature = "vless", feature = "vmess", feature = "trojan"))]
+#[cfg(any(
+    not(any(feature = "http", feature = "mixed")),
+    feature = "http",
+    feature = "mixed"
+))]
 impl<T> super::OutboundLeafClaimer for ProjectedOutboundClaimer<T>
 where
     T: Send + Sync + 'static,
@@ -167,16 +115,25 @@ impl ProtocolRegistry {
         feature = "http",
         feature = "mixed"
     ))]
-    pub(crate) fn register_core_capability<T>(&mut self, adapter: Arc<T>)
-    where
+    pub(crate) fn register_core_capability<T>(
+        &mut self,
+        adapter: Arc<T>,
+        claim: Option<OutboundLeafClaimFn<T>>,
+    ) where
         T: ProtocolSupportCapability + InboundListenerCapability + TcpOutboundCapability + 'static,
     {
         self.entries.push(super::RegisteredProtocolEntry {
             support: adapter.clone(),
             inbound: adapter.clone(),
-            outbound: Arc::new(CoreOutboundClaimer {
-                adapter: adapter.clone(),
-            }),
+            outbound: match claim {
+                Some(claim) => Arc::new(ProjectedOutboundClaimer {
+                    adapter: adapter.clone(),
+                    claim,
+                }),
+                None => Arc::new(NoOutboundClaimer {
+                    adapter: adapter.clone(),
+                }),
+            },
             #[cfg(test)]
             tcp: adapter,
             #[cfg(all(
@@ -228,7 +185,7 @@ impl ProtocolRegistry {
         feature = "vmess",
         feature = "mieru"
     ))]
-    pub(crate) fn register_capability<T>(&mut self, adapter: Arc<T>)
+    pub(crate) fn register_capability<T>(&mut self, adapter: Arc<T>, claim: OutboundLeafClaimFn<T>)
     where
         T: ProtocolSupportCapability
             + InboundListenerCapability
@@ -240,8 +197,9 @@ impl ProtocolRegistry {
         self.entries.push(super::RegisteredProtocolEntry {
             support: adapter.clone(),
             inbound: adapter.clone(),
-            outbound: Arc::new(ComposedOutboundClaimer {
+            outbound: Arc::new(ProjectedOutboundClaimer {
                 adapter: adapter.clone(),
+                claim,
             }),
             #[cfg(test)]
             tcp: adapter.clone(),
@@ -286,8 +244,11 @@ impl ProtocolRegistry {
     }
 
     #[cfg(feature = "socks5")]
-    pub(crate) fn register_upstream_capability<T>(&mut self, adapter: Arc<T>)
-    where
+    pub(crate) fn register_upstream_capability<T>(
+        &mut self,
+        adapter: Arc<T>,
+        claim: OutboundLeafClaimFn<T>,
+    ) where
         T: ProtocolSupportCapability
             + InboundListenerCapability
             + TcpOutboundCapability
@@ -299,8 +260,9 @@ impl ProtocolRegistry {
         self.entries.push(super::RegisteredProtocolEntry {
             support: adapter.clone(),
             inbound: adapter.clone(),
-            outbound: Arc::new(ComposedOutboundClaimer {
+            outbound: Arc::new(ProjectedOutboundClaimer {
                 adapter: adapter.clone(),
+                claim,
             }),
             #[cfg(test)]
             tcp: adapter.clone(),
@@ -351,61 +313,10 @@ impl ProtocolRegistry {
         feature = "trojan",
         feature = "mieru"
     ))]
-    pub(crate) fn register_managed_capability<T>(&mut self, adapter: Arc<T>)
-    where
-        T: ProtocolSupportCapability
-            + InboundListenerCapability
-            + TcpOutboundCapability
-            + UdpFlowCapability
-            + UdpPacketPathCapability
-            + ManagedUdpHandlerProvider
-            + 'static,
-    {
-        self.entries.push(super::RegisteredProtocolEntry {
-            support: adapter.clone(),
-            inbound: adapter.clone(),
-            outbound: Arc::new(ComposedOutboundClaimer {
-                adapter: adapter.clone(),
-            }),
-            #[cfg(test)]
-            tcp: adapter.clone(),
-            #[cfg(all(
-                test,
-                any(
-                    feature = "socks5",
-                    feature = "vless",
-                    feature = "hysteria2",
-                    feature = "shadowsocks",
-                    feature = "trojan",
-                    feature = "vmess",
-                    feature = "mieru"
-                )
-            ))]
-            udp: Some(adapter.clone()),
-            managed_udp_handlers: Some(adapter.clone()),
-            #[cfg(feature = "socks5")]
-            upstream_udp_handler: None,
-            #[cfg(all(
-                test,
-                any(
-                    feature = "socks5",
-                    feature = "vless",
-                    feature = "hysteria2",
-                    feature = "shadowsocks",
-                    feature = "trojan",
-                    feature = "vmess",
-                    feature = "mieru"
-                )
-            ))]
-            packet_path: Some(adapter),
-        });
-    }
-
-    #[cfg(any(feature = "vless", feature = "vmess", feature = "trojan"))]
-    pub(crate) fn register_managed_capability_with_outbound_claimer<T>(
+    pub(crate) fn register_managed_capability<T>(
         &mut self,
         adapter: Arc<T>,
-        claim: for<'a> fn(&T, ResolvedLeafOutbound<'a>) -> Option<OutboundLeafClaim<'a>>,
+        claim: OutboundLeafClaimFn<T>,
     ) where
         T: ProtocolSupportCapability
             + InboundListenerCapability

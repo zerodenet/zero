@@ -56,41 +56,44 @@ use crate::runtime::udp_flow::registered::UpstreamUdpHandlers;
 fn compiled_protocol_registry() -> ProtocolRegistry {
     let mut registry = ProtocolRegistry::default();
     #[cfg(feature = "socks5")]
-    registry.register_upstream_capability(Arc::new(Socks5Adapter));
+    registry.register_upstream_capability(
+        Arc::new(Socks5Adapter),
+        Socks5Adapter::claim_outbound_leaf_impl,
+    );
     #[cfg(feature = "http")]
-    registry.register_core_capability(Arc::new(HttpConnectAdapter));
+    registry.register_core_capability(Arc::new(HttpConnectAdapter), None);
     #[cfg(feature = "vless")]
     {
         let adapter = Arc::new(VlessAdapter::default());
-        registry.register_managed_capability_with_outbound_claimer(
-            adapter,
-            VlessAdapter::claim_outbound_leaf_impl,
-        );
+        registry.register_managed_capability(adapter, VlessAdapter::claim_outbound_leaf_impl);
     }
     #[cfg(feature = "hysteria2")]
-    registry.register_managed_capability(Arc::new(Hysteria2Adapter));
+    registry.register_managed_capability(
+        Arc::new(Hysteria2Adapter),
+        Hysteria2Adapter::claim_outbound_leaf_impl,
+    );
     #[cfg(feature = "shadowsocks")]
-    registry.register_managed_capability(Arc::new(ShadowsocksAdapter));
+    registry.register_managed_capability(
+        Arc::new(ShadowsocksAdapter),
+        ShadowsocksAdapter::claim_outbound_leaf_impl,
+    );
     #[cfg(feature = "trojan")]
     {
         let adapter = Arc::new(TrojanAdapter);
-        registry.register_managed_capability_with_outbound_claimer(
-            adapter,
-            TrojanAdapter::claim_outbound_leaf_impl,
-        );
+        registry.register_managed_capability(adapter, TrojanAdapter::claim_outbound_leaf_impl);
     }
     #[cfg(feature = "vmess")]
     {
         let adapter = Arc::new(VmessAdapter::default());
-        registry.register_managed_capability_with_outbound_claimer(
-            adapter,
-            VmessAdapter::claim_outbound_leaf_impl,
-        );
+        registry.register_managed_capability(adapter, VmessAdapter::claim_outbound_leaf_impl);
     }
     #[cfg(feature = "mieru")]
-    registry.register_managed_capability(Arc::new(MieruAdapter));
+    registry.register_managed_capability(
+        Arc::new(MieruAdapter),
+        MieruAdapter::claim_outbound_leaf_impl,
+    );
     #[cfg(feature = "mixed")]
-    registry.register_core_capability(Arc::new(MixedAdapter));
+    registry.register_core_capability(Arc::new(MixedAdapter), None);
     #[cfg(any(
         feature = "socks5",
         feature = "vless",
@@ -100,7 +103,10 @@ fn compiled_protocol_registry() -> ProtocolRegistry {
         feature = "vmess",
         feature = "mieru"
     ))]
-    registry.register_capability(Arc::new(DirectAdapter));
+    registry.register_capability(
+        Arc::new(DirectAdapter),
+        DirectAdapter::claim_outbound_leaf_impl,
+    );
     #[cfg(not(any(
         feature = "socks5",
         feature = "vless",
@@ -110,7 +116,10 @@ fn compiled_protocol_registry() -> ProtocolRegistry {
         feature = "vmess",
         feature = "mieru"
     )))]
-    registry.register_core_capability(Arc::new(DirectAdapter));
+    registry.register_core_capability(
+        Arc::new(DirectAdapter),
+        Some(DirectAdapter::claim_outbound_leaf_impl),
+    );
     registry
 }
 

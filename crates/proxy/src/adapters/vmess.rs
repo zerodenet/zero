@@ -18,8 +18,8 @@ use crate::adapters::identity::{
     named_protocol_supports_inbound, named_protocol_supports_outbound, NamedProtocolAdapter,
 };
 use crate::protocol_registry::{
-    claim_transport_tcp_leaf, claim_transport_udp_leaf, proxy_leaf_runtime, ClaimedTcpOutboundLeaf,
-    ClaimedUdpFlowLeaf, InboundListenerCapability, ManagedUdpHandlerProvider, OutboundLeafClaim,
+    claim_transport_tcp_leaf, claim_transport_udp_leaf, proxy_leaf_runtime,
+    InboundListenerCapability, ManagedUdpHandlerProvider, OutboundLeafClaim,
     ProtocolSupportCapability, TcpOutboundCapability, UdpFlowCapability, UdpPacketPathCapability,
 };
 use crate::runtime::path::TcpPathCategory;
@@ -226,26 +226,10 @@ impl InboundListenerCapability for VmessAdapter {
 }
 
 #[cfg(feature = "vmess")]
-impl TcpOutboundCapability for VmessAdapter {
-    fn claim_tcp_outbound_leaf<'a>(
-        &self,
-        leaf: ResolvedLeafOutbound<'a>,
-    ) -> Option<Box<dyn ClaimedTcpOutboundLeaf<'a> + 'a>> {
-        self.claim_outbound_leaf_impl(leaf)
-            .map(|claimed| claimed.tcp)
-    }
-}
+impl TcpOutboundCapability for VmessAdapter {}
 
 #[cfg(feature = "vmess")]
-impl UdpFlowCapability for VmessAdapter {
-    fn claim_udp_flow_leaf<'a>(
-        &self,
-        leaf: ResolvedLeafOutbound<'a>,
-    ) -> Option<Box<dyn ClaimedUdpFlowLeaf<'a> + 'a>> {
-        self.claim_outbound_leaf_impl(leaf)
-            .and_then(|claimed| claimed.udp)
-    }
-}
+impl UdpFlowCapability for VmessAdapter {}
 
 #[cfg(feature = "vmess")]
 impl ManagedUdpHandlerProvider for VmessAdapter {

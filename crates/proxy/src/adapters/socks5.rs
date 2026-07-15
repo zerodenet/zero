@@ -9,9 +9,8 @@ use crate::adapters::identity::{
     named_protocol_supports_inbound, named_protocol_supports_outbound, NamedProtocolAdapter,
 };
 use crate::protocol_registry::{
-    ClaimedTcpOutboundLeaf, ClaimedUdpFlowLeaf, ClaimedUdpPacketPathLeaf,
-    InboundListenerCapability, ProtocolSupportCapability, TcpOutboundCapability, UdpFlowCapability,
-    UdpPacketPathCapability, UpstreamUdpHandlerProvider,
+    InboundListenerCapability, OutboundLeafClaim, ProtocolSupportCapability, TcpOutboundCapability,
+    UdpFlowCapability, UdpPacketPathCapability, UpstreamUdpHandlerProvider,
 };
 use crate::runtime::udp_flow::registered::UpstreamAssociationHandler;
 
@@ -55,24 +54,26 @@ impl NamedProtocolAdapter for Socks5Adapter {
 }
 
 #[cfg(feature = "socks5")]
-impl UdpPacketPathCapability for Socks5Adapter {
-    fn claim_udp_packet_path_leaf<'a>(
+impl Socks5Adapter {
+    pub(crate) fn claim_outbound_leaf_impl<'a>(
         &self,
         leaf: ResolvedLeafOutbound<'a>,
-    ) -> Option<Box<dyn ClaimedUdpPacketPathLeaf<'a> + 'a>> {
-        self.claim_udp_packet_path_leaf_impl(leaf)
+    ) -> Option<OutboundLeafClaim<'a>> {
+        let tcp = self.claim_tcp_outbound_leaf_impl(leaf.clone())?;
+        Some(OutboundLeafClaim {
+            runtime: tcp.runtime(),
+            tcp,
+            udp: self.claim_udp_flow_leaf_impl(leaf.clone()),
+            packet_path: self.claim_udp_packet_path_leaf_impl(leaf),
+        })
     }
 }
 
 #[cfg(feature = "socks5")]
-impl UdpFlowCapability for Socks5Adapter {
-    fn claim_udp_flow_leaf<'a>(
-        &self,
-        leaf: ResolvedLeafOutbound<'a>,
-    ) -> Option<Box<dyn ClaimedUdpFlowLeaf<'a> + 'a>> {
-        self.claim_udp_flow_leaf_impl(leaf)
-    }
-}
+impl UdpPacketPathCapability for Socks5Adapter {}
+
+#[cfg(feature = "socks5")]
+impl UdpFlowCapability for Socks5Adapter {}
 
 #[cfg(feature = "socks5")]
 impl UpstreamUdpHandlerProvider for Socks5Adapter {
@@ -115,14 +116,7 @@ impl InboundListenerCapability for Socks5Adapter {
 }
 
 #[cfg(feature = "socks5")]
-impl TcpOutboundCapability for Socks5Adapter {
-    fn claim_tcp_outbound_leaf<'a>(
-        &self,
-        leaf: ResolvedLeafOutbound<'a>,
-    ) -> Option<Box<dyn ClaimedTcpOutboundLeaf<'a> + 'a>> {
-        self.claim_tcp_outbound_leaf_impl(leaf)
-    }
-}
+impl TcpOutboundCapability for Socks5Adapter {}
 
 #[cfg(feature = "socks5")]
 impl ProtocolSupportCapability for Socks5Adapter {

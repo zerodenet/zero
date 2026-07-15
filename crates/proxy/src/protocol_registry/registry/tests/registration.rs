@@ -8,7 +8,7 @@ fn focused_capability_views_share_one_adapter_instance() {
     let adapter = Arc::new(DirectAdapter);
     let expected = Arc::as_ptr(&adapter) as *const ();
     let mut registry = ProtocolRegistry::default();
-    registry.register_capability(adapter);
+    registry.register_capability(adapter, DirectAdapter::claim_outbound_leaf_impl);
 
     let entry = registry
         .entries
@@ -31,7 +31,10 @@ fn managed_handler_provider_shares_the_registered_adapter_instance() {
     let adapter = Arc::new(crate::adapters::Hysteria2Adapter);
     let expected = Arc::as_ptr(&adapter) as *const ();
     let mut registry = ProtocolRegistry::default();
-    registry.register_managed_capability(adapter);
+    registry.register_managed_capability(
+        adapter,
+        crate::adapters::Hysteria2Adapter::claim_outbound_leaf_impl,
+    );
 
     let entry = registry
         .entries
@@ -55,7 +58,10 @@ fn upstream_handler_provider_shares_the_registered_adapter_instance() {
     let adapter = Arc::new(crate::adapters::Socks5Adapter);
     let expected = Arc::as_ptr(&adapter) as *const ();
     let mut registry = ProtocolRegistry::default();
-    registry.register_upstream_capability(adapter);
+    registry.register_upstream_capability(
+        adapter,
+        crate::adapters::Socks5Adapter::claim_outbound_leaf_impl,
+    );
 
     let entry = registry.entries.first().expect("registered adapter entry");
     let provider = entry

@@ -23,9 +23,9 @@ use crate::adapters::identity::{
 };
 use crate::protocol_registry::{
     bind_transport_inbound, claim_relay_two_stream_transport_udp_leaf, claim_transport_tcp_leaf,
-    proxy_leaf_runtime, BoundInbound, ClaimedTcpOutboundLeaf, ClaimedUdpFlowLeaf,
-    InboundListenerCapability, ManagedUdpHandlerProvider, OutboundLeafClaim,
-    ProtocolSupportCapability, TcpOutboundCapability, UdpFlowCapability, UdpPacketPathCapability,
+    proxy_leaf_runtime, BoundInbound, InboundListenerCapability, ManagedUdpHandlerProvider,
+    OutboundLeafClaim, ProtocolSupportCapability, TcpOutboundCapability, UdpFlowCapability,
+    UdpPacketPathCapability,
 };
 use crate::runtime::path::TcpPathCategory;
 #[cfg(feature = "vless")]
@@ -306,26 +306,10 @@ impl InboundListenerCapability for VlessAdapter {
 }
 
 #[cfg(feature = "vless")]
-impl TcpOutboundCapability for VlessAdapter {
-    fn claim_tcp_outbound_leaf<'a>(
-        &self,
-        leaf: ResolvedLeafOutbound<'a>,
-    ) -> Option<Box<dyn ClaimedTcpOutboundLeaf<'a> + 'a>> {
-        self.claim_outbound_leaf_impl(leaf)
-            .map(|claimed| claimed.tcp)
-    }
-}
+impl TcpOutboundCapability for VlessAdapter {}
 
 #[cfg(feature = "vless")]
-impl UdpFlowCapability for VlessAdapter {
-    fn claim_udp_flow_leaf<'a>(
-        &self,
-        leaf: ResolvedLeafOutbound<'a>,
-    ) -> Option<Box<dyn ClaimedUdpFlowLeaf<'a> + 'a>> {
-        self.claim_outbound_leaf_impl(leaf)
-            .and_then(|claimed| claimed.udp)
-    }
-}
+impl UdpFlowCapability for VlessAdapter {}
 
 #[cfg(feature = "vless")]
 impl ManagedUdpHandlerProvider for VlessAdapter {
