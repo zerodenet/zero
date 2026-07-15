@@ -68,16 +68,7 @@ pub(crate) use registry::fake_direct_leaf;
 pub(crate) use registry::proxy_leaf_runtime;
 pub(crate) use registry::ClaimedOutboundLeaf;
 pub(crate) use registry::ProtocolRegistry;
-#[cfg(any(feature = "vless", feature = "vmess", feature = "trojan"))]
-pub(crate) use transport_leaf::{
-    prepare_owned_transport_bridge_udp_relay_final_hop, prepare_transport_bridge_udp_direct,
-};
 #[cfg(feature = "vless")]
-pub(crate) use transport_leaf::{
-    prepare_owned_transport_bridge_udp_relay_two_stream,
-    transport_bridge_udp_relay_needs_two_streams,
-};
+pub(crate) use transport_leaf::claim_relay_two_stream_transport_bridge_udp_leaf;
 #[cfg(any(feature = "vless", feature = "vmess", feature = "trojan"))]
-pub(crate) use transport_leaf::{
-    prepare_transport_bridge_tcp_connect, prepare_transport_bridge_tcp_relay,
-};
+pub(crate) use transport_leaf::{claim_transport_bridge_tcp_leaf, claim_transport_bridge_udp_leaf};

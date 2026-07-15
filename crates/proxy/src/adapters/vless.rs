@@ -17,11 +17,9 @@ use zero_traits::{ProtocolCapabilityDescriptor, ProtocolMetadata};
 use crate::adapters::identity::{
     named_protocol_supports_inbound, named_protocol_supports_outbound, NamedProtocolAdapter,
 };
-use crate::adapters::transport_bridge::{
-    claim_relay_two_stream_transport_bridge_udp_leaf, claim_transport_bridge_tcp_leaf,
-};
 use crate::protocol_registry::{
-    bind_transport_inbound, proxy_leaf_runtime, BoundInbound, ClaimedTcpOutboundLeaf,
+    bind_transport_inbound, claim_relay_two_stream_transport_bridge_udp_leaf,
+    claim_transport_bridge_tcp_leaf, proxy_leaf_runtime, BoundInbound, ClaimedTcpOutboundLeaf,
     ClaimedUdpFlowLeaf, InboundListenerCapability, ManagedUdpHandlerProvider,
     ProtocolSupportCapability, TcpOutboundCapability, UdpFlowCapability, UdpPacketPathCapability,
 };

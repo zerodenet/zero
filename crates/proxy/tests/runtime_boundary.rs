@@ -70,6 +70,7 @@ fn adapters_prepare_protocol_parts_but_do_not_own_runtime_execution() {
             "run_logged_quic_listener_loop",
             "serve_inbound",
             "ProtocolTransportBridgeAdapter",
+            "mod transport_bridge;",
         ],
     );
 }
@@ -227,14 +228,14 @@ fn transport_bridge_operations_are_generic() {
 
 #[test]
 fn transport_bridge_helpers_drop_raw_leaf_resolution_paths() {
-    let resolve = read(&proxy_src().join("adapters/transport_bridge.rs"));
     let tcp = read(&proxy_src().join("protocol_registry/transport_leaf/tcp.rs"));
     let udp = read(&proxy_src().join("protocol_registry/transport_leaf/udp.rs"));
-    assert!(!resolve.contains("prepare_last_transport_bridge_leaf"));
-    assert!(!resolve.contains("prepare_transport_bridge_leaf"));
-    assert!(!resolve.contains("trait ProtocolTransportLeafResolver {"));
-    assert!(!resolve.contains("trait ProtocolTransportLeafResolver<'a>"));
-    assert!(!resolve.contains("ResolvedLeafOutbound"));
+    let combined = format!("{tcp}\n{udp}");
+    assert!(!combined.contains("prepare_last_transport_bridge_leaf"));
+    assert!(!combined.contains("prepare_transport_bridge_leaf"));
+    assert!(!combined.contains("trait ProtocolTransportLeafResolver {"));
+    assert!(!combined.contains("trait ProtocolTransportLeafResolver<'a>"));
+    assert!(!combined.contains("ResolvedLeafOutbound"));
     assert!(!tcp.contains("ResolvedLeafOutbound"));
     assert!(!udp.contains("ResolvedLeafOutbound"));
     assert_sources_exclude(
@@ -1119,7 +1120,7 @@ fn claimed_outbound_leaf_owns_capability_preparation() {
 
 #[test]
 fn transport_bridge_adapters_offer_claim_time_tcp_projection() {
-    let helper = read(&proxy_src().join("adapters/transport_bridge.rs"));
+    let helper = read(&proxy_src().join("protocol_registry/transport_leaf/tcp.rs"));
     assert!(helper.contains("struct ClaimedTransportBridgeTcpLeaf"));
     assert!(helper.contains("claim_transport_bridge_tcp_leaf"));
 
@@ -1142,7 +1143,7 @@ fn transport_bridge_adapters_offer_claim_time_tcp_projection() {
 
 #[test]
 fn transport_bridge_adapters_offer_claim_time_udp_projection() {
-    let helper = read(&proxy_src().join("adapters/transport_bridge.rs"));
+    let helper = read(&proxy_src().join("protocol_registry/transport_leaf/udp.rs"));
     assert!(helper.contains("struct ClaimedTransportBridgeUdpLeaf"));
     assert!(helper.contains("claim_transport_bridge_udp_leaf"));
     assert!(helper.contains("ClaimedRelayTwoStreamTransportBridgeUdpLeaf"));
