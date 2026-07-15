@@ -1,8 +1,6 @@
 #[cfg(feature = "vmess")]
-use ::vmess::mux::VmessMuxConnectionPool;
-#[cfg(feature = "vmess")]
 mod listener;
-use ::vmess::transport::VmessOutboundLeaf;
+use ::vmess::transport::{VmessOutboundLeaf, VmessTransportRuntime};
 #[cfg(feature = "vmess")]
 use zero_config::InboundConfig;
 use zero_config::{InboundProtocolConfig, OutboundProtocolConfig};
@@ -29,7 +27,7 @@ use crate::runtime::udp_flow::managed::{
 #[cfg(feature = "vmess")]
 #[derive(Debug, Default)]
 pub(crate) struct VmessAdapter {
-    mux_pool: VmessMuxConnectionPool,
+    runtime: VmessTransportRuntime,
 }
 
 #[cfg(feature = "vmess")]
@@ -63,7 +61,7 @@ impl ProtocolSupportCapability for VmessAdapter {
     }
 
     fn on_config_reloaded(&self) {
-        self.mux_pool.evict_all();
+        self.runtime.on_config_reloaded();
     }
 }
 
@@ -111,9 +109,9 @@ impl TcpOutboundCapability for VmessAdapter {
             return None;
         };
         Some(claim_transport_tcp_leaf(Some((server, port)), runtime, {
-            let mux_pool = self.mux_pool.clone();
+            let transport_runtime = self.runtime.clone();
             move |source_dir| {
-                VmessOutboundLeaf::from_config_refs(
+                transport_runtime.build_outbound_leaf(
                     source_dir,
                     tag,
                     server,
@@ -124,7 +122,6 @@ impl TcpOutboundCapability for VmessAdapter {
                     tls,
                     ws,
                     grpc,
-                    mux_pool.clone(),
                 )
             }
         }))
@@ -153,9 +150,9 @@ impl UdpFlowCapability for VmessAdapter {
             return None;
         };
         Some(claim_transport_udp_leaf(Some((server, port)), {
-            let mux_pool = self.mux_pool.clone();
+            let transport_runtime = self.runtime.clone();
             move |source_dir| {
-                VmessOutboundLeaf::from_config_refs(
+                transport_runtime.build_outbound_leaf(
                     source_dir,
                     tag,
                     server,
@@ -166,7 +163,6 @@ impl UdpFlowCapability for VmessAdapter {
                     tls,
                     ws,
                     grpc,
-                    mux_pool.clone(),
                 )
             }
         }))

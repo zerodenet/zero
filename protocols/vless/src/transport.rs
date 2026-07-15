@@ -9,7 +9,9 @@ mod leaf;
 mod managed_udp;
 mod outbound;
 mod profile;
+mod runtime;
 
 pub use inbound::{VlessInboundBindPlan, VlessInboundListenerRequest};
 pub use leaf::VlessOutboundLeaf;
 pub use profile::{VlessQuicBindProfile, VlessQuicClientProfile, VlessRealityClientProfile};
+pub use runtime::VlessTransportRuntime;

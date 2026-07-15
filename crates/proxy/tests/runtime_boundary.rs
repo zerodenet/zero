@@ -372,6 +372,36 @@ fn protocol_adapter_roots_do_not_construct_transport_plans_or_request_bundles_in
 }
 
 #[test]
+fn transport_bridge_adapters_hold_protocol_runtime_handles_instead_of_protocol_pools() {
+    for (relative, runtime_handle, forbidden) in [
+        (
+            "adapters/vless.rs",
+            "VlessTransportRuntime",
+            "mux_pool::MuxConnectionPool",
+        ),
+        (
+            "adapters/vmess.rs",
+            "VmessTransportRuntime",
+            "VmessMuxConnectionPool",
+        ),
+    ] {
+        let source = read(&proxy_src().join(relative));
+        assert!(
+            source.contains(runtime_handle),
+            "{relative} should hold protocol-owned runtime handle `{runtime_handle}`"
+        );
+        assert!(
+            !source.contains(forbidden),
+            "{relative} must not retain protocol-owned pool type `{forbidden}`"
+        );
+        assert!(
+            !source.contains(".evict_all()"),
+            "{relative} must delegate reload eviction through its protocol runtime handle"
+        );
+    }
+}
+
+#[test]
 fn protocol_adapter_listener_modules_do_not_construct_transport_listener_requests_inline() {
     for relative in [
         "adapters/vless/listener.rs",

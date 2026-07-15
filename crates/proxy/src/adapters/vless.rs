@@ -1,9 +1,7 @@
 #[cfg(feature = "vless")]
-use ::vless::mux_pool::MuxConnectionPool as VlessMuxConnectionPool;
-#[cfg(feature = "vless")]
 use ::vless::transport::{
     VlessInboundBindPlan, VlessOutboundLeaf, VlessQuicBindProfile, VlessQuicClientProfile,
-    VlessRealityClientProfile,
+    VlessRealityClientProfile, VlessTransportRuntime,
 };
 #[cfg(feature = "vless")]
 use async_trait::async_trait;
@@ -36,7 +34,7 @@ use crate::runtime::udp_flow::managed::{
 #[cfg(feature = "vless")]
 #[derive(Debug, Default)]
 pub(crate) struct VlessAdapter {
-    mux_pool: VlessMuxConnectionPool,
+    runtime: VlessTransportRuntime,
 }
 
 #[cfg(feature = "vless")]
@@ -98,7 +96,7 @@ impl ProtocolSupportCapability for VlessAdapter {
     }
 
     fn on_config_reloaded(&self) {
-        self.mux_pool.evict_all();
+        self.runtime.on_config_reloaded();
     }
 }
 
@@ -170,9 +168,9 @@ impl TcpOutboundCapability for VlessAdapter {
         let reality = outbound_reality_profile(reality);
         let quic = quic_client_profile(quic);
         Some(claim_transport_tcp_leaf(Some((server, port)), runtime, {
-            let mux_pool = self.mux_pool.clone();
+            let transport_runtime = self.runtime.clone();
             move |source_dir| {
-                VlessOutboundLeaf::from_config_refs(
+                transport_runtime.build_outbound_leaf(
                     source_dir,
                     tag,
                     server,
@@ -188,7 +186,6 @@ impl TcpOutboundCapability for VlessAdapter {
                     http_upgrade,
                     split_http,
                     quic.as_ref(),
-                    mux_pool.clone(),
                 )
             }
         }))
@@ -226,9 +223,9 @@ impl UdpFlowCapability for VlessAdapter {
         Some(claim_relay_two_stream_transport_udp_leaf(
             Some((server, port)),
             {
-                let mux_pool = self.mux_pool.clone();
+                let transport_runtime = self.runtime.clone();
                 move |source_dir| {
-                    VlessOutboundLeaf::from_config_refs(
+                    transport_runtime.build_outbound_leaf(
                         source_dir,
                         tag,
                         server,
@@ -244,7 +241,6 @@ impl UdpFlowCapability for VlessAdapter {
                         http_upgrade,
                         split_http,
                         quic.as_ref(),
-                        mux_pool.clone(),
                     )
                 }
             },
