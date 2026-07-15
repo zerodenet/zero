@@ -160,38 +160,6 @@ impl VmessInboundProfile {
             session, client,
         ))
     }
-
-    pub async fn accept_route_owned<S>(
-        self,
-        inbound: VmessInbound,
-        stream: S,
-    ) -> Result<crate::mux::VmessInboundAcceptedStream<crate::stream::VmessAeadStream<S>>, Error>
-    where
-        S: AsyncSocket + tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send + 'static,
-    {
-        self.accept_client_owned(inbound, stream).await
-    }
-
-    pub async fn accept_route_owned_with<S, T, E, FRoute, FRouteFut>(
-        self,
-        inbound: VmessInbound,
-        stream: S,
-        on_route: FRoute,
-    ) -> Result<T, E>
-    where
-        S: AsyncSocket + tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send + 'static,
-        FRoute: FnOnce(
-            crate::mux::VmessInboundAcceptedStream<crate::stream::VmessAeadStream<S>>,
-        ) -> FRouteFut,
-        FRouteFut: core::future::Future<Output = Result<T, E>>,
-        E: From<Error>,
-    {
-        let route = self
-            .accept_route_owned(inbound, stream)
-            .await
-            .map_err(E::from)?;
-        on_route(route).await
-    }
 }
 
 pub trait IntoVmessInboundUserConfig {

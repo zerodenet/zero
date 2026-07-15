@@ -81,33 +81,6 @@ impl TrojanInboundProfile {
             session, stream,
         ))
     }
-
-    pub async fn accept_route_owned<S: AsyncSocket>(
-        self,
-        inbound: TrojanInbound,
-        stream: S,
-    ) -> Result<TrojanInboundAcceptedSession<S>, Error> {
-        self.accept_client_owned(inbound, stream).await
-    }
-
-    pub async fn accept_route_owned_with<S, T, E, FRoute, FRouteFut>(
-        self,
-        inbound: TrojanInbound,
-        stream: S,
-        on_route: FRoute,
-    ) -> Result<T, E>
-    where
-        S: AsyncSocket,
-        FRoute: FnOnce(TrojanInboundAcceptedSession<S>) -> FRouteFut,
-        FRouteFut: core::future::Future<Output = Result<T, E>>,
-        E: From<Error>,
-    {
-        let route = self
-            .accept_route_owned(inbound, stream)
-            .await
-            .map_err(E::from)?;
-        on_route(route).await
-    }
 }
 
 /// Result of accepting a Trojan connection.

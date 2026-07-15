@@ -105,7 +105,7 @@ impl TrojanInboundListenerRequest {
             zero_transport::inbound_stack::accept_tls_inbound_stream(socket, &self.tls_acceptor)
                 .await?;
         self.profile
-            .accept_route_owned(crate::inbound::TrojanInbound, stream)
+            .accept_client_owned(crate::inbound::TrojanInbound, stream)
             .await
             .map(OpaqueStreamRoute::new)
             .map_err(RuntimeError::from)

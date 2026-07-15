@@ -1111,6 +1111,71 @@ fn mieru_adapter_accepts_protocol_session_before_runtime_handoff() {
 }
 
 #[test]
+fn vmess_transport_accepts_client_owned_surface_without_route_wrappers() {
+    let transport = read(&workspace_root().join("protocols/vmess/src/transport/inbound.rs"));
+    assert!(
+        transport.contains(".accept_client_owned("),
+        "protocols/vmess/src/transport/inbound.rs should consume the owned accepted client surface directly"
+    );
+    assert!(
+        !transport.contains(".accept_route_owned("),
+        "protocols/vmess/src/transport/inbound.rs must not round-trip through legacy route wrapper helpers"
+    );
+
+    let inbound = read(&workspace_root().join("protocols/vmess/src/inbound.rs"));
+    assert!(
+        !inbound.contains("pub async fn accept_route_owned"),
+        "protocols/vmess/src/inbound.rs must not expose legacy owned route wrapper helpers"
+    );
+    assert!(
+        !inbound.contains("pub async fn accept_route_owned_with"),
+        "protocols/vmess/src/inbound.rs must not expose callback-based owned route helpers"
+    );
+}
+
+#[test]
+fn trojan_transport_accepts_client_owned_surface_without_route_wrappers() {
+    let transport = read(&workspace_root().join("protocols/trojan/src/transport/inbound.rs"));
+    assert!(
+        transport.contains(".accept_client_owned("),
+        "protocols/trojan/src/transport/inbound.rs should consume the owned accepted client surface directly"
+    );
+    assert!(
+        !transport.contains(".accept_route_owned("),
+        "protocols/trojan/src/transport/inbound.rs must not round-trip through legacy route wrapper helpers"
+    );
+
+    let inbound = read(&workspace_root().join("protocols/trojan/src/inbound.rs"));
+    assert!(
+        !inbound.contains("pub async fn accept_route_owned"),
+        "protocols/trojan/src/inbound.rs must not expose legacy owned route wrapper helpers"
+    );
+    assert!(
+        !inbound.contains("pub async fn accept_route_owned_with"),
+        "protocols/trojan/src/inbound.rs must not expose callback-based owned route helpers"
+    );
+}
+
+#[test]
+fn vless_transport_plan_accepts_client_owned_surface_without_callback_wrappers() {
+    let plan = read(&workspace_root().join("protocols/vless/src/transport/inbound/plan.rs"));
+    assert!(
+        plan.contains(".accept_client_owned("),
+        "protocols/vless/src/transport/inbound/plan.rs should consume the owned accepted client surface directly"
+    );
+    assert!(
+        !plan.contains(".accept_route_owned_with_sni_or_else("),
+        "protocols/vless/src/transport/inbound/plan.rs must not round-trip through callback-based route wrapper helpers"
+    );
+
+    let inbound = read(&workspace_root().join("protocols/vless/src/inbound.rs"));
+    assert!(
+        !inbound.contains("pub async fn accept_route_owned_with"),
+        "protocols/vless/src/inbound.rs must not expose callback-based owned route helpers"
+    );
+}
+
+#[test]
 fn socks5_adapter_accepts_protocol_request_before_runtime_handoff() {
     let listener = read(&proxy_src().join("adapters/socks5/inbound/listener.rs"));
     assert!(

@@ -135,7 +135,7 @@ struct VlessAcceptedSession {
     mux_master_uuid: [u8; 16],
 }
 
-struct VlessAcceptedClient<S> {
+pub(crate) struct VlessAcceptedClient<S> {
     accepted: VlessAcceptedSession,
     stream: S,
 }
@@ -168,14 +168,9 @@ pub struct VlessInboundUdpRelay<S> {
     stream: S,
 }
 
-struct VlessClientAcceptError<S> {
+pub(crate) struct VlessClientAcceptError<S> {
     error: Error,
     stream: S,
-}
-
-enum VlessAcceptedRouteError<S> {
-    Accept(VlessClientAcceptError<S>),
-    Route(Error),
 }
 
 pub struct VlessFallbackReplay<S> {
@@ -261,7 +256,7 @@ impl<S> VlessAcceptedClient<S> {
         (session, mux_master_uuid, self.stream)
     }
 
-    async fn into_route_with_sni(
+    pub(crate) async fn into_route_with_sni(
         self,
         sni: Option<String>,
     ) -> Result<VlessAcceptedClientRoute<S>, Error>
@@ -444,7 +439,7 @@ impl<S> VlessClientAcceptError<S> {
         Self { error, stream }
     }
 
-    fn into_fallback_replay(self) -> (Error, VlessFallbackReplay<S::Stream>)
+    pub(crate) fn into_fallback_replay(self) -> (Error, VlessFallbackReplay<S::Stream>)
     where
         S: InboundFallbackCapture,
     {
@@ -593,7 +588,7 @@ impl VlessInboundProfile {
         inbound.accept_tcp_with_auth_and_id(stream, &auth).await
     }
 
-    async fn accept_client_owned<S>(
+    pub(crate) async fn accept_client_owned<S>(
         self,
         inbound: VlessInbound,
         mut stream: S,
@@ -612,59 +607,6 @@ impl VlessInboundProfile {
                 stream,
             )),
             Err(error) => Err(VlessClientAcceptError::new(error, stream)),
-        }
-    }
-
-    async fn accept_route_owned_with_sni<S>(
-        self,
-        inbound: VlessInbound,
-        stream: S,
-        sni: Option<String>,
-    ) -> Result<VlessAcceptedClientRoute<S>, VlessAcceptedRouteError<S>>
-    where
-        S: AsyncSocket,
-    {
-        let accepted = self
-            .accept_client_owned(inbound, stream)
-            .await
-            .map_err(VlessAcceptedRouteError::Accept)?;
-        accepted
-            .into_route_with_sni(sni)
-            .await
-            .map_err(VlessAcceptedRouteError::Route)
-    }
-
-    pub async fn accept_route_owned_with_sni_or_else<
-        S,
-        T,
-        E,
-        FRoute,
-        FRouteFut,
-        FReject,
-        FRejectFut,
-    >(
-        self,
-        inbound: VlessInbound,
-        stream: S,
-        sni: Option<String>,
-        on_route: FRoute,
-        on_rejected: FReject,
-    ) -> Result<T, E>
-    where
-        S: AsyncSocket + InboundFallbackCapture,
-        FRoute: FnOnce(VlessAcceptedClientRoute<S>) -> FRouteFut,
-        FRouteFut: core::future::Future<Output = Result<T, E>>,
-        FReject: FnOnce(Error, VlessFallbackReplay<S::Stream>) -> FRejectFut,
-        FRejectFut: core::future::Future<Output = Result<T, E>>,
-        E: From<Error>,
-    {
-        match self.accept_route_owned_with_sni(inbound, stream, sni).await {
-            Ok(route) => on_route(route).await,
-            Err(VlessAcceptedRouteError::Route(error)) => Err(E::from(error)),
-            Err(VlessAcceptedRouteError::Accept(rejected)) => {
-                let (error, replay) = rejected.into_fallback_replay();
-                on_rejected(error, replay).await
-            }
         }
     }
 

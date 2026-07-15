@@ -227,7 +227,7 @@ async fn inbound_udp_helpers_roundtrip_response_packet() {
         .expect("write trojan udp handshake");
 
     let route = TrojanInboundProfile::from_config_password(password)
-        .accept_route_owned(
+        .accept_client_owned(
             TrojanInbound,
             RecordingSocket {
                 read_buf: handshake_writer.writes[0].clone(),

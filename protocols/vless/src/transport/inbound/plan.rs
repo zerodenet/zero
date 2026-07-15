@@ -133,37 +133,39 @@ impl OwnedVlessInboundTransportPlan {
         };
 
         match accepted {
-            VlessTcpInboundAcceptResult::Stream { stream, sni } => profile
-                .accept_route_owned_with_sni_or_else(
-                    crate::inbound::VlessInbound,
-                    wrap_stream(stream),
-                    sni,
-                    |route| async move { Ok(RouteAcceptResult::Route(OpaqueMuxRoute::new(route))) },
-                    move |auth_error, fallback_replay| {
-                        let fallback = fallback.clone();
-                        async move {
-                            match fallback {
-                                Some(fallback) => {
-                                    Ok(RouteAcceptResult::Fallback(InboundFallback {
-                                        config: fallback,
-                                        replay: OpaqueFallbackReplay::new(move |upstream| {
-                                            Box::pin(async move {
-                                                crate::inbound::VlessFallbackReplay::replay_to_upstream(
-                                                    fallback_replay,
-                                                    upstream,
-                                                )
-                                                .await
-                                            })
-                                        }),
-                                    }))
-                                }
-                                None => Err(RuntimeError::Core(auth_error)),
+            VlessTcpInboundAcceptResult::Stream { stream, sni } => {
+                let wrapped = wrap_stream(stream);
+                match profile
+                    .accept_client_owned(crate::inbound::VlessInbound, wrapped)
+                    .await
+                {
+                    Ok(accepted) => accepted
+                        .into_route_with_sni(sni)
+                        .await
+                        .map(|route| Some(RouteAcceptResult::Route(OpaqueMuxRoute::new(route))))
+                        .map_err(RuntimeError::from),
+                    Err(rejected) => {
+                        let (auth_error, fallback_replay) = rejected.into_fallback_replay();
+                        match fallback {
+                            Some(fallback) => {
+                                Ok(Some(RouteAcceptResult::Fallback(InboundFallback {
+                                    config: fallback,
+                                    replay: OpaqueFallbackReplay::new(move |upstream| {
+                                        Box::pin(async move {
+                                            crate::inbound::VlessFallbackReplay::replay_to_upstream(
+                                                fallback_replay,
+                                                upstream,
+                                            )
+                                            .await
+                                        })
+                                    }),
+                                })))
                             }
+                            None => Err(RuntimeError::Core(auth_error)),
                         }
-                    },
-                )
-                .await
-                .map(Some),
+                    }
+                }
+            }
             VlessTcpInboundAcceptResult::FallbackReplay(fallback_replay) => {
                 let fallback = fallback.ok_or_else(|| {
                     RuntimeError::Io(io::Error::new(
@@ -216,32 +218,32 @@ where
     <S as zero_core::InboundFallbackCapture>::Stream: ClientStream + Send + 'static,
     FWrap: Fn(T) -> S + Clone + Send + 'static,
 {
-    profile
-        .accept_route_owned_with_sni_or_else(
-            crate::inbound::VlessInbound,
-            wrap_stream(stream),
-            sni,
-            |route| async move { Ok(RouteAcceptResult::Route(OpaqueMuxRoute::new(route))) },
-            move |auth_error, fallback_replay| {
-                let fallback = fallback.clone();
-                async move {
-                    match fallback {
-                        Some(fallback) => Ok(RouteAcceptResult::Fallback(InboundFallback {
-                            config: fallback,
-                            replay: OpaqueFallbackReplay::new(move |upstream| {
-                                Box::pin(async move {
-                                    crate::inbound::VlessFallbackReplay::replay_to_upstream(
-                                        fallback_replay,
-                                        upstream,
-                                    )
-                                    .await
-                                })
-                            }),
-                        })),
-                        None => Err(RuntimeError::Core(auth_error)),
-                    }
-                }
-            },
-        )
+    match profile
+        .accept_client_owned(crate::inbound::VlessInbound, wrap_stream(stream))
         .await
+    {
+        Ok(accepted) => accepted
+            .into_route_with_sni(sni)
+            .await
+            .map(|route| RouteAcceptResult::Route(OpaqueMuxRoute::new(route)))
+            .map_err(RuntimeError::from),
+        Err(rejected) => {
+            let (auth_error, fallback_replay) = rejected.into_fallback_replay();
+            match fallback {
+                Some(fallback) => Ok(RouteAcceptResult::Fallback(InboundFallback {
+                    config: fallback,
+                    replay: OpaqueFallbackReplay::new(move |upstream| {
+                        Box::pin(async move {
+                            crate::inbound::VlessFallbackReplay::replay_to_upstream(
+                                fallback_replay,
+                                upstream,
+                            )
+                            .await
+                        })
+                    }),
+                })),
+                None => Err(RuntimeError::Core(auth_error)),
+            }
+        }
+    }
 }

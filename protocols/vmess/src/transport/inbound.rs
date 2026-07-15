@@ -130,7 +130,7 @@ impl VmessInboundListenerRequest {
         )
         .await?;
         self.profile
-            .accept_route_owned(crate::inbound::VmessInbound, stream)
+            .accept_client_owned(crate::inbound::VmessInbound, stream)
             .await
             .map(OpaqueMuxRoute::new)
             .map_err(RuntimeError::from)
