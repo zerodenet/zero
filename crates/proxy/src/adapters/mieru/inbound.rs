@@ -41,18 +41,21 @@ impl crate::adapters::mieru::MieruAdapter {
                 let tcp_context = context.clone();
                 let udp_context = context;
                 let response = profile.response_protocol();
-                profile
+                match profile
                     .accept_client(MeteredStream::new(TcpRelayStream::from(socket)))
                     .await?
-                    .dispatch(
-                        move |session, stream| {
-                            tcp_context.serve_with_client_response(session, stream, response)
-                        },
-                        move |session, relay| {
-                            udp_context.run_stream_udp_relay(session, relay, "mieru_udp")
-                        },
-                    )
-                    .await
+                {
+                    ::mieru::inbound::MieruInboundAcceptedSession::Tcp { session, stream } => {
+                        tcp_context
+                            .serve_with_client_response(session, stream, response)
+                            .await
+                    }
+                    ::mieru::inbound::MieruInboundAcceptedSession::Udp { session, relay } => {
+                        udp_context
+                            .run_stream_udp_relay(session, relay, "mieru_udp")
+                            .await
+                    }
+                }
             },
         }))
     }

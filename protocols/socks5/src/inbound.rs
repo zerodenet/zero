@@ -25,25 +25,7 @@ pub enum Socks5Request {
     UdpAssociate(Socks5UdpAssociateRequest),
 }
 
-impl Socks5Request {
-    pub async fn dispatch_with_handlers<S, Connect, ConnectFut, Udp, UdpFut, E>(
-        self,
-        stream: S,
-        on_connect: Connect,
-        on_udp_associate: Udp,
-    ) -> Result<(), E>
-    where
-        Connect: FnOnce(Session, S) -> ConnectFut,
-        ConnectFut: core::future::Future<Output = Result<(), E>>,
-        Udp: FnOnce(Socks5UdpAssociateRequest, S) -> UdpFut,
-        UdpFut: core::future::Future<Output = Result<(), E>>,
-    {
-        match self {
-            Self::Connect(session) => on_connect(*session, stream).await,
-            Self::UdpAssociate(request) => on_udp_associate(request, stream).await,
-        }
-    }
-}
+impl Socks5Request {}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Socks5UdpAssociateRequest {

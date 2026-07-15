@@ -174,19 +174,6 @@ impl<S> MieruInboundAcceptedSession<S> {
             }
         }
     }
-
-    pub async fn dispatch<Tcp, TcpFut, Udp, UdpFut, E>(self, tcp: Tcp, udp: Udp) -> Result<(), E>
-    where
-        Tcp: FnOnce(Session, S) -> TcpFut,
-        TcpFut: core::future::Future<Output = Result<(), E>>,
-        Udp: FnOnce(Session, MieruInboundUdpRelay<S>) -> UdpFut,
-        UdpFut: core::future::Future<Output = Result<(), E>>,
-    {
-        match self {
-            Self::Tcp { session, stream } => tcp(session, stream).await,
-            Self::Udp { session, relay } => udp(session, relay).await,
-        }
-    }
 }
 
 impl<S> MieruInboundUdpRelay<S> {

@@ -14,25 +14,22 @@ pub(crate) async fn handle_socks5_connection(
     let tcp_context = context.clone();
     let udp_context = context;
     let mut metered = metered;
-    acceptor
-        .accept_command(&mut metered)
-        .await?
-        .dispatch_with_handlers(
-            metered,
-            |session, stream| {
-                tcp_context.serve_with_client_response(session, stream, acceptor.clone())
-            },
-            |request, mut stream| async move {
-                let setup = setup_inbound_udp_association(&mut stream, request).await?;
-                udp_context
-                    .run_udp_association(
-                        stream,
-                        setup.relay,
-                        setup.pending_control_traffic,
-                        setup.handler,
-                    )
-                    .await
-            },
-        )
-        .await
+    match acceptor.accept_command(&mut metered).await? {
+        ::socks5::Socks5Request::Connect(session) => {
+            tcp_context
+                .serve_with_client_response(*session, metered, acceptor.clone())
+                .await
+        }
+        ::socks5::Socks5Request::UdpAssociate(request) => {
+            let setup = setup_inbound_udp_association(&mut metered, request).await?;
+            udp_context
+                .run_udp_association(
+                    metered,
+                    setup.relay,
+                    setup.pending_control_traffic,
+                    setup.handler,
+                )
+                .await
+        }
+    }
 }

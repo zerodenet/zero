@@ -1095,14 +1095,18 @@ fn mieru_adapter_accepts_protocol_session_before_runtime_handoff() {
         "adapters/mieru/inbound.rs should accept a protocol-owned session surface before runtime handoff"
     );
     assert!(
-        !listener.contains("accept_and_dispatch_client"),
-        "adapters/mieru/inbound.rs must not use legacy accept-and-dispatch helpers"
+        listener.contains("MieruInboundAcceptedSession::Tcp"),
+        "adapters/mieru/inbound.rs should explicitly branch on accepted mieru TCP sessions"
+    );
+    assert!(
+        listener.contains("MieruInboundAcceptedSession::Udp"),
+        "adapters/mieru/inbound.rs should explicitly branch on accepted mieru UDP sessions"
     );
 
     let inbound = read(&workspace_root().join("protocols/mieru/src/inbound.rs"));
     assert!(
-        !inbound.contains("accept_and_dispatch_client"),
-        "protocols/mieru/src/inbound.rs must stop at accepted session surfaces instead of owning runtime handoff helpers"
+        !inbound.contains("pub async fn dispatch<"),
+        "protocols/mieru/src/inbound.rs must stop at accepted session surfaces instead of owning adapter dispatch helpers"
     );
 }
 
@@ -1114,18 +1118,22 @@ fn socks5_adapter_accepts_protocol_request_before_runtime_handoff() {
         "adapters/socks5/inbound/listener.rs should accept a protocol-owned request surface before runtime handoff"
     );
     assert!(
-        !listener.contains("accept_and_dispatch_command"),
-        "adapters/socks5/inbound/listener.rs must not use legacy accept-and-dispatch helpers"
+        listener.contains("Socks5Request::Connect"),
+        "adapters/socks5/inbound/listener.rs should explicitly branch on accepted SOCKS5 CONNECT requests"
     );
     assert!(
-        listener.contains("setup_inbound_udp_association(&mut stream, request)"),
+        listener.contains("Socks5Request::UdpAssociate"),
+        "adapters/socks5/inbound/listener.rs should explicitly branch on accepted SOCKS5 UDP ASSOCIATE requests"
+    );
+    assert!(
+        listener.contains("setup_inbound_udp_association(&mut metered, request)"),
         "adapters/socks5/inbound/listener.rs should keep SOCKS5 UDP associate setup explicit at the adapter/runtime boundary"
     );
 
     let inbound = read(&workspace_root().join("protocols/socks5/src/inbound.rs"));
     assert!(
-        !inbound.contains("accept_and_dispatch_command_with"),
-        "protocols/socks5/src/inbound.rs must stop at accepted request surfaces instead of owning runtime handoff helpers"
+        !inbound.contains("pub async fn dispatch_with_handlers"),
+        "protocols/socks5/src/inbound.rs must stop at accepted request surfaces instead of owning adapter dispatch helpers"
     );
 }
 
