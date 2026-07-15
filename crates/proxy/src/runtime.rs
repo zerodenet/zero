@@ -8,22 +8,11 @@ use tracing::{info, warn};
 use zero_config::RuntimeConfig;
 use zero_dns::DnsSystem;
 use zero_engine::{Engine, EngineError};
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
-))]
-use zero_platform_tokio::TokioSocket;
 
 use crate::inventory::ProtocolInventory;
 
 #[cfg(any(feature = "shadowsocks", feature = "hysteria2"))]
 pub(crate) mod datagram_udp;
-mod engine_facade;
 mod handle;
 #[cfg(feature = "http")]
 pub(crate) mod http_redirect;
@@ -161,44 +150,6 @@ impl Proxy {
 
     pub fn engine(&self) -> &Engine {
         &self.engine
-    }
-
-    #[cfg(any(
-        feature = "socks5",
-        feature = "vless",
-        feature = "hysteria2",
-        feature = "shadowsocks",
-        feature = "trojan",
-        feature = "vmess",
-        feature = "mieru"
-    ))]
-    pub(crate) async fn connect_upstream_host(
-        &self,
-        server: &str,
-        port: u16,
-    ) -> Result<TokioSocket, zero_transport::RuntimeError> {
-        self.protocols
-            .direct_connector()
-            .connect_host(server, port, self.resolver.as_ref())
-            .await
-            .map_err(Into::into)
-    }
-
-    #[cfg(any(
-        feature = "socks5",
-        feature = "vless",
-        feature = "hysteria2",
-        feature = "shadowsocks",
-        feature = "trojan",
-        feature = "vmess",
-        feature = "mieru"
-    ))]
-    pub(crate) async fn connect_upstream_host_owned(
-        &self,
-        server: String,
-        port: u16,
-    ) -> Result<TokioSocket, zero_transport::RuntimeError> {
-        self.connect_upstream_host(&server, port).await
     }
 
     pub fn with_udp_upstream_idle_timeout(mut self, timeout: std::time::Duration) -> Self {

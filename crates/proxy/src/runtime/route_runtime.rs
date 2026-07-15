@@ -44,8 +44,9 @@ pub(crate) struct SharedIngressRuntimeServices {
 
 impl SharedIngressRuntimeServices {
     pub(crate) fn from_proxy(proxy: &Proxy) -> Self {
+        let tcp_services = TcpRuntimeServices::from_proxy(proxy);
         Self {
-            tcp_services: TcpRuntimeServices::from_proxy(proxy),
+            tcp_services: tcp_services.clone(),
             #[cfg(any(
                 feature = "socks5",
                 feature = "vless",
@@ -60,7 +61,7 @@ impl SharedIngressRuntimeServices {
                 proxy.config.clone(),
                 proxy.resolver.clone(),
                 proxy.protocols.clone(),
-                UdpRuntimeServices::from_proxy(proxy),
+                UdpRuntimeServices::new(tcp_services),
             ),
         }
     }
