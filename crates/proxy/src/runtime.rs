@@ -244,6 +244,16 @@ impl Proxy {
     {
         orchestration::run_until(self, shutdown).await
     }
+
+    pub async fn probe_outbound_single(
+        &self,
+        target_tag: &str,
+        url: &str,
+    ) -> Result<u64, EngineError> {
+        crate::groups::UrlTestRuntime::from_proxy(self)
+            .probe_outbound_single(target_tag, url)
+            .await
+    }
 }
 
 impl Deref for Proxy {

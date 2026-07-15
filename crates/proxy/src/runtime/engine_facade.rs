@@ -1,7 +1,3 @@
-use std::sync::Arc;
-
-use zero_engine::{EnginePlan, ResolvedOutbound, TargetId, UrlTestMemberState};
-
 use crate::runtime::Proxy;
 #[cfg(any(
     feature = "socks5",
@@ -15,36 +11,6 @@ use crate::runtime::Proxy;
 use crate::transport::StreamTraffic;
 
 impl Proxy {
-    pub(crate) fn resolve_target_id(
-        &self,
-        target_id: TargetId,
-    ) -> Option<(ResolvedOutbound<'static>, Arc<EnginePlan>)> {
-        self.engine.resolve_target_id(target_id)
-    }
-
-    pub(crate) fn resolve_target_chains(&self, target_id: TargetId) -> Vec<Vec<TargetId>> {
-        self.engine.resolve_target_chains(target_id)
-    }
-
-    pub(crate) fn target_tag(&self, target_id: TargetId) -> Option<String> {
-        self.engine.target_tag(target_id)
-    }
-
-    pub(crate) fn urltest_selected_target(&self, group_id: TargetId) -> Option<TargetId> {
-        self.engine.urltest_selected_target(group_id)
-    }
-
-    pub(crate) fn update_urltest_state(
-        &self,
-        group_id: TargetId,
-        selected: TargetId,
-        latency_ms: Option<u64>,
-        members: Vec<UrlTestMemberState>,
-    ) {
-        self.engine
-            .update_urltest_state(group_id, selected, latency_ms, members);
-    }
-
     pub(crate) fn record_session_inbound_rx(&self, session_id: u64, bytes: u64) {
         self.engine.record_session_inbound_rx(session_id, bytes);
     }

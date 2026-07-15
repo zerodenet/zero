@@ -1,4 +1,4 @@
-use crate::groups::DEFAULT_PROBE_URL;
+use crate::groups::{UrlTestRuntime, DEFAULT_PROBE_URL};
 
 use super::model::ProxyHandle;
 use super::util::parse_ip_address;
@@ -58,7 +58,10 @@ impl zero_api::CommandService for ProxyHandle {
                     .unwrap_or_else(|| DEFAULT_PROBE_URL.to_owned());
                 match tokio::runtime::Handle::try_current() {
                     Ok(rt) => rt.block_on(async move {
-                        match proxy.probe_outbound_single(&target_tag, &url).await {
+                        match UrlTestRuntime::from_proxy(&proxy)
+                            .probe_outbound_single(&target_tag, &url)
+                            .await
+                        {
                             Ok(latency_ms) => Ok(zero_api::CommandResponse {
                                 accepted: true,
                                 result: Some(serde_json::json!({

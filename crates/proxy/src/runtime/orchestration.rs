@@ -9,6 +9,7 @@ use tracing::{info, warn};
 use zero_engine::EngineError;
 
 use super::{listeners, reload, Proxy};
+use crate::groups::UrlTestRuntime;
 use crate::runtime::route_runtime::{InboundListenerRuntimeFactory, SharedIngressRuntimeServices};
 
 pub(super) async fn run_until<F>(proxy: &Proxy, shutdown: F) -> Result<(), EngineError>
@@ -25,6 +26,7 @@ where
     let mut urltests: JoinSet<Result<(), EngineError>> = JoinSet::new();
     let mut reload_async_rx = reload::subscribe_reload_bridge(proxy.engine.subscribe_reload());
     let source_dir: Option<PathBuf> = proxy.config.source_dir().map(|path| path.to_path_buf());
+    let urltest_runtime = UrlTestRuntime::from_proxy(proxy);
     let inbound_runtime_factory =
         InboundListenerRuntimeFactory::new(SharedIngressRuntimeServices::from_proxy(proxy));
 
@@ -44,10 +46,10 @@ where
             &mut listeners,
         );
     }
-    for &group_id in proxy.engine.plan().urltest_groups() {
-        let proxy = proxy.clone();
+    for group_id in urltest_runtime.group_ids() {
+        let runtime = urltest_runtime.clone();
         let shutdown = shutdown_rx.clone();
-        urltests.spawn(async move { proxy.run_urltest_group(group_id, shutdown).await });
+        urltests.spawn(async move { runtime.run_urltest_group(group_id, shutdown).await });
     }
 
     info!(
@@ -96,7 +98,7 @@ where
                     &mut listener_stops,
                     &mut listeners,
                 ).await;
-                listeners::reconcile_urltests(proxy, &new_config, &shutdown_rx, &mut urltests).await;
+                listeners::reconcile_urltests(&urltest_runtime, &shutdown_rx, &mut urltests).await;
                 proxy.protocols.on_config_reloaded();
                 info!(
                     inbound_count = new_config.inbounds.len(),

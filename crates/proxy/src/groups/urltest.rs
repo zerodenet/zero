@@ -7,27 +7,48 @@ use tracing::{debug, info, warn};
 use zero_core::{Address, Network, ProtocolType, Session};
 use zero_traits::AsyncSocket;
 
-use super::super::transport::extract_tcp_stream;
-use super::super::{logging::log_urltest_group_target_changed, runtime::Proxy};
 use crate::protocol_registry::TcpRuntimeServices;
+use crate::runtime::Proxy;
+use crate::transport::extract_tcp_stream;
 use zero_engine::{
     EngineError, PolicyProbeCompletedPayload, PolicyProbeMember, ProbeTrigger, ResolvedOutbound,
     TargetId, UrlTestMemberState,
 };
 
+use super::super::logging::log_urltest_group_target_changed;
+
 /// Default probe URL for single-outbound diagnostics (`diagnostics.probe_outbound`).
 /// Plain HTTP so the measured latency excludes a TLS handshake, and a 204
-/// response so there is no body to download — the de-facto standard also used
+/// response so there is no body to download; the de-facto standard also used
 /// by Clash/sing-box.
 pub const DEFAULT_PROBE_URL: &str = "http://www.gstatic.com/generate_204";
 
-impl Proxy {
+#[derive(Clone)]
+pub(crate) struct UrlTestRuntime {
+    services: TcpRuntimeServices,
+}
+
+impl UrlTestRuntime {
+    pub(crate) fn from_proxy(proxy: &Proxy) -> Self {
+        Self {
+            services: TcpRuntimeServices::from_proxy(proxy),
+        }
+    }
+
+    pub(crate) fn group_ids(&self) -> Vec<TargetId> {
+        self.services.engine().plan().urltest_groups().to_vec()
+    }
+
+    pub(crate) fn clear_probe_triggers(&self) {
+        self.services.engine().probe_trigger_registry().clear();
+    }
+
     pub(crate) async fn run_urltest_group(
         &self,
         group_id: TargetId,
         mut shutdown: watch::Receiver<bool>,
     ) -> Result<(), EngineError> {
-        let plan = self.engine().plan();
+        let plan = self.services.engine().plan();
         let group = plan
             .target(group_id)
             .expect("engine plan should resolve urltest group");
@@ -35,6 +56,7 @@ impl Proxy {
             return Ok(());
         };
         let group_tag = group.tag().to_owned();
+        let interval_seconds = urltest.interval().as_secs();
         let probe = UrlTestProbe::parse(urltest.url()).map_err(|message| {
             EngineError::InvalidUrlTestGroup {
                 tag: group_tag.clone(),
@@ -42,24 +64,24 @@ impl Proxy {
             }
         })?;
 
-        // Register a probe trigger so `policies.probe` can wake this loop.
         let probe_notify = Arc::new(Notify::new());
         let trigger = ProbeTrigger::new({
             let notify = Arc::clone(&probe_notify);
             move || notify.notify_one()
         });
-        self.engine()
+        self.services
+            .engine()
             .probe_trigger_registry()
             .register(&group_tag, trigger);
 
         info!(
             group_tag = %group_tag,
             url = probe.url.as_str(),
-            interval_seconds = urltest.interval().as_secs(),
+            interval_seconds,
             "urltest group started"
         );
 
-        let mut schedule = interval(urltest.interval());
+        let mut schedule = interval(Duration::from_secs(interval_seconds));
         schedule.set_missed_tick_behavior(MissedTickBehavior::Skip);
         schedule.tick().await;
         self.refresh_urltest_group(group_id, &probe, "startup")
@@ -84,7 +106,10 @@ impl Proxy {
             }
         }
 
-        self.engine().probe_trigger_registry().remove(&group_tag);
+        self.services
+            .engine()
+            .probe_trigger_registry()
+            .remove(&group_tag);
         info!(group_tag = %group_tag, "urltest group stopped");
         Ok(())
     }
@@ -95,7 +120,7 @@ impl Proxy {
         probe: &UrlTestProbe,
         trigger: &'static str,
     ) {
-        let plan = self.engine().plan();
+        let plan = self.services.engine().plan();
         let Some(group) = plan.target(group_id) else {
             debug!(
                 group_id = group_id.index(),
@@ -240,7 +265,8 @@ impl Proxy {
             "urltest probe completed"
         );
 
-        self.engine()
+        self.services
+            .engine()
             .push_policy_probe_completed(group_tag, event_payload);
 
         log_urltest_group_target_changed(
@@ -259,6 +285,30 @@ impl Proxy {
         }
     }
 
+    pub(crate) async fn probe_outbound_single(
+        &self,
+        target_tag: &str,
+        url: &str,
+    ) -> Result<u64, EngineError> {
+        let probe =
+            UrlTestProbe::parse(url).map_err(|message| EngineError::InvalidUrlTestGroup {
+                tag: target_tag.to_owned(),
+                message,
+            })?;
+        let plan = self.services.engine().plan();
+        let Some(target_id) = plan.target_id(target_tag) else {
+            return Err(EngineError::SelectorGroupNotFound {
+                tag: target_tag.to_owned(),
+            });
+        };
+        let Some((candidate, _plan)) = self.resolve_target_id(target_id) else {
+            return Err(EngineError::SelectorGroupNotFound {
+                tag: target_tag.to_owned(),
+            });
+        };
+        self.probe_outbound(candidate, &probe).await
+    }
+
     async fn probe_outbound(
         &self,
         candidate: ResolvedOutbound<'static>,
@@ -273,38 +323,6 @@ impl Proxy {
         }
     }
 
-    /// Probe a single outbound **through the proxy stack** (full TLS + protocol
-    /// handshake, then an HTTP HEAD to `url`, time to first byte) and return
-    /// the latency in milliseconds.
-    ///
-    /// This is the synchronous, single-node counterpart to the async group
-    /// probe (`policies.probe`), and unlike the engine's direct-TCP
-    /// `probe_target` it measures the real end-to-end proxy path. Used by the
-    /// `diagnostics.probe_outbound` command for GUI "tap one node to test".
-    pub async fn probe_outbound_single(
-        &self,
-        target_tag: &str,
-        url: &str,
-    ) -> Result<u64, EngineError> {
-        let probe =
-            UrlTestProbe::parse(url).map_err(|message| EngineError::InvalidUrlTestGroup {
-                tag: target_tag.to_owned(),
-                message,
-            })?;
-        let plan = self.engine().plan();
-        let Some(target_id) = plan.target_id(target_tag) else {
-            return Err(EngineError::SelectorGroupNotFound {
-                tag: target_tag.to_owned(),
-            });
-        };
-        let Some((candidate, _plan)) = self.resolve_target_id(target_id) else {
-            return Err(EngineError::SelectorGroupNotFound {
-                tag: target_tag.to_owned(),
-            });
-        };
-        self.probe_outbound(candidate, &probe).await
-    }
-
     async fn probe_resolved_outbound(
         &self,
         resolved: ResolvedOutbound<'static>,
@@ -314,9 +332,6 @@ impl Proxy {
 
         timeout(URLTEST_PROBE_TIMEOUT, async {
             let started_at = Instant::now();
-
-            // Build a dummy session for the probe target — the outbound
-            // establishment pipeline will connect through the candidate.
             let probe_session = Session::new(
                 0,
                 Address::Domain(probe.host.clone()),
@@ -325,15 +340,13 @@ impl Proxy {
                 ProtocolType::Unknown,
             );
 
-            // Use the existing TCP outbound establishment pipeline which
-            // handles all protocol types generically, including fallback.
             let outbound = crate::inventory::dispatch_tcp_outbound(
-                TcpRuntimeServices::from_proxy(self),
+                self.services.clone(),
                 &probe_session,
                 resolved,
             )
             .await
-            .map_err(|f| f.error)?;
+            .map_err(|failure| failure.error)?;
             let result = extract_tcp_stream(outbound)?;
             let mut socket = result.upstream;
 
@@ -355,6 +368,37 @@ impl Proxy {
         })
         .await
         .map_err(|_| std::io::Error::new(std::io::ErrorKind::TimedOut, "urltest probe timed out"))?
+    }
+
+    fn resolve_target_id(
+        &self,
+        target_id: TargetId,
+    ) -> Option<(ResolvedOutbound<'static>, Arc<zero_engine::EnginePlan>)> {
+        self.services.engine().resolve_target_id(target_id)
+    }
+
+    fn resolve_target_chains(&self, target_id: TargetId) -> Vec<Vec<TargetId>> {
+        self.services.engine().resolve_target_chains(target_id)
+    }
+
+    fn target_tag(&self, target_id: TargetId) -> Option<String> {
+        self.services.engine().target_tag(target_id)
+    }
+
+    fn urltest_selected_target(&self, group_id: TargetId) -> Option<TargetId> {
+        self.services.engine().urltest_selected_target(group_id)
+    }
+
+    fn update_urltest_state(
+        &self,
+        group_id: TargetId,
+        selected: TargetId,
+        latency_ms: Option<u64>,
+        members: Vec<UrlTestMemberState>,
+    ) {
+        self.services
+            .engine()
+            .update_urltest_state(group_id, selected, latency_ms, members);
     }
 }
 

@@ -1270,7 +1270,12 @@ fn non_transport_bridge_adapters_offer_claim_time_udp_projection() {
 #[test]
 fn urltest_probe_uses_generic_tcp_outbound_dispatch() {
     let urltest = read(&proxy_src().join("groups/urltest.rs"));
+    let runtime_urltest = read(&proxy_src().join("runtime/listeners/urltest.rs"));
+    assert!(urltest.contains("struct UrlTestRuntime"));
     assert!(urltest.contains("dispatch_tcp_outbound("));
     assert!(!urltest.contains("prepare_tcp_candidate("));
     assert!(!urltest.contains("ResolvedLeafOutbound"));
+    assert!(!urltest.contains("impl Proxy"));
+    assert!(!runtime_urltest.contains("use super::super::Proxy"));
+    assert!(!runtime_urltest.contains("proxy: &Proxy"));
 }
