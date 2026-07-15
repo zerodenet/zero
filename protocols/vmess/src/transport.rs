@@ -7,8 +7,7 @@ mod options;
 mod outbound;
 mod runtime;
 
-pub use crate::inbound::BorrowedVmessInboundUserConfigParts;
 pub use inbound::VmessInboundListenerRequest;
 pub use leaf::VmessOutboundLeaf;
-pub use options::VmessOutboundOptionsRef;
+pub use options::{VmessInboundOptionsRef, VmessInboundUserRef, VmessOutboundOptionsRef};
 pub use runtime::VmessTransportRuntime;

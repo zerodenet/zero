@@ -714,6 +714,20 @@ impl IntoVlessInboundUserConfig for BorrowedVlessInboundUserConfigParts<'_> {
     }
 }
 
+#[cfg(all(feature = "runtime", feature = "reality"))]
+impl IntoVlessInboundUserConfig for crate::transport::VlessInboundUserRef<'_> {
+    fn into_vless_inbound_user_config(self) -> VlessInboundUserConfigParts {
+        (
+            self.id.to_owned(),
+            self.flow.map(str::to_owned),
+            self.credential_id.map(str::to_owned),
+            self.principal_key.map(str::to_owned),
+            self.up_bps,
+            self.down_bps,
+        )
+    }
+}
+
 impl VlessInbound {
     pub fn protocol(&self) -> ProtocolType {
         ProtocolType::Vless

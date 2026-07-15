@@ -1,6 +1,6 @@
 use ::vless::transport::{
-    BorrowedVlessInboundUserConfigParts, VlessInboundListenerRequest, VlessRealityServerOptionsRef,
-    VlessTransportRuntime,
+    VlessInboundListenerRequest, VlessInboundOptionsRef, VlessInboundUserRef,
+    VlessRealityServerOptionsRef, VlessTransportRuntime,
 };
 use zero_config::{InboundConfig, InboundProtocolConfig};
 use zero_engine::EngineError;
@@ -32,33 +32,31 @@ pub(super) fn prepare(
         } => runtime
             .build_inbound_listener_request(
                 source_dir,
-                users
-                    .iter()
-                    .map(|user| -> BorrowedVlessInboundUserConfigParts<'_> {
-                        (
-                            user.id.as_str(),
-                            user.flow.as_deref(),
-                            user.credential_id.as_deref(),
-                            user.principal_key.as_deref(),
-                            user.up_bps,
-                            user.down_bps,
-                        )
+                VlessInboundOptionsRef {
+                    users: users.iter().map(|user| VlessInboundUserRef {
+                        id: user.id.as_str(),
+                        flow: user.flow.as_deref(),
+                        credential_id: user.credential_id.as_deref(),
+                        principal_key: user.principal_key.as_deref(),
+                        up_bps: user.up_bps,
+                        down_bps: user.down_bps,
                     }),
-                reality
-                    .as_deref()
-                    .map(|reality| VlessRealityServerOptionsRef {
-                        private_key: reality.private_key.as_str(),
-                        short_ids: reality.short_ids.as_slice(),
-                        server_name: reality.server_name.as_deref(),
-                        cipher_suites: reality.cipher_suites.as_slice(),
-                    }),
-                tls.as_deref(),
-                ws.as_deref(),
-                grpc.as_deref(),
-                h2.as_deref(),
-                http_upgrade.as_deref(),
-                split_http.as_deref(),
-                fallback.as_deref(),
+                    reality: reality
+                        .as_deref()
+                        .map(|reality| VlessRealityServerOptionsRef {
+                            private_key: reality.private_key.as_str(),
+                            short_ids: reality.short_ids.as_slice(),
+                            server_name: reality.server_name.as_deref(),
+                            cipher_suites: reality.cipher_suites.as_slice(),
+                        }),
+                    tls: tls.as_deref(),
+                    ws: ws.as_deref(),
+                    grpc: grpc.as_deref(),
+                    h2: h2.as_deref(),
+                    http_upgrade: http_upgrade.as_deref(),
+                    split_http: split_http.as_deref(),
+                    fallback: fallback.as_deref(),
+                },
             )
             .map_err(EngineError::from)?,
         _ => {

@@ -227,6 +227,20 @@ impl IntoVmessInboundUserConfig for BorrowedVmessInboundUserConfigParts<'_> {
     }
 }
 
+#[cfg(feature = "runtime")]
+impl IntoVmessInboundUserConfig for crate::transport::VmessInboundUserRef<'_> {
+    fn into_vmess_inbound_user_config(self) -> VmessInboundUserConfigParts {
+        (
+            self.id.to_owned(),
+            self.cipher.to_owned(),
+            self.credential_id.map(str::to_owned),
+            self.principal_key.map(str::to_owned),
+            self.up_bps,
+            self.down_bps,
+        )
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct VmessInbound;
 

@@ -1,5 +1,5 @@
 use ::vmess::transport::{
-    BorrowedVmessInboundUserConfigParts, VmessInboundListenerRequest, VmessTransportRuntime,
+    VmessInboundListenerRequest, VmessInboundOptionsRef, VmessInboundUserRef, VmessTransportRuntime,
 };
 use zero_config::{InboundConfig, InboundProtocolConfig};
 use zero_engine::EngineError;
@@ -22,21 +22,19 @@ pub(super) fn prepare(
         } => runtime
             .build_inbound_listener_request(
                 source_dir,
-                users
-                    .iter()
-                    .map(|user| -> BorrowedVmessInboundUserConfigParts<'_> {
-                        (
-                            user.id.as_str(),
-                            user.cipher.as_str(),
-                            user.credential_id.as_deref(),
-                            user.principal_key.as_deref(),
-                            user.up_bps,
-                            user.down_bps,
-                        )
+                VmessInboundOptionsRef {
+                    users: users.iter().map(|user| VmessInboundUserRef {
+                        id: user.id.as_str(),
+                        cipher: user.cipher.as_str(),
+                        credential_id: user.credential_id.as_deref(),
+                        principal_key: user.principal_key.as_deref(),
+                        up_bps: user.up_bps,
+                        down_bps: user.down_bps,
                     }),
-                tls.as_deref(),
-                ws.as_deref(),
-                grpc.as_deref(),
+                    tls: tls.as_deref(),
+                    ws: ws.as_deref(),
+                    grpc: grpc.as_deref(),
+                },
             )
             .map_err(EngineError::from)?,
         _ => {

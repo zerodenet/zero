@@ -1,29 +1,9 @@
+use super::options::{
+    VlessQuicBindOptionsRef, VlessQuicClientOptionsRef, VlessRealityClientOptionsRef,
+    VlessRealityServerOptionsRef,
+};
+
 const VLESS_QUIC_ALPN: &[u8] = b"h3";
-
-#[derive(Debug, Clone, Copy)]
-pub struct VlessOutboundOptionsRef<'a> {
-    pub id: &'a str,
-    pub flow: Option<&'a str>,
-    pub mux_concurrency: Option<u32>,
-    pub reality: Option<VlessRealityClientOptionsRef<'a>>,
-    pub quic: Option<VlessQuicClientOptionsRef<'a>>,
-}
-
-#[derive(Debug, Clone, Copy)]
-pub struct VlessRealityClientOptionsRef<'a> {
-    pub public_key: &'a str,
-    pub short_id: &'a str,
-    pub server_name: Option<&'a str>,
-    pub cipher_suites: &'a [String],
-}
-
-#[derive(Debug, Clone, Copy)]
-pub struct VlessRealityServerOptionsRef<'a> {
-    pub private_key: &'a str,
-    pub short_ids: &'a [String],
-    pub server_name: Option<&'a str>,
-    pub cipher_suites: &'a [String],
-}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct VlessRealityClientProfile {
@@ -71,13 +51,6 @@ impl From<VlessRealityServerOptionsRef<'_>> for crate::reality::VlessRealityServ
     }
 }
 
-#[derive(Debug, Clone, Copy)]
-pub struct VlessQuicClientOptionsRef<'a> {
-    pub server_name: Option<&'a str>,
-    pub insecure: bool,
-    pub ca_cert_path: Option<&'a str>,
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct VlessQuicClientProfile {
     pub server_name: Option<String>,
@@ -107,12 +80,6 @@ impl From<VlessQuicClientOptionsRef<'_>> for VlessQuicClientProfile {
             options.ca_cert_path.map(str::to_owned),
         )
     }
-}
-
-#[derive(Debug, Clone, Copy)]
-pub struct VlessQuicBindOptionsRef<'a> {
-    pub cert_path: Option<&'a str>,
-    pub key_path: Option<&'a str>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

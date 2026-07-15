@@ -7,15 +7,15 @@
 mod inbound;
 mod leaf;
 mod managed_udp;
+mod options;
 mod outbound;
 mod profile;
 mod runtime;
 
-pub use crate::inbound::BorrowedVlessInboundUserConfigParts;
 pub use inbound::VlessInboundListenerRequest;
 pub use leaf::VlessOutboundLeaf;
-pub use profile::{
-    VlessOutboundOptionsRef, VlessQuicBindOptionsRef, VlessQuicClientOptionsRef,
-    VlessRealityClientOptionsRef, VlessRealityServerOptionsRef,
+pub use options::{
+    VlessInboundOptionsRef, VlessInboundUserRef, VlessOutboundOptionsRef, VlessQuicBindOptionsRef,
+    VlessQuicClientOptionsRef, VlessRealityClientOptionsRef, VlessRealityServerOptionsRef,
 };
 pub use runtime::VlessTransportRuntime;

@@ -6,8 +6,7 @@ use zero_traits::{
 
 use super::inbound::VmessInboundListenerRequest;
 use super::leaf::VmessOutboundLeaf;
-use super::options::VmessOutboundOptionsRef;
-use crate::inbound::BorrowedVmessInboundUserConfigParts;
+use super::options::{VmessInboundOptionsRef, VmessInboundUserRef, VmessOutboundOptionsRef};
 
 #[derive(Debug, Clone, Default)]
 pub struct VmessTransportRuntime {
@@ -22,17 +21,20 @@ impl VmessTransportRuntime {
     pub fn build_inbound_listener_request<'a, I, TTls, TWs, TGrpc>(
         &self,
         source_dir: Option<&Path>,
-        users: I,
-        tls: Option<&TTls>,
-        ws: Option<&TWs>,
-        grpc: Option<&TGrpc>,
+        options: VmessInboundOptionsRef<'a, I, TTls, TWs, TGrpc>,
     ) -> Result<VmessInboundListenerRequest, zero_transport::RuntimeError>
     where
-        I: IntoIterator<Item = BorrowedVmessInboundUserConfigParts<'a>>,
+        I: IntoIterator<Item = VmessInboundUserRef<'a>>,
         TTls: ServerTlsProfile + ?Sized,
         TWs: WebSocketTransportProfile + ?Sized,
         TGrpc: GrpcTransportProfile + ?Sized,
     {
+        let VmessInboundOptionsRef {
+            users,
+            tls,
+            ws,
+            grpc,
+        } = options;
         let profile = crate::inbound::VmessInboundProfile::from_config_users(users)?;
         VmessInboundListenerRequest::from_profile_refs(source_dir, profile, tls, ws, grpc)
     }

@@ -7,11 +7,10 @@ use zero_traits::{
 
 use super::inbound::{VlessInboundBindPlan, VlessInboundListenerRequest};
 use super::leaf::VlessOutboundLeaf;
-use super::profile::{
-    VlessOutboundOptionsRef, VlessQuicBindOptionsRef, VlessQuicBindProfile, VlessQuicClientProfile,
-    VlessRealityClientProfile, VlessRealityServerOptionsRef,
+use super::options::{
+    VlessInboundOptionsRef, VlessInboundUserRef, VlessOutboundOptionsRef, VlessQuicBindOptionsRef,
 };
-use crate::inbound::BorrowedVlessInboundUserConfigParts;
+use super::profile::{VlessQuicBindProfile, VlessQuicClientProfile, VlessRealityClientProfile};
 
 #[derive(Debug, Clone, Default)]
 pub struct VlessTransportRuntime {
@@ -36,18 +35,10 @@ impl VlessTransportRuntime {
     pub fn build_inbound_listener_request<'a, I, TTls, TWs, TGrpc, TH2, THttp, TSplit, TFallback>(
         &self,
         source_dir: Option<&Path>,
-        users: I,
-        reality: Option<VlessRealityServerOptionsRef<'a>>,
-        tls: Option<&TTls>,
-        ws: Option<&TWs>,
-        grpc: Option<&TGrpc>,
-        h2: Option<&TH2>,
-        http_upgrade: Option<&THttp>,
-        split_http: Option<&TSplit>,
-        fallback: Option<&TFallback>,
+        options: VlessInboundOptionsRef<'a, I, TTls, TWs, TGrpc, TH2, THttp, TSplit, TFallback>,
     ) -> Result<VlessInboundListenerRequest, zero_transport::RuntimeError>
     where
-        I: IntoIterator<Item = BorrowedVlessInboundUserConfigParts<'a>>,
+        I: IntoIterator<Item = VlessInboundUserRef<'a>>,
         TTls: ServerTlsProfile + ?Sized,
         TWs: WebSocketTransportProfile + ?Sized,
         TGrpc: GrpcTransportProfile + ?Sized,
@@ -56,6 +47,17 @@ impl VlessTransportRuntime {
         TSplit: SplitHttpTransportProfile + ?Sized,
         TFallback: InboundFallbackProfile + ?Sized,
     {
+        let VlessInboundOptionsRef {
+            users,
+            reality,
+            tls,
+            ws,
+            grpc,
+            h2,
+            http_upgrade,
+            split_http,
+            fallback,
+        } = options;
         let profile = crate::inbound::VlessInboundProfile::from_config_users(users)?;
         let reality = reality.map(crate::reality::VlessRealityServerProfile::from);
         VlessInboundListenerRequest::from_profile_refs(

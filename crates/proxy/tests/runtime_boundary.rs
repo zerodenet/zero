@@ -734,7 +734,8 @@ fn vless_listener_adapter_uses_protocol_runtime_input_refs() {
         );
     }
     for required in [
-        "BorrowedVlessInboundUserConfigParts",
+        "VlessInboundOptionsRef",
+        "VlessInboundUserRef",
         "VlessRealityServerOptionsRef",
         "VlessTransportRuntime",
         "build_inbound_listener_request(",
@@ -775,13 +776,50 @@ fn vmess_listener_adapter_uses_protocol_runtime_input_refs() {
         );
     }
     for required in [
-        "BorrowedVmessInboundUserConfigParts",
+        "VmessInboundOptionsRef",
+        "VmessInboundUserRef",
         "VmessTransportRuntime",
         "build_inbound_listener_request(",
     ] {
         assert!(
             listener.contains(required),
             "adapters/vmess/listener.rs should project through protocol-owned VMess inbound runtime surface `{required}`"
+        );
+    }
+}
+
+#[test]
+fn heavy_protocol_transport_roots_expose_named_inbound_option_surfaces() {
+    for (relative, required, forbidden) in [
+        (
+            "protocols/vless/src/transport.rs",
+            "VlessInboundUserRef",
+            "BorrowedVlessInboundUserConfigParts",
+        ),
+        (
+            "protocols/vless/src/transport.rs",
+            "VlessInboundOptionsRef",
+            "BorrowedVlessInboundUserConfigParts",
+        ),
+        (
+            "protocols/vmess/src/transport.rs",
+            "VmessInboundUserRef",
+            "BorrowedVmessInboundUserConfigParts",
+        ),
+        (
+            "protocols/vmess/src/transport.rs",
+            "VmessInboundOptionsRef",
+            "BorrowedVmessInboundUserConfigParts",
+        ),
+    ] {
+        let source = read(&workspace_root().join(relative));
+        assert!(
+            source.contains(required),
+            "{relative} should expose named inbound option surface `{required}`"
+        );
+        assert!(
+            !source.contains(forbidden),
+            "{relative} must not re-export borrowed tuple inbound surface `{forbidden}`"
         );
     }
 }
