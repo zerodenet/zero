@@ -7,17 +7,21 @@ use zero_traits::{
     ClientTlsProfile, GrpcTransportProfile, H2TransportProfile, HttpUpgradeTransportProfile,
     SplitHttpTransportProfile, WebSocketTransportProfile,
 };
+use zero_transport::managed_udp::{
+    ManagedTupleUdpResume, ProtocolManagedStreamUdpLeafOps, ProtocolRelayTwoStreamManagedUdpLeafOps,
+};
 use zero_transport::RuntimeError;
 
 use zero_transport::outbound_leaf::{
     clone_socket_opener, ProtocolRelayTwoStreamTransportLeaf,
     ProtocolRelayTwoStreamUdpTransportLeafMetadata, ProtocolTcpTransportLeafMetadata,
-    ProtocolTcpTransportOpenResult, ProtocolTransportLeaf, ProtocolUdpTransportLeafMetadata,
+    ProtocolTcpTransportLeafOps, ProtocolTcpTransportOpenResult, ProtocolTransportLeaf,
+    ProtocolUdpTransportLeafMetadata,
 };
 use zero_transport::transport_plan::{direct_stream_opener, relay_stream_opener};
 use zero_transport::StreamTraffic;
 
-use super::managed_udp::VlessManagedUdpFlowResume;
+use super::managed_udp::{VlessManagedStreamUdpResume, VlessManagedUdpFlowResume};
 use super::outbound::OwnedVlessOutboundTransportPlan;
 use super::profile::{VlessQuicClientProfile, VlessRealityClientProfile};
 
@@ -28,6 +32,7 @@ struct OwnedVlessOutboundLeafConfig {
     port: u16,
     transport: OwnedVlessOutboundTransportPlan,
     protocol: crate::outbound::PreparedVlessOutboundRequestBundle,
+    mux_pool: crate::mux_pool::MuxConnectionPool,
 }
 
 impl OwnedVlessOutboundLeafConfig {
@@ -48,6 +53,7 @@ impl OwnedVlessOutboundLeafConfig {
         http_upgrade: Option<&THttp>,
         split_http: Option<&TSplit>,
         quic: Option<&VlessQuicClientProfile>,
+        mux_pool: crate::mux_pool::MuxConnectionPool,
     ) -> Result<Self, zero_core::Error>
     where
         TTls: ClientTlsProfile + ?Sized,
@@ -83,6 +89,7 @@ impl OwnedVlessOutboundLeafConfig {
             port,
             transport,
             protocol,
+            mux_pool,
         })
     }
 }
@@ -94,6 +101,7 @@ pub struct VlessOutboundLeaf {
     port: u16,
     transport: OwnedVlessOutboundTransportPlan,
     protocol: crate::outbound::PreparedVlessOutboundRequestBundle,
+    mux_pool: crate::mux_pool::MuxConnectionPool,
 }
 
 impl VlessOutboundLeaf {
@@ -114,6 +122,7 @@ impl VlessOutboundLeaf {
         http_upgrade: Option<&THttp>,
         split_http: Option<&TSplit>,
         quic: Option<&VlessQuicClientProfile>,
+        mux_pool: crate::mux_pool::MuxConnectionPool,
     ) -> Result<Self, zero_core::Error>
     where
         TTls: ClientTlsProfile + ?Sized,
@@ -139,6 +148,7 @@ impl VlessOutboundLeaf {
             http_upgrade,
             split_http,
             quic,
+            mux_pool,
         )
         .map(Into::into)
     }
@@ -149,6 +159,7 @@ impl VlessOutboundLeaf {
         port: u16,
         transport: OwnedVlessOutboundTransportPlan,
         protocol: crate::outbound::PreparedVlessOutboundRequestBundle,
+        mux_pool: crate::mux_pool::MuxConnectionPool,
     ) -> Self {
         Self {
             tag: tag.to_owned(),
@@ -156,6 +167,7 @@ impl VlessOutboundLeaf {
             port,
             protocol,
             transport,
+            mux_pool,
         }
     }
 
@@ -184,7 +196,6 @@ impl VlessOutboundLeaf {
     pub(super) async fn open_tcp_stream<OpenSocket, OpenSocketFut>(
         &self,
         session: &Session,
-        mux_pool: &crate::mux_pool::MuxConnectionPool,
         open_socket: OpenSocket,
     ) -> Result<crate::outbound::VlessTcpStreamOpen, RuntimeError>
     where
@@ -201,7 +212,7 @@ impl VlessOutboundLeaf {
                 &self.server,
                 self.port,
                 self.uses_deferred_tcp_response(),
-                mux_pool,
+                &self.mux_pool,
                 direct_transport,
             )
             .await
@@ -225,34 +236,25 @@ impl VlessOutboundLeaf {
             .map(TcpRelayStream::new)
     }
 
-    pub(super) fn direct_udp_resume(
-        &self,
-        mux_pool: crate::mux_pool::MuxConnectionPool,
-    ) -> VlessManagedUdpFlowResume {
+    pub(super) fn direct_udp_resume(&self) -> VlessManagedUdpFlowResume {
         VlessManagedUdpFlowResume::new(
-            mux_pool,
+            self.mux_pool.clone(),
             self.protocol.udp_direct_flow_plan(),
             self.owned_transport_plan(),
         )
     }
 
-    pub(super) fn relay_two_stream_udp_resume(
-        &self,
-        mux_pool: crate::mux_pool::MuxConnectionPool,
-    ) -> VlessManagedUdpFlowResume {
+    pub(super) fn relay_two_stream_udp_resume(&self) -> VlessManagedUdpFlowResume {
         VlessManagedUdpFlowResume::new(
-            mux_pool,
+            self.mux_pool.clone(),
             self.protocol.udp_relay_paired_transport_plan(),
             self.owned_transport_plan(),
         )
     }
 
-    pub(super) fn relay_final_hop_udp_resume(
-        &self,
-        mux_pool: crate::mux_pool::MuxConnectionPool,
-    ) -> VlessManagedUdpFlowResume {
+    pub(super) fn relay_final_hop_udp_resume(&self) -> VlessManagedUdpFlowResume {
         VlessManagedUdpFlowResume::new(
-            mux_pool,
+            self.mux_pool.clone(),
             self.protocol.udp_relay_final_hop_plan(),
             self.owned_transport_plan(),
         )
@@ -267,8 +269,9 @@ impl From<OwnedVlessOutboundLeafConfig> for VlessOutboundLeaf {
             port,
             transport,
             protocol,
+            mux_pool,
         } = config;
-        Self::new(&tag, &server, port, transport, protocol)
+        Self::new(&tag, &server, port, transport, protocol, mux_pool)
     }
 }
 
@@ -311,6 +314,53 @@ impl ProtocolUdpTransportLeafMetadata for VlessOutboundLeaf {
 impl ProtocolRelayTwoStreamUdpTransportLeafMetadata for VlessOutboundLeaf {
     const UDP_RELAY_CAPABILITY_STAGE: &'static str = "udp_vless_relay_capability";
     const UDP_RELAY_CHAIN_STAGE: &'static str = "udp_vless_relay_chain";
+}
+
+#[async_trait::async_trait]
+impl ProtocolTcpTransportLeafOps for VlessOutboundLeaf {
+    type Opened = crate::outbound::VlessTcpStreamOpen;
+
+    async fn open_tcp_stream<OpenSocket, OpenSocketFut>(
+        &self,
+        session: &Session,
+        open_socket: OpenSocket,
+    ) -> Result<Self::Opened, RuntimeError>
+    where
+        OpenSocket: Clone + Fn(&str, u16) -> OpenSocketFut + Send + Sync,
+        OpenSocketFut: Future<Output = Result<TokioSocket, RuntimeError>> + Send,
+    {
+        VlessOutboundLeaf::open_tcp_stream(self, session, open_socket).await
+    }
+
+    async fn open_tcp_relay_hop(
+        &self,
+        stream: TcpRelayStream,
+        session: &Session,
+    ) -> Result<TcpRelayStream, RuntimeError> {
+        VlessOutboundLeaf::open_tcp_relay_hop(self, stream, session).await
+    }
+}
+
+impl ProtocolManagedStreamUdpLeafOps for VlessOutboundLeaf {
+    type Resume = VlessManagedStreamUdpResume;
+
+    fn direct_udp_resume(&self) -> Self::Resume {
+        ManagedTupleUdpResume::new(VlessOutboundLeaf::direct_udp_resume(self))
+    }
+
+    fn relay_final_hop_udp_resume(&self) -> Self::Resume {
+        ManagedTupleUdpResume::new(VlessOutboundLeaf::relay_final_hop_udp_resume(self))
+    }
+}
+
+impl ProtocolRelayTwoStreamManagedUdpLeafOps for VlessOutboundLeaf {
+    fn udp_relay_needs_two_streams(&self) -> bool {
+        VlessOutboundLeaf::relay_needs_two_streams(self)
+    }
+
+    fn relay_two_stream_udp_resume(&self) -> Self::Resume {
+        ManagedTupleUdpResume::new(VlessOutboundLeaf::relay_two_stream_udp_resume(self))
+    }
 }
 
 impl ProtocolTcpTransportOpenResult for crate::outbound::VlessTcpStreamOpen {

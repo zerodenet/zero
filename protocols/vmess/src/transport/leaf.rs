@@ -4,15 +4,16 @@ use std::path::Path;
 use zero_core::Session;
 use zero_platform_tokio::{TcpRelayStream, TokioSocket};
 use zero_traits::{ClientTlsProfile, GrpcTransportProfile, WebSocketTransportProfile};
+use zero_transport::managed_udp::{ManagedTupleUdpResume, ProtocolManagedStreamUdpLeafOps};
 use zero_transport::outbound_leaf::{
-    clone_socket_opener, ProtocolTcpTransportLeafMetadata, ProtocolTcpTransportOpenResult,
-    ProtocolTransportLeaf, ProtocolUdpTransportLeafMetadata,
+    clone_socket_opener, ProtocolTcpTransportLeafMetadata, ProtocolTcpTransportLeafOps,
+    ProtocolTcpTransportOpenResult, ProtocolTransportLeaf, ProtocolUdpTransportLeafMetadata,
 };
 use zero_transport::transport_plan::{direct_stream_opener, relay_stream_opener};
 use zero_transport::RuntimeError;
 use zero_transport::StreamTraffic;
 
-use super::managed_udp::VmessManagedUdpFlowResume;
+use super::managed_udp::{VmessManagedStreamUdpResume, VmessManagedUdpFlowResume};
 use super::outbound::OwnedVmessOutboundTransportPlan;
 
 #[derive(Clone)]
@@ -22,6 +23,7 @@ struct OwnedVmessOutboundLeafConfig {
     port: u16,
     transport: OwnedVmessOutboundTransportPlan,
     protocol: crate::outbound::PreparedVmessOutboundRequestBundle,
+    mux_pool: crate::mux::VmessMuxConnectionPool,
 }
 
 impl OwnedVmessOutboundLeafConfig {
@@ -37,6 +39,7 @@ impl OwnedVmessOutboundLeafConfig {
         tls: Option<&TTls>,
         ws: Option<&TWs>,
         grpc: Option<&TGrpc>,
+        mux_pool: crate::mux::VmessMuxConnectionPool,
     ) -> Result<Self, zero_core::Error>
     where
         TTls: ClientTlsProfile + ?Sized,
@@ -59,6 +62,7 @@ impl OwnedVmessOutboundLeafConfig {
             port,
             transport,
             protocol,
+            mux_pool,
         })
     }
 }
@@ -70,6 +74,7 @@ pub struct VmessOutboundLeaf {
     port: u16,
     transport: OwnedVmessOutboundTransportPlan,
     protocol: crate::outbound::PreparedVmessOutboundRequestBundle,
+    mux_pool: crate::mux::VmessMuxConnectionPool,
 }
 
 impl VmessOutboundLeaf {
@@ -85,6 +90,7 @@ impl VmessOutboundLeaf {
         tls: Option<&TTls>,
         ws: Option<&TWs>,
         grpc: Option<&TGrpc>,
+        mux_pool: crate::mux::VmessMuxConnectionPool,
     ) -> Result<Self, zero_core::Error>
     where
         TTls: ClientTlsProfile + ?Sized,
@@ -102,6 +108,7 @@ impl VmessOutboundLeaf {
             tls,
             ws,
             grpc,
+            mux_pool,
         )
         .map(Into::into)
     }
@@ -112,6 +119,7 @@ impl VmessOutboundLeaf {
         port: u16,
         transport: OwnedVmessOutboundTransportPlan,
         protocol: crate::outbound::PreparedVmessOutboundRequestBundle,
+        mux_pool: crate::mux::VmessMuxConnectionPool,
     ) -> Self {
         Self {
             tag: tag.to_owned(),
@@ -119,6 +127,7 @@ impl VmessOutboundLeaf {
             port,
             protocol,
             transport,
+            mux_pool,
         }
     }
 
@@ -129,7 +138,6 @@ impl VmessOutboundLeaf {
     pub(super) async fn open_tcp_stream<OpenSocket, OpenSocketFut>(
         &self,
         session: &Session,
-        mux_pool: &crate::mux::VmessMuxConnectionPool,
         open_socket: OpenSocket,
     ) -> Result<crate::outbound::VmessTcpStreamOpen, RuntimeError>
     where
@@ -145,7 +153,7 @@ impl VmessOutboundLeaf {
                 session,
                 &self.server,
                 self.port,
-                mux_pool,
+                &self.mux_pool,
                 direct_transport,
             )
             .await
@@ -164,23 +172,17 @@ impl VmessOutboundLeaf {
             .map(TcpRelayStream::new)
     }
 
-    pub(super) fn direct_udp_resume(
-        &self,
-        mux_pool: crate::mux::VmessMuxConnectionPool,
-    ) -> VmessManagedUdpFlowResume {
+    pub(super) fn direct_udp_resume(&self) -> VmessManagedUdpFlowResume {
         VmessManagedUdpFlowResume::new(
-            mux_pool,
+            self.mux_pool.clone(),
             self.protocol.udp_direct_flow_plan(),
             self.owned_transport_plan(),
         )
     }
 
-    pub(super) fn relay_final_hop_udp_resume(
-        &self,
-        mux_pool: crate::mux::VmessMuxConnectionPool,
-    ) -> VmessManagedUdpFlowResume {
+    pub(super) fn relay_final_hop_udp_resume(&self) -> VmessManagedUdpFlowResume {
         VmessManagedUdpFlowResume::new(
-            mux_pool,
+            self.mux_pool.clone(),
             self.protocol.udp_relay_flow_plan(),
             self.owned_transport_plan(),
         )
@@ -195,8 +197,9 @@ impl From<OwnedVmessOutboundLeafConfig> for VmessOutboundLeaf {
             port,
             transport,
             protocol,
+            mux_pool,
         } = config;
-        Self::new(&tag, &server, port, transport, protocol)
+        Self::new(&tag, &server, port, transport, protocol, mux_pool)
     }
 }
 
@@ -224,6 +227,43 @@ impl ProtocolUdpTransportLeafMetadata for VmessOutboundLeaf {
     const UDP_DIRECT_STAGE: &'static str = "udp_vmess_leaf";
     const UDP_INVALID_CONFIG: &'static str = "invalid vmess udp config";
     const UDP_RELAY_FINAL_STAGE: &'static str = "udp_vmess_relay_final_leaf";
+}
+
+#[async_trait::async_trait]
+impl ProtocolTcpTransportLeafOps for VmessOutboundLeaf {
+    type Opened = crate::outbound::VmessTcpStreamOpen;
+
+    async fn open_tcp_stream<OpenSocket, OpenSocketFut>(
+        &self,
+        session: &Session,
+        open_socket: OpenSocket,
+    ) -> Result<Self::Opened, RuntimeError>
+    where
+        OpenSocket: Clone + Fn(&str, u16) -> OpenSocketFut + Send + Sync,
+        OpenSocketFut: Future<Output = Result<TokioSocket, RuntimeError>> + Send,
+    {
+        VmessOutboundLeaf::open_tcp_stream(self, session, open_socket).await
+    }
+
+    async fn open_tcp_relay_hop(
+        &self,
+        stream: TcpRelayStream,
+        session: &Session,
+    ) -> Result<TcpRelayStream, RuntimeError> {
+        VmessOutboundLeaf::open_tcp_relay_hop(self, stream, session).await
+    }
+}
+
+impl ProtocolManagedStreamUdpLeafOps for VmessOutboundLeaf {
+    type Resume = VmessManagedStreamUdpResume;
+
+    fn direct_udp_resume(&self) -> Self::Resume {
+        ManagedTupleUdpResume::new(VmessOutboundLeaf::direct_udp_resume(self))
+    }
+
+    fn relay_final_hop_udp_resume(&self) -> Self::Resume {
+        ManagedTupleUdpResume::new(VmessOutboundLeaf::relay_final_hop_udp_resume(self))
+    }
 }
 
 impl ProtocolTcpTransportOpenResult for crate::outbound::VmessTcpStreamOpen {

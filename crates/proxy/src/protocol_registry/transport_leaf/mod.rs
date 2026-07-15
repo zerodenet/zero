@@ -4,8 +4,8 @@ mod tcp;
 mod udp;
 
 #[cfg(any(feature = "vless", feature = "vmess", feature = "trojan"))]
-pub(crate) use tcp::claim_transport_bridge_tcp_leaf;
+pub(crate) use tcp::claim_transport_tcp_leaf;
 #[cfg(feature = "vless")]
-pub(crate) use udp::claim_relay_two_stream_transport_bridge_udp_leaf;
+pub(crate) use udp::claim_relay_two_stream_transport_udp_leaf;
 #[cfg(any(feature = "vless", feature = "vmess", feature = "trojan"))]
-pub(crate) use udp::claim_transport_bridge_udp_leaf;
+pub(crate) use udp::claim_transport_udp_leaf;

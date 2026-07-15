@@ -213,17 +213,17 @@ fn capability_surface_is_split_and_context_is_narrow() {
 }
 
 #[test]
-fn transport_bridge_operations_are_generic() {
+fn transport_leaf_operations_are_generic() {
     let tcp = read(&proxy_src().join("runtime/tcp_dispatch/operation.rs"));
     let udp = rust_sources(&proxy_src().join("protocol_registry/transport_leaf"))
         .into_iter()
         .map(|path| read(&path))
         .collect::<String>();
-    assert!(tcp.contains("TransportBridgeTcpConnectOperation"));
-    assert!(tcp.contains("TransportBridgeTcpRelayOperation"));
-    assert!(tcp.contains("PreparedTransportBridgeLeaf"));
-    assert!(udp.contains("prepare_transport_bridge_udp_direct"));
-    assert!(udp.contains("prepare_owned_transport_bridge_udp_relay_two_stream"));
+    assert!(tcp.contains("TransportLeafTcpConnectOperation"));
+    assert!(tcp.contains("TransportLeafTcpRelayOperation"));
+    assert!(tcp.contains("PreparedTransportLeaf"));
+    assert!(udp.contains("prepare_transport_udp_direct"));
+    assert!(udp.contains("prepare_owned_transport_udp_relay_two_stream"));
 }
 
 #[test]
@@ -1121,8 +1121,8 @@ fn claimed_outbound_leaf_owns_capability_preparation() {
 #[test]
 fn transport_bridge_adapters_offer_claim_time_tcp_projection() {
     let helper = read(&proxy_src().join("protocol_registry/transport_leaf/tcp.rs"));
-    assert!(helper.contains("struct ClaimedTransportBridgeTcpLeaf"));
-    assert!(helper.contains("claim_transport_bridge_tcp_leaf"));
+    assert!(helper.contains("struct ClaimedTransportTcpLeaf"));
+    assert!(helper.contains("claim_transport_tcp_leaf"));
 
     for relative in [
         "adapters/vless.rs",
@@ -1135,8 +1135,8 @@ fn transport_bridge_adapters_offer_claim_time_tcp_projection() {
             "{relative} should expose a claim-time TCP leaf projection path"
         );
         assert!(
-            source.contains("claim_transport_bridge_tcp_leaf("),
-            "{relative} should project into the shared claimed transport-bridge helper"
+            source.contains("claim_transport_tcp_leaf("),
+            "{relative} should project into the shared claimed transport leaf helper"
         );
     }
 }
@@ -1144,10 +1144,10 @@ fn transport_bridge_adapters_offer_claim_time_tcp_projection() {
 #[test]
 fn transport_bridge_adapters_offer_claim_time_udp_projection() {
     let helper = read(&proxy_src().join("protocol_registry/transport_leaf/udp.rs"));
-    assert!(helper.contains("struct ClaimedTransportBridgeUdpLeaf"));
-    assert!(helper.contains("claim_transport_bridge_udp_leaf"));
-    assert!(helper.contains("ClaimedRelayTwoStreamTransportBridgeUdpLeaf"));
-    assert!(helper.contains("claim_relay_two_stream_transport_bridge_udp_leaf"));
+    assert!(helper.contains("struct ClaimedTransportUdpLeaf"));
+    assert!(helper.contains("claim_transport_udp_leaf"));
+    assert!(helper.contains("ClaimedRelayTwoStreamTransportUdpLeaf"));
+    assert!(helper.contains("claim_relay_two_stream_transport_udp_leaf"));
 
     for relative in [
         "adapters/vless.rs",
@@ -1162,15 +1162,22 @@ fn transport_bridge_adapters_offer_claim_time_udp_projection() {
     }
 
     let vless = read(&proxy_src().join("adapters/vless.rs"));
-    assert!(vless.contains("claim_relay_two_stream_transport_bridge_udp_leaf("));
+    assert!(vless.contains("claim_relay_two_stream_transport_udp_leaf("));
+    assert!(!vless.contains("VlessStreamBridge"));
 
     for relative in ["adapters/vmess.rs", "adapters/trojan.rs"] {
         let source = read(&proxy_src().join(relative));
         assert!(
-            source.contains("claim_transport_bridge_udp_leaf("),
-            "{relative} should project into the shared claimed UDP transport-bridge helper"
+            source.contains("claim_transport_udp_leaf("),
+            "{relative} should project into the shared claimed UDP transport leaf helper"
         );
     }
+
+    let vmess = read(&proxy_src().join("adapters/vmess.rs"));
+    assert!(!vmess.contains("VmessStreamBridge"));
+
+    let trojan = read(&proxy_src().join("adapters/trojan.rs"));
+    assert!(!trojan.contains("TrojanTlsBridge"));
 }
 
 #[test]
@@ -1179,6 +1186,8 @@ fn managed_stream_udp_handlers_key_off_resume_metadata_not_bridge_types() {
     let handler =
         read(&proxy_src().join("runtime/udp_flow/managed/bridge/stream_packet/handler.rs"));
     assert!(!transport_managed_udp.contains("ProtocolManagedStreamUdpBridgeHandlerMetadata"));
+    assert!(transport_managed_udp.contains("ProtocolManagedStreamUdpLeafOps"));
+    assert!(transport_managed_udp.contains("ProtocolRelayTwoStreamManagedUdpLeafOps"));
     assert!(handler.contains("managed_stream_udp_handler_for_resume"));
     assert!(!handler.contains("managed_stream_udp_handler_for_bridge"));
 
@@ -1203,11 +1212,13 @@ fn managed_stream_udp_handlers_key_off_resume_metadata_not_bridge_types() {
 fn transport_leaf_metadata_owns_live_runtime_stage_constants() {
     let outbound_leaf = read(&workspace_root().join("crates/transport/src/outbound_leaf.rs"));
     assert!(outbound_leaf.contains("pub trait ProtocolTcpTransportLeafMetadata"));
+    assert!(outbound_leaf.contains("pub trait ProtocolTcpTransportLeafOps"));
     assert!(outbound_leaf.contains("pub trait ProtocolUdpTransportLeafMetadata"));
     assert!(outbound_leaf.contains("pub trait ProtocolRelayTwoStreamUdpTransportLeafMetadata"));
     assert!(!outbound_leaf.contains("pub trait ProtocolTcpTransportBridgeMetadata"));
     assert!(!outbound_leaf.contains("pub trait ProtocolUdpTransportBridgeMetadata"));
     assert!(!outbound_leaf.contains("pub trait ProtocolRelayTwoStreamUdpTransportBridgeMetadata"));
+    assert!(!outbound_leaf.contains("pub trait ProtocolTcpTransportBridgeOps"));
     assert!(!outbound_leaf.contains("TCP_INVALID_CONNECT_LEAF_STAGE"));
     assert!(!outbound_leaf.contains("TCP_INVALID_RELAY_LEAF_STAGE"));
     assert!(!outbound_leaf.contains("EXPECTED_OUTBOUND_LEAF"));
@@ -1217,44 +1228,37 @@ fn transport_leaf_metadata_owns_live_runtime_stage_constants() {
     assert!(vless_leaf.contains("impl ProtocolUdpTransportLeafMetadata for VlessOutboundLeaf"));
     assert!(vless_leaf
         .contains("impl ProtocolRelayTwoStreamUdpTransportLeafMetadata for VlessOutboundLeaf"));
+    assert!(vless_leaf.contains("impl ProtocolTcpTransportLeafOps for VlessOutboundLeaf"));
+    assert!(vless_leaf.contains("impl ProtocolManagedStreamUdpLeafOps for VlessOutboundLeaf"));
+    assert!(
+        vless_leaf.contains("impl ProtocolRelayTwoStreamManagedUdpLeafOps for VlessOutboundLeaf")
+    );
 
     let vmess_leaf = read(&workspace_root().join("protocols/vmess/src/transport/leaf.rs"));
     assert!(vmess_leaf.contains("impl ProtocolTcpTransportLeafMetadata for VmessOutboundLeaf"));
     assert!(vmess_leaf.contains("impl ProtocolUdpTransportLeafMetadata for VmessOutboundLeaf"));
+    assert!(vmess_leaf.contains("impl ProtocolTcpTransportLeafOps for VmessOutboundLeaf"));
+    assert!(vmess_leaf.contains("impl ProtocolManagedStreamUdpLeafOps for VmessOutboundLeaf"));
 
     let trojan_leaf = read(&workspace_root().join("protocols/trojan/src/transport/leaf.rs"));
     assert!(trojan_leaf.contains("impl ProtocolTcpTransportLeafMetadata for TrojanOutboundLeaf"));
     assert!(trojan_leaf.contains("impl ProtocolUdpTransportLeafMetadata for TrojanOutboundLeaf"));
+    assert!(trojan_leaf.contains("impl ProtocolTcpTransportLeafOps for TrojanOutboundLeaf"));
+    assert!(trojan_leaf.contains("impl ProtocolManagedStreamUdpLeafOps for TrojanOutboundLeaf"));
 
     for relative in [
-        "protocols/vless/src/transport/bridge.rs",
-        "protocols/vmess/src/transport/bridge.rs",
-        "protocols/trojan/src/transport/bridge.rs",
+        "protocols/vless/src/transport.rs",
+        "protocols/vmess/src/transport.rs",
+        "protocols/trojan/src/transport.rs",
     ] {
         let source = read(&workspace_root().join(relative));
         assert!(
-            !source.contains("ProtocolTcpTransportBridgeMetadata"),
-            "{relative} must not keep TCP transport metadata on bridge types"
+            !source.contains("mod bridge;"),
+            "{relative} must not compile a standalone transport bridge module"
         );
         assert!(
-            !source.contains("ProtocolUdpTransportBridgeMetadata"),
-            "{relative} must not keep UDP transport metadata on bridge types"
-        );
-        assert!(
-            !source.contains("ProtocolRelayTwoStreamUdpTransportBridgeMetadata"),
-            "{relative} must not keep relay-two-stream UDP metadata on bridge types"
-        );
-        assert!(
-            !source.contains("TCP_INVALID_CONNECT_LEAF_STAGE"),
-            "{relative} must not carry dead TCP leaf-stage metadata"
-        );
-        assert!(
-            !source.contains("TCP_INVALID_RELAY_LEAF_STAGE"),
-            "{relative} must not carry dead TCP relay-leaf metadata"
-        );
-        assert!(
-            !source.contains("EXPECTED_OUTBOUND_LEAF"),
-            "{relative} must not carry unused expected-leaf bridge metadata"
+            !source.contains("pub use bridge::"),
+            "{relative} must not re-export standalone transport bridge types"
         );
     }
 }

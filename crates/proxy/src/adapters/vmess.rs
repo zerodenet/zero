@@ -1,6 +1,8 @@
 #[cfg(feature = "vmess")]
+use ::vmess::mux::VmessMuxConnectionPool;
+#[cfg(feature = "vmess")]
 mod listener;
-use ::vmess::transport::{VmessOutboundLeaf, VmessStreamBridge};
+use ::vmess::transport::VmessOutboundLeaf;
 #[cfg(feature = "vmess")]
 use zero_config::InboundConfig;
 use zero_config::{InboundProtocolConfig, OutboundProtocolConfig};
@@ -8,16 +10,15 @@ use zero_config::{InboundProtocolConfig, OutboundProtocolConfig};
 use zero_engine::{EngineError, ResolvedLeafOutbound};
 use zero_traits::{ProtocolCapabilityDescriptor, ProtocolMetadata};
 #[cfg(feature = "vmess")]
-use zero_transport::managed_udp::ProtocolManagedStreamUdpBridgeOps;
+use zero_transport::managed_udp::ProtocolManagedStreamUdpLeafOps;
 
 use crate::adapters::identity::{
     named_protocol_supports_inbound, named_protocol_supports_outbound, NamedProtocolAdapter,
 };
 use crate::protocol_registry::{
-    claim_transport_bridge_tcp_leaf, claim_transport_bridge_udp_leaf, proxy_leaf_runtime,
-    ClaimedTcpOutboundLeaf, ClaimedUdpFlowLeaf, InboundListenerCapability,
-    ManagedUdpHandlerProvider, ProtocolSupportCapability, TcpOutboundCapability, UdpFlowCapability,
-    UdpPacketPathCapability,
+    claim_transport_tcp_leaf, claim_transport_udp_leaf, proxy_leaf_runtime, ClaimedTcpOutboundLeaf,
+    ClaimedUdpFlowLeaf, InboundListenerCapability, ManagedUdpHandlerProvider,
+    ProtocolSupportCapability, TcpOutboundCapability, UdpFlowCapability, UdpPacketPathCapability,
 };
 use crate::runtime::path::TcpPathCategory;
 #[cfg(feature = "vmess")]
@@ -28,7 +29,7 @@ use crate::runtime::udp_flow::managed::{
 #[cfg(feature = "vmess")]
 #[derive(Debug, Default)]
 pub(crate) struct VmessAdapter {
-    bridge: VmessStreamBridge,
+    mux_pool: VmessMuxConnectionPool,
 }
 
 #[cfg(feature = "vmess")]
@@ -62,7 +63,7 @@ impl ProtocolSupportCapability for VmessAdapter {
     }
 
     fn on_config_reloaded(&self) {
-        self.bridge.on_config_reloaded();
+        self.mux_pool.evict_all();
     }
 }
 
@@ -109,11 +110,8 @@ impl TcpOutboundCapability for VmessAdapter {
         else {
             return None;
         };
-        let bridge = self.bridge.clone();
-        Some(claim_transport_bridge_tcp_leaf(
-            bridge,
-            Some((server, port)),
-            runtime,
+        Some(claim_transport_tcp_leaf(Some((server, port)), runtime, {
+            let mux_pool = self.mux_pool.clone();
             move |source_dir| {
                 VmessOutboundLeaf::from_config_refs(
                     source_dir,
@@ -126,9 +124,10 @@ impl TcpOutboundCapability for VmessAdapter {
                     tls,
                     ws,
                     grpc,
+                    mux_pool.clone(),
                 )
-            },
-        ))
+            }
+        }))
     }
 }
 
@@ -153,10 +152,8 @@ impl UdpFlowCapability for VmessAdapter {
         else {
             return None;
         };
-        let bridge = self.bridge.clone();
-        Some(claim_transport_bridge_udp_leaf(
-            bridge,
-            Some((server, port)),
+        Some(claim_transport_udp_leaf(Some((server, port)), {
+            let mux_pool = self.mux_pool.clone();
             move |source_dir| {
                 VmessOutboundLeaf::from_config_refs(
                     source_dir,
@@ -169,9 +166,10 @@ impl UdpFlowCapability for VmessAdapter {
                     tls,
                     ws,
                     grpc,
+                    mux_pool.clone(),
                 )
-            },
-        ))
+            }
+        }))
     }
 }
 
@@ -179,7 +177,7 @@ impl UdpFlowCapability for VmessAdapter {
 impl ManagedUdpHandlerProvider for VmessAdapter {
     fn managed_stream_udp_handlers(&self) -> Option<ManagedStreamHandlerPair> {
         Some(managed_stream_udp_handler_for_resume::<
-            <VmessStreamBridge as ProtocolManagedStreamUdpBridgeOps<VmessOutboundLeaf>>::Resume,
+            <VmessOutboundLeaf as ProtocolManagedStreamUdpLeafOps>::Resume,
         >())
     }
 }

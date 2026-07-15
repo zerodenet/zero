@@ -3,14 +3,15 @@ use std::path::Path;
 
 use zero_core::Session;
 use zero_platform_tokio::TokioSocket;
+use zero_transport::managed_udp::{ManagedPacketUdpResume, ProtocolManagedStreamUdpLeafOps};
 use zero_transport::outbound_leaf::{
-    ProtocolTcpTransportLeafMetadata, ProtocolTcpTransportOpenResult, ProtocolTransportLeaf,
-    ProtocolUdpTransportLeafMetadata,
+    ProtocolTcpTransportLeafMetadata, ProtocolTcpTransportLeafOps, ProtocolTcpTransportOpenResult,
+    ProtocolTransportLeaf, ProtocolUdpTransportLeafMetadata,
 };
 use zero_transport::RuntimeError;
 use zero_transport::{StreamTraffic, TcpRelayStream};
 
-use super::managed_udp::TrojanManagedUdpFlowResume;
+use super::managed_udp::{TrojanManagedStreamUdpResume, TrojanManagedUdpFlowResume};
 use super::outbound::{OwnedTrojanOutboundTlsPlan, TrojanTcpStreamOpen};
 
 #[derive(Clone)]
@@ -192,6 +193,43 @@ impl ProtocolUdpTransportLeafMetadata for TrojanOutboundLeaf {
     const UDP_DIRECT_STAGE: &'static str = "udp_trojan_leaf";
     const UDP_INVALID_CONFIG: &'static str = "invalid trojan udp config";
     const UDP_RELAY_FINAL_STAGE: &'static str = "udp_trojan_relay_leaf";
+}
+
+#[async_trait::async_trait]
+impl ProtocolTcpTransportLeafOps for TrojanOutboundLeaf {
+    type Opened = TrojanTcpStreamOpen;
+
+    async fn open_tcp_stream<OpenSocket, OpenSocketFut>(
+        &self,
+        session: &Session,
+        open_socket: OpenSocket,
+    ) -> Result<Self::Opened, RuntimeError>
+    where
+        OpenSocket: Clone + Fn(&str, u16) -> OpenSocketFut + Send + Sync,
+        OpenSocketFut: Future<Output = Result<TokioSocket, RuntimeError>> + Send,
+    {
+        TrojanOutboundLeaf::open_tcp_stream(self, session, open_socket).await
+    }
+
+    async fn open_tcp_relay_hop(
+        &self,
+        stream: TcpRelayStream,
+        session: &Session,
+    ) -> Result<TcpRelayStream, RuntimeError> {
+        TrojanOutboundLeaf::open_tcp_relay_hop(self, stream, session).await
+    }
+}
+
+impl ProtocolManagedStreamUdpLeafOps for TrojanOutboundLeaf {
+    type Resume = TrojanManagedStreamUdpResume;
+
+    fn direct_udp_resume(&self) -> Self::Resume {
+        ManagedPacketUdpResume::new(TrojanOutboundLeaf::direct_udp_resume(self))
+    }
+
+    fn relay_final_hop_udp_resume(&self) -> Self::Resume {
+        ManagedPacketUdpResume::new(TrojanOutboundLeaf::relay_final_hop_udp_resume(self))
+    }
 }
 
 impl ProtocolTcpTransportOpenResult for TrojanTcpStreamOpen {

@@ -1,7 +1,9 @@
 #[cfg(feature = "vless")]
+use ::vless::mux_pool::MuxConnectionPool as VlessMuxConnectionPool;
+#[cfg(feature = "vless")]
 use ::vless::transport::{
     VlessInboundBindPlan, VlessOutboundLeaf, VlessQuicBindProfile, VlessQuicClientProfile,
-    VlessRealityClientProfile, VlessStreamBridge,
+    VlessRealityClientProfile,
 };
 #[cfg(feature = "vless")]
 use async_trait::async_trait;
@@ -14,16 +16,16 @@ use zero_config::{InboundProtocolConfig, OutboundProtocolConfig};
 use zero_engine::{EngineError, ResolvedLeafOutbound};
 use zero_traits::{ProtocolCapabilityDescriptor, ProtocolMetadata};
 #[cfg(feature = "vless")]
-use zero_transport::managed_udp::ProtocolManagedStreamUdpBridgeOps;
+use zero_transport::managed_udp::ProtocolManagedStreamUdpLeafOps;
 
 use crate::adapters::identity::{
     named_protocol_supports_inbound, named_protocol_supports_outbound, NamedProtocolAdapter,
 };
 use crate::protocol_registry::{
-    bind_transport_inbound, claim_relay_two_stream_transport_bridge_udp_leaf,
-    claim_transport_bridge_tcp_leaf, proxy_leaf_runtime, BoundInbound, ClaimedTcpOutboundLeaf,
-    ClaimedUdpFlowLeaf, InboundListenerCapability, ManagedUdpHandlerProvider,
-    ProtocolSupportCapability, TcpOutboundCapability, UdpFlowCapability, UdpPacketPathCapability,
+    bind_transport_inbound, claim_relay_two_stream_transport_udp_leaf, claim_transport_tcp_leaf,
+    proxy_leaf_runtime, BoundInbound, ClaimedTcpOutboundLeaf, ClaimedUdpFlowLeaf,
+    InboundListenerCapability, ManagedUdpHandlerProvider, ProtocolSupportCapability,
+    TcpOutboundCapability, UdpFlowCapability, UdpPacketPathCapability,
 };
 use crate::runtime::path::TcpPathCategory;
 #[cfg(feature = "vless")]
@@ -34,7 +36,7 @@ use crate::runtime::udp_flow::managed::{
 #[cfg(feature = "vless")]
 #[derive(Debug, Default)]
 pub(crate) struct VlessAdapter {
-    bridge: VlessStreamBridge,
+    mux_pool: VlessMuxConnectionPool,
 }
 
 #[cfg(feature = "vless")]
@@ -96,7 +98,7 @@ impl ProtocolSupportCapability for VlessAdapter {
     }
 
     fn on_config_reloaded(&self) {
-        self.bridge.on_config_reloaded();
+        self.mux_pool.evict_all();
     }
 }
 
@@ -165,13 +167,10 @@ impl TcpOutboundCapability for VlessAdapter {
         else {
             return None;
         };
-        let bridge = self.bridge.clone();
         let reality = outbound_reality_profile(reality);
         let quic = quic_client_profile(quic);
-        Some(claim_transport_bridge_tcp_leaf(
-            bridge,
-            Some((server, port)),
-            runtime,
+        Some(claim_transport_tcp_leaf(Some((server, port)), runtime, {
+            let mux_pool = self.mux_pool.clone();
             move |source_dir| {
                 VlessOutboundLeaf::from_config_refs(
                     source_dir,
@@ -189,9 +188,10 @@ impl TcpOutboundCapability for VlessAdapter {
                     http_upgrade,
                     split_http,
                     quic.as_ref(),
+                    mux_pool.clone(),
                 )
-            },
-        ))
+            }
+        }))
     }
 }
 
@@ -221,30 +221,32 @@ impl UdpFlowCapability for VlessAdapter {
         else {
             return None;
         };
-        let bridge = self.bridge.clone();
         let reality = outbound_reality_profile(reality);
         let quic = quic_client_profile(quic);
-        Some(claim_relay_two_stream_transport_bridge_udp_leaf(
-            bridge,
+        Some(claim_relay_two_stream_transport_udp_leaf(
             Some((server, port)),
-            move |source_dir| {
-                VlessOutboundLeaf::from_config_refs(
-                    source_dir,
-                    tag,
-                    server,
-                    port,
-                    id,
-                    flow,
-                    mux_concurrency,
-                    tls,
-                    reality.as_ref(),
-                    ws,
-                    grpc,
-                    h2,
-                    http_upgrade,
-                    split_http,
-                    quic.as_ref(),
-                )
+            {
+                let mux_pool = self.mux_pool.clone();
+                move |source_dir| {
+                    VlessOutboundLeaf::from_config_refs(
+                        source_dir,
+                        tag,
+                        server,
+                        port,
+                        id,
+                        flow,
+                        mux_concurrency,
+                        tls,
+                        reality.as_ref(),
+                        ws,
+                        grpc,
+                        h2,
+                        http_upgrade,
+                        split_http,
+                        quic.as_ref(),
+                        mux_pool.clone(),
+                    )
+                }
             },
         ))
     }
@@ -254,7 +256,7 @@ impl UdpFlowCapability for VlessAdapter {
 impl ManagedUdpHandlerProvider for VlessAdapter {
     fn managed_stream_udp_handlers(&self) -> Option<ManagedStreamHandlerPair> {
         Some(managed_stream_udp_handler_for_resume::<
-            <VlessStreamBridge as ProtocolManagedStreamUdpBridgeOps<VlessOutboundLeaf>>::Resume,
+            <VlessOutboundLeaf as ProtocolManagedStreamUdpLeafOps>::Resume,
         >())
     }
 }

@@ -1,6 +1,6 @@
 #[cfg(feature = "trojan")]
 mod listener;
-use ::trojan::transport::{TrojanOutboundLeaf, TrojanTlsBridge};
+use ::trojan::transport::TrojanOutboundLeaf;
 #[cfg(feature = "trojan")]
 use zero_config::InboundConfig;
 use zero_config::{InboundProtocolConfig, OutboundProtocolConfig};
@@ -8,16 +8,15 @@ use zero_config::{InboundProtocolConfig, OutboundProtocolConfig};
 use zero_engine::{EngineError, ResolvedLeafOutbound};
 use zero_traits::{ProtocolCapabilityDescriptor, ProtocolMetadata};
 #[cfg(feature = "trojan")]
-use zero_transport::managed_udp::ProtocolManagedStreamUdpBridgeOps;
+use zero_transport::managed_udp::ProtocolManagedStreamUdpLeafOps;
 
 use crate::adapters::identity::{
     named_protocol_supports_inbound, named_protocol_supports_outbound, NamedProtocolAdapter,
 };
 use crate::protocol_registry::{
-    claim_transport_bridge_tcp_leaf, claim_transport_bridge_udp_leaf, proxy_leaf_runtime,
-    ClaimedTcpOutboundLeaf, ClaimedUdpFlowLeaf, InboundListenerCapability,
-    ManagedUdpHandlerProvider, ProtocolSupportCapability, TcpOutboundCapability, UdpFlowCapability,
-    UdpPacketPathCapability,
+    claim_transport_tcp_leaf, claim_transport_udp_leaf, proxy_leaf_runtime, ClaimedTcpOutboundLeaf,
+    ClaimedUdpFlowLeaf, InboundListenerCapability, ManagedUdpHandlerProvider,
+    ProtocolSupportCapability, TcpOutboundCapability, UdpFlowCapability, UdpPacketPathCapability,
 };
 use crate::runtime::path::TcpPathCategory;
 #[cfg(feature = "trojan")]
@@ -26,22 +25,11 @@ use crate::runtime::udp_flow::managed::{
 };
 
 #[cfg(feature = "trojan")]
-#[derive(Debug)]
-pub(crate) struct TrojanAdapter {
-    bridge: TrojanTlsBridge,
-}
+#[derive(Debug, Default)]
+pub(crate) struct TrojanAdapter;
 
 #[cfg(feature = "trojan")]
 const TCP_PATH: TcpPathCategory = TcpPathCategory::Tunnel;
-
-#[cfg(feature = "trojan")]
-impl Default for TrojanAdapter {
-    fn default() -> Self {
-        Self {
-            bridge: TrojanTlsBridge,
-        }
-    }
-}
 
 #[cfg(feature = "trojan")]
 impl NamedProtocolAdapter for TrojanAdapter {
@@ -68,10 +56,6 @@ impl ProtocolSupportCapability for TrojanAdapter {
     }
     fn supports_outbound(&self, c: &OutboundProtocolConfig) -> bool {
         named_protocol_supports_outbound::<Self>(c)
-    }
-
-    fn on_config_reloaded(&self) {
-        self.bridge.on_config_reloaded();
     }
 }
 
@@ -115,9 +99,7 @@ impl TcpOutboundCapability for TrojanAdapter {
         else {
             return None;
         };
-        let bridge = self.bridge;
-        Some(claim_transport_bridge_tcp_leaf(
-            bridge,
+        Some(claim_transport_tcp_leaf(
             Some((server, port)),
             runtime,
             move |source_dir| {
@@ -154,9 +136,7 @@ impl UdpFlowCapability for TrojanAdapter {
         else {
             return None;
         };
-        let bridge = self.bridge;
-        Some(claim_transport_bridge_udp_leaf(
-            bridge,
+        Some(claim_transport_udp_leaf(
             Some((server, port)),
             move |source_dir| {
                 Ok::<TrojanOutboundLeaf, zero_core::Error>(TrojanOutboundLeaf::from_config_refs(
@@ -178,7 +158,7 @@ impl UdpFlowCapability for TrojanAdapter {
 impl ManagedUdpHandlerProvider for TrojanAdapter {
     fn managed_stream_udp_handlers(&self) -> Option<ManagedStreamHandlerPair> {
         Some(managed_stream_udp_handler_for_resume::<
-            <TrojanTlsBridge as ProtocolManagedStreamUdpBridgeOps<TrojanOutboundLeaf>>::Resume,
+            <TrojanOutboundLeaf as ProtocolManagedStreamUdpLeafOps>::Resume,
         >())
     }
 }

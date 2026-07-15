@@ -2,7 +2,7 @@ use std::path::Path;
 
 use zero_engine::EngineError;
 use zero_transport::outbound_leaf::{
-    PreparedTransportBridgeLeaf, ProtocolTcpTransportBridgeOps, ProtocolTcpTransportLeafMetadata,
+    PreparedTransportLeaf, ProtocolTcpTransportLeafMetadata, ProtocolTcpTransportLeafOps,
     ProtocolTcpTransportOpenResult, ProtocolTransportLeaf,
 };
 
@@ -12,40 +12,44 @@ use crate::runtime::tcp_dispatch::operation::{
 };
 use crate::transport::TcpOutboundFailure;
 
-pub(crate) fn claim_transport_bridge_tcp_leaf<'a, TBridge, TLeaf, F, E>(
-    bridge: TBridge,
+pub(crate) fn claim_transport_tcp_leaf<'a, TLeaf, F, E>(
     upstream: Option<(&'a str, u16)>,
     runtime: OutboundLeafRuntime,
     prepare_leaf: F,
 ) -> Box<dyn ClaimedTcpOutboundLeaf<'a> + 'a>
 where
-    TBridge: Send + Sync + Clone + 'a + ProtocolTcpTransportBridgeOps<TLeaf>,
-    TLeaf: ProtocolTransportLeaf + ProtocolTcpTransportLeafMetadata + Send + Sync + 'a,
-    TBridge::Opened: ProtocolTcpTransportOpenResult,
+    TLeaf: ProtocolTransportLeaf
+        + ProtocolTcpTransportLeafMetadata
+        + ProtocolTcpTransportLeafOps
+        + Send
+        + Sync
+        + 'a,
+    TLeaf::Opened: ProtocolTcpTransportOpenResult,
     F: Fn(Option<&Path>) -> Result<TLeaf, E> + Send + Sync + 'a,
     E: std::fmt::Display,
 {
-    Box::new(ClaimedTransportBridgeTcpLeaf {
-        bridge,
+    Box::new(ClaimedTransportTcpLeaf {
         upstream,
         runtime,
         prepare_leaf,
     })
 }
 
-struct ClaimedTransportBridgeTcpLeaf<'a, TBridge, F> {
-    bridge: TBridge,
+struct ClaimedTransportTcpLeaf<'a, F> {
     upstream: Option<(&'a str, u16)>,
     runtime: OutboundLeafRuntime,
     prepare_leaf: F,
 }
 
-impl<'a, TBridge, TLeaf, F, E> ClaimedTcpOutboundLeaf<'a>
-    for ClaimedTransportBridgeTcpLeaf<'a, TBridge, F>
+impl<'a, TLeaf, F, E> ClaimedTcpOutboundLeaf<'a> for ClaimedTransportTcpLeaf<'a, F>
 where
-    TBridge: Send + Sync + Clone + 'a + ProtocolTcpTransportBridgeOps<TLeaf>,
-    TLeaf: ProtocolTransportLeaf + ProtocolTcpTransportLeafMetadata + Send + Sync + 'a,
-    TBridge::Opened: ProtocolTcpTransportOpenResult,
+    TLeaf: ProtocolTransportLeaf
+        + ProtocolTcpTransportLeafMetadata
+        + ProtocolTcpTransportLeafOps
+        + Send
+        + Sync
+        + 'a,
+    TLeaf::Opened: ProtocolTcpTransportOpenResult,
     F: Fn(Option<&Path>) -> Result<TLeaf, E> + Send + Sync + 'a,
     E: std::fmt::Display,
 {
@@ -58,11 +62,11 @@ where
         source_dir: Option<&Path>,
     ) -> Result<Box<dyn PreparedTcpConnectOperation + 'a>, TcpOutboundFailure> {
         let prepared = (self.prepare_leaf)(source_dir)
-            .map(PreparedTransportBridgeLeaf::new)
+            .map(PreparedTransportLeaf::new)
             .map_err(|error| {
-                transport_bridge_connect_claim_prepare_failure::<TLeaf, _>(self.upstream, error)
+                transport_tcp_connect_claim_prepare_failure::<TLeaf, _>(self.upstream, error)
             })?;
-        Ok(prepare_transport_bridge_tcp_connect(&self.bridge, prepared))
+        Ok(prepare_transport_tcp_connect(prepared))
     }
 
     fn prepare_tcp_relay_hop(
@@ -70,9 +74,9 @@ where
         source_dir: Option<&Path>,
     ) -> Result<Box<dyn PreparedTcpRelayOperation + 'a>, EngineError> {
         let prepared = (self.prepare_leaf)(source_dir)
-            .map(PreparedTransportBridgeLeaf::new)
-            .map_err(transport_bridge_relay_claim_prepare_error::<TLeaf, _>)?;
-        Ok(prepare_transport_bridge_tcp_relay(&self.bridge, prepared))
+            .map(PreparedTransportLeaf::new)
+            .map_err(transport_tcp_relay_claim_prepare_error::<TLeaf, _>)?;
+        Ok(prepare_transport_tcp_relay(prepared))
     }
 }
 
@@ -85,21 +89,19 @@ where
     feature = "vmess",
     feature = "mieru"
 ))]
-pub(crate) fn prepare_transport_bridge_tcp_connect<'a, TBridge, TLeaf>(
-    bridge: &TBridge,
-    prepared: PreparedTransportBridgeLeaf<TLeaf>,
+pub(crate) fn prepare_transport_tcp_connect<'a, TLeaf>(
+    prepared: PreparedTransportLeaf<TLeaf>,
 ) -> Box<dyn crate::runtime::tcp_dispatch::operation::PreparedTcpConnectOperation + 'a>
 where
-    TBridge: Send + Sync + Clone + 'a + ProtocolTcpTransportBridgeOps<TLeaf>,
-    TLeaf: ProtocolTransportLeaf + ProtocolTcpTransportLeafMetadata + Send + Sync + 'a,
-    TBridge::Opened: ProtocolTcpTransportOpenResult,
+    TLeaf: ProtocolTransportLeaf
+        + ProtocolTcpTransportLeafMetadata
+        + ProtocolTcpTransportLeafOps
+        + Send
+        + Sync
+        + 'a,
+    TLeaf::Opened: ProtocolTcpTransportOpenResult,
 {
-    Box::new(
-        crate::runtime::tcp_dispatch::operation::TransportBridgeTcpConnectOperation {
-            bridge: bridge.clone(),
-            prepared,
-        },
-    )
+    Box::new(crate::runtime::tcp_dispatch::operation::TransportLeafTcpConnectOperation { prepared })
 }
 
 #[cfg(any(
@@ -111,23 +113,16 @@ where
     feature = "vmess",
     feature = "mieru"
 ))]
-pub(crate) fn prepare_transport_bridge_tcp_relay<'a, TBridge, TLeaf>(
-    bridge: &TBridge,
-    prepared: PreparedTransportBridgeLeaf<TLeaf>,
+pub(crate) fn prepare_transport_tcp_relay<'a, TLeaf>(
+    prepared: PreparedTransportLeaf<TLeaf>,
 ) -> Box<dyn crate::runtime::tcp_dispatch::operation::PreparedTcpRelayOperation + 'a>
 where
-    TBridge: Send + Sync + Clone + 'a + ProtocolTcpTransportBridgeOps<TLeaf>,
-    TLeaf: Send + Sync + 'a,
+    TLeaf: ProtocolTcpTransportLeafOps + Send + Sync + 'a,
 {
-    Box::new(
-        crate::runtime::tcp_dispatch::operation::TransportBridgeTcpRelayOperation {
-            bridge: bridge.clone(),
-            prepared,
-        },
-    )
+    Box::new(crate::runtime::tcp_dispatch::operation::TransportLeafTcpRelayOperation { prepared })
 }
 
-fn transport_bridge_connect_claim_prepare_failure<TLeaf, E>(
+fn transport_tcp_connect_claim_prepare_failure<TLeaf, E>(
     upstream: Option<(&str, u16)>,
     error: E,
 ) -> TcpOutboundFailure
@@ -142,7 +137,7 @@ where
     }
 }
 
-fn transport_bridge_relay_claim_prepare_error<TLeaf, E>(error: E) -> EngineError
+fn transport_tcp_relay_claim_prepare_error<TLeaf, E>(error: E) -> EngineError
 where
     TLeaf: ProtocolTcpTransportLeafMetadata,
     E: std::fmt::Display,

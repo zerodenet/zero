@@ -4,14 +4,12 @@
 //! (TLS / Reality / WebSocket / gRPC / H2), dispatching to the correct
 //! connect function for every valid combination.
 
-mod bridge;
 mod inbound;
 mod leaf;
 mod managed_udp;
 mod outbound;
 mod profile;
 
-pub use bridge::VlessStreamBridge;
 pub use inbound::{VlessInboundBindPlan, VlessInboundListenerRequest};
 pub use leaf::VlessOutboundLeaf;
 pub use profile::{VlessQuicBindProfile, VlessQuicClientProfile, VlessRealityClientProfile};

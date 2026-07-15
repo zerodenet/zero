@@ -209,20 +209,18 @@ where
     const MISMATCH_MESSAGE: &'static str = T::MISMATCH_MESSAGE;
 }
 
-pub trait ProtocolManagedStreamUdpBridgeOps<TLeaf> {
+pub trait ProtocolManagedStreamUdpLeafOps {
     type Resume: Send + Sync + std::fmt::Debug + 'static;
 
-    fn direct_udp_resume_for_leaf(&self, leaf: &TLeaf) -> Self::Resume;
+    fn direct_udp_resume(&self) -> Self::Resume;
 
-    fn relay_final_hop_udp_resume_for_leaf(&self, leaf: &TLeaf) -> Self::Resume;
+    fn relay_final_hop_udp_resume(&self) -> Self::Resume;
 }
 
-pub trait ProtocolRelayTwoStreamManagedUdpBridgeOps<TLeaf>:
-    ProtocolManagedStreamUdpBridgeOps<TLeaf>
-{
-    fn udp_relay_needs_two_streams_for_leaf(&self, leaf: &TLeaf) -> bool;
+pub trait ProtocolRelayTwoStreamManagedUdpLeafOps: ProtocolManagedStreamUdpLeafOps {
+    fn udp_relay_needs_two_streams(&self) -> bool;
 
-    fn relay_two_stream_udp_resume_for_leaf(&self, leaf: &TLeaf) -> Self::Resume;
+    fn relay_two_stream_udp_resume(&self) -> Self::Resume;
 }
 
 #[async_trait::async_trait]

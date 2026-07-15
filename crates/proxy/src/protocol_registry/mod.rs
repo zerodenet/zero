@@ -69,6 +69,6 @@ pub(crate) use registry::proxy_leaf_runtime;
 pub(crate) use registry::ClaimedOutboundLeaf;
 pub(crate) use registry::ProtocolRegistry;
 #[cfg(feature = "vless")]
-pub(crate) use transport_leaf::claim_relay_two_stream_transport_bridge_udp_leaf;
+pub(crate) use transport_leaf::claim_relay_two_stream_transport_udp_leaf;
 #[cfg(any(feature = "vless", feature = "vmess", feature = "trojan"))]
-pub(crate) use transport_leaf::{claim_transport_bridge_tcp_leaf, claim_transport_bridge_udp_leaf};
+pub(crate) use transport_leaf::{claim_transport_tcp_leaf, claim_transport_udp_leaf};

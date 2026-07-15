@@ -13,10 +13,10 @@ use zero_engine::EngineError;
     feature = "mieru"
 ))]
 use zero_transport::outbound_leaf::{
-    open_prepared_tcp_transport_bridge_relay_hop, open_prepared_tcp_transport_bridge_stream,
-    PreparedTransportBridgeLeaf, ProtocolSessionTcpHandshake, ProtocolSocketTcpHandshake,
-    ProtocolTcpTransportBridgeOps, ProtocolTcpTransportLeafMetadata,
-    ProtocolTcpTransportOpenResult, ProtocolTransportLeaf,
+    open_prepared_tcp_transport_leaf_relay_hop, open_prepared_tcp_transport_leaf_stream,
+    PreparedTransportLeaf, ProtocolSessionTcpHandshake, ProtocolSocketTcpHandshake,
+    ProtocolTcpTransportLeafMetadata, ProtocolTcpTransportLeafOps, ProtocolTcpTransportOpenResult,
+    ProtocolTransportLeaf,
 };
 
 use crate::protocol_registry::TcpRuntimeServices;
@@ -217,9 +217,8 @@ where
     feature = "vmess",
     feature = "mieru"
 ))]
-pub(crate) struct TransportBridgeTcpConnectOperation<TBridge, TLeaf> {
-    pub(crate) bridge: TBridge,
-    pub(crate) prepared: PreparedTransportBridgeLeaf<TLeaf>,
+pub(crate) struct TransportLeafTcpConnectOperation<TLeaf> {
+    pub(crate) prepared: PreparedTransportLeaf<TLeaf>,
 }
 
 #[cfg(any(
@@ -231,12 +230,14 @@ pub(crate) struct TransportBridgeTcpConnectOperation<TBridge, TLeaf> {
     feature = "vmess",
     feature = "mieru"
 ))]
-impl<TBridge, TLeaf> PreparedTcpConnectOperation
-    for TransportBridgeTcpConnectOperation<TBridge, TLeaf>
+impl<TLeaf> PreparedTcpConnectOperation for TransportLeafTcpConnectOperation<TLeaf>
 where
-    TBridge: Send + Sync + ProtocolTcpTransportBridgeOps<TLeaf>,
-    TLeaf: ProtocolTransportLeaf + ProtocolTcpTransportLeafMetadata + Send + Sync,
-    TBridge::Opened: ProtocolTcpTransportOpenResult,
+    TLeaf: ProtocolTransportLeaf
+        + ProtocolTcpTransportLeafMetadata
+        + ProtocolTcpTransportLeafOps
+        + Send
+        + Sync,
+    TLeaf::Opened: ProtocolTcpTransportOpenResult,
 {
     fn execute<'a>(
         self: Box<Self>,
@@ -252,8 +253,7 @@ where
             let server = endpoint.server.to_owned();
             let port = endpoint.port;
             let dial_services = services.clone();
-            let opened = open_prepared_tcp_transport_bridge_stream(
-                &self.bridge,
+            let opened = open_prepared_tcp_transport_leaf_stream(
                 session,
                 &self.prepared,
                 move |server, port| {
@@ -286,9 +286,8 @@ where
     feature = "vmess",
     feature = "mieru"
 ))]
-pub(crate) struct TransportBridgeTcpRelayOperation<TBridge, TLeaf> {
-    pub(crate) bridge: TBridge,
-    pub(crate) prepared: PreparedTransportBridgeLeaf<TLeaf>,
+pub(crate) struct TransportLeafTcpRelayOperation<TLeaf> {
+    pub(crate) prepared: PreparedTransportLeaf<TLeaf>,
 }
 
 #[cfg(any(
@@ -300,10 +299,9 @@ pub(crate) struct TransportBridgeTcpRelayOperation<TBridge, TLeaf> {
     feature = "vmess",
     feature = "mieru"
 ))]
-impl<TBridge, TLeaf> PreparedTcpRelayOperation for TransportBridgeTcpRelayOperation<TBridge, TLeaf>
+impl<TLeaf> PreparedTcpRelayOperation for TransportLeafTcpRelayOperation<TLeaf>
 where
-    TBridge: Send + Sync + ProtocolTcpTransportBridgeOps<TLeaf>,
-    TLeaf: Send + Sync,
+    TLeaf: ProtocolTcpTransportLeafOps + Send + Sync,
 {
     fn execute<'a>(
         self: Box<Self>,
@@ -315,14 +313,9 @@ where
         Self: 'a,
     {
         Box::pin(async move {
-            open_prepared_tcp_transport_bridge_relay_hop(
-                &self.bridge,
-                stream,
-                session,
-                &self.prepared,
-            )
-            .await
-            .map_err(Into::into)
+            open_prepared_tcp_transport_leaf_relay_hop(stream, session, &self.prepared)
+                .await
+                .map_err(Into::into)
         })
     }
 }
