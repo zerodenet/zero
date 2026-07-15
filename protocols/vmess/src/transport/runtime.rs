@@ -6,7 +6,7 @@ use zero_traits::{
 
 use super::inbound::VmessInboundListenerRequest;
 use super::leaf::VmessOutboundLeaf;
-use super::options::{VmessInboundOptionsRef, VmessInboundUserRef, VmessOutboundOptionsRef};
+use super::options::{VmessInboundOptionsRef, VmessInboundUserRef, VmessOutboundBuildOptionsRef};
 
 #[derive(Debug, Clone, Default)]
 pub struct VmessTransportRuntime {
@@ -39,31 +39,33 @@ impl VmessTransportRuntime {
         VmessInboundListenerRequest::from_profile_refs(source_dir, profile, tls, ws, grpc)
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub fn build_outbound_leaf<TTls, TWs, TGrpc>(
         &self,
         source_dir: Option<&Path>,
-        tag: &str,
-        server: &str,
-        port: u16,
-        options: VmessOutboundOptionsRef<'_>,
-        tls: Option<&TTls>,
-        ws: Option<&TWs>,
-        grpc: Option<&TGrpc>,
+        options: VmessOutboundBuildOptionsRef<'_, TTls, TWs, TGrpc>,
     ) -> Result<VmessOutboundLeaf, zero_core::Error>
     where
         TTls: ClientTlsProfile + ?Sized,
         TWs: WebSocketTransportProfile + ?Sized,
         TGrpc: GrpcTransportProfile + ?Sized,
     {
+        let VmessOutboundBuildOptionsRef {
+            tag,
+            server,
+            port,
+            protocol,
+            tls,
+            ws,
+            grpc,
+        } = options;
         VmessOutboundLeaf::from_profile_refs(
             source_dir,
             tag,
             server,
             port,
-            options.id,
-            options.cipher,
-            options.mux_concurrency,
+            protocol.id,
+            protocol.cipher,
+            protocol.mux_concurrency,
             tls,
             ws,
             grpc,

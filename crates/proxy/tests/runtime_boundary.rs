@@ -692,6 +692,7 @@ fn vless_adapter_uses_protocol_option_refs_instead_of_private_profile_constructo
         );
     }
     for required in [
+        "VlessOutboundBuildOptionsRef",
         "VlessOutboundOptionsRef",
         "VlessQuicBindOptionsRef",
         "VlessQuicClientOptionsRef",
@@ -751,6 +752,7 @@ fn vless_listener_adapter_uses_protocol_runtime_input_refs() {
 fn vmess_adapter_uses_protocol_outbound_option_refs() {
     let adapter = read(&proxy_src().join("adapters/vmess.rs"));
     for required in [
+        "VmessOutboundBuildOptionsRef",
         "VmessOutboundOptionsRef",
         "VmessTransportRuntime",
         "build_outbound_leaf(",
@@ -820,6 +822,26 @@ fn heavy_protocol_transport_roots_expose_named_inbound_option_surfaces() {
         assert!(
             !source.contains(forbidden),
             "{relative} must not re-export borrowed tuple inbound surface `{forbidden}`"
+        );
+    }
+}
+
+#[test]
+fn heavy_protocol_transport_roots_expose_named_outbound_build_surfaces() {
+    for (relative, required) in [
+        (
+            "protocols/vless/src/transport.rs",
+            "VlessOutboundBuildOptionsRef",
+        ),
+        (
+            "protocols/vmess/src/transport.rs",
+            "VmessOutboundBuildOptionsRef",
+        ),
+    ] {
+        let source = read(&workspace_root().join(relative));
+        assert!(
+            source.contains(required),
+            "{relative} should expose named outbound build surface `{required}`"
         );
     }
 }

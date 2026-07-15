@@ -1,6 +1,8 @@
 #[cfg(feature = "vmess")]
 mod listener;
-use ::vmess::transport::{VmessOutboundLeaf, VmessOutboundOptionsRef, VmessTransportRuntime};
+use ::vmess::transport::{
+    VmessOutboundBuildOptionsRef, VmessOutboundLeaf, VmessOutboundOptionsRef, VmessTransportRuntime,
+};
 #[cfg(feature = "vmess")]
 use zero_config::InboundConfig;
 use zero_config::{InboundProtocolConfig, OutboundProtocolConfig};
@@ -113,17 +115,19 @@ impl TcpOutboundCapability for VmessAdapter {
             move |source_dir| {
                 transport_runtime.build_outbound_leaf(
                     source_dir,
-                    tag,
-                    server,
-                    port,
-                    VmessOutboundOptionsRef {
-                        id,
-                        cipher,
-                        mux_concurrency,
+                    VmessOutboundBuildOptionsRef {
+                        tag,
+                        server,
+                        port,
+                        protocol: VmessOutboundOptionsRef {
+                            id,
+                            cipher,
+                            mux_concurrency,
+                        },
+                        tls,
+                        ws,
+                        grpc,
                     },
-                    tls,
-                    ws,
-                    grpc,
                 )
             }
         }))
@@ -156,17 +160,19 @@ impl UdpFlowCapability for VmessAdapter {
             move |source_dir| {
                 transport_runtime.build_outbound_leaf(
                     source_dir,
-                    tag,
-                    server,
-                    port,
-                    VmessOutboundOptionsRef {
-                        id,
-                        cipher,
-                        mux_concurrency,
+                    VmessOutboundBuildOptionsRef {
+                        tag,
+                        server,
+                        port,
+                        protocol: VmessOutboundOptionsRef {
+                            id,
+                            cipher,
+                            mux_concurrency,
+                        },
+                        tls,
+                        ws,
+                        grpc,
                     },
-                    tls,
-                    ws,
-                    grpc,
                 )
             }
         }))

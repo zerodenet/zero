@@ -21,3 +21,13 @@ pub struct VmessOutboundOptionsRef<'a> {
     pub cipher: &'a str,
     pub mux_concurrency: Option<u32>,
 }
+
+pub struct VmessOutboundBuildOptionsRef<'a, TTls: ?Sized, TWs: ?Sized, TGrpc: ?Sized> {
+    pub tag: &'a str,
+    pub server: &'a str,
+    pub port: u16,
+    pub protocol: VmessOutboundOptionsRef<'a>,
+    pub tls: Option<&'a TTls>,
+    pub ws: Option<&'a TWs>,
+    pub grpc: Option<&'a TGrpc>,
+}

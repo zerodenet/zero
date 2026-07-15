@@ -9,5 +9,8 @@ mod runtime;
 
 pub use inbound::VmessInboundListenerRequest;
 pub use leaf::VmessOutboundLeaf;
-pub use options::{VmessInboundOptionsRef, VmessInboundUserRef, VmessOutboundOptionsRef};
+pub use options::{
+    VmessInboundOptionsRef, VmessInboundUserRef, VmessOutboundBuildOptionsRef,
+    VmessOutboundOptionsRef,
+};
 pub use runtime::VmessTransportRuntime;

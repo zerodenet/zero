@@ -8,7 +8,8 @@ use zero_traits::{
 use super::inbound::{VlessInboundBindPlan, VlessInboundListenerRequest};
 use super::leaf::VlessOutboundLeaf;
 use super::options::{
-    VlessInboundOptionsRef, VlessInboundUserRef, VlessOutboundOptionsRef, VlessQuicBindOptionsRef,
+    VlessInboundOptionsRef, VlessInboundUserRef, VlessOutboundBuildOptionsRef,
+    VlessQuicBindOptionsRef,
 };
 use super::profile::{VlessQuicBindProfile, VlessQuicClientProfile, VlessRealityClientProfile};
 
@@ -74,20 +75,10 @@ impl VlessTransportRuntime {
         )
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub fn build_outbound_leaf<TTls, TWs, TGrpc, TH2, THttp, TSplit>(
         &self,
         source_dir: Option<&Path>,
-        tag: &str,
-        server: &str,
-        port: u16,
-        options: VlessOutboundOptionsRef<'_>,
-        tls: Option<&TTls>,
-        ws: Option<&TWs>,
-        grpc: Option<&TGrpc>,
-        h2: Option<&TH2>,
-        http_upgrade: Option<&THttp>,
-        split_http: Option<&TSplit>,
+        options: VlessOutboundBuildOptionsRef<'_, TTls, TWs, TGrpc, TH2, THttp, TSplit>,
     ) -> Result<VlessOutboundLeaf, zero_core::Error>
     where
         TTls: ClientTlsProfile + ?Sized,
@@ -97,16 +88,28 @@ impl VlessTransportRuntime {
         THttp: HttpUpgradeTransportProfile + ?Sized,
         TSplit: SplitHttpTransportProfile + ?Sized,
     {
-        let reality = options.reality.map(VlessRealityClientProfile::from);
-        let quic = options.quic.map(VlessQuicClientProfile::from);
+        let VlessOutboundBuildOptionsRef {
+            tag,
+            server,
+            port,
+            protocol,
+            tls,
+            ws,
+            grpc,
+            h2,
+            http_upgrade,
+            split_http,
+        } = options;
+        let reality = protocol.reality.map(VlessRealityClientProfile::from);
+        let quic = protocol.quic.map(VlessQuicClientProfile::from);
         VlessOutboundLeaf::from_profile_refs(
             source_dir,
             tag,
             server,
             port,
-            options.id,
-            options.flow,
-            options.mux_concurrency,
+            protocol.id,
+            protocol.flow,
+            protocol.mux_concurrency,
             tls,
             reality.as_ref(),
             ws,

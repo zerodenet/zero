@@ -15,7 +15,8 @@ mod runtime;
 pub use inbound::VlessInboundListenerRequest;
 pub use leaf::VlessOutboundLeaf;
 pub use options::{
-    VlessInboundOptionsRef, VlessInboundUserRef, VlessOutboundOptionsRef, VlessQuicBindOptionsRef,
-    VlessQuicClientOptionsRef, VlessRealityClientOptionsRef, VlessRealityServerOptionsRef,
+    VlessInboundOptionsRef, VlessInboundUserRef, VlessOutboundBuildOptionsRef,
+    VlessOutboundOptionsRef, VlessQuicBindOptionsRef, VlessQuicClientOptionsRef,
+    VlessRealityClientOptionsRef, VlessRealityServerOptionsRef,
 };
 pub use runtime::VlessTransportRuntime;

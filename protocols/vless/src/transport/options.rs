@@ -39,6 +39,27 @@ pub struct VlessOutboundOptionsRef<'a> {
     pub quic: Option<VlessQuicClientOptionsRef<'a>>,
 }
 
+pub struct VlessOutboundBuildOptionsRef<
+    'a,
+    TTls: ?Sized,
+    TWs: ?Sized,
+    TGrpc: ?Sized,
+    TH2: ?Sized,
+    THttp: ?Sized,
+    TSplit: ?Sized,
+> {
+    pub tag: &'a str,
+    pub server: &'a str,
+    pub port: u16,
+    pub protocol: VlessOutboundOptionsRef<'a>,
+    pub tls: Option<&'a TTls>,
+    pub ws: Option<&'a TWs>,
+    pub grpc: Option<&'a TGrpc>,
+    pub h2: Option<&'a TH2>,
+    pub http_upgrade: Option<&'a THttp>,
+    pub split_http: Option<&'a TSplit>,
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct VlessRealityClientOptionsRef<'a> {
     pub public_key: &'a str,
