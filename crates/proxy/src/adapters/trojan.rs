@@ -10,7 +10,6 @@ use zero_traits::{ProtocolCapabilityDescriptor, ProtocolMetadata};
 
 use crate::adapters::identity::{
     named_protocol_supports_inbound, named_protocol_supports_outbound, NamedProtocolAdapter,
-    ProtocolTransportBridgeAdapter,
 };
 use crate::adapters::transport_bridge::{
     claim_transport_bridge_tcp_leaf, claim_transport_bridge_udp_leaf,
@@ -33,6 +32,9 @@ pub(crate) struct TrojanAdapter {
 }
 
 #[cfg(feature = "trojan")]
+const TCP_PATH: TcpPathCategory = TcpPathCategory::Tunnel;
+
+#[cfg(feature = "trojan")]
 impl Default for TrojanAdapter {
     fn default() -> Self {
         Self {
@@ -45,13 +47,6 @@ impl Default for TrojanAdapter {
 impl NamedProtocolAdapter for TrojanAdapter {
     const PROTOCOL_NAME: &'static str = "trojan";
     const FEATURE_NAME: &'static str = "trojan";
-}
-
-#[cfg(feature = "trojan")]
-impl ProtocolTransportBridgeAdapter for TrojanAdapter {
-    type Bridge = TrojanTlsBridge;
-
-    const TCP_PATH: TcpPathCategory = TcpPathCategory::Tunnel;
 }
 
 #[cfg(feature = "trojan")]
@@ -107,7 +102,7 @@ impl TcpOutboundCapability for TrojanAdapter {
         &self,
         leaf: ResolvedLeafOutbound<'a>,
     ) -> Option<Box<dyn ClaimedTcpOutboundLeaf<'a> + 'a>> {
-        let runtime = proxy_leaf_runtime(&leaf, Self::TCP_PATH)?;
+        let runtime = proxy_leaf_runtime(&leaf, TCP_PATH)?;
         let ResolvedLeafOutbound::Trojan {
             tag,
             server,

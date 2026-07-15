@@ -69,6 +69,7 @@ fn adapters_prepare_protocol_parts_but_do_not_own_runtime_execution() {
             "run_logged_tcp_listener_loop",
             "run_logged_quic_listener_loop",
             "serve_inbound",
+            "ProtocolTransportBridgeAdapter",
         ],
     );
 }

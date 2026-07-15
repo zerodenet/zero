@@ -16,7 +16,6 @@ use zero_traits::{ProtocolCapabilityDescriptor, ProtocolMetadata};
 
 use crate::adapters::identity::{
     named_protocol_supports_inbound, named_protocol_supports_outbound, NamedProtocolAdapter,
-    ProtocolTransportBridgeAdapter,
 };
 use crate::adapters::transport_bridge::{
     claim_relay_two_stream_transport_bridge_udp_leaf, claim_transport_bridge_tcp_leaf,
@@ -37,6 +36,9 @@ use crate::runtime::udp_flow::managed::{
 pub(crate) struct VlessAdapter {
     bridge: VlessStreamBridge,
 }
+
+#[cfg(feature = "vless")]
+const TCP_PATH: TcpPathCategory = TcpPathCategory::Tunnel;
 
 #[cfg(feature = "vless")]
 fn outbound_reality_profile(reality: Option<&RealityConfig>) -> Option<VlessRealityClientProfile> {
@@ -70,13 +72,6 @@ fn quic_bind_profile(quic: Option<&QuicConfig>) -> Option<VlessQuicBindProfile> 
 impl NamedProtocolAdapter for VlessAdapter {
     const PROTOCOL_NAME: &'static str = "vless";
     const FEATURE_NAME: &'static str = "vless";
-}
-
-#[cfg(feature = "vless")]
-impl ProtocolTransportBridgeAdapter for VlessAdapter {
-    type Bridge = VlessStreamBridge;
-
-    const TCP_PATH: TcpPathCategory = TcpPathCategory::Tunnel;
 }
 
 #[cfg(feature = "vless")]
@@ -149,7 +144,7 @@ impl TcpOutboundCapability for VlessAdapter {
         &self,
         leaf: ResolvedLeafOutbound<'a>,
     ) -> Option<Box<dyn ClaimedTcpOutboundLeaf<'a> + 'a>> {
-        let runtime = proxy_leaf_runtime(&leaf, Self::TCP_PATH)?;
+        let runtime = proxy_leaf_runtime(&leaf, TCP_PATH)?;
         let ResolvedLeafOutbound::Vless {
             tag,
             server,

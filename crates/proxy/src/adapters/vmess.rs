@@ -10,7 +10,6 @@ use zero_traits::{ProtocolCapabilityDescriptor, ProtocolMetadata};
 
 use crate::adapters::identity::{
     named_protocol_supports_inbound, named_protocol_supports_outbound, NamedProtocolAdapter,
-    ProtocolTransportBridgeAdapter,
 };
 use crate::adapters::transport_bridge::{
     claim_transport_bridge_tcp_leaf, claim_transport_bridge_udp_leaf,
@@ -33,16 +32,12 @@ pub(crate) struct VmessAdapter {
 }
 
 #[cfg(feature = "vmess")]
+const TCP_PATH: TcpPathCategory = TcpPathCategory::Session;
+
+#[cfg(feature = "vmess")]
 impl NamedProtocolAdapter for VmessAdapter {
     const PROTOCOL_NAME: &'static str = "vmess";
     const FEATURE_NAME: &'static str = "vmess";
-}
-
-#[cfg(feature = "vmess")]
-impl ProtocolTransportBridgeAdapter for VmessAdapter {
-    type Bridge = VmessStreamBridge;
-
-    const TCP_PATH: TcpPathCategory = TcpPathCategory::Session;
 }
 
 #[cfg(feature = "vmess")]
@@ -98,7 +93,7 @@ impl TcpOutboundCapability for VmessAdapter {
         &self,
         leaf: ResolvedLeafOutbound<'a>,
     ) -> Option<Box<dyn ClaimedTcpOutboundLeaf<'a> + 'a>> {
-        let runtime = proxy_leaf_runtime(&leaf, Self::TCP_PATH)?;
+        let runtime = proxy_leaf_runtime(&leaf, TCP_PATH)?;
         let ResolvedLeafOutbound::Vmess {
             tag,
             server,

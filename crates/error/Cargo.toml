@@ -1,5 +1,5 @@
 [package]
-name = "zero-engine-contract"
+name = "zero-error"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
