@@ -59,7 +59,7 @@ impl VlessTransportRuntime {
     {
         let profile = crate::inbound::VlessInboundProfile::from_config_users(users)?;
         let reality = reality.map(crate::reality::VlessRealityServerProfile::from);
-        VlessInboundListenerRequest::from_config_refs(
+        VlessInboundListenerRequest::from_profile_refs(
             source_dir,
             profile,
             reality,
@@ -102,7 +102,7 @@ impl VlessTransportRuntime {
     {
         let reality = reality.map(VlessRealityClientProfile::from);
         let quic = quic.map(VlessQuicClientProfile::from);
-        VlessOutboundLeaf::from_config_refs(
+        VlessOutboundLeaf::from_profile_refs(
             source_dir,
             tag,
             server,

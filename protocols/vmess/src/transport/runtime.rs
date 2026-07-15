@@ -33,7 +33,7 @@ impl VmessTransportRuntime {
         TGrpc: GrpcTransportProfile + ?Sized,
     {
         let profile = crate::inbound::VmessInboundProfile::from_config_users(users)?;
-        VmessInboundListenerRequest::from_config_refs(source_dir, profile, tls, ws, grpc)
+        VmessInboundListenerRequest::from_profile_refs(source_dir, profile, tls, ws, grpc)
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -55,7 +55,7 @@ impl VmessTransportRuntime {
         TWs: WebSocketTransportProfile + ?Sized,
         TGrpc: GrpcTransportProfile + ?Sized,
     {
-        VmessOutboundLeaf::from_config_refs(
+        VmessOutboundLeaf::from_profile_refs(
             source_dir,
             tag,
             server,

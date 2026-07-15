@@ -28,7 +28,7 @@ struct OwnedVmessOutboundLeafConfig {
 
 impl OwnedVmessOutboundLeafConfig {
     #[allow(clippy::too_many_arguments)]
-    fn from_config_refs<TTls, TWs, TGrpc>(
+    fn from_profile_refs<TTls, TWs, TGrpc>(
         source_dir: Option<&Path>,
         tag: &str,
         server: &str,
@@ -79,7 +79,7 @@ pub struct VmessOutboundLeaf {
 
 impl VmessOutboundLeaf {
     #[allow(clippy::too_many_arguments)]
-    pub fn from_config_refs<TTls, TWs, TGrpc>(
+    pub(in crate::transport) fn from_profile_refs<TTls, TWs, TGrpc>(
         source_dir: Option<&Path>,
         tag: &str,
         server: &str,
@@ -97,7 +97,7 @@ impl VmessOutboundLeaf {
         TWs: WebSocketTransportProfile + ?Sized,
         TGrpc: GrpcTransportProfile + ?Sized,
     {
-        OwnedVmessOutboundLeafConfig::from_config_refs(
+        OwnedVmessOutboundLeafConfig::from_profile_refs(
             source_dir,
             tag,
             server,

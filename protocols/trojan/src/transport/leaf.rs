@@ -26,7 +26,7 @@ struct OwnedTrojanOutboundLeafConfig {
 
 impl OwnedTrojanOutboundLeafConfig {
     #[allow(clippy::too_many_arguments)]
-    fn from_config_refs(
+    fn from_parts(
         source_dir: Option<&Path>,
         tag: &str,
         server: &str,
@@ -64,7 +64,7 @@ pub struct TrojanOutboundLeaf {
 
 impl TrojanOutboundLeaf {
     #[allow(clippy::too_many_arguments)]
-    pub fn from_config_refs(
+    fn from_parts(
         source_dir: Option<&Path>,
         tag: &str,
         server: &str,
@@ -74,7 +74,7 @@ impl TrojanOutboundLeaf {
         insecure: bool,
         client_fingerprint: Option<&str>,
     ) -> Self {
-        OwnedTrojanOutboundLeafConfig::from_config_refs(
+        OwnedTrojanOutboundLeafConfig::from_parts(
             source_dir,
             tag,
             server,
@@ -94,7 +94,7 @@ impl TrojanOutboundLeaf {
         port: u16,
         options: TrojanOutboundOptionsRef<'_>,
     ) -> Self {
-        Self::from_config_refs(
+        Self::from_parts(
             source_dir,
             tag,
             server,

@@ -17,7 +17,7 @@ struct OwnedTrojanInboundListenerConfig {
 }
 
 impl OwnedTrojanInboundListenerConfig {
-    fn from_config_refs<TTls>(
+    fn from_profile_refs<TTls>(
         source_dir: Option<&Path>,
         profile: crate::inbound::TrojanInboundProfile,
         tls: Option<&TTls>,
@@ -53,7 +53,7 @@ impl TrojanInboundListenerRequest {
         }
     }
 
-    pub fn from_config_refs<TTls>(
+    fn from_profile_refs<TTls>(
         source_dir: Option<&Path>,
         profile: crate::inbound::TrojanInboundProfile,
         tls: Option<&TTls>,
@@ -61,7 +61,8 @@ impl TrojanInboundListenerRequest {
     where
         TTls: ServerTlsProfile + ?Sized,
     {
-        OwnedTrojanInboundListenerConfig::from_config_refs(source_dir, profile, tls).map(Into::into)
+        OwnedTrojanInboundListenerConfig::from_profile_refs(source_dir, profile, tls)
+            .map(Into::into)
     }
 
     pub fn from_options_refs<TTls>(
@@ -72,7 +73,7 @@ impl TrojanInboundListenerRequest {
     where
         TTls: ServerTlsProfile + ?Sized,
     {
-        Self::from_config_refs(
+        Self::from_profile_refs(
             source_dir,
             crate::inbound::TrojanInboundProfile::from_config_password(options.password),
             tls,

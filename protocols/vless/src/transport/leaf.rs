@@ -37,7 +37,7 @@ struct OwnedVlessOutboundLeafConfig {
 
 impl OwnedVlessOutboundLeafConfig {
     #[allow(clippy::too_many_arguments)]
-    fn from_config_refs<TTls, TWs, TGrpc, TH2, THttp, TSplit>(
+    fn from_profile_refs<TTls, TWs, TGrpc, TH2, THttp, TSplit>(
         source_dir: Option<&Path>,
         tag: &str,
         server: &str,
@@ -106,7 +106,7 @@ pub struct VlessOutboundLeaf {
 
 impl VlessOutboundLeaf {
     #[allow(clippy::too_many_arguments)]
-    pub fn from_config_refs<TTls, TWs, TGrpc, TH2, THttp, TSplit>(
+    pub(in crate::transport) fn from_profile_refs<TTls, TWs, TGrpc, TH2, THttp, TSplit>(
         source_dir: Option<&Path>,
         tag: &str,
         server: &str,
@@ -132,7 +132,7 @@ impl VlessOutboundLeaf {
         THttp: HttpUpgradeTransportProfile + ?Sized,
         TSplit: SplitHttpTransportProfile + ?Sized,
     {
-        OwnedVlessOutboundLeafConfig::from_config_refs(
+        OwnedVlessOutboundLeafConfig::from_profile_refs(
             source_dir,
             tag,
             server,

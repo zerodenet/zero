@@ -20,7 +20,7 @@ struct OwnedVmessInboundListenerConfig {
 
 impl OwnedVmessInboundListenerConfig {
     #[allow(clippy::too_many_arguments)]
-    fn from_config_refs<TTls, TWs, TGrpc>(
+    fn from_profile_refs<TTls, TWs, TGrpc>(
         source_dir: Option<&Path>,
         profile: crate::inbound::VmessInboundProfile,
         tls: Option<&TTls>,
@@ -75,7 +75,7 @@ impl VmessInboundListenerRequest {
     pub const ABORT_ON_END: bool = false;
     pub const READ_ERROR_LOG: &'static str = "vmess mux frame read failed";
 
-    pub fn from_config_refs<TTls, TWs, TGrpc>(
+    pub(in crate::transport) fn from_profile_refs<TTls, TWs, TGrpc>(
         source_dir: Option<&Path>,
         profile: crate::inbound::VmessInboundProfile,
         tls: Option<&TTls>,
@@ -87,7 +87,7 @@ impl VmessInboundListenerRequest {
         TWs: WebSocketTransportProfile + ?Sized,
         TGrpc: GrpcTransportProfile + ?Sized,
     {
-        OwnedVmessInboundListenerConfig::from_config_refs(source_dir, profile, tls, ws, grpc)
+        OwnedVmessInboundListenerConfig::from_profile_refs(source_dir, profile, tls, ws, grpc)
             .map(Into::into)
     }
 

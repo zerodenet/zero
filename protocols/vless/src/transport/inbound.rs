@@ -34,7 +34,7 @@ struct OwnedVlessInboundListenerConfig {
 
 impl OwnedVlessInboundListenerConfig {
     #[allow(clippy::too_many_arguments)]
-    fn from_config_refs<TTls, TWs, TGrpc, TH2, THttp, TSplit, TFallback>(
+    fn from_profile_refs<TTls, TWs, TGrpc, TH2, THttp, TSplit, TFallback>(
         source_dir: Option<&Path>,
         profile: crate::inbound::VlessInboundProfile,
         reality: Option<crate::reality::VlessRealityServerProfile>,
@@ -102,7 +102,7 @@ impl VlessInboundListenerRequest {
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub fn from_config_refs<TTls, TWs, TGrpc, TH2, THttp, TSplit, TFallback>(
+    pub(in crate::transport) fn from_profile_refs<TTls, TWs, TGrpc, TH2, THttp, TSplit, TFallback>(
         source_dir: Option<&Path>,
         profile: crate::inbound::VlessInboundProfile,
         reality: Option<crate::reality::VlessRealityServerProfile>,
@@ -123,7 +123,7 @@ impl VlessInboundListenerRequest {
         TSplit: SplitHttpTransportProfile + ?Sized,
         TFallback: InboundFallbackProfile + ?Sized,
     {
-        OwnedVlessInboundListenerConfig::from_config_refs(
+        OwnedVlessInboundListenerConfig::from_profile_refs(
             source_dir,
             profile,
             reality,
