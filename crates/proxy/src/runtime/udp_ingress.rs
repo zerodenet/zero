@@ -1,33 +1,49 @@
 //! Narrow ingress from an accepted inbound UDP packet into [`UdpPipe`].
 
+use std::path::Path;
+use std::sync::Arc;
+
+use zero_config::RuntimeConfig;
 use zero_core::{InboundUdpDispatch, Session, SessionAuth};
-use zero_engine::{EngineError, ResolvedOutbound, RouteDecision, SessionHandle};
+use zero_dns::DnsSystem;
+use zero_engine::{Engine, EngineError, ResolvedOutbound, RouteDecision, SessionHandle};
 use zero_traits::DnsResolver;
 
+use crate::inventory::ProtocolInventory;
 use crate::logging::log_session_accepted;
 use crate::protocol_registry::{UdpAdapterContext, UdpRuntimeServices};
 use crate::runtime::pipe::{KernelPipe, UdpPipe, UdpPipeInput};
-use crate::runtime::tcp_ingress::apply_kernel_rate_limits;
+use crate::runtime::tcp_ingress::apply_kernel_rate_limits_from_config;
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
-use crate::runtime::Proxy;
-use std::path::Path;
 
 #[derive(Clone)]
 pub(crate) struct UdpIngressRuntime {
-    proxy: Proxy,
+    engine: Engine,
+    config: Arc<RuntimeConfig>,
+    resolver: Arc<DnsSystem>,
+    protocols: ProtocolInventory,
     services: UdpRuntimeServices,
 }
 
 impl UdpIngressRuntime {
-    pub(crate) fn from_proxy(proxy: &Proxy) -> Self {
+    pub(crate) fn new(
+        engine: Engine,
+        config: Arc<RuntimeConfig>,
+        resolver: Arc<DnsSystem>,
+        protocols: ProtocolInventory,
+        services: UdpRuntimeServices,
+    ) -> Self {
         Self {
-            proxy: proxy.clone(),
-            services: UdpRuntimeServices::from_proxy(proxy),
+            engine,
+            config,
+            resolver,
+            protocols,
+            services,
         }
     }
 
     pub(crate) async fn new_dispatch(&self, inbound_tag: &str) -> Result<UdpDispatch, EngineError> {
-        UdpDispatch::new(self.clone(), inbound_tag, &self.proxy.protocols).await
+        UdpDispatch::new(self.clone(), inbound_tag, &self.protocols).await
     }
 
     pub(crate) fn services(&self) -> &UdpRuntimeServices {
@@ -39,41 +55,55 @@ impl UdpIngressRuntime {
     }
 
     pub(crate) async fn resolve_local_dns(&self, domain: &str) {
-        let _ = self.proxy.resolver.resolve(domain).await;
+        let _ = self.resolver.resolve(domain).await;
     }
 
     pub(crate) fn prepare_udp_session(&self, session: &mut Session, inbound_tag: &str) {
-        self.proxy.prepare_session(session, inbound_tag, None);
-        apply_kernel_rate_limits(&self.proxy, session, inbound_tag);
+        self.engine.prepare_session(session, inbound_tag);
+        apply_kernel_rate_limits_from_config(self.config.as_ref(), session, inbound_tag);
     }
 
     pub(crate) fn track_session(&self, session_id: u64) -> SessionHandle {
-        self.proxy.track_session(session_id)
+        self.engine.track_session(session_id)
     }
 
     pub(crate) async fn resolve_fake_ip_target(&self, session: &mut Session) {
-        self.proxy.resolve_fake_ip_target(session).await;
+        use zero_core::Address;
+        use zero_traits::IpAddress;
+
+        let ip = match &session.target {
+            Address::Ipv4(octets) => IpAddress::V4(*octets),
+            Address::Ipv6(octets) => IpAddress::V6(*octets),
+            _ => return,
+        };
+        if let Some(domain) = self.resolver.lookup_fake_ip(&ip).await {
+            session.target = Address::Domain(domain);
+        }
     }
 
     pub(crate) fn route_decision(&self, session: &Session) -> RouteDecision {
-        self.proxy.route_decision(session)
+        self.engine.route_decision_with_inbound(
+            &session.target,
+            session.sni.as_deref(),
+            session.inbound_tag.as_deref(),
+        )
     }
 
     pub(crate) fn resolve_outbound(
         &self,
         action: &RouteDecision,
     ) -> Result<ResolvedOutbound<'static>, EngineError> {
-        self.proxy
-            .resolve_outbound(action)
+        self.engine
+            .resolve_route_decision(action.clone())
             .map(|(resolved, _)| resolved)
     }
 
     pub(crate) fn log_session_accepted(&self, session: &Session, action: &RouteDecision) {
-        log_session_accepted(session, action, self.proxy.config.mode.kind());
+        log_session_accepted(session, action, self.config.mode.kind());
     }
 
     pub(crate) fn set_session_outbound(&self, session: &Session) {
-        self.proxy.set_session_outbound(session);
+        self.engine.set_session_outbound(session);
     }
 
     #[cfg(any(feature = "socks5", feature = "vless"))]
@@ -87,7 +117,7 @@ impl UdpIngressRuntime {
     }
 
     pub(crate) fn source_dir(&self) -> Option<&Path> {
-        self.proxy.config.source_dir()
+        self.config.source_dir()
     }
 
     pub(crate) async fn start_udp_resolved_outbound(
@@ -98,7 +128,7 @@ impl UdpIngressRuntime {
         payload: &[u8],
     ) -> Result<FlowStartResult, FlowFailure> {
         crate::inventory::start_udp_resolved_outbound(
-            &self.proxy.protocols,
+            &self.protocols,
             dispatch,
             UdpAdapterContext::new(self.source_dir(), self.runtime_services()),
             session,
@@ -114,7 +144,7 @@ impl UdpIngressRuntime {
         inbound_dispatch: &InboundUdpDispatch,
         auth: Option<&SessionAuth>,
     ) -> Result<u64, EngineError> {
-        if !self.proxy.udp_enabled_for_inbound(dispatch.inbound_tag()) {
+        if !self.udp_enabled_for_inbound(dispatch.inbound_tag()) {
             return Err(EngineError::Io(std::io::Error::other(
                 "udp disabled for inbound",
             )));
@@ -123,5 +153,16 @@ impl UdpIngressRuntime {
         UdpPipe::new(dispatch)
             .dispatch(UdpPipeInput::from_inbound_dispatch(inbound_dispatch, auth))
             .await
+    }
+
+    fn udp_enabled_for_inbound(&self, inbound_tag: &str) -> bool {
+        let config = self.engine.config();
+        config.runtime.udp.enabled
+            && config
+                .inbounds
+                .iter()
+                .find(|inbound| inbound.tag == inbound_tag)
+                .map(|inbound| inbound.udp.enabled)
+                .unwrap_or(true)
     }
 }

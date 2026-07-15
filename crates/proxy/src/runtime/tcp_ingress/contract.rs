@@ -17,17 +17,17 @@ use zero_engine::EngineError;
 ))]
 use zero_traits::AsyncSocket;
 
-use crate::runtime::Proxy;
+use crate::protocol_registry::TcpRuntimeServices;
 use crate::transport::{relay_bidirectional_metered_throttled, TcpRelayStream};
 
-pub(crate) fn record_tcp_upload(proxy: &Proxy, session_id: u64, bytes: u64) {
-    proxy.record_session_inbound_rx(session_id, bytes);
-    proxy.record_session_outbound_tx(session_id, bytes);
+pub(crate) fn record_tcp_upload(services: &TcpRuntimeServices, session_id: u64, bytes: u64) {
+    services.record_session_inbound_rx(session_id, bytes);
+    services.record_session_outbound_tx(session_id, bytes);
 }
 
-pub(crate) fn record_tcp_download(proxy: &Proxy, session_id: u64, bytes: u64) {
-    proxy.record_session_outbound_rx(session_id, bytes);
-    proxy.record_session_inbound_tx(session_id, bytes);
+pub(crate) fn record_tcp_download(services: &TcpRuntimeServices, session_id: u64, bytes: u64) {
+    services.record_session_outbound_rx(session_id, bytes);
+    services.record_session_inbound_tx(session_id, bytes);
 }
 
 #[async_trait]
@@ -47,19 +47,21 @@ pub(crate) trait InboundProtocol: Send + Sync {
         &self,
         client: Self::ClientStream,
         upstream: TcpRelayStream,
-        proxy: &Proxy,
+        services: TcpRuntimeServices,
         session_id: u64,
         up_bps: Option<u64>,
         down_bps: Option<u64>,
     ) -> Result<(), EngineError> {
+        let upload_services = services.clone();
+        let download_services = services;
         relay_bidirectional_metered_throttled(
             client,
             upstream,
-            |bytes| {
-                record_tcp_upload(proxy, session_id, bytes);
+            move |bytes| {
+                record_tcp_upload(&upload_services, session_id, bytes);
             },
-            |bytes| {
-                record_tcp_download(proxy, session_id, bytes);
+            move |bytes| {
+                record_tcp_download(&download_services, session_id, bytes);
             },
             up_bps,
             down_bps,

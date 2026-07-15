@@ -5,3 +5,5 @@
 
 mod leaf;
 pub(crate) mod operation;
+
+pub(crate) use leaf::dispatch_tcp;

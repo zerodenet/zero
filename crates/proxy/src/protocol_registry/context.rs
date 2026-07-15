@@ -1,15 +1,42 @@
+use std::sync::Arc;
+
+use zero_config::RuntimeConfig;
+use zero_dns::DnsSystem;
+use zero_engine::Engine;
+
+use crate::inventory::ProtocolInventory;
 use crate::runtime::Proxy;
 
 #[derive(Clone)]
 pub(crate) struct TcpRuntimeServices {
-    proxy: Proxy,
+    engine: Engine,
+    config: Arc<RuntimeConfig>,
+    resolver: Arc<DnsSystem>,
+    protocols: ProtocolInventory,
 }
 
 impl TcpRuntimeServices {
-    pub(crate) fn from_proxy(proxy: &Proxy) -> Self {
+    pub(crate) fn new(
+        engine: Engine,
+        config: Arc<RuntimeConfig>,
+        resolver: Arc<DnsSystem>,
+        protocols: ProtocolInventory,
+    ) -> Self {
         Self {
-            proxy: proxy.clone(),
+            engine,
+            config,
+            resolver,
+            protocols,
         }
+    }
+
+    pub(crate) fn from_proxy(proxy: &Proxy) -> Self {
+        Self::new(
+            proxy.engine().clone(),
+            proxy.config.clone(),
+            proxy.resolver.clone(),
+            proxy.protocols.clone(),
+        )
     }
 
     #[cfg(any(
@@ -26,31 +53,34 @@ impl TcpRuntimeServices {
         server: String,
         port: u16,
     ) -> Result<zero_platform_tokio::TokioSocket, zero_transport::RuntimeError> {
-        self.proxy.connect_upstream_host_owned(server, port).await
+        self.protocols
+            .direct_connector()
+            .connect_host(&server, port, self.resolver.as_ref())
+            .await
+            .map_err(Into::into)
     }
 
     pub(crate) async fn connect_direct(
         &self,
         session: &zero_core::Session,
     ) -> Result<zero_platform_tokio::TokioSocket, zero_engine::EngineError> {
-        self.proxy
-            .protocols
+        self.protocols
             .direct_connector()
-            .connect(session, self.proxy.resolver.as_ref())
+            .connect(session, self.resolver.as_ref())
             .await
             .map_err(Into::into)
     }
 
     pub(crate) fn check_outbound_health(&self, tag: &str) -> Result<(), zero_engine::EngineError> {
-        self.proxy.check_outbound_health(tag)
+        self.engine.check_outbound_health(tag)
     }
 
     pub(crate) fn record_outbound_failure(&self, tag: &str) {
-        self.proxy.record_outbound_failure(tag);
+        self.engine.record_outbound_failure(tag);
     }
 
     pub(crate) fn record_outbound_success(&self, tag: &str) {
-        self.proxy.record_outbound_success(tag);
+        self.engine.record_outbound_success(tag);
     }
 
     pub(crate) fn prepare_tcp_outbound<'a>(
@@ -58,8 +88,8 @@ impl TcpRuntimeServices {
         resolved: &'a zero_engine::ResolvedOutbound<'a>,
     ) -> Result<crate::inventory::PreparedTcpOutbound<'a>, crate::transport::TcpOutboundFailure>
     {
-        self.proxy.protocols.prepare_tcp_outbound(
-            OutboundAdapterContext::new(self.proxy.config.source_dir()),
+        self.protocols.prepare_tcp_outbound(
+            OutboundAdapterContext::new(self.config.source_dir()),
             resolved,
         )
     }
@@ -94,8 +124,28 @@ impl TcpRuntimeServices {
         session_id: u64,
         traffic: zero_transport::StreamTraffic,
     ) {
-        self.proxy
-            .record_session_outbound_traffic(session_id, traffic);
+        if traffic.is_empty() {
+            return;
+        }
+
+        self.record_session_outbound_rx(session_id, traffic.read_bytes);
+        self.record_session_outbound_tx(session_id, traffic.written_bytes);
+    }
+
+    pub(crate) fn record_session_inbound_rx(&self, session_id: u64, bytes: u64) {
+        self.engine.record_session_inbound_rx(session_id, bytes);
+    }
+
+    pub(crate) fn record_session_inbound_tx(&self, session_id: u64, bytes: u64) {
+        self.engine.record_session_inbound_tx(session_id, bytes);
+    }
+
+    pub(crate) fn record_session_outbound_rx(&self, session_id: u64, bytes: u64) {
+        self.engine.record_session_outbound_rx(session_id, bytes);
+    }
+
+    pub(crate) fn record_session_outbound_tx(&self, session_id: u64, bytes: u64) {
+        self.engine.record_session_outbound_tx(session_id, bytes);
     }
 }
 

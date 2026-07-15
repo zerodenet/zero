@@ -6,11 +6,11 @@ use zero_platform_tokio::TokioSocket;
 use zero_transport::inbound_route::FallbackReplayToUpstream;
 use zero_transport::profile::OwnedInboundFallbackProfile;
 
-use crate::runtime::Proxy;
+use crate::protocol_registry::TcpRuntimeServices;
 use crate::transport::{relay_bidirectional_metered, ClientStream, MeteredStream};
 
 pub(crate) async fn relay_recorded_fallback<S, FReplay>(
-    proxy: Proxy,
+    services: TcpRuntimeServices,
     fallback: OwnedInboundFallbackProfile,
     replay_to_upstream: FReplay,
 ) -> Result<(), EngineError>
@@ -22,10 +22,8 @@ where
         Box<dyn core::future::Future<Output = Result<S, std::io::Error>> + Send + 'a>,
     >,
 {
-    let mut upstream = proxy
-        .protocols
-        .direct_connector()
-        .connect_host(&fallback.server, fallback.port, proxy.resolver.as_ref())
+    let mut upstream = services
+        .connect_upstream_owned(fallback.server.clone(), fallback.port)
         .await?;
 
     let client_stream = replay_to_upstream(&mut upstream).await?;
@@ -45,14 +43,14 @@ where
 }
 
 pub(crate) async fn relay_recorded_fallback_replay<R>(
-    proxy: Proxy,
+    services: TcpRuntimeServices,
     fallback: OwnedInboundFallbackProfile,
     replay: R,
 ) -> Result<(), EngineError>
 where
     R: FallbackReplayToUpstream + 'static,
 {
-    relay_recorded_fallback(proxy, fallback, move |upstream| {
+    relay_recorded_fallback(services, fallback, move |upstream| {
         Box::pin(async move { replay.replay_to_upstream(upstream).await })
     })
     .await

@@ -31,7 +31,7 @@
 //! # Usage
 //!
 //! ```ignore
-//! let runtime = crate::runtime::udp_ingress::UdpIngressRuntime::from_proxy(proxy);
+//! let runtime = make_udp_ingress_runtime();
 //! let mut dispatch = runtime.new_dispatch("inbound-tag").await?;
 //!
 //! // For each incoming packet:

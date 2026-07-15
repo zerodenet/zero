@@ -3,6 +3,17 @@ use std::net::SocketAddr;
 use zero_core::Session;
 use zero_engine::EngineError;
 
+use crate::protocol_registry::TcpRuntimeServices;
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
+use crate::protocol_registry::UdpRuntimeServices;
 use crate::runtime::tcp_ingress::{InboundProtocol, TcpIngressRuntime};
 #[cfg(any(
     feature = "socks5",
@@ -33,7 +44,7 @@ pub(crate) struct InboundRouteRuntime {
 
 impl InboundRouteRuntime {
     pub(crate) fn new(proxy: Proxy, inbound_tag: String, source_addr: Option<SocketAddr>) -> Self {
-        let tcp_runtime = TcpIngressRuntime::new(proxy.clone(), inbound_tag, source_addr);
+        let tcp_runtime = tcp_ingress_runtime(&proxy, inbound_tag, source_addr);
         Self {
             #[cfg(any(
                 feature = "socks5",
@@ -44,7 +55,7 @@ impl InboundRouteRuntime {
                 feature = "vmess",
                 feature = "mieru"
             ))]
-            udp_runtime: UdpIngressRuntime::from_proxy(&proxy),
+            udp_runtime: udp_ingress_runtime(&proxy),
             tcp_runtime,
         }
     }
@@ -177,7 +188,7 @@ impl InboundListenerRuntime {
                 feature = "vmess",
                 feature = "mieru"
             ))]
-            udp_runtime: UdpIngressRuntime::from_proxy(proxy),
+            udp_runtime: udp_ingress_runtime(proxy),
         }
     }
 
@@ -219,6 +230,40 @@ impl InboundListenerRuntimeFactory {
     pub(crate) fn for_inbound(&self, inbound_tag: String) -> InboundListenerRuntime {
         InboundListenerRuntime::new(&self.proxy, inbound_tag)
     }
+}
+
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
+fn udp_ingress_runtime(proxy: &Proxy) -> UdpIngressRuntime {
+    UdpIngressRuntime::new(
+        proxy.engine().clone(),
+        proxy.config.clone(),
+        proxy.resolver.clone(),
+        proxy.protocols.clone(),
+        UdpRuntimeServices::from_proxy(proxy),
+    )
+}
+
+fn tcp_ingress_runtime(
+    proxy: &Proxy,
+    inbound_tag: String,
+    source_addr: Option<SocketAddr>,
+) -> TcpIngressRuntime {
+    TcpIngressRuntime::new(
+        proxy.engine().clone(),
+        proxy.config.clone(),
+        proxy.resolver.clone(),
+        TcpRuntimeServices::from_proxy(proxy),
+        inbound_tag,
+        source_addr,
+    )
 }
 
 #[cfg(any(feature = "vless", feature = "vmess"))]

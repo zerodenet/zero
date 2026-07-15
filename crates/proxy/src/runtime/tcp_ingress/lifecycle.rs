@@ -1,8 +1,9 @@
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 #[cfg(any(feature = "socks5", feature = "hysteria2", feature = "mieru"))]
 use tokio::io::{AsyncRead, AsyncWrite};
 
+use zero_config::RuntimeConfig;
 #[cfg(any(feature = "socks5", feature = "hysteria2", feature = "mieru"))]
 use zero_core::InboundClientResponse;
 use zero_core::Session;
@@ -13,58 +14,53 @@ use zero_traits::AsyncSocket;
 #[cfg(any(feature = "socks5", feature = "hysteria2", feature = "mieru"))]
 use super::contract::ClientResponseInboundProtocol;
 use super::contract::InboundProtocol;
-use crate::logging::{log_session_accepted, log_session_failed, log_session_finished};
+use super::runtime::TcpIngressRuntime;
+use crate::logging::{log_session_failed, log_session_finished};
 use crate::runtime::pipe::{KernelPipe, TcpPipe, TcpPipeInput};
-use crate::runtime::Proxy;
 use crate::transport::is_block_error;
 
 #[cfg(any(feature = "socks5", feature = "hysteria2", feature = "mieru"))]
 pub(crate) async fn serve_inbound_with_client_response<P, S>(
-    proxy: &Proxy,
+    runtime: &TcpIngressRuntime,
     session: Session,
     client: S,
     response_protocol: P,
-    inbound_tag: &str,
-    source_addr: Option<std::net::SocketAddr>,
 ) -> Result<(), EngineError>
 where
     P: InboundClientResponse<S> + Send + Sync,
     S: AsyncRead + AsyncWrite + AsyncSocket + Unpin + Send,
 {
     let protocol = ClientResponseInboundProtocol::new(response_protocol);
-    serve_inbound(proxy, session, client, &protocol, inbound_tag, source_addr).await
+    serve_inbound(runtime, session, client, &protocol).await
 }
 
 pub(crate) async fn serve_inbound<P: InboundProtocol>(
-    proxy: &Proxy,
+    runtime: &TcpIngressRuntime,
     session: Session,
     client: P::ClientStream,
     protocol: &P,
-    inbound_tag: &str,
-    source_addr: Option<std::net::SocketAddr>,
 ) -> Result<(), EngineError> {
     let mut session = session;
     let mut client = client;
 
-    apply_url_rewrite(proxy, &mut session);
-    apply_kernel_rate_limits(proxy, &mut session, inbound_tag);
+    runtime.apply_url_rewrite(&mut session);
+    runtime.apply_kernel_rate_limits(&mut session);
+    runtime.prepare_session(&mut session);
 
-    proxy.prepare_session(&mut session, inbound_tag, source_addr);
-
-    let mut handle = proxy.track_session(session.id);
+    let mut handle = runtime.track_session(session.id);
     let started_at = Instant::now();
 
-    match TcpPipe::new(proxy)
+    match TcpPipe::new(runtime)
         .dispatch(TcpPipeInput {
             session: &mut session,
         })
         .await
     {
         Ok(result) => {
-            log_session_accepted(&session, &result.route_action, proxy.config.mode.kind());
+            runtime.log_session_accepted(&session, &result.route_action);
 
             session.outbound_tag = Some(result.outbound_tag.clone());
-            proxy.set_session_outbound(&session);
+            runtime.set_session_outbound(&session);
 
             let outcome = if result.is_direct {
                 SessionOutcome::DirectRelayed
@@ -75,20 +71,12 @@ pub(crate) async fn serve_inbound<P: InboundProtocol>(
 
             protocol.send_ok(&mut client).await?;
 
-            let idle_secs = proxy
-                .config
-                .inbounds
-                .iter()
-                .find(|i| i.tag == inbound_tag)
-                .and_then(|i| i.idle_timeout_secs)
-                .unwrap_or(300);
-
             let relay_result = tokio::time::timeout(
-                Duration::from_secs(idle_secs),
+                runtime.idle_timeout(),
                 protocol.relay(
                     client,
                     result.upstream,
-                    proxy,
+                    runtime.runtime_services(),
                     session.id,
                     session.up_bps,
                     session.down_bps,
@@ -159,35 +147,12 @@ pub(crate) async fn serve_inbound<P: InboundProtocol>(
     }
 }
 
-fn apply_url_rewrite(proxy: &Proxy, session: &mut Session) {
-    let rules = &proxy.config.route.url_rewrite;
-    if rules.is_empty() {
-        return;
-    }
-    let zero_core::Address::Domain(ref domain) = session.target else {
-        return;
-    };
-    for rule in rules {
-        if let Some(ref from) = rule.from {
-            if from == domain {
-                session.target = zero_core::Address::Domain(rule.to.clone());
-                return;
-            }
-        }
-        if let Some(ref pattern) = &rule.from_regex {
-            if let Ok(re) = regex::Regex::new(pattern) {
-                if re.is_match(domain) {
-                    let result = re.replace(domain, &rule.to);
-                    session.target = zero_core::Address::Domain(result.to_string());
-                    return;
-                }
-            }
-        }
-    }
-}
-
-pub(crate) fn apply_kernel_rate_limits(proxy: &Proxy, session: &mut Session, inbound_tag: &str) {
-    let Some(cfg) = proxy.config.inbounds.iter().find(|i| i.tag == inbound_tag) else {
+pub(crate) fn apply_kernel_rate_limits_from_config(
+    config: &RuntimeConfig,
+    session: &mut Session,
+    inbound_tag: &str,
+) {
+    let Some(cfg) = config.inbounds.iter().find(|i| i.tag == inbound_tag) else {
         return;
     };
     let (up, down) = cfg.protocol.rate_limits();

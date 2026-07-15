@@ -812,6 +812,9 @@ fn udp_ingress_runtime_collapses_proxy_and_services_for_session_loops() {
     let ingress = read(&proxy_src().join("runtime/udp_ingress.rs"));
     assert!(ingress.contains("struct UdpIngressRuntime"));
     assert!(ingress.contains("services: UdpRuntimeServices"));
+    assert!(!ingress.contains("use crate::runtime::Proxy"));
+    assert!(!ingress.contains("proxy: Proxy"));
+    assert!(!ingress.contains("from_proxy("));
 
     let association = read(&proxy_src().join("runtime/udp_association/contract.rs"));
     assert!(association.contains("struct UdpAssociationDatagramRequest"));
@@ -897,6 +900,18 @@ fn udp_ingress_runtime_collapses_proxy_and_services_for_session_loops() {
     let tcp_ingress_runtime = read(&proxy_src().join("runtime/tcp_ingress/runtime.rs"));
     assert!(tcp_ingress_runtime.contains("struct TcpIngressRuntime"));
     assert!(tcp_ingress_runtime.contains("serve_inbound("));
+    assert!(!tcp_ingress_runtime.contains("use crate::runtime::Proxy"));
+    assert!(!tcp_ingress_runtime.contains("proxy: Proxy"));
+
+    let tcp_ingress_lifecycle = read(&proxy_src().join("runtime/tcp_ingress/lifecycle.rs"));
+    assert!(tcp_ingress_lifecycle.contains("TcpIngressRuntime"));
+    assert!(!tcp_ingress_lifecycle.contains("use crate::runtime::Proxy"));
+    assert!(!tcp_ingress_lifecycle.contains("proxy: &Proxy"));
+
+    let tcp_ingress_contract = read(&proxy_src().join("runtime/tcp_ingress/contract.rs"));
+    assert!(tcp_ingress_contract.contains("TcpRuntimeServices"));
+    assert!(!tcp_ingress_contract.contains("use crate::runtime::Proxy"));
+    assert!(!tcp_ingress_contract.contains("proxy: &Proxy"));
 
     for relative in [
         "runtime/listener_loop/tcp.rs",

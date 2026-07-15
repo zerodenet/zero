@@ -18,6 +18,7 @@ use zero_core::Session;
 use zero_core::{Address, InboundUdpDispatch, ProtocolType, SessionAuth};
 use zero_engine::EngineError;
 
+use crate::runtime::tcp_ingress::TcpIngressRuntime;
 #[cfg(any(
     feature = "socks5",
     feature = "vless",
@@ -28,7 +29,6 @@ use zero_engine::EngineError;
     feature = "mieru"
 ))]
 use crate::runtime::udp_dispatch::UdpDispatch;
-use crate::runtime::Proxy;
 use crate::transport::TcpRouteResult;
 
 /// Common runtime pipe boundary for kernel orchestration.
@@ -42,12 +42,12 @@ pub(crate) trait KernelPipe {
 
 /// TCP connection pipe.
 pub(crate) struct TcpPipe<'a> {
-    proxy: &'a Proxy,
+    runtime: &'a TcpIngressRuntime,
 }
 
 impl<'a> TcpPipe<'a> {
-    pub(crate) fn new(proxy: &'a Proxy) -> Self {
-        Self { proxy }
+    pub(crate) fn new(runtime: &'a TcpIngressRuntime) -> Self {
+        Self { runtime }
     }
 }
 
@@ -62,7 +62,7 @@ impl KernelPipe for TcpPipe<'_> {
     type Error = EngineError;
 
     async fn dispatch(&mut self, input: Self::Input<'_>) -> Result<Self::Output, Self::Error> {
-        self.proxy.dispatch_tcp(input.session).await
+        crate::runtime::tcp_dispatch::dispatch_tcp(self.runtime, input.session).await
     }
 }
 

@@ -1,10 +1,6 @@
 use std::sync::Arc;
 
-use zero_core::{Address, Session};
-use zero_engine::{
-    EngineError, EnginePlan, ResolvedOutbound, RouteDecision, SessionHandle, TargetId,
-    UrlTestMemberState,
-};
+use zero_engine::{EnginePlan, ResolvedOutbound, TargetId, UrlTestMemberState};
 
 use crate::runtime::Proxy;
 #[cfg(any(
@@ -19,21 +15,6 @@ use crate::runtime::Proxy;
 use crate::transport::StreamTraffic;
 
 impl Proxy {
-    pub(crate) fn route_decision(&self, session: &zero_core::Session) -> RouteDecision {
-        self.engine.route_decision_with_inbound(
-            &session.target,
-            session.sni.as_deref(),
-            session.inbound_tag.as_deref(),
-        )
-    }
-
-    pub(crate) fn resolve_outbound(
-        &self,
-        action: &RouteDecision,
-    ) -> Result<(ResolvedOutbound<'static>, Option<Arc<EnginePlan>>), EngineError> {
-        self.engine.resolve_route_decision(action.clone())
-    }
-
     pub(crate) fn resolve_target_id(
         &self,
         target_id: TargetId,
@@ -62,53 +43,6 @@ impl Proxy {
     ) {
         self.engine
             .update_urltest_state(group_id, selected, latency_ms, members);
-    }
-
-    pub(crate) fn prepare_session(
-        &self,
-        session: &mut Session,
-        inbound_tag: &str,
-        source_addr: Option<std::net::SocketAddr>,
-    ) {
-        if let Some(addr) = source_addr {
-            session.source_ip = Some(match addr.ip() {
-                std::net::IpAddr::V4(v4) => Address::Ipv4(v4.octets()),
-                std::net::IpAddr::V6(v6) => Address::Ipv6(v6.octets()),
-            });
-            session.source_port = Some(addr.port());
-        }
-        self.engine.prepare_session(session, inbound_tag);
-
-        // Resolve local process identity from the client's source address.
-        if let Some(addr) = source_addr {
-            if let Some(info) = crate::process_lookup::lookup_process(addr) {
-                session.process_id = Some(info.pid);
-                session.process_name = Some(info.name);
-            }
-        }
-    }
-
-    /// If the session target is a fake IP, replace it with the real domain
-    /// so routing sees the original domain name.
-    pub(crate) async fn resolve_fake_ip_target(&self, session: &mut Session) {
-        use zero_core::Address;
-        use zero_traits::IpAddress;
-        let ip = match &session.target {
-            Address::Ipv4(octets) => IpAddress::V4(*octets),
-            Address::Ipv6(octets) => IpAddress::V6(*octets),
-            _ => return,
-        };
-        if let Some(domain) = self.resolver.lookup_fake_ip(&ip).await {
-            session.target = Address::Domain(domain);
-        }
-    }
-
-    pub(crate) fn set_session_outbound(&self, session: &Session) {
-        self.engine.set_session_outbound(session);
-    }
-
-    pub(crate) fn track_session(&self, session_id: u64) -> SessionHandle {
-        self.engine.track_session(session_id)
     }
 
     pub(crate) fn record_session_inbound_rx(&self, session_id: u64, bytes: u64) {
@@ -216,30 +150,6 @@ impl Proxy {
         self.engine.udp_upstream_idle_timeout()
     }
 
-    pub(crate) fn check_outbound_health(&self, tag: &str) -> Result<(), EngineError> {
-        self.engine.check_outbound_health(tag)
-    }
-
-    #[cfg(any(
-        feature = "socks5",
-        feature = "vless",
-        feature = "hysteria2",
-        feature = "shadowsocks",
-        feature = "trojan",
-        feature = "vmess",
-        feature = "mieru"
-    ))]
-    pub(crate) fn udp_enabled_for_inbound(&self, inbound_tag: &str) -> bool {
-        let config = self.engine.config();
-        config.runtime.udp.enabled
-            && config
-                .inbounds
-                .iter()
-                .find(|inbound| inbound.tag == inbound_tag)
-                .map(|inbound| inbound.udp.enabled)
-                .unwrap_or(true)
-    }
-
     #[cfg(any(
         feature = "socks5",
         feature = "vless",
@@ -256,13 +166,5 @@ impl Proxy {
                 .and_then(|tag| config.outbounds.iter().find(|outbound| outbound.tag == tag))
                 .map(|outbound| outbound.udp.enabled)
                 .unwrap_or(true)
-    }
-
-    pub(crate) fn record_outbound_failure(&self, tag: &str) {
-        self.engine.record_outbound_failure(tag);
-    }
-
-    pub(crate) fn record_outbound_success(&self, tag: &str) {
-        self.engine.record_outbound_success(tag);
     }
 }
