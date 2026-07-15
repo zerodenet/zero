@@ -16,7 +16,7 @@ impl crate::adapters::mieru::MieruAdapter {
     > {
         let profile = match &inbound.protocol {
             InboundProtocolConfig::Mieru { users } => {
-                ::mieru::transport::inbound_profile_from_users(
+                ::mieru::transport::inbound_listener_request_from_users(
                     users
                         .iter()
                         .map(|user| (user.username.as_str(), user.password.as_str())),
@@ -34,7 +34,7 @@ impl crate::adapters::mieru::MieruAdapter {
             protocol_name: "mieru",
             error_protocol_name: "mieru",
             request: profile,
-            dispatch: |profile: ::mieru::transport::OwnedMieruInboundProfile,
+            dispatch: |profile: ::mieru::transport::MieruInboundListenerRequest,
                        socket,
                        context: InboundConnectionContext| async move {
                 let tcp_context = context.clone();

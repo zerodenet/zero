@@ -13,18 +13,18 @@ mod projection;
 mod stream;
 
 pub use connection::open_quic_connection;
-pub use inbound::OwnedHysteria2InboundBindPlan;
+pub use inbound::Hysteria2InboundBindPlan;
 pub use inbound::{inbound_profile_from_password, inbound_tcp_acceptor};
 pub use managed_udp::{
     establish_hysteria2_udp_flow_connection, managed_datagram_connector_flow_from_resume,
     open_hysteria2_udp_packet_path_build,
 };
 pub use model::{
-    Hysteria2AuthenticatedQuicConnection, Hysteria2ManagedDatagramFlowResume,
+    Hysteria2AuthenticatedInboundProfile, Hysteria2AuthenticatedQuicConnection,
+    Hysteria2InboundTcpResponseProtocol, Hysteria2ManagedDatagramFlowResume,
     Hysteria2ManagedUdpFlowConfig, Hysteria2ManagedUdpFlowPlan,
     Hysteria2ManagedUdpPacketPathCarrierBuild, Hysteria2ManagedUdpPacketPathCarrierDescriptor,
-    Hysteria2ManagedUdpPacketPathPlan, Hysteria2TransportLeaf, OwnedHysteria2InboundProfile,
-    OwnedHysteria2InboundTcpResponseProtocol,
+    Hysteria2ManagedUdpPacketPathPlan, Hysteria2TransportLeaf,
 };
 pub use model::{Hysteria2QuicProfile, QuicConnectionOptions};
 pub use projection::{
@@ -46,7 +46,7 @@ pub async fn accept_and_dispatch_authenticated_hysteria2_quic_session<
     TaskResultFut,
     E,
 >(
-    profile: &OwnedHysteria2InboundProfile,
+    profile: &Hysteria2AuthenticatedInboundProfile,
     conn: quinn::Connection,
     on_udp_session: Udp,
     on_tcp_stream: Tcp,

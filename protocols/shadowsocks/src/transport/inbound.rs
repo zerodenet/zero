@@ -4,17 +4,23 @@ use zero_core::Session;
 use zero_traits::AsyncSocket;
 use zero_transport::RuntimeError;
 
-use super::{
-    OwnedShadowsocksInboundBindings, OwnedShadowsocksInboundProfile,
-    OwnedShadowsocksInboundTcpAcceptor,
+use super::model::{
+    ShadowsocksInboundBindings, ShadowsocksInboundProfile, ShadowsocksInboundTcpAcceptor,
 };
 
-pub fn inbound_profile_from_cipher_password(
+pub fn inbound_listener_parts_from_cipher_password(
     cipher: &str,
     password: &str,
-) -> Result<OwnedShadowsocksInboundProfile, RuntimeError> {
+) -> Result<
+    (
+        ShadowsocksInboundTcpAcceptor,
+        crate::udp::ShadowsocksInboundUdpRelay,
+    ),
+    RuntimeError,
+> {
     crate::inbound_profile_from_config_cipher_password(cipher, password)
-        .map(OwnedShadowsocksInboundProfile::new)
+        .map(ShadowsocksInboundProfile::new)
+        .map(ShadowsocksInboundProfile::into_listener_parts)
         .map_err(|error| {
             RuntimeError::Io(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
@@ -23,21 +29,30 @@ pub fn inbound_profile_from_cipher_password(
         })
 }
 
-impl OwnedShadowsocksInboundProfile {
+impl ShadowsocksInboundProfile {
     fn new(protocol: crate::ShadowsocksInboundProfile) -> Self {
         Self { protocol }
     }
 
-    pub fn into_listener_bindings(self) -> OwnedShadowsocksInboundBindings {
+    fn into_listener_bindings(self) -> ShadowsocksInboundBindings {
         let (acceptor, udp_relay) = self.protocol.into_listener_bindings();
-        OwnedShadowsocksInboundBindings {
-            acceptor: OwnedShadowsocksInboundTcpAcceptor::new(acceptor),
+        ShadowsocksInboundBindings {
+            acceptor: ShadowsocksInboundTcpAcceptor::new(acceptor),
             udp_relay,
         }
     }
+
+    fn into_listener_parts(
+        self,
+    ) -> (
+        ShadowsocksInboundTcpAcceptor,
+        crate::udp::ShadowsocksInboundUdpRelay,
+    ) {
+        self.into_listener_bindings().into_parts()
+    }
 }
 
-impl OwnedShadowsocksInboundTcpAcceptor {
+impl ShadowsocksInboundTcpAcceptor {
     fn new(protocol: crate::ShadowsocksInboundTcpAcceptor) -> Self {
         Self { protocol }
     }
@@ -59,11 +74,11 @@ impl OwnedShadowsocksInboundTcpAcceptor {
     }
 }
 
-impl OwnedShadowsocksInboundBindings {
-    pub fn into_parts(
+impl ShadowsocksInboundBindings {
+    fn into_parts(
         self,
     ) -> (
-        OwnedShadowsocksInboundTcpAcceptor,
+        ShadowsocksInboundTcpAcceptor,
         crate::udp::ShadowsocksInboundUdpRelay,
     ) {
         (self.acceptor, self.udp_relay)

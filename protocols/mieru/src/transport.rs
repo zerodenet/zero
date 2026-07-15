@@ -16,12 +16,12 @@ use zero_transport::StreamTraffic;
 pub use managed_udp::{MieruManagedStreamUdpResume, MieruManagedUdpFlowConfig};
 
 #[derive(Debug, Clone)]
-pub struct OwnedMieruInboundProfile {
+pub struct MieruInboundListenerRequest {
     protocol: crate::inbound::MieruInboundProfile,
 }
 
 #[derive(Debug, Default, Clone)]
-pub struct OwnedMieruInboundResponseProtocol {
+pub struct MieruInboundResponseProtocol {
     protocol: crate::inbound::MieruInbound,
 }
 
@@ -87,20 +87,20 @@ pub struct MieruManagedUdpFlowPlan {
     relay_chain: bool,
 }
 
-pub fn inbound_profile_from_users<'a, I>(users: I) -> OwnedMieruInboundProfile
+pub fn inbound_listener_request_from_users<'a, I>(users: I) -> MieruInboundListenerRequest
 where
     I: IntoIterator<Item = (&'a str, &'a str)>,
 {
-    OwnedMieruInboundProfile::new(crate::inbound::inbound_profile_from_config_users(users))
+    MieruInboundListenerRequest::new(crate::inbound::inbound_profile_from_config_users(users))
 }
 
-impl OwnedMieruInboundProfile {
+impl MieruInboundListenerRequest {
     fn new(protocol: crate::inbound::MieruInboundProfile) -> Self {
         Self { protocol }
     }
 
-    pub fn response_protocol(&self) -> OwnedMieruInboundResponseProtocol {
-        OwnedMieruInboundResponseProtocol::default()
+    pub fn response_protocol(&self) -> MieruInboundResponseProtocol {
+        MieruInboundResponseProtocol::default()
     }
 
     pub async fn accept_and_dispatch_client<S, Tcp, TcpFut, Udp, UdpFut, E>(
@@ -127,7 +127,7 @@ impl OwnedMieruInboundProfile {
 }
 
 impl<S> InboundClientResponse<crate::inbound::MieruInboundStream<S>>
-    for OwnedMieruInboundResponseProtocol
+    for MieruInboundResponseProtocol
 where
     S: AsyncRead + AsyncWrite + Unpin + Send + Sync,
 {

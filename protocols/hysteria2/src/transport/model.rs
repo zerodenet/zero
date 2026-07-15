@@ -12,12 +12,12 @@ pub struct Hysteria2ManagedDatagramFlowResume {
 }
 
 #[derive(Debug, Clone)]
-pub struct OwnedHysteria2InboundProfile {
+pub struct Hysteria2AuthenticatedInboundProfile {
     pub(super) protocol: crate::inbound::Hysteria2InboundProfile,
 }
 
 #[derive(Debug, Clone, Copy, Default)]
-pub struct OwnedHysteria2InboundTcpResponseProtocol {
+pub struct Hysteria2InboundTcpResponseProtocol {
     pub(super) protocol: crate::inbound::Hysteria2InboundTcpAcceptor,
 }
 

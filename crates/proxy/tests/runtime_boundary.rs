@@ -474,6 +474,34 @@ fn adapters_do_not_hold_protocol_owned_config_intermediates() {
 }
 
 #[test]
+fn simpler_protocol_surfaces_do_not_expose_owned_inbound_intermediate_names() {
+    for (relative, forbidden) in [
+        (
+            "protocols/shadowsocks/src/transport.rs",
+            "OwnedShadowsocksInbound",
+        ),
+        ("protocols/mieru/src/transport.rs", "OwnedMieruInbound"),
+        (
+            "protocols/hysteria2/src/transport.rs",
+            "OwnedHysteria2Inbound",
+        ),
+        ("adapters/shadowsocks/inbound.rs", "OwnedShadowsocksInbound"),
+        ("adapters/mieru/inbound.rs", "OwnedMieruInbound"),
+        ("adapters/hysteria2.rs", "OwnedHysteria2Inbound"),
+    ] {
+        let source = if relative.starts_with("protocols/") {
+            read(&workspace_root().join(relative))
+        } else {
+            read(&proxy_src().join(relative))
+        };
+        assert!(
+            !source.contains(forbidden),
+            "{relative} must not expose transitional inbound surface `{forbidden}`"
+        );
+    }
+}
+
+#[test]
 fn inventory_udp_dispatch_keeps_relay_choreography_outside_candidate_root() {
     let dispatch = read(&proxy_src().join("inventory/udp/dispatch.rs"));
     assert!(!dispatch.contains("ClaimedResolvedOutbound"));

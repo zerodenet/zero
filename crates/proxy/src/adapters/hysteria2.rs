@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 
+use ::hysteria2::transport::Hysteria2InboundBindPlan;
 use ::hysteria2::transport::Hysteria2TransportLeaf;
-use ::hysteria2::transport::OwnedHysteria2InboundBindPlan;
 use zero_config::{InboundConfig, InboundProtocolConfig, OutboundProtocolConfig};
 use zero_engine::{EngineError, ResolvedLeafOutbound};
 use zero_traits::{ProtocolCapabilityDescriptor, ProtocolMetadata};
@@ -102,7 +102,7 @@ impl InboundListenerCapability for Hysteria2Adapter {
                 "hysteria2 inbound bind received non-hysteria2 inbound config",
             )));
         };
-        let plan = OwnedHysteria2InboundBindPlan::from_paths(
+        let plan = Hysteria2InboundBindPlan::from_paths(
             source_dir,
             cert_path.as_deref(),
             key_path.as_deref(),

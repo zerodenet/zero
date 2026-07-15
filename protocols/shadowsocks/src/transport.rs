@@ -13,10 +13,9 @@ mod model;
 mod tcp;
 mod udp_socket;
 
-pub use inbound::inbound_profile_from_cipher_password;
+pub use inbound::inbound_listener_parts_from_cipher_password;
 pub use model::{
-    OwnedShadowsocksInboundBindings, OwnedShadowsocksInboundProfile,
-    OwnedShadowsocksInboundTcpAcceptor, ShadowsocksManagedDatagramFlowResume,
+    ShadowsocksInboundTcpAcceptor, ShadowsocksManagedDatagramFlowResume,
     ShadowsocksManagedUdpFlowConfig, ShadowsocksManagedUdpFlowPlan,
     ShadowsocksManagedUdpPacketPathCarrierDescriptor,
     ShadowsocksManagedUdpPacketPathDatagramSourceBuild, ShadowsocksManagedUdpPacketPathPlan,

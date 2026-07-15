@@ -56,17 +56,17 @@ pub struct ShadowsocksTransportLeaf {
 }
 
 #[derive(Debug, Clone)]
-pub struct OwnedShadowsocksInboundProfile {
+pub(crate) struct ShadowsocksInboundProfile {
     pub(super) protocol: crate::ShadowsocksInboundProfile,
 }
 
 #[derive(Clone)]
-pub struct OwnedShadowsocksInboundTcpAcceptor {
+pub struct ShadowsocksInboundTcpAcceptor {
     pub(super) protocol: crate::ShadowsocksInboundTcpAcceptor,
 }
 
-pub struct OwnedShadowsocksInboundBindings {
-    pub(super) acceptor: OwnedShadowsocksInboundTcpAcceptor,
+pub(crate) struct ShadowsocksInboundBindings {
+    pub(super) acceptor: ShadowsocksInboundTcpAcceptor,
     pub(super) udp_relay: crate::udp::ShadowsocksInboundUdpRelay,
 }
 
