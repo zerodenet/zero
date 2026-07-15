@@ -505,6 +505,42 @@ fn simpler_protocol_surfaces_do_not_expose_owned_inbound_intermediate_names() {
 }
 
 #[test]
+fn vless_public_boundary_profiles_do_not_use_owned_prefixes() {
+    for (relative, forbidden) in [
+        (
+            "protocols/vless/src/transport.rs",
+            "OwnedVlessInboundBindPlan",
+        ),
+        (
+            "protocols/vless/src/transport.rs",
+            "OwnedVlessQuicBindProfile",
+        ),
+        (
+            "protocols/vless/src/transport.rs",
+            "OwnedVlessQuicClientProfile",
+        ),
+        (
+            "protocols/vless/src/transport.rs",
+            "OwnedVlessRealityClientProfile",
+        ),
+        ("adapters/vless.rs", "OwnedVlessInboundBindPlan"),
+        ("adapters/vless.rs", "OwnedVlessQuicBindProfile"),
+        ("adapters/vless.rs", "OwnedVlessQuicClientProfile"),
+        ("adapters/vless.rs", "OwnedVlessRealityClientProfile"),
+    ] {
+        let source = if relative.starts_with("protocols/") {
+            read(&workspace_root().join(relative))
+        } else {
+            read(&proxy_src().join(relative))
+        };
+        assert!(
+            !source.contains(forbidden),
+            "{relative} must not expose stable VLESS boundary type `{forbidden}`"
+        );
+    }
+}
+
+#[test]
 fn inventory_udp_dispatch_keeps_relay_choreography_outside_candidate_root() {
     let dispatch = read(&proxy_src().join("inventory/udp/dispatch.rs"));
     assert!(!dispatch.contains("ClaimedResolvedOutbound"));

@@ -1,7 +1,7 @@
 #[cfg(feature = "vless")]
 use ::vless::transport::{
-    OwnedVlessInboundBindPlan, OwnedVlessQuicBindProfile, OwnedVlessQuicClientProfile,
-    OwnedVlessRealityClientProfile, VlessOutboundLeaf, VlessStreamBridge,
+    VlessInboundBindPlan, VlessOutboundLeaf, VlessQuicBindProfile, VlessQuicClientProfile,
+    VlessRealityClientProfile, VlessStreamBridge,
 };
 #[cfg(feature = "vless")]
 use async_trait::async_trait;
@@ -39,11 +39,9 @@ pub(crate) struct VlessAdapter {
 }
 
 #[cfg(feature = "vless")]
-fn outbound_reality_profile(
-    reality: Option<&RealityConfig>,
-) -> Option<OwnedVlessRealityClientProfile> {
+fn outbound_reality_profile(reality: Option<&RealityConfig>) -> Option<VlessRealityClientProfile> {
     reality.map(|reality| {
-        OwnedVlessRealityClientProfile::new(
+        VlessRealityClientProfile::new(
             reality.public_key.clone(),
             reality.short_id.clone(),
             reality.server_name.clone(),
@@ -53,9 +51,9 @@ fn outbound_reality_profile(
 }
 
 #[cfg(feature = "vless")]
-fn quic_client_profile(quic: Option<&QuicConfig>) -> Option<OwnedVlessQuicClientProfile> {
+fn quic_client_profile(quic: Option<&QuicConfig>) -> Option<VlessQuicClientProfile> {
     quic.map(|quic| {
-        OwnedVlessQuicClientProfile::new(
+        VlessQuicClientProfile::new(
             quic.server_name.clone(),
             quic.insecure,
             quic.ca_cert_path.clone(),
@@ -64,8 +62,8 @@ fn quic_client_profile(quic: Option<&QuicConfig>) -> Option<OwnedVlessQuicClient
 }
 
 #[cfg(feature = "vless")]
-fn quic_bind_profile(quic: Option<&QuicConfig>) -> Option<OwnedVlessQuicBindProfile> {
-    quic.map(|quic| OwnedVlessQuicBindProfile::new(quic.cert_path.clone(), quic.key_path.clone()))
+fn quic_bind_profile(quic: Option<&QuicConfig>) -> Option<VlessQuicBindProfile> {
+    quic.map(|quic| VlessQuicBindProfile::new(quic.cert_path.clone(), quic.key_path.clone()))
 }
 
 #[cfg(feature = "vless")]
@@ -129,7 +127,7 @@ impl InboundListenerCapability for VlessAdapter {
             )));
         };
         let quic = quic_bind_profile(quic.as_deref());
-        let plan = OwnedVlessInboundBindPlan::from_quic_profile(source_dir, quic.as_ref());
+        let plan = VlessInboundBindPlan::from_quic_profile(source_dir, quic.as_ref());
         bind_transport_inbound(inbound, plan).await
     }
 

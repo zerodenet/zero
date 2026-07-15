@@ -12,8 +12,6 @@ mod outbound;
 mod profile;
 
 pub use bridge::VlessStreamBridge;
-pub use inbound::{OwnedVlessInboundBindPlan, VlessInboundListenerRequest};
+pub use inbound::{VlessInboundBindPlan, VlessInboundListenerRequest};
 pub use leaf::VlessOutboundLeaf;
-pub use profile::{
-    OwnedVlessQuicBindProfile, OwnedVlessQuicClientProfile, OwnedVlessRealityClientProfile,
-};
+pub use profile::{VlessQuicBindProfile, VlessQuicClientProfile, VlessRealityClientProfile};

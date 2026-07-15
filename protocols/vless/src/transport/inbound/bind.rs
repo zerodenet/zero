@@ -1,29 +1,29 @@
 use std::io;
 use std::path::{Path, PathBuf};
 
-use super::super::profile::OwnedVlessQuicBindProfile;
+use super::super::profile::VlessQuicBindProfile;
 use zero_transport::RuntimeError;
 
 use zero_transport::quic;
 
 #[derive(Debug, Clone, Default)]
-pub struct OwnedVlessInboundBindPlan {
+pub struct VlessInboundBindPlan {
     quic_cert_path: Option<String>,
     quic_key_path: Option<String>,
     quic_alpn_protocols: Vec<Vec<u8>>,
     source_dir: Option<PathBuf>,
 }
 
-impl OwnedVlessInboundBindPlan {
+impl VlessInboundBindPlan {
     pub fn from_quic_profile(
         source_dir: Option<&Path>,
-        quic: Option<&OwnedVlessQuicBindProfile>,
+        quic: Option<&VlessQuicBindProfile>,
     ) -> Self {
         Self {
             quic_cert_path: quic.and_then(|config| config.cert_path.clone()),
             quic_key_path: quic.and_then(|config| config.key_path.clone()),
             quic_alpn_protocols: quic
-                .map(OwnedVlessQuicBindProfile::alpn_protocols)
+                .map(VlessQuicBindProfile::alpn_protocols)
                 .unwrap_or_default(),
             source_dir: source_dir.map(PathBuf::from),
         }
@@ -54,12 +54,12 @@ impl OwnedVlessInboundBindPlan {
 }
 
 #[async_trait::async_trait]
-impl zero_transport::inbound_route::ProtocolInboundBindPlan for OwnedVlessInboundBindPlan {
+impl zero_transport::inbound_route::ProtocolInboundBindPlan for VlessInboundBindPlan {
     async fn bind(
         &self,
         listen_addr: &str,
     ) -> Result<zero_transport::inbound_route::TransportInboundBindTarget, RuntimeError> {
-        match OwnedVlessInboundBindPlan::bind(self, listen_addr).await? {
+        match VlessInboundBindPlan::bind(self, listen_addr).await? {
             Some(endpoint) => {
                 Ok(zero_transport::inbound_route::TransportInboundBindTarget::Quic(endpoint))
             }

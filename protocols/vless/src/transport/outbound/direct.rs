@@ -6,7 +6,7 @@ use crate::reality::{upgrade_reality_client, RealityClientOptions};
 use zero_transport::outbound_stack::{connect_socket_transport_stack, StreamTransportStack};
 use zero_transport::{quic, split_http, tls, RuntimeError};
 
-use super::super::profile::OwnedVlessQuicClientProfile;
+use super::super::profile::VlessQuicClientProfile;
 use super::{
     VlessDirectTransportRequest, VlessOutboundTransportRequest, VlessTransportOptions,
     VlessUdpOutboundTransportRequest,
@@ -15,7 +15,7 @@ use super::{
 pub(super) async fn open_vless_quic_transport(
     server: &str,
     port: u16,
-    quic_config: &OwnedVlessQuicClientProfile,
+    quic_config: &VlessQuicClientProfile,
 ) -> Result<TcpRelayStream, RuntimeError> {
     let server_name = quic_config.server_name.as_deref().unwrap_or(server);
     let alpn_protocols = quic_config.alpn_protocols();

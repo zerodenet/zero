@@ -15,7 +15,7 @@ use zero_transport::split_http;
 use zero_transport::transport_plan::TcpStreamTransportPlan;
 use zero_transport::RuntimeError;
 
-use super::super::profile::{OwnedVlessQuicClientProfile, OwnedVlessRealityClientProfile};
+use super::super::profile::{VlessQuicClientProfile, VlessRealityClientProfile};
 use super::{
     build_vless_direct_outbound_transport, build_vless_outbound_transport_over_stream,
     build_vless_split_http_over_relay, build_vless_udp_outbound_transport,
@@ -24,7 +24,7 @@ use super::{
 #[derive(Clone, Copy)]
 pub(in crate::transport) struct VlessTransportOptions<'a> {
     pub(super) tls: Option<&'a OwnedClientTlsProfile>,
-    pub(super) reality: Option<&'a OwnedVlessRealityClientProfile>,
+    pub(super) reality: Option<&'a VlessRealityClientProfile>,
     pub(super) ws: Option<&'a OwnedWebSocketProfile>,
     pub(super) grpc: Option<&'a OwnedGrpcProfile>,
     pub(super) h2: Option<&'a OwnedH2Profile>,
@@ -49,7 +49,7 @@ pub(in crate::transport) struct VlessOutboundTransportRequest<'a> {
 pub(in crate::transport) struct VlessDirectTransportRequest<'a> {
     pub(super) socket: Option<TokioSocket>,
     pub(super) options: VlessTransportOptions<'a>,
-    pub(super) quic: Option<&'a OwnedVlessQuicClientProfile>,
+    pub(super) quic: Option<&'a VlessQuicClientProfile>,
     pub(super) server: &'a str,
     pub(super) port: u16,
 }
@@ -62,13 +62,13 @@ pub(in crate::transport) struct VlessFinalHopTransportRequest<'a> {
 #[derive(Clone, Copy)]
 pub(in crate::transport) struct VlessUdpTransportOptions<'a> {
     pub(super) tls: Option<&'a OwnedClientTlsProfile>,
-    pub(super) reality: Option<&'a OwnedVlessRealityClientProfile>,
+    pub(super) reality: Option<&'a VlessRealityClientProfile>,
     pub(super) ws: Option<&'a OwnedWebSocketProfile>,
     pub(super) grpc: Option<&'a OwnedGrpcProfile>,
     pub(super) h2: Option<&'a OwnedH2Profile>,
     pub(super) http_upgrade: Option<&'a OwnedHttpUpgradeProfile>,
     pub(super) split_http: Option<&'a OwnedSplitHttpProfile>,
-    pub(super) quic: Option<&'a OwnedVlessQuicClientProfile>,
+    pub(super) quic: Option<&'a VlessQuicClientProfile>,
     pub(super) source_dir: Option<&'a Path>,
 }
 
@@ -95,13 +95,13 @@ impl<'a> VlessUdpTransportOptions<'a> {
 #[derive(Debug, Clone)]
 struct OwnedVlessUdpTransportOptions {
     tls: Option<OwnedClientTlsProfile>,
-    reality: Option<OwnedVlessRealityClientProfile>,
+    reality: Option<VlessRealityClientProfile>,
     ws: Option<OwnedWebSocketProfile>,
     grpc: Option<OwnedGrpcProfile>,
     h2: Option<OwnedH2Profile>,
     http_upgrade: Option<OwnedHttpUpgradeProfile>,
     split_http: Option<OwnedSplitHttpProfile>,
-    quic: Option<OwnedVlessQuicClientProfile>,
+    quic: Option<VlessQuicClientProfile>,
     source_dir: Option<PathBuf>,
 }
 
@@ -110,13 +110,13 @@ impl OwnedVlessUdpTransportOptions {
     fn from_profile_refs<TTls, TWs, TGrpc, TH2, THttp, TSplit>(
         source_dir: Option<&Path>,
         tls: Option<&TTls>,
-        reality: Option<&OwnedVlessRealityClientProfile>,
+        reality: Option<&VlessRealityClientProfile>,
         ws: Option<&TWs>,
         grpc: Option<&TGrpc>,
         h2: Option<&TH2>,
         http_upgrade: Option<&THttp>,
         split_http: Option<&TSplit>,
-        quic: Option<&OwnedVlessQuicClientProfile>,
+        quic: Option<&VlessQuicClientProfile>,
     ) -> Self
     where
         TTls: ClientTlsProfile + ?Sized,
@@ -172,13 +172,13 @@ impl OwnedVlessOutboundTransportPlan {
         server: &str,
         port: u16,
         tls: Option<&TTls>,
-        reality: Option<&OwnedVlessRealityClientProfile>,
+        reality: Option<&VlessRealityClientProfile>,
         ws: Option<&TWs>,
         grpc: Option<&TGrpc>,
         h2: Option<&TH2>,
         http_upgrade: Option<&THttp>,
         split_http: Option<&TSplit>,
-        quic: Option<&OwnedVlessQuicClientProfile>,
+        quic: Option<&VlessQuicClientProfile>,
     ) -> Self
     where
         TTls: ClientTlsProfile + ?Sized,

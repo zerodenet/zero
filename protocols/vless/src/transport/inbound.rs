@@ -14,7 +14,7 @@ mod bind;
 mod carrier;
 mod plan;
 
-pub use bind::OwnedVlessInboundBindPlan;
+pub use bind::VlessInboundBindPlan;
 use plan::{accept_vless_stream_route, OwnedVlessInboundTransportPlan};
 
 fn record_client_stream<S>(

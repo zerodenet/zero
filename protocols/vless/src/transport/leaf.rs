@@ -18,7 +18,7 @@ use zero_transport::StreamTraffic;
 
 use super::managed_udp::VlessManagedUdpFlowResume;
 use super::outbound::OwnedVlessOutboundTransportPlan;
-use super::profile::{OwnedVlessQuicClientProfile, OwnedVlessRealityClientProfile};
+use super::profile::{VlessQuicClientProfile, VlessRealityClientProfile};
 
 #[derive(Clone)]
 struct OwnedVlessOutboundLeafConfig {
@@ -40,13 +40,13 @@ impl OwnedVlessOutboundLeafConfig {
         flow: Option<&str>,
         mux_concurrency: Option<u32>,
         tls: Option<&TTls>,
-        reality: Option<&OwnedVlessRealityClientProfile>,
+        reality: Option<&VlessRealityClientProfile>,
         ws: Option<&TWs>,
         grpc: Option<&TGrpc>,
         h2: Option<&TH2>,
         http_upgrade: Option<&THttp>,
         split_http: Option<&TSplit>,
-        quic: Option<&OwnedVlessQuicClientProfile>,
+        quic: Option<&VlessQuicClientProfile>,
     ) -> Result<Self, zero_core::Error>
     where
         TTls: ClientTlsProfile + ?Sized,
@@ -106,13 +106,13 @@ impl VlessOutboundLeaf {
         flow: Option<&str>,
         mux_concurrency: Option<u32>,
         tls: Option<&TTls>,
-        reality: Option<&OwnedVlessRealityClientProfile>,
+        reality: Option<&VlessRealityClientProfile>,
         ws: Option<&TWs>,
         grpc: Option<&TGrpc>,
         h2: Option<&TH2>,
         http_upgrade: Option<&THttp>,
         split_http: Option<&TSplit>,
-        quic: Option<&OwnedVlessQuicClientProfile>,
+        quic: Option<&VlessQuicClientProfile>,
     ) -> Result<Self, zero_core::Error>
     where
         TTls: ClientTlsProfile + ?Sized,
