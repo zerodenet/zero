@@ -102,7 +102,6 @@ pub(crate) struct UdpPipeInput<'a> {
     feature = "mieru"
 ))]
 pub(crate) struct UdpPipe<'a> {
-    proxy: &'a Proxy,
     dispatch: &'a mut UdpDispatch,
 }
 
@@ -116,8 +115,8 @@ pub(crate) struct UdpPipe<'a> {
     feature = "mieru"
 ))]
 impl<'a> UdpPipe<'a> {
-    pub(crate) fn new(proxy: &'a Proxy, dispatch: &'a mut UdpDispatch) -> Self {
-        Self { proxy, dispatch }
+    pub(crate) fn new(dispatch: &'a mut UdpDispatch) -> Self {
+        Self { dispatch }
     }
 }
 
@@ -136,7 +135,7 @@ impl KernelPipe for UdpPipe<'_> {
     type Error = EngineError;
 
     async fn dispatch(&mut self, input: Self::Input<'_>) -> Result<Self::Output, Self::Error> {
-        UdpDispatch::dispatch(self.dispatch, self.proxy, input).await
+        UdpDispatch::dispatch(self.dispatch, input).await
     }
 }
 

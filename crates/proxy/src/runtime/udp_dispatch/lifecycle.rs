@@ -32,11 +32,13 @@ pub(crate) struct ClosedUpstreamAssociation {
 impl UdpDispatch {
     /// Create a new dispatcher with an ephemeral direct socket.
     pub(crate) async fn new(
+        runtime: crate::runtime::udp_ingress::UdpIngressRuntime,
         inbound_tag: &str,
         protocols: &crate::inventory::ProtocolInventory,
     ) -> Result<Self, EngineError> {
         let direct_socket = TokioDatagramSocket::bind("0.0.0.0:0").await?;
         Ok(Self {
+            runtime,
             inbound_tag: inbound_tag.to_owned(),
             flows: UdpSessionFlows::default(),
             direct_socket,

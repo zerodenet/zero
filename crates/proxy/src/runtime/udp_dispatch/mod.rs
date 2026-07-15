@@ -31,10 +31,11 @@
 //! # Usage
 //!
 //! ```ignore
-//! let mut dispatch = UdpDispatch::new("inbound-tag", &proxy.protocols).await?;
+//! let runtime = crate::runtime::udp_ingress::UdpIngressRuntime::from_proxy(proxy);
+//! let mut dispatch = runtime.new_dispatch("inbound-tag").await?;
 //!
 //! // For each incoming packet:
-//! UdpPipe::new(proxy, &mut dispatch).dispatch(input).await?;
+//! UdpPipe::new(&mut dispatch).dispatch(input).await?;
 //!
 //! // Poll for responses in a select loop:
 //! select! {
@@ -100,6 +101,16 @@ use crate::runtime::udp_flow::snapshot::UdpFlowSnapshot;
     feature = "mieru"
 ))]
 use crate::runtime::udp_flow::state::UdpFlowState;
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
+use crate::runtime::udp_ingress::UdpIngressRuntime;
 #[cfg(any(
     feature = "socks5",
     feature = "vless",
@@ -176,6 +187,16 @@ pub(crate) use managed::UpstreamTrackedStart;
 /// packet-path, and chain-task state.
 /// Created per inbound UDP session/association.
 pub(crate) struct UdpDispatch {
+    #[cfg(any(
+        feature = "socks5",
+        feature = "vless",
+        feature = "hysteria2",
+        feature = "shadowsocks",
+        feature = "trojan",
+        feature = "vmess",
+        feature = "mieru"
+    ))]
+    runtime: UdpIngressRuntime,
     #[cfg(any(
         feature = "socks5",
         feature = "vless",

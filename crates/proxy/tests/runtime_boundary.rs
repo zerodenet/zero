@@ -835,6 +835,33 @@ fn udp_ingress_runtime_collapses_proxy_and_services_for_session_loops() {
             "{relative} must not call the raw inbound UDP helper directly"
         );
     }
+
+    for relative in [
+        "runtime/udp_dispatch/dispatch.rs",
+        "runtime/udp_dispatch/forward.rs",
+        "runtime/udp_dispatch/managed/forward.rs",
+    ] {
+        let source = read(&proxy_src().join(relative));
+        assert!(
+            !source.contains("use crate::runtime::Proxy"),
+            "{relative} must not import Proxy directly"
+        );
+        assert!(
+            !source.contains("&Proxy"),
+            "{relative} must not carry raw Proxy references"
+        );
+        assert!(
+            !source.contains("UdpRuntimeServices::from_proxy(proxy)"),
+            "{relative} must not rebuild services inline from raw Proxy"
+        );
+    }
+
+    let pipe = read(&proxy_src().join("runtime/pipe.rs"));
+    assert!(pipe.contains("pub(crate) struct UdpPipe<'a> {\n    dispatch: &'a mut UdpDispatch,"));
+    assert!(pipe.contains("pub(crate) fn new(dispatch: &'a mut UdpDispatch)"));
+    assert!(pipe.contains("Self { dispatch }"));
+    assert!(!pipe.contains("UdpDispatch::dispatch(self.dispatch, self.proxy, input)"));
+    assert!(pipe.contains("UdpDispatch::dispatch(self.dispatch, input)"));
 }
 
 #[test]

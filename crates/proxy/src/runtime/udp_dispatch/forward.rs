@@ -18,11 +18,9 @@ use std::time::Instant;
 use zero_engine::EngineError;
 
 use super::UdpDispatch;
-use crate::protocol_registry::UdpRuntimeServices;
 use crate::runtime::path::UdpPathCategory;
 use crate::runtime::udp_flow::snapshot::UdpFlowSnapshot;
 use crate::runtime::udp_socket::send_direct_udp_packet;
-use crate::runtime::Proxy;
 
 impl UdpDispatch {
     /// Forward a packet to an existing flow.
@@ -31,12 +29,12 @@ impl UdpDispatch {
     /// accessors or `UdpFlowState`.
     pub(super) async fn forward_existing(
         &mut self,
-        proxy: &Proxy,
         flow: &UdpFlowSnapshot,
         payload: &[u8],
     ) -> Result<(), EngineError> {
+        let services = self.runtime.runtime_services();
         let started_at = Instant::now();
-        proxy.record_session_inbound_rx(flow.session.id, payload.len() as u64);
+        services.record_session_inbound_rx(flow.session.id, payload.len() as u64);
 
         match flow.outbound.path_category() {
             // Direct path.
@@ -46,7 +44,7 @@ impl UdpDispatch {
                 };
                 match send_direct_udp_packet(&self.direct_socket, target_addr, payload).await {
                     Ok(sent) => {
-                        proxy.record_session_outbound_tx(flow.session.id, sent as u64);
+                        services.record_session_outbound_tx(flow.session.id, sent as u64);
                     }
                     Err(error) => {
                         self.fail_flow(flow, started_at, "udp_direct_send", &error);
@@ -68,11 +66,11 @@ impl UdpDispatch {
                     unreachable!("Relay category maps to a managed relay flow");
                 };
                 match self
-                    .forward_managed_relay_flow(proxy, flow, managed, payload)
+                    .forward_managed_relay_flow(flow, managed, payload)
                     .await
                 {
                     Ok(sent) => {
-                        proxy.record_session_outbound_tx(flow.session.id, sent as u64);
+                        services.record_session_outbound_tx(flow.session.id, sent as u64);
                     }
                     Err(error) => {
                         self.fail_flow(flow, started_at, "udp_upstream_send", &error);
@@ -85,12 +83,9 @@ impl UdpDispatch {
             UdpPathCategory::Datagram => {
                 let result = self
                     .flow_state
-                    .forward_existing_managed_flow(
-                        UdpRuntimeServices::from_proxy(proxy),
-                        (flow, payload),
-                    )
+                    .forward_existing_managed_flow(services.clone(), (flow, payload))
                     .await;
-                self.record_or_fail(flow, proxy, started_at, result)?;
+                self.record_or_fail(flow, &services, started_at, result)?;
             }
 
             #[cfg(any(
@@ -102,12 +97,9 @@ impl UdpDispatch {
             UdpPathCategory::StreamPacket => {
                 let result = self
                     .flow_state
-                    .forward_existing_managed_flow(
-                        UdpRuntimeServices::from_proxy(proxy),
-                        (flow, payload),
-                    )
+                    .forward_existing_managed_flow(services.clone(), (flow, payload))
                     .await;
-                self.record_or_fail(flow, proxy, started_at, result)?;
+                self.record_or_fail(flow, &services, started_at, result)?;
             }
 
             #[cfg(any(
@@ -124,7 +116,7 @@ impl UdpDispatch {
                     .flow_state
                     .forward_existing_packet_path_flow(flow, payload)
                     .await;
-                self.record_or_fail(flow, proxy, started_at, result)?;
+                self.record_or_fail(flow, &services, started_at, result)?;
             }
         }
 
@@ -147,13 +139,13 @@ impl UdpDispatch {
     fn record_or_fail(
         &mut self,
         flow: &UdpFlowSnapshot,
-        proxy: &Proxy,
+        services: &crate::protocol_registry::UdpRuntimeServices,
         started_at: Instant,
         result: Result<usize, super::FlowFailure>,
     ) -> Result<(), EngineError> {
         match result {
             Ok(sent) => {
-                proxy.record_session_outbound_tx(flow.session.id, sent as u64);
+                services.record_session_outbound_tx(flow.session.id, sent as u64);
                 Ok(())
             }
             Err(failure) => {

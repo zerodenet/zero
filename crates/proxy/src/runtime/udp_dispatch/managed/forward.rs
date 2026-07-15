@@ -1,4 +1,3 @@
-use crate::protocol_registry::UdpRuntimeServices;
 use crate::runtime::udp_dispatch::UdpDispatch;
 #[cfg(any(
     feature = "socks5",
@@ -25,14 +24,6 @@ use crate::runtime::udp_flow::snapshot::UdpFlowSnapshot;
     feature = "trojan",
     feature = "mieru"
 ))]
-use crate::runtime::Proxy;
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "vmess",
-    feature = "trojan",
-    feature = "mieru"
-))]
 use zero_engine::EngineError;
 
 impl UdpDispatch {
@@ -45,11 +36,11 @@ impl UdpDispatch {
     ))]
     pub(in crate::runtime::udp_dispatch) async fn forward_managed_relay_flow(
         &mut self,
-        proxy: &Proxy,
         flow: &UdpFlowSnapshot,
         managed: ManagedUdpFlowRef,
         payload: &[u8],
     ) -> Result<usize, EngineError> {
+        let services = self.runtime.runtime_services();
         let upstream = flow
             .outbound
             .upstream()
@@ -60,13 +51,12 @@ impl UdpDispatch {
             .expect("managed relay flow should have protocol resume");
         #[cfg(feature = "socks5")]
         if self.flow_state.handles_upstream_resume(&resume) {
-            let services = UdpRuntimeServices::from_proxy(proxy);
             return self
                 .flow_state
                 .start_upstream_flow(
                     &self.inbound_tag,
                     UpstreamAssociationSend {
-                        services: Some(services),
+                        services: Some(services.clone()),
                         session: &flow.session,
                         server: upstream.server,
                         port: upstream.port,
@@ -87,7 +77,7 @@ impl UdpDispatch {
         ))]
         return self
             .flow_state
-            .forward_existing_managed_flow(UdpRuntimeServices::from_proxy(proxy), (flow, payload))
+            .forward_existing_managed_flow(services, (flow, payload))
             .await
             .map_err(|failure| failure.error);
 

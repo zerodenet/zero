@@ -239,6 +239,10 @@ impl UdpRuntimeServices {
         self.proxy.record_session_outbound_rx(session_id, bytes);
     }
 
+    pub(crate) fn record_session_outbound_tx(&self, session_id: u64, bytes: u64) {
+        self.proxy.record_session_outbound_tx(session_id, bytes);
+    }
+
     #[cfg(any(feature = "socks5", feature = "vless"))]
     pub(crate) fn record_session_inbound_traffic(
         &self,

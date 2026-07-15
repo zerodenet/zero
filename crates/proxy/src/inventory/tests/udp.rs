@@ -7,14 +7,15 @@ use super::fixtures::FakeUpstreamResume;
 use super::fixtures::{FakeTcpCapability, TcpCapabilityCalls};
 use super::tcp::{proxy_with_fake_tcp, session};
 use crate::protocol_registry::{fake_direct_leaf, UdpAdapterContext, UdpRuntimeServices};
-use crate::runtime::udp_dispatch::{FlowStartResult, UdpDispatch};
+use crate::runtime::udp_dispatch::FlowStartResult;
 use crate::transport::{RelayCarrier, TcpRelayStream};
 
 #[tokio::test]
 async fn inventory_invokes_fake_udp_leaf_capability() {
     let calls = Arc::new(TcpCapabilityCalls::default());
     let proxy = proxy_with_fake_tcp(calls.clone());
-    let mut dispatch = UdpDispatch::new("fake-inbound", &proxy.protocols)
+    let mut dispatch = crate::runtime::udp_ingress::UdpIngressRuntime::from_proxy(&proxy)
+        .new_dispatch("fake-inbound")
         .await
         .expect("UDP dispatch");
     let ctx = UdpAdapterContext::new(
@@ -57,7 +58,8 @@ async fn inventory_preserves_fake_udp_failure_metadata() {
     let calls = Arc::new(TcpCapabilityCalls::default());
     calls.set_fail_udp(true);
     let proxy = proxy_with_fake_tcp(calls);
-    let mut dispatch = UdpDispatch::new("fake-inbound", &proxy.protocols)
+    let mut dispatch = crate::runtime::udp_ingress::UdpIngressRuntime::from_proxy(&proxy)
+        .new_dispatch("fake-inbound")
         .await
         .expect("UDP dispatch");
     let ctx = UdpAdapterContext::new(
@@ -98,7 +100,8 @@ async fn inventory_preserves_fake_udp_failure_metadata() {
 async fn inventory_invokes_fake_udp_relay_capabilities() {
     let calls = Arc::new(TcpCapabilityCalls::default());
     let proxy = proxy_with_fake_tcp(calls.clone());
-    let mut dispatch = UdpDispatch::new("fake-inbound", &proxy.protocols)
+    let mut dispatch = crate::runtime::udp_ingress::UdpIngressRuntime::from_proxy(&proxy)
+        .new_dispatch("fake-inbound")
         .await
         .expect("UDP dispatch");
     let ctx = UdpAdapterContext::new(
@@ -361,7 +364,8 @@ async fn inventory_composes_packet_path_roles_and_builds_carrier() {
     let leaf = fake_direct_leaf();
     let target = zero_core::Address::Domain("target.test".to_owned());
     let payload = b"packet";
-    let mut dispatch = UdpDispatch::new("fake-inbound", &proxy.protocols)
+    let mut dispatch = crate::runtime::udp_ingress::UdpIngressRuntime::from_proxy(&proxy)
+        .new_dispatch("fake-inbound")
         .await
         .expect("UDP dispatch");
     let claimed = proxy
