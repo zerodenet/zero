@@ -2,10 +2,7 @@ use std::future::Future;
 
 use zero_core::Session;
 use zero_platform_tokio::TokioSocket;
-use zero_transport::managed_udp::{
-    ManagedPacketUdpResume, ProtocolManagedStreamUdpBridgeHandlerMetadata,
-    ProtocolManagedStreamUdpBridgeOps,
-};
+use zero_transport::managed_udp::{ManagedPacketUdpResume, ProtocolManagedStreamUdpBridgeOps};
 use zero_transport::outbound_leaf::{
     ProtocolTcpTransportBridgeMetadata, ProtocolTcpTransportBridgeOps,
     ProtocolUdpTransportBridgeMetadata,
@@ -81,8 +78,4 @@ impl ProtocolManagedStreamUdpBridgeOps<TrojanOutboundLeaf> for TrojanTlsBridge {
         let _ = self;
         ManagedPacketUdpResume::new(leaf.relay_final_hop_udp_resume())
     }
-}
-
-impl ProtocolManagedStreamUdpBridgeHandlerMetadata for TrojanTlsBridge {
-    type Resume = TrojanManagedStreamUdpResume;
 }

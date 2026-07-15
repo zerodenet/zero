@@ -5,8 +5,8 @@ use zero_platform_tokio::{TcpRelayStream, TokioSocket};
 use zero_transport::RuntimeError;
 
 use zero_transport::managed_udp::{
-    ManagedTupleUdpResume, ProtocolManagedStreamUdpBridgeHandlerMetadata,
-    ProtocolManagedStreamUdpBridgeOps, ProtocolRelayTwoStreamManagedUdpBridgeOps,
+    ManagedTupleUdpResume, ProtocolManagedStreamUdpBridgeOps,
+    ProtocolRelayTwoStreamManagedUdpBridgeOps,
 };
 use zero_transport::outbound_leaf::{
     ProtocolRelayTwoStreamUdpTransportBridgeMetadata, ProtocolTcpTransportBridgeMetadata,
@@ -87,10 +87,6 @@ impl ProtocolManagedStreamUdpBridgeOps<VlessOutboundLeaf> for VlessStreamBridge 
     fn relay_final_hop_udp_resume_for_leaf(&self, leaf: &VlessOutboundLeaf) -> Self::Resume {
         ManagedTupleUdpResume::new(leaf.relay_final_hop_udp_resume(self.mux_pool.clone()))
     }
-}
-
-impl ProtocolManagedStreamUdpBridgeHandlerMetadata for VlessStreamBridge {
-    type Resume = VlessManagedStreamUdpResume;
 }
 
 impl ProtocolRelayTwoStreamManagedUdpBridgeOps<VlessOutboundLeaf> for VlessStreamBridge {

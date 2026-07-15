@@ -2,10 +2,7 @@ use std::future::Future;
 
 use zero_core::Session;
 use zero_platform_tokio::{TcpRelayStream, TokioSocket};
-use zero_transport::managed_udp::{
-    ManagedTupleUdpResume, ProtocolManagedStreamUdpBridgeHandlerMetadata,
-    ProtocolManagedStreamUdpBridgeOps,
-};
+use zero_transport::managed_udp::{ManagedTupleUdpResume, ProtocolManagedStreamUdpBridgeOps};
 use zero_transport::outbound_leaf::{
     ProtocolTcpTransportBridgeMetadata, ProtocolTcpTransportBridgeOps,
     ProtocolUdpTransportBridgeMetadata,
@@ -81,8 +78,4 @@ impl ProtocolManagedStreamUdpBridgeOps<VmessOutboundLeaf> for VmessStreamBridge 
     fn relay_final_hop_udp_resume_for_leaf(&self, leaf: &VmessOutboundLeaf) -> Self::Resume {
         ManagedTupleUdpResume::new(leaf.relay_final_hop_udp_resume(self.mux_pool.clone()))
     }
-}
-
-impl ProtocolManagedStreamUdpBridgeHandlerMetadata for VmessStreamBridge {
-    type Resume = VmessManagedStreamUdpResume;
 }

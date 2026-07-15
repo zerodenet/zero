@@ -3,7 +3,7 @@ mod request;
 mod start;
 
 #[cfg(any(feature = "vless", feature = "vmess", feature = "trojan"))]
-pub(crate) use handler::managed_stream_udp_handler_for_bridge;
+pub(crate) use handler::managed_stream_udp_handler_for_resume;
 #[cfg(feature = "mieru")]
 pub(crate) use handler::{managed_stream_handler_box, ManagedStreamStages};
 pub(crate) use request::{ManagedStreamPacketRelay, ManagedStreamPacketStartBridge};

@@ -1,6 +1,6 @@
 use zero_transport::managed_udp::ProtocolManagedStreamFlowStages;
 #[cfg(any(feature = "vless", feature = "vmess", feature = "trojan"))]
-use zero_transport::managed_udp::ProtocolManagedStreamUdpBridgeHandlerMetadata;
+use zero_transport::managed_udp::ProtocolManagedStreamUdpResumeMetadata;
 
 use super::super::super::model::ManagedStreamHandlerPair;
 use super::super::super::stream_manager::{
@@ -28,10 +28,9 @@ where
 }
 
 #[cfg(any(feature = "vless", feature = "vmess", feature = "trojan"))]
-pub(crate) fn managed_stream_udp_handler_for_bridge<TBridge>() -> ManagedStreamHandlerPair
+pub(crate) fn managed_stream_udp_handler_for_resume<TResume>() -> ManagedStreamHandlerPair
 where
-    TBridge: ProtocolManagedStreamUdpBridgeHandlerMetadata,
-    TBridge::Resume: ManagedStreamFlowConnector,
+    TResume: ProtocolManagedStreamUdpResumeMetadata + ManagedStreamFlowConnector,
 {
-    managed_stream_handler_box::<TBridge::Resume>(TBridge::managed_stream_flow_stages())
+    managed_stream_handler_box::<TResume>(ManagedStreamStages::from_resume::<TResume>())
 }

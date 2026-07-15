@@ -125,14 +125,6 @@ impl ProtocolManagedStreamFlowStages {
     }
 }
 
-pub trait ProtocolManagedStreamUdpBridgeHandlerMetadata {
-    type Resume: Send + Sync + std::fmt::Debug + 'static + ProtocolManagedStreamUdpResumeMetadata;
-
-    fn managed_stream_flow_stages() -> ProtocolManagedStreamFlowStages {
-        ProtocolManagedStreamFlowStages::from_resume::<Self::Resume>()
-    }
-}
-
 pub trait ProtocolManagedDatagramUdpResumeMetadata {
     const ESTABLISH_STAGE: &'static str;
     const MISMATCH_STAGE: &'static str;

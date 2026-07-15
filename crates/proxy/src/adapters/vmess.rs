@@ -7,6 +7,8 @@ use zero_config::{InboundProtocolConfig, OutboundProtocolConfig};
 #[cfg(feature = "vmess")]
 use zero_engine::{EngineError, ResolvedLeafOutbound};
 use zero_traits::{ProtocolCapabilityDescriptor, ProtocolMetadata};
+#[cfg(feature = "vmess")]
+use zero_transport::managed_udp::ProtocolManagedStreamUdpBridgeOps;
 
 use crate::adapters::identity::{
     named_protocol_supports_inbound, named_protocol_supports_outbound, NamedProtocolAdapter,
@@ -20,7 +22,7 @@ use crate::protocol_registry::{
 use crate::runtime::path::TcpPathCategory;
 #[cfg(feature = "vmess")]
 use crate::runtime::udp_flow::managed::{
-    bridge::managed_stream_udp_handler_for_bridge, ManagedStreamHandlerPair,
+    bridge::managed_stream_udp_handler_for_resume, ManagedStreamHandlerPair,
 };
 
 #[cfg(feature = "vmess")]
@@ -176,7 +178,9 @@ impl UdpFlowCapability for VmessAdapter {
 #[cfg(feature = "vmess")]
 impl ManagedUdpHandlerProvider for VmessAdapter {
     fn managed_stream_udp_handlers(&self) -> Option<ManagedStreamHandlerPair> {
-        Some(managed_stream_udp_handler_for_bridge::<VmessStreamBridge>())
+        Some(managed_stream_udp_handler_for_resume::<
+            <VmessStreamBridge as ProtocolManagedStreamUdpBridgeOps<VmessOutboundLeaf>>::Resume,
+        >())
     }
 }
 

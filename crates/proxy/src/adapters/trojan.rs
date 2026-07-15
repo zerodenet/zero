@@ -7,6 +7,8 @@ use zero_config::{InboundProtocolConfig, OutboundProtocolConfig};
 #[cfg(feature = "trojan")]
 use zero_engine::{EngineError, ResolvedLeafOutbound};
 use zero_traits::{ProtocolCapabilityDescriptor, ProtocolMetadata};
+#[cfg(feature = "trojan")]
+use zero_transport::managed_udp::ProtocolManagedStreamUdpBridgeOps;
 
 use crate::adapters::identity::{
     named_protocol_supports_inbound, named_protocol_supports_outbound, NamedProtocolAdapter,
@@ -20,7 +22,7 @@ use crate::protocol_registry::{
 use crate::runtime::path::TcpPathCategory;
 #[cfg(feature = "trojan")]
 use crate::runtime::udp_flow::managed::{
-    bridge::managed_stream_udp_handler_for_bridge, ManagedStreamHandlerPair,
+    bridge::managed_stream_udp_handler_for_resume, ManagedStreamHandlerPair,
 };
 
 #[cfg(feature = "trojan")]
@@ -175,7 +177,9 @@ impl UdpFlowCapability for TrojanAdapter {
 #[cfg(feature = "trojan")]
 impl ManagedUdpHandlerProvider for TrojanAdapter {
     fn managed_stream_udp_handlers(&self) -> Option<ManagedStreamHandlerPair> {
-        Some(managed_stream_udp_handler_for_bridge::<TrojanTlsBridge>())
+        Some(managed_stream_udp_handler_for_resume::<
+            <TrojanTlsBridge as ProtocolManagedStreamUdpBridgeOps<TrojanOutboundLeaf>>::Resume,
+        >())
     }
 }
 

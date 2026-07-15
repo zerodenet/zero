@@ -1174,6 +1174,32 @@ fn transport_bridge_adapters_offer_claim_time_udp_projection() {
 }
 
 #[test]
+fn managed_stream_udp_handlers_key_off_resume_metadata_not_bridge_types() {
+    let transport_managed_udp = read(&workspace_root().join("crates/transport/src/managed_udp.rs"));
+    let handler =
+        read(&proxy_src().join("runtime/udp_flow/managed/bridge/stream_packet/handler.rs"));
+    assert!(!transport_managed_udp.contains("ProtocolManagedStreamUdpBridgeHandlerMetadata"));
+    assert!(handler.contains("managed_stream_udp_handler_for_resume"));
+    assert!(!handler.contains("managed_stream_udp_handler_for_bridge"));
+
+    for relative in [
+        "adapters/vless.rs",
+        "adapters/vmess.rs",
+        "adapters/trojan.rs",
+    ] {
+        let source = read(&proxy_src().join(relative));
+        assert!(
+            source.contains("managed_stream_udp_handler_for_resume::<"),
+            "{relative} should register managed stream UDP handlers by resume type"
+        );
+        assert!(
+            !source.contains("managed_stream_udp_handler_for_bridge::<"),
+            "{relative} must not route managed stream UDP handler registration through bridge types"
+        );
+    }
+}
+
+#[test]
 fn packet_path_adapters_offer_claim_time_projection() {
     for relative in [
         "adapters/socks5.rs",

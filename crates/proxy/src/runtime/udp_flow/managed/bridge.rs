@@ -1,7 +1,7 @@
 mod stream_packet;
 
 #[cfg(any(feature = "vless", feature = "vmess", feature = "trojan"))]
-pub(crate) use stream_packet::managed_stream_udp_handler_for_bridge;
+pub(crate) use stream_packet::managed_stream_udp_handler_for_resume;
 #[cfg(feature = "mieru")]
 pub(crate) use stream_packet::{managed_stream_handler_box, ManagedStreamStages};
 pub(crate) use stream_packet::{
