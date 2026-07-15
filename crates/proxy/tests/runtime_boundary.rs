@@ -880,6 +880,8 @@ fn udp_ingress_runtime_collapses_proxy_and_services_for_session_loops() {
     assert!(route_runtime.contains("struct MuxSubstreamRuntime"));
     assert!(route_runtime.contains("TcpIngressRuntime"));
     assert!(route_runtime.contains("tcp_runtime: TcpIngressRuntime"));
+    assert!(!route_runtime.contains("use crate::runtime::Proxy"));
+    assert!(!route_runtime.contains("from_proxy("));
     assert!(!route_runtime.contains("fallback_proxy"));
     assert!(!route_runtime.contains("proxy: Proxy"));
 
@@ -1274,6 +1276,8 @@ fn urltest_probe_uses_generic_tcp_outbound_dispatch() {
     let runtime_urltest = read(&proxy_src().join("runtime/listeners/urltest.rs"));
     assert!(urltest.contains("struct UrlTestRuntime"));
     assert!(urltest.contains("dispatch_tcp_outbound("));
+    assert!(!urltest.contains("use crate::runtime::Proxy"));
+    assert!(!urltest.contains("from_proxy("));
     assert!(!urltest.contains("prepare_tcp_candidate("));
     assert!(!urltest.contains("ResolvedLeafOutbound"));
     assert!(!urltest.contains("impl Proxy"));

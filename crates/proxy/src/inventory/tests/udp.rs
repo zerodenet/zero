@@ -6,18 +6,14 @@ use super::fixtures::FakeProviderResume;
 use super::fixtures::FakeUpstreamResume;
 use super::fixtures::{FakeTcpCapability, TcpCapabilityCalls};
 use super::tcp::{proxy_with_fake_tcp, session};
-use crate::protocol_registry::{fake_direct_leaf, UdpAdapterContext, UdpRuntimeServices};
+use crate::protocol_registry::{
+    fake_direct_leaf, TcpRuntimeServices, UdpAdapterContext, UdpRuntimeServices,
+};
 use crate::runtime::udp_dispatch::FlowStartResult;
 use crate::transport::{RelayCarrier, TcpRelayStream};
 
 fn udp_runtime(proxy: &crate::runtime::Proxy) -> crate::runtime::udp_ingress::UdpIngressRuntime {
-    crate::runtime::udp_ingress::UdpIngressRuntime::new(
-        proxy.engine().clone(),
-        proxy.config.clone(),
-        proxy.resolver.clone(),
-        proxy.protocols.clone(),
-        UdpRuntimeServices::from_proxy(proxy),
-    )
+    crate::runtime::udp_ingress::UdpIngressRuntime::new(TcpRuntimeServices::from_proxy(proxy))
 }
 
 #[tokio::test]

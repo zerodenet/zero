@@ -4,16 +4,6 @@ use zero_core::Session;
 use zero_engine::EngineError;
 
 use crate::protocol_registry::TcpRuntimeServices;
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
-))]
-use crate::protocol_registry::UdpRuntimeServices;
 use crate::runtime::tcp_ingress::{InboundProtocol, TcpIngressRuntime};
 #[cfg(any(
     feature = "socks5",
@@ -25,7 +15,6 @@ use crate::runtime::tcp_ingress::{InboundProtocol, TcpIngressRuntime};
     feature = "mieru"
 ))]
 use crate::runtime::udp_ingress::UdpIngressRuntime;
-use crate::runtime::Proxy;
 
 #[derive(Clone)]
 pub(crate) struct SharedIngressRuntimeServices {
@@ -43,8 +32,7 @@ pub(crate) struct SharedIngressRuntimeServices {
 }
 
 impl SharedIngressRuntimeServices {
-    pub(crate) fn from_proxy(proxy: &Proxy) -> Self {
-        let tcp_services = TcpRuntimeServices::from_proxy(proxy);
+    pub(crate) fn new(tcp_services: TcpRuntimeServices) -> Self {
         Self {
             tcp_services: tcp_services.clone(),
             #[cfg(any(
@@ -56,13 +44,7 @@ impl SharedIngressRuntimeServices {
                 feature = "vmess",
                 feature = "mieru"
             ))]
-            udp_runtime: UdpIngressRuntime::new(
-                proxy.engine().clone(),
-                proxy.config.clone(),
-                proxy.resolver.clone(),
-                proxy.protocols.clone(),
-                UdpRuntimeServices::new(tcp_services),
-            ),
+            udp_runtime: UdpIngressRuntime::new(tcp_services),
         }
     }
 

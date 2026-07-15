@@ -1,49 +1,34 @@
 //! Narrow ingress from an accepted inbound UDP packet into [`UdpPipe`].
 
 use std::path::Path;
-use std::sync::Arc;
 
-use zero_config::RuntimeConfig;
 use zero_core::{InboundUdpDispatch, Session, SessionAuth};
-use zero_dns::DnsSystem;
-use zero_engine::{Engine, EngineError, ResolvedOutbound, RouteDecision, SessionHandle};
+use zero_engine::{EngineError, ResolvedOutbound, RouteDecision, SessionHandle};
 use zero_traits::DnsResolver;
 
-use crate::inventory::ProtocolInventory;
 use crate::logging::log_session_accepted;
-use crate::protocol_registry::{UdpAdapterContext, UdpRuntimeServices};
+use crate::protocol_registry::{TcpRuntimeServices, UdpAdapterContext, UdpRuntimeServices};
 use crate::runtime::pipe::{KernelPipe, UdpPipe, UdpPipeInput};
 use crate::runtime::tcp_ingress::apply_kernel_rate_limits_from_config;
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
 
 #[derive(Clone)]
 pub(crate) struct UdpIngressRuntime {
-    engine: Engine,
-    config: Arc<RuntimeConfig>,
-    resolver: Arc<DnsSystem>,
-    protocols: ProtocolInventory,
+    tcp_services: TcpRuntimeServices,
     services: UdpRuntimeServices,
 }
 
 impl UdpIngressRuntime {
-    pub(crate) fn new(
-        engine: Engine,
-        config: Arc<RuntimeConfig>,
-        resolver: Arc<DnsSystem>,
-        protocols: ProtocolInventory,
-        services: UdpRuntimeServices,
-    ) -> Self {
+    pub(crate) fn new(tcp_services: TcpRuntimeServices) -> Self {
+        let services = UdpRuntimeServices::new(tcp_services.clone());
         Self {
-            engine,
-            config,
-            resolver,
-            protocols,
+            tcp_services,
             services,
         }
     }
 
     pub(crate) async fn new_dispatch(&self, inbound_tag: &str) -> Result<UdpDispatch, EngineError> {
-        UdpDispatch::new(self.clone(), inbound_tag, &self.protocols).await
+        UdpDispatch::new(self.clone(), inbound_tag, self.tcp_services.protocols()).await
     }
 
     pub(crate) fn services(&self) -> &UdpRuntimeServices {
@@ -55,16 +40,18 @@ impl UdpIngressRuntime {
     }
 
     pub(crate) async fn resolve_local_dns(&self, domain: &str) {
-        let _ = self.resolver.resolve(domain).await;
+        let _ = self.tcp_services.resolver().resolve(domain).await;
     }
 
     pub(crate) fn prepare_udp_session(&self, session: &mut Session, inbound_tag: &str) {
-        self.engine.prepare_session(session, inbound_tag);
-        apply_kernel_rate_limits_from_config(self.config.as_ref(), session, inbound_tag);
+        self.tcp_services
+            .engine()
+            .prepare_session(session, inbound_tag);
+        apply_kernel_rate_limits_from_config(self.tcp_services.config(), session, inbound_tag);
     }
 
     pub(crate) fn track_session(&self, session_id: u64) -> SessionHandle {
-        self.engine.track_session(session_id)
+        self.tcp_services.engine().track_session(session_id)
     }
 
     pub(crate) async fn resolve_fake_ip_target(&self, session: &mut Session) {
@@ -76,13 +63,13 @@ impl UdpIngressRuntime {
             Address::Ipv6(octets) => IpAddress::V6(*octets),
             _ => return,
         };
-        if let Some(domain) = self.resolver.lookup_fake_ip(&ip).await {
+        if let Some(domain) = self.tcp_services.resolver().lookup_fake_ip(&ip).await {
             session.target = Address::Domain(domain);
         }
     }
 
     pub(crate) fn route_decision(&self, session: &Session) -> RouteDecision {
-        self.engine.route_decision_with_inbound(
+        self.tcp_services.engine().route_decision_with_inbound(
             &session.target,
             session.sni.as_deref(),
             session.inbound_tag.as_deref(),
@@ -93,17 +80,18 @@ impl UdpIngressRuntime {
         &self,
         action: &RouteDecision,
     ) -> Result<ResolvedOutbound<'static>, EngineError> {
-        self.engine
+        self.tcp_services
+            .engine()
             .resolve_route_decision(action.clone())
             .map(|(resolved, _)| resolved)
     }
 
     pub(crate) fn log_session_accepted(&self, session: &Session, action: &RouteDecision) {
-        log_session_accepted(session, action, self.config.mode.kind());
+        log_session_accepted(session, action, self.tcp_services.config().mode.kind());
     }
 
     pub(crate) fn set_session_outbound(&self, session: &Session) {
-        self.engine.set_session_outbound(session);
+        self.tcp_services.engine().set_session_outbound(session);
     }
 
     #[cfg(any(feature = "socks5", feature = "vless"))]
@@ -117,7 +105,7 @@ impl UdpIngressRuntime {
     }
 
     pub(crate) fn source_dir(&self) -> Option<&Path> {
-        self.config.source_dir()
+        self.tcp_services.config().source_dir()
     }
 
     pub(crate) async fn start_udp_resolved_outbound(
@@ -128,7 +116,7 @@ impl UdpIngressRuntime {
         payload: &[u8],
     ) -> Result<FlowStartResult, FlowFailure> {
         crate::inventory::start_udp_resolved_outbound(
-            &self.protocols,
+            self.tcp_services.protocols(),
             dispatch,
             UdpAdapterContext::new(self.source_dir(), self.runtime_services()),
             session,
@@ -156,7 +144,7 @@ impl UdpIngressRuntime {
     }
 
     fn udp_enabled_for_inbound(&self, inbound_tag: &str) -> bool {
-        let config = self.engine.config();
+        let config = self.tcp_services.config();
         config.runtime.udp.enabled
             && config
                 .inbounds

@@ -60,6 +60,19 @@ impl TcpRuntimeServices {
         feature = "vmess",
         feature = "mieru"
     ))]
+    pub(crate) fn protocols(&self) -> &ProtocolInventory {
+        &self.protocols
+    }
+
+    #[cfg(any(
+        feature = "socks5",
+        feature = "vless",
+        feature = "hysteria2",
+        feature = "shadowsocks",
+        feature = "trojan",
+        feature = "vmess",
+        feature = "mieru"
+    ))]
     pub(crate) async fn connect_upstream_owned(
         &self,
         server: String,

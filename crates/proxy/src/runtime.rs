@@ -10,6 +10,7 @@ use zero_dns::DnsSystem;
 use zero_engine::{Engine, EngineError};
 
 use crate::inventory::ProtocolInventory;
+use crate::protocol_registry::TcpRuntimeServices;
 
 #[cfg(any(feature = "shadowsocks", feature = "hysteria2"))]
 pub(crate) mod datagram_udp;
@@ -201,7 +202,7 @@ impl Proxy {
         target_tag: &str,
         url: &str,
     ) -> Result<u64, EngineError> {
-        crate::groups::UrlTestRuntime::from_proxy(self)
+        crate::groups::UrlTestRuntime::new(TcpRuntimeServices::from_proxy(self))
             .probe_outbound_single(target_tag, url)
             .await
     }

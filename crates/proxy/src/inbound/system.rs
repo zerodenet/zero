@@ -24,6 +24,7 @@ use zero_core::{Address, Network, ProtocolType, Session};
 use zero_engine::EngineError;
 use zero_stack::SystemTcpStack;
 
+use crate::protocol_registry::TcpRuntimeServices;
 use crate::runtime::listener_loop::{run_system_tcp_stack_loop, SystemTcpStackLoopRequest};
 use crate::runtime::route_runtime::{
     InboundRouteRuntime, InboundRouteRuntimeFactory, SharedIngressRuntimeServices,
@@ -60,7 +61,7 @@ async fn system_tcp_loop(
 ) {
     run_system_tcp_stack_loop(SystemTcpStackLoopRequest {
         runtime_factory: InboundRouteRuntimeFactory::new(
-            SharedIngressRuntimeServices::from_proxy(&proxy),
+            SharedIngressRuntimeServices::new(TcpRuntimeServices::from_proxy(&proxy)),
             tag,
         ),
         stack,

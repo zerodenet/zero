@@ -8,7 +8,6 @@ use zero_core::{Address, Network, ProtocolType, Session};
 use zero_traits::AsyncSocket;
 
 use crate::protocol_registry::TcpRuntimeServices;
-use crate::runtime::Proxy;
 use crate::transport::extract_tcp_stream;
 use zero_engine::{
     EngineError, PolicyProbeCompletedPayload, PolicyProbeMember, ProbeTrigger, ResolvedOutbound,
@@ -29,10 +28,8 @@ pub(crate) struct UrlTestRuntime {
 }
 
 impl UrlTestRuntime {
-    pub(crate) fn from_proxy(proxy: &Proxy) -> Self {
-        Self {
-            services: TcpRuntimeServices::from_proxy(proxy),
-        }
+    pub(crate) fn new(services: TcpRuntimeServices) -> Self {
+        Self { services }
     }
 
     pub(crate) fn group_ids(&self) -> Vec<TargetId> {
