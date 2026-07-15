@@ -60,15 +60,33 @@ fn compiled_protocol_registry() -> ProtocolRegistry {
     #[cfg(feature = "http")]
     registry.register_core_capability(Arc::new(HttpConnectAdapter));
     #[cfg(feature = "vless")]
-    registry.register_managed_capability(Arc::new(VlessAdapter::default()));
+    {
+        let adapter = Arc::new(VlessAdapter::default());
+        registry.register_managed_capability_with_outbound_claimer(
+            adapter,
+            VlessAdapter::claim_outbound_leaf_impl,
+        );
+    }
     #[cfg(feature = "hysteria2")]
     registry.register_managed_capability(Arc::new(Hysteria2Adapter));
     #[cfg(feature = "shadowsocks")]
     registry.register_managed_capability(Arc::new(ShadowsocksAdapter));
     #[cfg(feature = "trojan")]
-    registry.register_managed_capability(Arc::new(TrojanAdapter::default()));
+    {
+        let adapter = Arc::new(TrojanAdapter::default());
+        registry.register_managed_capability_with_outbound_claimer(
+            adapter,
+            TrojanAdapter::claim_outbound_leaf_impl,
+        );
+    }
     #[cfg(feature = "vmess")]
-    registry.register_managed_capability(Arc::new(VmessAdapter::default()));
+    {
+        let adapter = Arc::new(VmessAdapter::default());
+        registry.register_managed_capability_with_outbound_claimer(
+            adapter,
+            VmessAdapter::claim_outbound_leaf_impl,
+        );
+    }
     #[cfg(feature = "mieru")]
     registry.register_managed_capability(Arc::new(MieruAdapter));
     #[cfg(feature = "mixed")]

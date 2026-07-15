@@ -1780,6 +1780,7 @@ fn registry_outbound_claim_surface_replaces_lookup_only_helpers() {
 fn claimed_outbound_leaf_owns_capability_preparation() {
     let outbound = read(&proxy_src().join("protocol_registry/registry/outbound.rs"));
     let capability = read(&proxy_src().join("protocol_registry/capability.rs"));
+    let registry_mod = read(&proxy_src().join("protocol_registry/registry/mod.rs"));
     for method in [
         "fn prepare_tcp_connect(",
         "fn prepare_tcp_relay_hop(",
@@ -1802,8 +1803,9 @@ fn claimed_outbound_leaf_owns_capability_preparation() {
     assert!(outbound.contains("entry.support.name() == protocol"));
     assert!(!outbound.contains("for entry in &self.entries {\n            if let Some(claimed) = entry.tcp.claim_tcp_outbound_leaf(leaf.clone()) {"));
     assert!(!outbound.contains("for entry in &self.entries {\r\n            if let Some(claimed) = entry.tcp.claim_tcp_outbound_leaf(leaf.clone()) {"));
-    assert!(capability.contains("trait OutboundLeafClaimCapability"));
     assert!(capability.contains("struct OutboundLeafClaim<'a>"));
+    assert!(!capability.contains("trait OutboundLeafClaimCapability"));
+    assert!(registry_mod.contains("trait OutboundLeafClaimer"));
     assert!(outbound.contains("entry.outbound.claim_outbound_leaf(leaf.clone())"));
     assert!(outbound.contains("fn claim_outbound_hooks<'a>("));
     assert!(!outbound.contains("claim_tcp_outbound_leaf(leaf.clone())"));

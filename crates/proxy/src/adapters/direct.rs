@@ -17,8 +17,8 @@ use crate::protocol_catalog::protocol_descriptor;
 ))]
 use crate::protocol_registry::ClaimedUdpFlowLeaf;
 use crate::protocol_registry::{
-    ClaimedTcpOutboundLeaf, InboundListenerCapability, OutboundLeafClaim,
-    OutboundLeafClaimCapability, ProtocolSupportCapability, TcpOutboundCapability,
+    ClaimedTcpOutboundLeaf, InboundListenerCapability, ProtocolSupportCapability,
+    TcpOutboundCapability,
 };
 #[cfg(any(
     feature = "socks5",
@@ -102,39 +102,6 @@ impl TcpOutboundCapability for DirectAdapter {
         leaf: ResolvedLeafOutbound<'a>,
     ) -> Option<Box<dyn ClaimedTcpOutboundLeaf<'a> + 'a>> {
         self.claim_tcp_outbound_leaf_impl(leaf)
-    }
-}
-
-impl OutboundLeafClaimCapability for DirectAdapter {
-    fn claim_outbound_leaf<'a>(
-        &self,
-        leaf: ResolvedLeafOutbound<'a>,
-    ) -> Option<OutboundLeafClaim<'a>> {
-        let tcp = self.claim_tcp_outbound_leaf(leaf.clone())?;
-        Some(OutboundLeafClaim {
-            runtime: tcp.runtime(),
-            tcp,
-            #[cfg(any(
-                feature = "socks5",
-                feature = "vless",
-                feature = "hysteria2",
-                feature = "shadowsocks",
-                feature = "trojan",
-                feature = "vmess",
-                feature = "mieru"
-            ))]
-            udp: Some(self.claim_udp_flow_leaf(leaf)?),
-            #[cfg(any(
-                feature = "socks5",
-                feature = "vless",
-                feature = "hysteria2",
-                feature = "shadowsocks",
-                feature = "trojan",
-                feature = "vmess",
-                feature = "mieru"
-            ))]
-            packet_path: None,
-        })
     }
 }
 

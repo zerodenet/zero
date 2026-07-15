@@ -10,9 +10,8 @@ use zero_traits::{ProtocolCapabilityDescriptor, ProtocolMetadata};
 use crate::protocol_catalog::protocol_descriptor;
 use crate::protocol_registry::{
     ClaimedTcpOutboundLeaf, ClaimedUdpFlowLeaf, ClaimedUdpPacketPathLeaf,
-    InboundListenerCapability, OutboundLeafClaim, OutboundLeafClaimCapability, OutboundLeafRuntime,
-    ProtocolSupportCapability, TcpOutboundCapability, TcpRuntimeServices, UdpFlowCapability,
-    UdpPacketPathCapability,
+    InboundListenerCapability, OutboundLeafRuntime, ProtocolSupportCapability,
+    TcpOutboundCapability, TcpRuntimeServices, UdpFlowCapability, UdpPacketPathCapability,
 };
 use crate::runtime::path::{OutboundEndpoint, TcpPathCategory};
 use crate::runtime::tcp_dispatch::operation::{
@@ -722,38 +721,5 @@ impl TcpOutboundCapability for FakeTcpCapability {
                 udp_policy_tag: tag.map(str::to_owned),
             },
         }))
-    }
-}
-
-impl OutboundLeafClaimCapability for FakeTcpCapability {
-    fn claim_outbound_leaf<'a>(
-        &self,
-        leaf: ResolvedLeafOutbound<'a>,
-    ) -> Option<OutboundLeafClaim<'a>> {
-        let tcp = self.claim_tcp_outbound_leaf(leaf.clone())?;
-        Some(OutboundLeafClaim {
-            runtime: tcp.runtime(),
-            tcp,
-            #[cfg(any(
-                feature = "socks5",
-                feature = "vless",
-                feature = "hysteria2",
-                feature = "shadowsocks",
-                feature = "trojan",
-                feature = "vmess",
-                feature = "mieru"
-            ))]
-            udp: Some(self.claim_udp_flow_leaf(leaf.clone())?),
-            #[cfg(any(
-                feature = "socks5",
-                feature = "vless",
-                feature = "hysteria2",
-                feature = "shadowsocks",
-                feature = "trojan",
-                feature = "vmess",
-                feature = "mieru"
-            ))]
-            packet_path: Some(self.claim_udp_packet_path_leaf(leaf)?),
-        })
     }
 }

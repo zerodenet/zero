@@ -133,15 +133,6 @@ pub(crate) struct OutboundLeafClaim<'a> {
     pub(crate) packet_path: Option<Box<dyn ClaimedUdpPacketPathLeaf<'a> + 'a>>,
 }
 
-pub(crate) trait OutboundLeafClaimCapability: Send + Sync {
-    fn claim_outbound_leaf<'a>(
-        &self,
-        _leaf: ResolvedLeafOutbound<'a>,
-    ) -> Option<OutboundLeafClaim<'a>> {
-        None
-    }
-}
-
 pub(crate) trait ProtocolSupportCapability: ProtocolMetadata + Send + Sync {
     fn name(&self) -> &'static str;
     fn feature_name(&self) -> &'static str;

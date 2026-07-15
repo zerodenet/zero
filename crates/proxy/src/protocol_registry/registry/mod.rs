@@ -1,6 +1,8 @@
 use std::fmt;
 use std::sync::Arc;
 
+use zero_engine::ResolvedLeafOutbound;
+
 #[cfg(any(
     feature = "hysteria2",
     feature = "shadowsocks",
@@ -15,7 +17,7 @@ use crate::protocol_registry::TcpOutboundCapability;
 #[cfg(feature = "socks5")]
 use crate::protocol_registry::UpstreamUdpHandlerProvider;
 use crate::protocol_registry::{
-    InboundListenerCapability, OutboundLeafClaimCapability, ProtocolSupportCapability,
+    InboundListenerCapability, OutboundLeafClaim, ProtocolSupportCapability,
 };
 #[cfg(all(
     test,
@@ -60,11 +62,18 @@ pub(crate) struct ProtocolRegistry {
     entries: Vec<RegisteredProtocolEntry>,
 }
 
+pub(crate) trait OutboundLeafClaimer: Send + Sync {
+    fn claim_outbound_leaf<'a>(
+        &self,
+        leaf: ResolvedLeafOutbound<'a>,
+    ) -> Option<OutboundLeafClaim<'a>>;
+}
+
 #[derive(Clone)]
 struct RegisteredProtocolEntry {
     support: Arc<dyn ProtocolSupportCapability>,
     inbound: Arc<dyn InboundListenerCapability>,
-    outbound: Arc<dyn OutboundLeafClaimCapability>,
+    outbound: Arc<dyn OutboundLeafClaimer>,
     #[cfg(test)]
     tcp: Arc<dyn TcpOutboundCapability>,
     #[cfg(all(

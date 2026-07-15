@@ -1,5 +1,5 @@
 use zero_config::{InboundConfig, InboundProtocolConfig, OutboundProtocolConfig};
-use zero_engine::{EngineError, ResolvedLeafOutbound};
+use zero_engine::EngineError;
 use zero_traits::{ProtocolCapabilityDescriptor, ProtocolMetadata};
 
 use crate::adapters::identity::{
@@ -7,8 +7,8 @@ use crate::adapters::identity::{
 };
 use crate::protocol_catalog::protocol_descriptor;
 use crate::protocol_registry::{
-    InboundListenerCapability, OutboundLeafClaim, OutboundLeafClaimCapability,
-    ProtocolSupportCapability, TcpOutboundCapability, UdpFlowCapability, UdpPacketPathCapability,
+    InboundListenerCapability, ProtocolSupportCapability, TcpOutboundCapability, UdpFlowCapability,
+    UdpPacketPathCapability,
 };
 
 #[cfg(feature = "mixed")]
@@ -47,16 +47,6 @@ impl UdpFlowCapability for MixedAdapter {}
 
 #[cfg(feature = "mixed")]
 impl UdpPacketPathCapability for MixedAdapter {}
-
-#[cfg(feature = "mixed")]
-impl OutboundLeafClaimCapability for MixedAdapter {
-    fn claim_outbound_leaf<'a>(
-        &self,
-        _leaf: ResolvedLeafOutbound<'a>,
-    ) -> Option<OutboundLeafClaim<'a>> {
-        None
-    }
-}
 
 #[cfg(feature = "mixed")]
 impl ProtocolSupportCapability for MixedAdapter {
