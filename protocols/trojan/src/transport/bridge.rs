@@ -3,10 +3,7 @@ use std::future::Future;
 use zero_core::Session;
 use zero_platform_tokio::TokioSocket;
 use zero_transport::managed_udp::{ManagedPacketUdpResume, ProtocolManagedStreamUdpBridgeOps};
-use zero_transport::outbound_leaf::{
-    ProtocolTcpTransportBridgeMetadata, ProtocolTcpTransportBridgeOps,
-    ProtocolUdpTransportBridgeMetadata,
-};
+use zero_transport::outbound_leaf::ProtocolTcpTransportBridgeOps;
 use zero_transport::RuntimeError;
 use zero_transport::TcpRelayStream;
 
@@ -19,22 +16,6 @@ pub struct TrojanTlsBridge;
 
 impl TrojanTlsBridge {
     pub fn on_config_reloaded(&self) {}
-}
-
-impl ProtocolTcpTransportBridgeMetadata for TrojanTlsBridge {
-    const TCP_CONNECT_STAGE: &'static str = "connect_upstream_trojan";
-    const TCP_INVALID_CONNECT_CONFIG: &'static str = "invalid trojan tcp config";
-    const TCP_INVALID_CONNECT_LEAF_STAGE: &'static str = "invalid trojan tcp leaf";
-    const TCP_INVALID_RELAY_CONFIG: &'static str = "invalid trojan tcp relay config";
-    const TCP_INVALID_RELAY_LEAF_STAGE: &'static str = "invalid trojan tcp relay leaf";
-    const EXPECTED_OUTBOUND_LEAF: &'static str = "expected Trojan outbound leaf";
-}
-
-impl ProtocolUdpTransportBridgeMetadata for TrojanTlsBridge {
-    const UDP_DIRECT_STAGE: &'static str = "udp_trojan_leaf";
-    const UDP_INVALID_CONFIG: &'static str = "invalid trojan udp config";
-    const UDP_RELAY_FINAL_STAGE: &'static str = "udp_trojan_relay_leaf";
-    const EXPECTED_OUTBOUND_LEAF: &'static str = "expected Trojan outbound leaf";
 }
 
 #[async_trait::async_trait]

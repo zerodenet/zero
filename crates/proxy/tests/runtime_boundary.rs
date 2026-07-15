@@ -1200,6 +1200,66 @@ fn managed_stream_udp_handlers_key_off_resume_metadata_not_bridge_types() {
 }
 
 #[test]
+fn transport_leaf_metadata_owns_live_runtime_stage_constants() {
+    let outbound_leaf = read(&workspace_root().join("crates/transport/src/outbound_leaf.rs"));
+    assert!(outbound_leaf.contains("pub trait ProtocolTcpTransportLeafMetadata"));
+    assert!(outbound_leaf.contains("pub trait ProtocolUdpTransportLeafMetadata"));
+    assert!(outbound_leaf.contains("pub trait ProtocolRelayTwoStreamUdpTransportLeafMetadata"));
+    assert!(!outbound_leaf.contains("pub trait ProtocolTcpTransportBridgeMetadata"));
+    assert!(!outbound_leaf.contains("pub trait ProtocolUdpTransportBridgeMetadata"));
+    assert!(!outbound_leaf.contains("pub trait ProtocolRelayTwoStreamUdpTransportBridgeMetadata"));
+    assert!(!outbound_leaf.contains("TCP_INVALID_CONNECT_LEAF_STAGE"));
+    assert!(!outbound_leaf.contains("TCP_INVALID_RELAY_LEAF_STAGE"));
+    assert!(!outbound_leaf.contains("EXPECTED_OUTBOUND_LEAF"));
+
+    let vless_leaf = read(&workspace_root().join("protocols/vless/src/transport/leaf.rs"));
+    assert!(vless_leaf.contains("impl ProtocolTcpTransportLeafMetadata for VlessOutboundLeaf"));
+    assert!(vless_leaf.contains("impl ProtocolUdpTransportLeafMetadata for VlessOutboundLeaf"));
+    assert!(vless_leaf
+        .contains("impl ProtocolRelayTwoStreamUdpTransportLeafMetadata for VlessOutboundLeaf"));
+
+    let vmess_leaf = read(&workspace_root().join("protocols/vmess/src/transport/leaf.rs"));
+    assert!(vmess_leaf.contains("impl ProtocolTcpTransportLeafMetadata for VmessOutboundLeaf"));
+    assert!(vmess_leaf.contains("impl ProtocolUdpTransportLeafMetadata for VmessOutboundLeaf"));
+
+    let trojan_leaf = read(&workspace_root().join("protocols/trojan/src/transport/leaf.rs"));
+    assert!(trojan_leaf.contains("impl ProtocolTcpTransportLeafMetadata for TrojanOutboundLeaf"));
+    assert!(trojan_leaf.contains("impl ProtocolUdpTransportLeafMetadata for TrojanOutboundLeaf"));
+
+    for relative in [
+        "protocols/vless/src/transport/bridge.rs",
+        "protocols/vmess/src/transport/bridge.rs",
+        "protocols/trojan/src/transport/bridge.rs",
+    ] {
+        let source = read(&workspace_root().join(relative));
+        assert!(
+            !source.contains("ProtocolTcpTransportBridgeMetadata"),
+            "{relative} must not keep TCP transport metadata on bridge types"
+        );
+        assert!(
+            !source.contains("ProtocolUdpTransportBridgeMetadata"),
+            "{relative} must not keep UDP transport metadata on bridge types"
+        );
+        assert!(
+            !source.contains("ProtocolRelayTwoStreamUdpTransportBridgeMetadata"),
+            "{relative} must not keep relay-two-stream UDP metadata on bridge types"
+        );
+        assert!(
+            !source.contains("TCP_INVALID_CONNECT_LEAF_STAGE"),
+            "{relative} must not carry dead TCP leaf-stage metadata"
+        );
+        assert!(
+            !source.contains("TCP_INVALID_RELAY_LEAF_STAGE"),
+            "{relative} must not carry dead TCP relay-leaf metadata"
+        );
+        assert!(
+            !source.contains("EXPECTED_OUTBOUND_LEAF"),
+            "{relative} must not carry unused expected-leaf bridge metadata"
+        );
+    }
+}
+
+#[test]
 fn packet_path_adapters_offer_claim_time_projection() {
     for relative in [
         "adapters/socks5.rs",

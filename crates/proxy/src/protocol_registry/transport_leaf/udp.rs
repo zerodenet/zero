@@ -13,12 +13,12 @@ use zero_transport::outbound_leaf::PreparedTransportBridgeLeaf;
 use zero_transport::outbound_leaf::{
     open_prepared_relay_two_stream_udp_transport, prepared_relay_two_stream_udp_resume,
     prepared_udp_relay_needs_two_streams, ProtocolRelayTwoStreamTransportLeaf,
-    ProtocolRelayTwoStreamUdpTransportBridgeMetadata,
+    ProtocolRelayTwoStreamUdpTransportLeafMetadata,
 };
 #[cfg(any(feature = "vless", feature = "vmess", feature = "trojan"))]
 use zero_transport::outbound_leaf::{
     prepared_direct_udp_resume, prepared_relay_final_hop_udp_resume, ProtocolTransportLeaf,
-    ProtocolUdpTransportBridgeMetadata,
+    ProtocolUdpTransportLeafMetadata,
 };
 
 use super::super::{ClaimedUdpFlowLeaf, UdpAdapterContext};
@@ -36,13 +36,8 @@ pub(crate) fn claim_transport_bridge_udp_leaf<'a, TBridge, TLeaf, F, E>(
     prepare_leaf: F,
 ) -> Box<dyn ClaimedUdpFlowLeaf<'a> + 'a>
 where
-    TBridge: Send
-        + Sync
-        + Clone
-        + 'a
-        + ProtocolUdpTransportBridgeMetadata
-        + ProtocolManagedStreamUdpBridgeOps<TLeaf>,
-    TLeaf: ProtocolTransportLeaf + Send + 'a,
+    TBridge: Send + Sync + Clone + 'a + ProtocolManagedStreamUdpBridgeOps<TLeaf>,
+    TLeaf: ProtocolTransportLeaf + ProtocolUdpTransportLeafMetadata + Send + 'a,
     F: Fn(Option<&Path>) -> Result<TLeaf, E> + Send + Sync + 'a,
     E: std::fmt::Display,
 {
@@ -64,11 +59,13 @@ where
         + Sync
         + Clone
         + 'a
-        + ProtocolUdpTransportBridgeMetadata
         + ProtocolManagedStreamUdpBridgeOps<TLeaf>
-        + ProtocolRelayTwoStreamUdpTransportBridgeMetadata
         + ProtocolRelayTwoStreamManagedUdpBridgeOps<TLeaf>,
-    TLeaf: ProtocolRelayTwoStreamTransportLeaf + Send + Sync + 'a,
+    TLeaf: ProtocolRelayTwoStreamTransportLeaf
+        + ProtocolRelayTwoStreamUdpTransportLeafMetadata
+        + Send
+        + Sync
+        + 'a,
     F: Fn(Option<&Path>) -> Result<TLeaf, E> + Send + Sync + 'a,
     E: std::fmt::Display,
 {
@@ -120,13 +117,8 @@ pub(crate) fn prepare_transport_bridge_udp_direct<'a, TBridge, TLeaf>(
     prepared: PreparedTransportBridgeLeaf<TLeaf>,
 ) -> Box<dyn PreparedUdpFlowOperation + 'a>
 where
-    TBridge: Send
-        + Sync
-        + Clone
-        + 'a
-        + ProtocolUdpTransportBridgeMetadata
-        + ProtocolManagedStreamUdpBridgeOps<TLeaf>,
-    TLeaf: ProtocolTransportLeaf + Send + 'a,
+    TBridge: Send + Sync + Clone + 'a + ProtocolManagedStreamUdpBridgeOps<TLeaf>,
+    TLeaf: ProtocolTransportLeaf + ProtocolUdpTransportLeafMetadata + Send + 'a,
 {
     Box::new(TransportBridgeUdpOperation::<TBridge, TLeaf> {
         bridge: bridge.clone(),
@@ -141,13 +133,8 @@ pub(crate) fn prepare_owned_transport_bridge_udp_relay_final_hop<'a, TBridge, TL
     prepared: PreparedTransportBridgeLeaf<TLeaf>,
 ) -> Box<dyn PreparedUdpFlowOperation + 'a>
 where
-    TBridge: Send
-        + Sync
-        + Clone
-        + 'a
-        + ProtocolUdpTransportBridgeMetadata
-        + ProtocolManagedStreamUdpBridgeOps<TLeaf>,
-    TLeaf: ProtocolTransportLeaf + Send + 'a,
+    TBridge: Send + Sync + Clone + 'a + ProtocolManagedStreamUdpBridgeOps<TLeaf>,
+    TLeaf: ProtocolTransportLeaf + ProtocolUdpTransportLeafMetadata + Send + 'a,
 {
     Box::new(TransportBridgeUdpOperation::<TBridge, TLeaf> {
         bridge: bridge.clone(),
@@ -163,13 +150,12 @@ pub(crate) fn prepare_owned_transport_bridge_udp_relay_two_stream<'a, TBridge, T
     prepared: PreparedTransportBridgeLeaf<TLeaf>,
 ) -> Box<dyn PreparedUdpFlowOperation + 'a>
 where
-    TBridge: Send
+    TBridge: Send + Sync + Clone + 'a + ProtocolRelayTwoStreamManagedUdpBridgeOps<TLeaf>,
+    TLeaf: ProtocolRelayTwoStreamTransportLeaf
+        + ProtocolRelayTwoStreamUdpTransportLeafMetadata
+        + Send
         + Sync
-        + Clone
-        + 'a
-        + ProtocolRelayTwoStreamUdpTransportBridgeMetadata
-        + ProtocolRelayTwoStreamManagedUdpBridgeOps<TLeaf>,
-    TLeaf: ProtocolRelayTwoStreamTransportLeaf + Send + Sync + 'a,
+        + 'a,
 {
     Box::new(RelayTwoStreamUdpOperation::<TBridge, TLeaf> {
         bridge: bridge.clone(),
@@ -185,9 +171,8 @@ pub(crate) fn transport_bridge_udp_relay_needs_two_streams<TBridge, TLeaf>(
     prepared: &PreparedTransportBridgeLeaf<TLeaf>,
 ) -> bool
 where
-    TBridge: ProtocolRelayTwoStreamUdpTransportBridgeMetadata
-        + ProtocolRelayTwoStreamManagedUdpBridgeOps<TLeaf>,
-    TLeaf: ProtocolRelayTwoStreamTransportLeaf,
+    TBridge: ProtocolRelayTwoStreamManagedUdpBridgeOps<TLeaf>,
+    TLeaf: ProtocolRelayTwoStreamTransportLeaf + ProtocolRelayTwoStreamUdpTransportLeafMetadata,
 {
     prepared_udp_relay_needs_two_streams(bridge, prepared)
 }
@@ -196,13 +181,8 @@ where
 impl<'a, TBridge, TLeaf, F, E> ClaimedUdpFlowLeaf<'a>
     for ClaimedTransportBridgeUdpLeaf<'a, TBridge, F>
 where
-    TBridge: Send
-        + Sync
-        + Clone
-        + 'a
-        + ProtocolUdpTransportBridgeMetadata
-        + ProtocolManagedStreamUdpBridgeOps<TLeaf>,
-    TLeaf: ProtocolTransportLeaf + Send + 'a,
+    TBridge: Send + Sync + Clone + 'a + ProtocolManagedStreamUdpBridgeOps<TLeaf>,
+    TLeaf: ProtocolTransportLeaf + ProtocolUdpTransportLeafMetadata + Send + 'a,
     F: Fn(Option<&Path>) -> Result<TLeaf, E> + Send + Sync + 'a,
     E: std::fmt::Display,
 {
@@ -213,10 +193,7 @@ where
         let prepared = (self.prepare_leaf)(source_dir)
             .map(PreparedTransportBridgeLeaf::new)
             .map_err(|error| {
-                transport_bridge_udp_direct_claim_prepare_failure::<TBridge, _>(
-                    self.upstream,
-                    error,
-                )
+                transport_bridge_udp_direct_claim_prepare_failure::<TLeaf, _>(self.upstream, error)
             })?;
         Ok(prepare_transport_bridge_udp_direct(&self.bridge, prepared))
     }
@@ -229,7 +206,7 @@ where
         let prepared = (self.prepare_leaf)(source_dir)
             .map(PreparedTransportBridgeLeaf::new)
             .map_err(|error| {
-                transport_bridge_udp_relay_final_claim_prepare_failure::<TBridge, _>(
+                transport_bridge_udp_relay_final_claim_prepare_failure::<TLeaf, _>(
                     self.upstream,
                     error,
                 )
@@ -250,11 +227,13 @@ where
         + Sync
         + Clone
         + 'a
-        + ProtocolUdpTransportBridgeMetadata
         + ProtocolManagedStreamUdpBridgeOps<TLeaf>
-        + ProtocolRelayTwoStreamUdpTransportBridgeMetadata
         + ProtocolRelayTwoStreamManagedUdpBridgeOps<TLeaf>,
-    TLeaf: ProtocolRelayTwoStreamTransportLeaf + Send + Sync + 'a,
+    TLeaf: ProtocolRelayTwoStreamTransportLeaf
+        + ProtocolRelayTwoStreamUdpTransportLeafMetadata
+        + Send
+        + Sync
+        + 'a,
     F: Fn(Option<&Path>) -> Result<TLeaf, E> + Send + Sync + 'a,
     E: std::fmt::Display,
 {
@@ -265,10 +244,7 @@ where
         let prepared = (self.prepare_leaf)(source_dir)
             .map(PreparedTransportBridgeLeaf::new)
             .map_err(|error| {
-                transport_bridge_udp_direct_claim_prepare_failure::<TBridge, _>(
-                    self.upstream,
-                    error,
-                )
+                transport_bridge_udp_direct_claim_prepare_failure::<TLeaf, _>(self.upstream, error)
             })?;
         Ok(prepare_transport_bridge_udp_direct(&self.bridge, prepared))
     }
@@ -289,7 +265,7 @@ where
         let prepared = (self.prepare_leaf)(source_dir)
             .map(PreparedTransportBridgeLeaf::new)
             .map_err(|error| {
-                transport_bridge_udp_relay_final_claim_prepare_failure::<TBridge, _>(
+                transport_bridge_udp_relay_final_claim_prepare_failure::<TLeaf, _>(
                     self.upstream,
                     error,
                 )
@@ -310,7 +286,7 @@ where
         let prepared = (self.prepare_leaf)(source_dir)
             .map(PreparedTransportBridgeLeaf::new)
             .map_err(|error| {
-                transport_bridge_udp_two_stream_claim_prepare_failure::<TBridge, _>(
+                transport_bridge_udp_two_stream_claim_prepare_failure::<TLeaf, _>(
                     self.upstream,
                     error,
                 )
@@ -327,9 +303,8 @@ where
 #[cfg(any(feature = "vless", feature = "vmess", feature = "trojan"))]
 impl<TBridge, TLeaf> PreparedUdpFlowOperation for TransportBridgeUdpOperation<TBridge, TLeaf>
 where
-    TBridge:
-        Send + Sync + ProtocolUdpTransportBridgeMetadata + ProtocolManagedStreamUdpBridgeOps<TLeaf>,
-    TLeaf: ProtocolTransportLeaf + Send,
+    TBridge: Send + Sync + ProtocolManagedStreamUdpBridgeOps<TLeaf>,
+    TLeaf: ProtocolTransportLeaf + ProtocolUdpTransportLeafMetadata + Send,
 {
     fn execute<'a>(
         self: Box<Self>,
@@ -358,11 +333,11 @@ where
 #[cfg(feature = "vless")]
 impl<TBridge, TLeaf> PreparedUdpFlowOperation for RelayTwoStreamUdpOperation<TBridge, TLeaf>
 where
-    TBridge: Send
-        + Sync
-        + ProtocolRelayTwoStreamUdpTransportBridgeMetadata
-        + ProtocolRelayTwoStreamManagedUdpBridgeOps<TLeaf>,
-    TLeaf: ProtocolRelayTwoStreamTransportLeaf + Send + Sync,
+    TBridge: Send + Sync + ProtocolRelayTwoStreamManagedUdpBridgeOps<TLeaf>,
+    TLeaf: ProtocolRelayTwoStreamTransportLeaf
+        + ProtocolRelayTwoStreamUdpTransportLeafMetadata
+        + Send
+        + Sync,
 {
     fn execute<'a>(
         self: Box<Self>,
@@ -403,64 +378,60 @@ fn udp_flow_failure(
     }
 }
 
-fn transport_bridge_udp_direct_claim_prepare_failure<TBridge, E>(
+fn transport_bridge_udp_direct_claim_prepare_failure<TLeaf, E>(
     upstream: Option<(&str, u16)>,
     error: E,
 ) -> FlowFailure
 where
-    TBridge: ProtocolUdpTransportBridgeMetadata,
+    TLeaf: ProtocolUdpTransportLeafMetadata,
     E: std::fmt::Display,
 {
-    transport_bridge_udp_claim_prepare_failure::<TBridge, E>(
-        upstream,
-        error,
-        TBridge::UDP_DIRECT_STAGE,
-    )
+    transport_bridge_udp_claim_prepare_failure::<TLeaf, E>(upstream, error, TLeaf::UDP_DIRECT_STAGE)
 }
 
-fn transport_bridge_udp_relay_final_claim_prepare_failure<TBridge, E>(
+fn transport_bridge_udp_relay_final_claim_prepare_failure<TLeaf, E>(
     upstream: Option<(&str, u16)>,
     error: E,
 ) -> FlowFailure
 where
-    TBridge: ProtocolUdpTransportBridgeMetadata,
+    TLeaf: ProtocolUdpTransportLeafMetadata,
     E: std::fmt::Display,
 {
-    transport_bridge_udp_claim_prepare_failure::<TBridge, E>(
+    transport_bridge_udp_claim_prepare_failure::<TLeaf, E>(
         upstream,
         error,
-        TBridge::UDP_RELAY_FINAL_STAGE,
+        TLeaf::UDP_RELAY_FINAL_STAGE,
     )
 }
 
 #[cfg(feature = "vless")]
-fn transport_bridge_udp_two_stream_claim_prepare_failure<TBridge, E>(
+fn transport_bridge_udp_two_stream_claim_prepare_failure<TLeaf, E>(
     upstream: Option<(&str, u16)>,
     error: E,
 ) -> FlowFailure
 where
-    TBridge: ProtocolRelayTwoStreamUdpTransportBridgeMetadata + ProtocolUdpTransportBridgeMetadata,
+    TLeaf: ProtocolRelayTwoStreamUdpTransportLeafMetadata,
     E: std::fmt::Display,
 {
-    transport_bridge_udp_claim_prepare_failure::<TBridge, E>(
+    transport_bridge_udp_claim_prepare_failure::<TLeaf, E>(
         upstream,
         error,
-        TBridge::UDP_RELAY_CAPABILITY_STAGE,
+        TLeaf::UDP_RELAY_CAPABILITY_STAGE,
     )
 }
 
-fn transport_bridge_udp_claim_prepare_failure<TBridge, E>(
+fn transport_bridge_udp_claim_prepare_failure<TLeaf, E>(
     upstream: Option<(&str, u16)>,
     error: E,
     stage: &'static str,
 ) -> FlowFailure
 where
-    TBridge: ProtocolUdpTransportBridgeMetadata,
+    TLeaf: ProtocolUdpTransportLeafMetadata,
     E: std::fmt::Display,
 {
     FlowFailure {
         stage,
-        error: invalid_input(TBridge::UDP_INVALID_CONFIG, error),
+        error: invalid_input(TLeaf::UDP_INVALID_CONFIG, error),
         upstream: upstream.map(|(server, port)| (server.to_owned(), port)),
     }
 }
@@ -484,9 +455,8 @@ async fn execute_relay_two_stream_udp_operation<TBridge, TLeaf>(
     prepared: PreparedTransportBridgeLeaf<TLeaf>,
 ) -> Result<FlowStartResult, FlowFailure>
 where
-    TBridge: ProtocolRelayTwoStreamUdpTransportBridgeMetadata
-        + ProtocolRelayTwoStreamManagedUdpBridgeOps<TLeaf>,
-    TLeaf: ProtocolRelayTwoStreamTransportLeaf,
+    TBridge: ProtocolRelayTwoStreamManagedUdpBridgeOps<TLeaf>,
+    TLeaf: ProtocolRelayTwoStreamTransportLeaf + ProtocolRelayTwoStreamUdpTransportLeafMetadata,
 {
     let mut context = dispatch.flow_start_context();
     let endpoint = prepared.endpoint();
@@ -498,7 +468,7 @@ where
     )
     .await
     .map_err(|error| FlowFailure {
-        stage: TBridge::UDP_RELAY_CHAIN_STAGE,
+        stage: TLeaf::UDP_RELAY_CHAIN_STAGE,
         error: error.into(),
         upstream: None,
     })?;
@@ -535,8 +505,8 @@ async fn execute_transport_udp_operation<TBridge, TLeaf>(
     operation: PreparedTransportUdpOperation<TLeaf>,
 ) -> Result<FlowStartResult, FlowFailure>
 where
-    TBridge: ProtocolUdpTransportBridgeMetadata + ProtocolManagedStreamUdpBridgeOps<TLeaf>,
-    TLeaf: ProtocolTransportLeaf,
+    TBridge: ProtocolManagedStreamUdpBridgeOps<TLeaf>,
+    TLeaf: ProtocolTransportLeaf + ProtocolUdpTransportLeafMetadata,
 {
     match operation {
         PreparedTransportUdpOperation::Direct { prepared } => {

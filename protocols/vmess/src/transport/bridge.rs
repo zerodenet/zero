@@ -3,10 +3,7 @@ use std::future::Future;
 use zero_core::Session;
 use zero_platform_tokio::{TcpRelayStream, TokioSocket};
 use zero_transport::managed_udp::{ManagedTupleUdpResume, ProtocolManagedStreamUdpBridgeOps};
-use zero_transport::outbound_leaf::{
-    ProtocolTcpTransportBridgeMetadata, ProtocolTcpTransportBridgeOps,
-    ProtocolUdpTransportBridgeMetadata,
-};
+use zero_transport::outbound_leaf::ProtocolTcpTransportBridgeOps;
 use zero_transport::RuntimeError;
 
 use super::leaf::VmessOutboundLeaf;
@@ -21,22 +18,6 @@ impl VmessStreamBridge {
     pub fn on_config_reloaded(&self) {
         self.mux_pool.evict_all();
     }
-}
-
-impl ProtocolTcpTransportBridgeMetadata for VmessStreamBridge {
-    const TCP_CONNECT_STAGE: &'static str = "connect_upstream_vmess";
-    const TCP_INVALID_CONNECT_CONFIG: &'static str = "invalid vmess tcp config";
-    const TCP_INVALID_CONNECT_LEAF_STAGE: &'static str = "invalid vmess tcp leaf";
-    const TCP_INVALID_RELAY_CONFIG: &'static str = "invalid vmess tcp relay config";
-    const TCP_INVALID_RELAY_LEAF_STAGE: &'static str = "invalid vmess tcp relay leaf";
-    const EXPECTED_OUTBOUND_LEAF: &'static str = "expected VMess outbound leaf";
-}
-
-impl ProtocolUdpTransportBridgeMetadata for VmessStreamBridge {
-    const UDP_DIRECT_STAGE: &'static str = "udp_vmess_leaf";
-    const UDP_INVALID_CONFIG: &'static str = "invalid vmess udp config";
-    const UDP_RELAY_FINAL_STAGE: &'static str = "udp_vmess_relay_final_leaf";
-    const EXPECTED_OUTBOUND_LEAF: &'static str = "expected VMess outbound leaf";
 }
 
 #[async_trait::async_trait]

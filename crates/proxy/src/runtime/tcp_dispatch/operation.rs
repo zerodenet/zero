@@ -15,7 +15,7 @@ use zero_engine::EngineError;
 use zero_transport::outbound_leaf::{
     open_prepared_tcp_transport_bridge_relay_hop, open_prepared_tcp_transport_bridge_stream,
     PreparedTransportBridgeLeaf, ProtocolSessionTcpHandshake, ProtocolSocketTcpHandshake,
-    ProtocolTcpTransportBridgeMetadata, ProtocolTcpTransportBridgeOps,
+    ProtocolTcpTransportBridgeOps, ProtocolTcpTransportLeafMetadata,
     ProtocolTcpTransportOpenResult, ProtocolTransportLeaf,
 };
 
@@ -234,9 +234,8 @@ pub(crate) struct TransportBridgeTcpConnectOperation<TBridge, TLeaf> {
 impl<TBridge, TLeaf> PreparedTcpConnectOperation
     for TransportBridgeTcpConnectOperation<TBridge, TLeaf>
 where
-    TBridge:
-        Send + Sync + ProtocolTcpTransportBridgeMetadata + ProtocolTcpTransportBridgeOps<TLeaf>,
-    TLeaf: ProtocolTransportLeaf + Send + Sync,
+    TBridge: Send + Sync + ProtocolTcpTransportBridgeOps<TLeaf>,
+    TLeaf: ProtocolTransportLeaf + ProtocolTcpTransportLeafMetadata + Send + Sync,
     TBridge::Opened: ProtocolTcpTransportOpenResult,
 {
     fn execute<'a>(
@@ -265,7 +264,7 @@ where
             )
             .await
             .map_err(|error| TcpOutboundFailure {
-                stage: TBridge::TCP_CONNECT_STAGE,
+                stage: TLeaf::TCP_CONNECT_STAGE,
                 error: error.into(),
                 upstream_endpoint: Some((server.clone(), port)),
             })?;

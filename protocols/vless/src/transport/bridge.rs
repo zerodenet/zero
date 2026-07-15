@@ -8,10 +8,7 @@ use zero_transport::managed_udp::{
     ManagedTupleUdpResume, ProtocolManagedStreamUdpBridgeOps,
     ProtocolRelayTwoStreamManagedUdpBridgeOps,
 };
-use zero_transport::outbound_leaf::{
-    ProtocolRelayTwoStreamUdpTransportBridgeMetadata, ProtocolTcpTransportBridgeMetadata,
-    ProtocolTcpTransportBridgeOps, ProtocolUdpTransportBridgeMetadata,
-};
+use zero_transport::outbound_leaf::ProtocolTcpTransportBridgeOps;
 
 use super::leaf::VlessOutboundLeaf;
 use super::managed_udp::VlessManagedStreamUdpResume;
@@ -25,27 +22,6 @@ impl VlessStreamBridge {
     pub fn on_config_reloaded(&self) {
         self.mux_pool.evict_all();
     }
-}
-
-impl ProtocolTcpTransportBridgeMetadata for VlessStreamBridge {
-    const TCP_CONNECT_STAGE: &'static str = "connect_upstream_vless";
-    const TCP_INVALID_CONNECT_CONFIG: &'static str = "invalid vless tcp config";
-    const TCP_INVALID_CONNECT_LEAF_STAGE: &'static str = "invalid vless tcp leaf";
-    const TCP_INVALID_RELAY_CONFIG: &'static str = "invalid vless tcp relay config";
-    const TCP_INVALID_RELAY_LEAF_STAGE: &'static str = "invalid vless tcp relay leaf";
-    const EXPECTED_OUTBOUND_LEAF: &'static str = "expected VLESS outbound leaf";
-}
-
-impl ProtocolUdpTransportBridgeMetadata for VlessStreamBridge {
-    const UDP_DIRECT_STAGE: &'static str = "udp_vless_leaf";
-    const UDP_INVALID_CONFIG: &'static str = "invalid vless udp config";
-    const UDP_RELAY_FINAL_STAGE: &'static str = "udp_vless_relay_final_leaf";
-    const EXPECTED_OUTBOUND_LEAF: &'static str = "expected VLESS outbound leaf";
-}
-
-impl ProtocolRelayTwoStreamUdpTransportBridgeMetadata for VlessStreamBridge {
-    const UDP_RELAY_CAPABILITY_STAGE: &'static str = "udp_vless_relay_capability";
-    const UDP_RELAY_CHAIN_STAGE: &'static str = "udp_vless_relay_chain";
 }
 
 #[async_trait::async_trait]

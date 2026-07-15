@@ -3,7 +3,10 @@ use std::path::Path;
 
 use zero_core::Session;
 use zero_platform_tokio::TokioSocket;
-use zero_transport::outbound_leaf::{ProtocolTcpTransportOpenResult, ProtocolTransportLeaf};
+use zero_transport::outbound_leaf::{
+    ProtocolTcpTransportLeafMetadata, ProtocolTcpTransportOpenResult, ProtocolTransportLeaf,
+    ProtocolUdpTransportLeafMetadata,
+};
 use zero_transport::RuntimeError;
 use zero_transport::{StreamTraffic, TcpRelayStream};
 
@@ -177,6 +180,18 @@ impl ProtocolTransportLeaf for TrojanOutboundLeaf {
     fn port(&self) -> u16 {
         self.port
     }
+}
+
+impl ProtocolTcpTransportLeafMetadata for TrojanOutboundLeaf {
+    const TCP_CONNECT_STAGE: &'static str = "connect_upstream_trojan";
+    const TCP_INVALID_CONNECT_CONFIG: &'static str = "invalid trojan tcp config";
+    const TCP_INVALID_RELAY_CONFIG: &'static str = "invalid trojan tcp relay config";
+}
+
+impl ProtocolUdpTransportLeafMetadata for TrojanOutboundLeaf {
+    const UDP_DIRECT_STAGE: &'static str = "udp_trojan_leaf";
+    const UDP_INVALID_CONFIG: &'static str = "invalid trojan udp config";
+    const UDP_RELAY_FINAL_STAGE: &'static str = "udp_trojan_relay_leaf";
 }
 
 impl ProtocolTcpTransportOpenResult for TrojanTcpStreamOpen {

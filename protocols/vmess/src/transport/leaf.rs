@@ -5,7 +5,8 @@ use zero_core::Session;
 use zero_platform_tokio::{TcpRelayStream, TokioSocket};
 use zero_traits::{ClientTlsProfile, GrpcTransportProfile, WebSocketTransportProfile};
 use zero_transport::outbound_leaf::{
-    clone_socket_opener, ProtocolTcpTransportOpenResult, ProtocolTransportLeaf,
+    clone_socket_opener, ProtocolTcpTransportLeafMetadata, ProtocolTcpTransportOpenResult,
+    ProtocolTransportLeaf, ProtocolUdpTransportLeafMetadata,
 };
 use zero_transport::transport_plan::{direct_stream_opener, relay_stream_opener};
 use zero_transport::RuntimeError;
@@ -211,6 +212,18 @@ impl ProtocolTransportLeaf for VmessOutboundLeaf {
     fn port(&self) -> u16 {
         self.port
     }
+}
+
+impl ProtocolTcpTransportLeafMetadata for VmessOutboundLeaf {
+    const TCP_CONNECT_STAGE: &'static str = "connect_upstream_vmess";
+    const TCP_INVALID_CONNECT_CONFIG: &'static str = "invalid vmess tcp config";
+    const TCP_INVALID_RELAY_CONFIG: &'static str = "invalid vmess tcp relay config";
+}
+
+impl ProtocolUdpTransportLeafMetadata for VmessOutboundLeaf {
+    const UDP_DIRECT_STAGE: &'static str = "udp_vmess_leaf";
+    const UDP_INVALID_CONFIG: &'static str = "invalid vmess udp config";
+    const UDP_RELAY_FINAL_STAGE: &'static str = "udp_vmess_relay_final_leaf";
 }
 
 impl ProtocolTcpTransportOpenResult for crate::outbound::VmessTcpStreamOpen {

@@ -10,8 +10,9 @@ use zero_traits::{
 use zero_transport::RuntimeError;
 
 use zero_transport::outbound_leaf::{
-    clone_socket_opener, ProtocolRelayTwoStreamTransportLeaf, ProtocolTcpTransportOpenResult,
-    ProtocolTransportLeaf,
+    clone_socket_opener, ProtocolRelayTwoStreamTransportLeaf,
+    ProtocolRelayTwoStreamUdpTransportLeafMetadata, ProtocolTcpTransportLeafMetadata,
+    ProtocolTcpTransportOpenResult, ProtocolTransportLeaf, ProtocolUdpTransportLeafMetadata,
 };
 use zero_transport::transport_plan::{direct_stream_opener, relay_stream_opener};
 use zero_transport::StreamTraffic;
@@ -293,6 +294,23 @@ impl ProtocolTransportLeaf for VlessOutboundLeaf {
         }
         Ok(())
     }
+}
+
+impl ProtocolTcpTransportLeafMetadata for VlessOutboundLeaf {
+    const TCP_CONNECT_STAGE: &'static str = "connect_upstream_vless";
+    const TCP_INVALID_CONNECT_CONFIG: &'static str = "invalid vless tcp config";
+    const TCP_INVALID_RELAY_CONFIG: &'static str = "invalid vless tcp relay config";
+}
+
+impl ProtocolUdpTransportLeafMetadata for VlessOutboundLeaf {
+    const UDP_DIRECT_STAGE: &'static str = "udp_vless_leaf";
+    const UDP_INVALID_CONFIG: &'static str = "invalid vless udp config";
+    const UDP_RELAY_FINAL_STAGE: &'static str = "udp_vless_relay_final_leaf";
+}
+
+impl ProtocolRelayTwoStreamUdpTransportLeafMetadata for VlessOutboundLeaf {
+    const UDP_RELAY_CAPABILITY_STAGE: &'static str = "udp_vless_relay_capability";
+    const UDP_RELAY_CHAIN_STAGE: &'static str = "udp_vless_relay_chain";
 }
 
 impl ProtocolTcpTransportOpenResult for crate::outbound::VlessTcpStreamOpen {

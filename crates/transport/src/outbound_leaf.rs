@@ -65,13 +65,10 @@ pub trait ProtocolTcpTransportOpenResult {
     fn into_proxied_stream_parts(self) -> (TcpRelayStream, StreamTraffic);
 }
 
-pub trait ProtocolTcpTransportBridgeMetadata {
+pub trait ProtocolTcpTransportLeafMetadata: ProtocolTransportLeaf {
     const TCP_CONNECT_STAGE: &'static str;
     const TCP_INVALID_CONNECT_CONFIG: &'static str;
-    const TCP_INVALID_CONNECT_LEAF_STAGE: &'static str;
     const TCP_INVALID_RELAY_CONFIG: &'static str;
-    const TCP_INVALID_RELAY_LEAF_STAGE: &'static str;
-    const EXPECTED_OUTBOUND_LEAF: &'static str;
 }
 
 #[async_trait::async_trait]
@@ -95,16 +92,13 @@ pub trait ProtocolTcpTransportBridgeOps<TLeaf>: Send + Sync {
         leaf: &TLeaf,
     ) -> Result<TcpRelayStream, RuntimeError>;
 }
-pub trait ProtocolUdpTransportBridgeMetadata {
+pub trait ProtocolUdpTransportLeafMetadata: ProtocolTransportLeaf {
     const UDP_DIRECT_STAGE: &'static str;
     const UDP_INVALID_CONFIG: &'static str;
     const UDP_RELAY_FINAL_STAGE: &'static str;
-    const EXPECTED_OUTBOUND_LEAF: &'static str;
 }
 
-pub trait ProtocolRelayTwoStreamUdpTransportBridgeMetadata:
-    ProtocolUdpTransportBridgeMetadata
-{
+pub trait ProtocolRelayTwoStreamUdpTransportLeafMetadata: ProtocolUdpTransportLeafMetadata {
     const UDP_RELAY_CAPABILITY_STAGE: &'static str;
     const UDP_RELAY_CHAIN_STAGE: &'static str;
 }
