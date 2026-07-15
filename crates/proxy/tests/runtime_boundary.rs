@@ -42,6 +42,26 @@ fn read(path: &Path) -> String {
     fs::read_to_string(path).unwrap_or_else(|error| panic!("read {}: {error}", path.display()))
 }
 
+fn read_module(path: &Path) -> String {
+    let mut combined = String::new();
+    if path.is_file() {
+        combined.push_str(&read(path));
+        combined.push('\n');
+    }
+    let module_dir = if path.extension().is_some_and(|extension| extension == "rs") {
+        path.with_extension("")
+    } else {
+        path.to_path_buf()
+    };
+    if module_dir.is_dir() {
+        for source in rust_sources(&module_dir) {
+            combined.push_str(&read(&source));
+            combined.push('\n');
+        }
+    }
+    combined
+}
+
 fn assert_sources_exclude(root: &Path, forbidden: &[&str]) {
     for path in rust_sources(root) {
         let source = read(&path);
@@ -94,7 +114,7 @@ fn runtime_operations_are_protocol_neutral() {
     ];
     for relative in operation_files {
         let path = proxy_src().join(relative);
-        let source = read(&path);
+        let source = read_module(&path);
         for protocol in protocol_names {
             assert!(
                 !source.contains(protocol),
@@ -234,8 +254,8 @@ fn capability_surface_is_split_and_context_is_narrow() {
     assert!(context.contains("pub(crate) struct UdpAdapterContext<'a> {\n    source_dir: Option<&'a std::path::Path>,\n    services: UdpRuntimeServices,"));
     assert!(!context.contains("pub(crate) struct UdpAdapterContext<'a> {\n    proxy: &'a Proxy,"));
     let tcp_leaf = read(&proxy_src().join("inventory/tcp/leaf.rs"));
-    let tcp_operation = read(&proxy_src().join("runtime/tcp_dispatch/operation.rs"));
-    let udp_operation = read(&proxy_src().join("runtime/udp_dispatch/operation.rs"));
+    let tcp_operation = read_module(&proxy_src().join("runtime/tcp_dispatch/operation.rs"));
+    let udp_operation = read_module(&proxy_src().join("runtime/udp_dispatch/operation.rs"));
     assert!(tcp_leaf.contains("OutboundAdapterContext"));
     assert!(tcp_operation.contains("TcpRuntimeServices"));
     assert!(udp_operation.contains("UdpAdapterContext"));
@@ -243,7 +263,7 @@ fn capability_surface_is_split_and_context_is_narrow() {
 
 #[test]
 fn transport_leaf_operations_are_generic() {
-    let tcp = read(&proxy_src().join("runtime/tcp_dispatch/operation.rs"));
+    let tcp = read_module(&proxy_src().join("runtime/tcp_dispatch/operation.rs"));
     let udp = rust_sources(&proxy_src().join("protocol_registry/transport_leaf"))
         .into_iter()
         .map(|path| read(&path))
@@ -1800,7 +1820,7 @@ fn managed_udp_forward_paths_use_runtime_services_instead_of_proxy() {
 
 #[test]
 fn tcp_dispatch_operations_use_runtime_services_for_connect_flows() {
-    let operation = read(&proxy_src().join("runtime/tcp_dispatch/operation.rs"));
+    let operation = read_module(&proxy_src().join("runtime/tcp_dispatch/operation.rs"));
     assert!(operation.contains("TcpRuntimeServices"));
     assert!(!operation.contains("ctx.proxy()"));
 }
