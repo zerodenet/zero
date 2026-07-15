@@ -2,7 +2,7 @@ use ::socks5::transport::Socks5ManagedUdpPacketPathPlan;
 use zero_engine::{EngineError, ResolvedLeafOutbound};
 
 use crate::adapters::socks5::Socks5Adapter;
-use crate::protocol_registry::ProtocolSupportCapability;
+use crate::protocol_registry::{ClaimedUdpPacketPathLeaf, ProtocolSupportCapability};
 use crate::runtime::udp_dispatch::packet_path_operation::PreparedUdpPacketPathOperation;
 use crate::runtime::udp_dispatch::FlowFailure;
 use crate::runtime::udp_flow::registered::UpstreamAssociationHandler;
@@ -13,6 +13,18 @@ mod upstream_association;
 
 struct Socks5PacketPathOperation {
     plan: Socks5ManagedUdpPacketPathPlan,
+}
+
+struct ClaimedSocks5PacketPathLeaf {
+    plan: Socks5ManagedUdpPacketPathPlan,
+}
+
+impl<'a> ClaimedUdpPacketPathLeaf<'a> for ClaimedSocks5PacketPathLeaf {
+    fn prepare_udp_packet_path(&self) -> Option<Box<dyn PreparedUdpPacketPathOperation + 'a>> {
+        Some(Box::new(Socks5PacketPathOperation {
+            plan: self.plan.clone(),
+        }))
+    }
 }
 
 impl PreparedUdpPacketPathOperation for Socks5PacketPathOperation {
@@ -50,6 +62,16 @@ pub(crate) fn upstream_association_handler() -> Box<dyn UpstreamAssociationHandl
 }
 
 impl Socks5Adapter {
+    pub(super) fn claim_udp_packet_path_leaf_impl<'a>(
+        &self,
+        leaf: ResolvedLeafOutbound<'a>,
+    ) -> Option<Box<dyn ClaimedUdpPacketPathLeaf<'a> + 'a>> {
+        let leaf = super::transport_leaf(&leaf)?;
+        Some(Box::new(ClaimedSocks5PacketPathLeaf {
+            plan: leaf.udp_packet_path_plan(),
+        }))
+    }
+
     pub(super) fn prepare_udp_packet_path_impl<'a>(
         &self,
         leaf: ResolvedLeafOutbound<'a>,

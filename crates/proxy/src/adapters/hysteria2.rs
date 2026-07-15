@@ -11,9 +11,9 @@ use crate::adapters::identity::{
     named_protocol_supports_outbound, NamedProtocolAdapter,
 };
 use crate::protocol_registry::{
-    bind_transport_inbound, proxy_leaf_runtime, BoundInbound, InboundListenerCapability,
-    ManagedUdpHandlerProvider, OutboundLeafRuntime, ProtocolSupportCapability,
-    TcpOutboundCapability, UdpFlowCapability, UdpPacketPathCapability,
+    bind_transport_inbound, proxy_leaf_runtime, BoundInbound, ClaimedUdpPacketPathLeaf,
+    InboundListenerCapability, ManagedUdpHandlerProvider, OutboundLeafRuntime,
+    ProtocolSupportCapability, TcpOutboundCapability, UdpFlowCapability, UdpPacketPathCapability,
 };
 use crate::runtime::path::TcpPathCategory;
 use crate::runtime::udp_dispatch::FlowFailure;
@@ -62,6 +62,13 @@ impl NamedProtocolAdapter for Hysteria2Adapter {
 
 #[cfg(feature = "hysteria2")]
 impl UdpPacketPathCapability for Hysteria2Adapter {
+    fn claim_udp_packet_path_leaf<'a>(
+        &self,
+        leaf: ResolvedLeafOutbound<'a>,
+    ) -> Option<Box<dyn ClaimedUdpPacketPathLeaf<'a> + 'a>> {
+        self.claim_udp_packet_path_leaf_impl(leaf)
+    }
+
     fn prepare_udp_packet_path<'a>(
         &self,
         leaf: ResolvedLeafOutbound<'a>,

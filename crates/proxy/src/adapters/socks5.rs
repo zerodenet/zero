@@ -10,8 +10,9 @@ use crate::adapters::identity::{
     named_protocol_supports_outbound, NamedProtocolAdapter,
 };
 use crate::protocol_registry::{
-    proxy_leaf_runtime, InboundListenerCapability, OutboundLeafRuntime, ProtocolSupportCapability,
-    TcpOutboundCapability, UdpFlowCapability, UdpPacketPathCapability, UpstreamUdpHandlerProvider,
+    proxy_leaf_runtime, ClaimedUdpPacketPathLeaf, InboundListenerCapability, OutboundLeafRuntime,
+    ProtocolSupportCapability, TcpOutboundCapability, UdpFlowCapability, UdpPacketPathCapability,
+    UpstreamUdpHandlerProvider,
 };
 use crate::runtime::path::TcpPathCategory;
 use crate::runtime::udp_dispatch::FlowFailure;
@@ -57,6 +58,13 @@ impl NamedProtocolAdapter for Socks5Adapter {
 
 #[cfg(feature = "socks5")]
 impl UdpPacketPathCapability for Socks5Adapter {
+    fn claim_udp_packet_path_leaf<'a>(
+        &self,
+        leaf: ResolvedLeafOutbound<'a>,
+    ) -> Option<Box<dyn ClaimedUdpPacketPathLeaf<'a> + 'a>> {
+        self.claim_udp_packet_path_leaf_impl(leaf)
+    }
+
     fn prepare_udp_packet_path<'a>(
         &self,
         leaf: ResolvedLeafOutbound<'a>,

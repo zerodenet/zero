@@ -1,8 +1,9 @@
 use zero_engine::{EngineError, ResolvedLeafOutbound};
 
 use crate::adapters::shadowsocks::ShadowsocksAdapter;
-use crate::protocol_registry::unreachable_udp_leaf;
-use crate::protocol_registry::ProtocolSupportCapability;
+use crate::protocol_registry::{
+    unreachable_udp_leaf, ClaimedUdpPacketPathLeaf, ProtocolSupportCapability,
+};
 use crate::runtime::udp_dispatch::packet_path_operation::PreparedUdpPacketPathOperation;
 use crate::runtime::udp_dispatch::FlowFailure;
 use crate::runtime::udp_flow::managed::{
@@ -66,6 +67,18 @@ struct ShadowsocksPacketPathOperation {
     plan: ShadowsocksManagedUdpPacketPathPlan,
 }
 
+struct ClaimedShadowsocksPacketPathLeaf {
+    plan: ShadowsocksManagedUdpPacketPathPlan,
+}
+
+impl<'a> ClaimedUdpPacketPathLeaf<'a> for ClaimedShadowsocksPacketPathLeaf {
+    fn prepare_udp_packet_path(&self) -> Option<Box<dyn PreparedUdpPacketPathOperation + 'a>> {
+        Some(Box::new(ShadowsocksPacketPathOperation {
+            plan: self.plan.clone(),
+        }))
+    }
+}
+
 impl PreparedUdpPacketPathOperation for ShadowsocksPacketPathOperation {
     fn carrier_descriptor(&self) -> Option<PacketPathCarrierDescriptor> {
         Some(packet_path_carrier_descriptor(self.plan.clone()))
@@ -100,6 +113,16 @@ pub(crate) fn managed_datagram_handler() -> Box<dyn ManagedDatagramFlowHandler> 
 }
 
 impl ShadowsocksAdapter {
+    pub(super) fn claim_udp_packet_path_leaf_impl<'a>(
+        &self,
+        leaf: ResolvedLeafOutbound<'a>,
+    ) -> Option<Box<dyn ClaimedUdpPacketPathLeaf<'a> + 'a>> {
+        let leaf = super::transport_leaf(&leaf)?;
+        Some(Box::new(ClaimedShadowsocksPacketPathLeaf {
+            plan: leaf.udp_packet_path_plan().ok()?,
+        }))
+    }
+
     pub(super) fn prepare_udp_packet_path_impl<'a>(
         &self,
         leaf: ResolvedLeafOutbound<'a>,

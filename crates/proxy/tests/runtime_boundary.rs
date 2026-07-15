@@ -753,6 +753,37 @@ fn transport_bridge_adapters_offer_claim_time_udp_projection() {
 }
 
 #[test]
+fn packet_path_adapters_offer_claim_time_projection() {
+    for relative in [
+        "adapters/socks5.rs",
+        "adapters/shadowsocks.rs",
+        "adapters/hysteria2.rs",
+    ] {
+        let source = read(&proxy_src().join(relative));
+        assert!(
+            source.contains("fn claim_udp_packet_path_leaf<'a>("),
+            "{relative} should expose a claim-time packet-path leaf projection path"
+        );
+    }
+
+    for relative in [
+        "adapters/socks5/udp.rs",
+        "adapters/shadowsocks/udp.rs",
+        "adapters/hysteria2/udp.rs",
+    ] {
+        let source = read(&proxy_src().join(relative));
+        assert!(
+            source.contains("ClaimedUdpPacketPathLeaf"),
+            "{relative} should materialize packet-path plans into claimed leaves"
+        );
+        assert!(
+            source.contains("claim_udp_packet_path_leaf_impl"),
+            "{relative} should own the packet-path claim-time projection helper"
+        );
+    }
+}
+
+#[test]
 fn urltest_probe_uses_generic_tcp_outbound_dispatch() {
     let urltest = read(&proxy_src().join("groups/urltest.rs"));
     assert!(urltest.contains("dispatch_tcp_outbound("));
