@@ -95,15 +95,6 @@ pub type VlessInboundUserConfigParts = (
     Option<u64>,
 );
 
-pub type BorrowedVlessInboundUserConfigParts<'a> = (
-    &'a str,
-    Option<&'a str>,
-    Option<&'a str>,
-    Option<&'a str>,
-    Option<u64>,
-    Option<u64>,
-);
-
 impl VlessConfiguredUser {
     pub fn from_config(
         id: &str,
@@ -697,20 +688,6 @@ pub trait IntoVlessInboundUserConfig {
 impl IntoVlessInboundUserConfig for VlessInboundUserConfigParts {
     fn into_vless_inbound_user_config(self) -> VlessInboundUserConfigParts {
         self
-    }
-}
-
-impl IntoVlessInboundUserConfig for BorrowedVlessInboundUserConfigParts<'_> {
-    fn into_vless_inbound_user_config(self) -> VlessInboundUserConfigParts {
-        let (id, flow, credential_id, principal_key, up_bps, down_bps) = self;
-        (
-            id.to_owned(),
-            flow.map(str::to_owned),
-            credential_id.map(str::to_owned),
-            principal_key.map(str::to_owned),
-            up_bps,
-            down_bps,
-        )
     }
 }
 

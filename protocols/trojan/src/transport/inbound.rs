@@ -65,7 +65,7 @@ impl TrojanInboundListenerRequest {
             .map(Into::into)
     }
 
-    pub fn from_options_refs<TTls>(
+    pub(in crate::transport) fn from_options_refs<TTls>(
         source_dir: Option<&Path>,
         options: TrojanInboundOptionsRef<'_>,
         tls: Option<&TTls>,

@@ -1,6 +1,9 @@
 #[cfg(feature = "trojan")]
 mod listener;
-use ::trojan::transport::{TrojanOutboundLeaf, TrojanOutboundOptionsRef};
+use ::trojan::transport::{
+    TrojanOutboundBuildOptionsRef, TrojanOutboundLeaf, TrojanOutboundOptionsRef,
+    TrojanTransportRuntime,
+};
 #[cfg(feature = "trojan")]
 use zero_config::InboundConfig;
 use zero_config::{InboundProtocolConfig, OutboundProtocolConfig};
@@ -26,7 +29,9 @@ use crate::runtime::udp_flow::managed::{
 
 #[cfg(feature = "trojan")]
 #[derive(Debug, Default)]
-pub(crate) struct TrojanAdapter;
+pub(crate) struct TrojanAdapter {
+    runtime: TrojanTransportRuntime,
+}
 
 #[cfg(feature = "trojan")]
 const TCP_PATH: TcpPathCategory = TcpPathCategory::Tunnel;
@@ -76,7 +81,7 @@ impl InboundListenerCapability for TrojanAdapter {
         Box<dyn crate::runtime::inbound_operation::PreparedInboundListenerOperation>,
         EngineError,
     > {
-        listener::prepare(inbound, source_dir)
+        listener::prepare(self.runtime.clone(), inbound, source_dir)
     }
 }
 
@@ -99,22 +104,25 @@ impl TcpOutboundCapability for TrojanAdapter {
         else {
             return None;
         };
+        let transport_runtime = self.runtime.clone();
         Some(claim_transport_tcp_leaf(
             Some((server, port)),
             runtime,
             move |source_dir| {
-                Ok::<TrojanOutboundLeaf, zero_core::Error>(TrojanOutboundLeaf::from_options_refs(
+                transport_runtime.build_outbound_leaf(
                     source_dir,
-                    tag,
-                    server,
-                    port,
-                    TrojanOutboundOptionsRef {
-                        password,
-                        sni,
-                        insecure,
-                        client_fingerprint,
+                    TrojanOutboundBuildOptionsRef {
+                        tag,
+                        server,
+                        port,
+                        protocol: TrojanOutboundOptionsRef {
+                            password,
+                            sni,
+                            insecure,
+                            client_fingerprint,
+                        },
                     },
-                ))
+                )
             },
         ))
     }
@@ -138,21 +146,24 @@ impl UdpFlowCapability for TrojanAdapter {
         else {
             return None;
         };
+        let transport_runtime = self.runtime.clone();
         Some(claim_transport_udp_leaf(
             Some((server, port)),
             move |source_dir| {
-                Ok::<TrojanOutboundLeaf, zero_core::Error>(TrojanOutboundLeaf::from_options_refs(
+                transport_runtime.build_outbound_leaf(
                     source_dir,
-                    tag,
-                    server,
-                    port,
-                    TrojanOutboundOptionsRef {
-                        password,
-                        sni,
-                        insecure,
-                        client_fingerprint,
+                    TrojanOutboundBuildOptionsRef {
+                        tag,
+                        server,
+                        port,
+                        protocol: TrojanOutboundOptionsRef {
+                            password,
+                            sni,
+                            insecure,
+                            client_fingerprint,
+                        },
                     },
-                ))
+                )
             },
         ))
     }

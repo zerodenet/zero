@@ -52,15 +52,6 @@ pub type VmessInboundUserConfigParts = (
     Option<u64>,
 );
 
-pub type BorrowedVmessInboundUserConfigParts<'a> = (
-    &'a str,
-    &'a str,
-    Option<&'a str>,
-    Option<&'a str>,
-    Option<u64>,
-    Option<u64>,
-);
-
 #[derive(Clone)]
 pub struct VmessInboundProfile {
     users: Vec<VmessUser>,
@@ -210,20 +201,6 @@ pub trait IntoVmessInboundUserConfig {
 impl IntoVmessInboundUserConfig for VmessInboundUserConfigParts {
     fn into_vmess_inbound_user_config(self) -> VmessInboundUserConfigParts {
         self
-    }
-}
-
-impl IntoVmessInboundUserConfig for BorrowedVmessInboundUserConfigParts<'_> {
-    fn into_vmess_inbound_user_config(self) -> VmessInboundUserConfigParts {
-        let (id, cipher, credential_id, principal_key, up_bps, down_bps) = self;
-        (
-            id.to_owned(),
-            cipher.to_owned(),
-            credential_id.map(str::to_owned),
-            principal_key.map(str::to_owned),
-            up_bps,
-            down_bps,
-        )
     }
 }
 

@@ -12,7 +12,7 @@ use zero_transport::RuntimeError;
 use zero_transport::{StreamTraffic, TcpRelayStream};
 
 use super::managed_udp::{TrojanManagedStreamUdpResume, TrojanManagedUdpFlowResume};
-use super::options::TrojanOutboundOptionsRef;
+use super::options::{TrojanOutboundBuildOptionsRef, TrojanOutboundOptionsRef};
 use super::outbound::{OwnedTrojanOutboundTlsPlan, TrojanTcpStreamOpen};
 
 #[derive(Clone)]
@@ -87,22 +87,31 @@ impl TrojanOutboundLeaf {
         .into()
     }
 
-    pub fn from_options_refs(
+    pub(in crate::transport) fn from_options_refs(
         source_dir: Option<&Path>,
-        tag: &str,
-        server: &str,
-        port: u16,
-        options: TrojanOutboundOptionsRef<'_>,
+        options: TrojanOutboundBuildOptionsRef<'_>,
     ) -> Self {
+        let TrojanOutboundBuildOptionsRef {
+            tag,
+            server,
+            port,
+            protocol:
+                TrojanOutboundOptionsRef {
+                    password,
+                    sni,
+                    insecure,
+                    client_fingerprint,
+                },
+        } = options;
         Self::from_parts(
             source_dir,
             tag,
             server,
             port,
-            options.password,
-            options.sni,
-            options.insecure,
-            options.client_fingerprint,
+            password,
+            sni,
+            insecure,
+            client_fingerprint,
         )
     }
 

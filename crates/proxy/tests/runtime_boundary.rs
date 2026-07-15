@@ -827,6 +827,26 @@ fn heavy_protocol_transport_roots_expose_named_inbound_option_surfaces() {
 }
 
 #[test]
+fn heavy_protocol_inbound_modules_do_not_keep_borrowed_tuple_surfaces() {
+    for (relative, forbidden) in [
+        (
+            "protocols/vless/src/inbound.rs",
+            "BorrowedVlessInboundUserConfigParts",
+        ),
+        (
+            "protocols/vmess/src/inbound.rs",
+            "BorrowedVmessInboundUserConfigParts",
+        ),
+    ] {
+        let source = read(&workspace_root().join(relative));
+        assert!(
+            !source.contains(forbidden),
+            "{relative} must not keep transitional borrowed tuple surface `{forbidden}`"
+        );
+    }
+}
+
+#[test]
 fn heavy_protocol_transport_roots_expose_named_outbound_build_surfaces() {
     for (relative, required) in [
         (
@@ -836,6 +856,10 @@ fn heavy_protocol_transport_roots_expose_named_outbound_build_surfaces() {
         (
             "protocols/vmess/src/transport.rs",
             "VmessOutboundBuildOptionsRef",
+        ),
+        (
+            "protocols/trojan/src/transport.rs",
+            "TrojanOutboundBuildOptionsRef",
         ),
     ] {
         let source = read(&workspace_root().join(relative));
@@ -847,20 +871,26 @@ fn heavy_protocol_transport_roots_expose_named_outbound_build_surfaces() {
 }
 
 #[test]
-fn trojan_adapter_uses_protocol_option_refs_instead_of_direct_config_constructors() {
+fn trojan_adapter_uses_protocol_runtime_input_refs() {
     let adapter = read(&proxy_src().join("adapters/trojan.rs"));
-    let forbidden = "TrojanOutboundLeaf::from_config_refs";
-    assert!(
-        !adapter.contains(forbidden),
-        "adapters/trojan.rs must not construct Trojan outbound leaves via `{forbidden}`"
-    );
-    for required in [
-        "TrojanOutboundOptionsRef",
+    for forbidden in [
+        "TrojanOutboundLeaf::from_config_refs",
         "TrojanOutboundLeaf::from_options_refs",
     ] {
         assert!(
+            !adapter.contains(forbidden),
+            "adapters/trojan.rs must not construct Trojan outbound leaves via `{forbidden}`"
+        );
+    }
+    for required in [
+        "TrojanTransportRuntime",
+        "TrojanOutboundBuildOptionsRef",
+        "TrojanOutboundOptionsRef",
+        "build_outbound_leaf(",
+    ] {
+        assert!(
             adapter.contains(required),
-            "adapters/trojan.rs should project through protocol-owned Trojan option surface `{required}`"
+            "adapters/trojan.rs should project through protocol-owned Trojan runtime surface `{required}`"
         );
     }
 }
@@ -887,6 +917,16 @@ fn heavy_protocol_transport_runtimes_use_internal_profile_constructors() {
             "protocols/vmess/src/transport/runtime.rs",
             "VmessOutboundLeaf::from_profile_refs",
             "VmessOutboundLeaf::from_config_refs",
+        ),
+        (
+            "protocols/trojan/src/transport/runtime.rs",
+            "TrojanInboundListenerRequest::from_options_refs",
+            "TrojanInboundListenerRequest::from_config_refs",
+        ),
+        (
+            "protocols/trojan/src/transport/runtime.rs",
+            "TrojanOutboundLeaf::from_options_refs",
+            "TrojanOutboundLeaf::from_config_refs",
         ),
     ] {
         let source = read(&workspace_root().join(relative));
@@ -922,11 +962,11 @@ fn heavy_protocol_transport_files_do_not_expose_public_config_constructors() {
         ),
         (
             "protocols/trojan/src/transport/inbound.rs",
-            "pub fn from_options_refs",
+            "pub(in crate::transport) fn from_options_refs",
         ),
         (
             "protocols/trojan/src/transport/leaf.rs",
-            "pub fn from_options_refs",
+            "pub(in crate::transport) fn from_options_refs",
         ),
     ] {
         let source = read(&workspace_root().join(relative));
@@ -1139,6 +1179,7 @@ fn trojan_listener_adapter_uses_protocol_option_refs() {
         "TrojanInboundProfile::from_config_password",
         "TrojanInboundListenerRequest::from_config_refs",
         "TrojanInboundListenerRequest::from_profile_refs",
+        "TrojanInboundListenerRequest::from_options_refs",
     ] {
         assert!(
             !listener.contains(forbidden),
@@ -1146,12 +1187,13 @@ fn trojan_listener_adapter_uses_protocol_option_refs() {
         );
     }
     for required in [
+        "TrojanTransportRuntime",
         "TrojanInboundOptionsRef",
-        "TrojanInboundListenerRequest::from_options_refs",
+        "build_inbound_listener_request(",
     ] {
         assert!(
             listener.contains(required),
-            "adapters/trojan/listener.rs should project through protocol-owned Trojan option surface `{required}`"
+            "adapters/trojan/listener.rs should project through protocol-owned Trojan runtime surface `{required}`"
         );
     }
 }
