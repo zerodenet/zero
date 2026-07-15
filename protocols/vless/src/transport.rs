@@ -12,7 +12,7 @@ mod outbound;
 mod profile;
 mod runtime;
 
-pub use inbound::VlessInboundListenerRequest;
+pub use inbound::{VlessInboundBindPlan, VlessInboundListenerRequest};
 pub use leaf::VlessOutboundLeaf;
 pub use options::{
     VlessInboundOptionsRef, VlessInboundUserRef, VlessOutboundBuildOptionsRef,

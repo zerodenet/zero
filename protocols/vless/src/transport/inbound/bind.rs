@@ -1,6 +1,7 @@
 use std::io;
 use std::path::{Path, PathBuf};
 
+use super::super::options::VlessQuicBindOptionsRef;
 use super::super::profile::VlessQuicBindProfile;
 use zero_transport::RuntimeError;
 
@@ -15,10 +16,15 @@ pub struct VlessInboundBindPlan {
 }
 
 impl VlessInboundBindPlan {
-    pub fn from_quic_profile(
+    pub fn from_options_refs(
         source_dir: Option<&Path>,
-        quic: Option<&VlessQuicBindProfile>,
+        quic: Option<VlessQuicBindOptionsRef<'_>>,
     ) -> Self {
+        let quic = quic.map(VlessQuicBindProfile::from);
+        Self::from_quic_profile(source_dir, quic.as_ref())
+    }
+
+    fn from_quic_profile(source_dir: Option<&Path>, quic: Option<&VlessQuicBindProfile>) -> Self {
         Self {
             quic_cert_path: quic.and_then(|config| config.cert_path.clone()),
             quic_key_path: quic.and_then(|config| config.key_path.clone()),

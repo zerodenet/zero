@@ -5,10 +5,9 @@ use zero_traits::{
     SplitHttpTransportProfile, WebSocketTransportProfile,
 };
 
-use super::inbound::VlessInboundBindPlan;
 use super::leaf::VlessOutboundLeaf;
-use super::options::{VlessOutboundBuildOptionsRef, VlessQuicBindOptionsRef};
-use super::profile::{VlessQuicBindProfile, VlessQuicClientProfile, VlessRealityClientProfile};
+use super::options::VlessOutboundBuildOptionsRef;
+use super::profile::{VlessQuicClientProfile, VlessRealityClientProfile};
 
 #[derive(Debug, Clone, Default)]
 pub struct VlessTransportRuntime {
@@ -18,15 +17,6 @@ pub struct VlessTransportRuntime {
 impl VlessTransportRuntime {
     pub fn on_config_reloaded(&self) {
         self.mux_pool.evict_all();
-    }
-
-    pub fn build_inbound_bind_plan(
-        &self,
-        source_dir: Option<&Path>,
-        quic: Option<VlessQuicBindOptionsRef<'_>>,
-    ) -> VlessInboundBindPlan {
-        let quic = quic.map(VlessQuicBindProfile::from);
-        VlessInboundBindPlan::from_quic_profile(source_dir, quic.as_ref())
     }
 
     pub fn build_outbound_leaf<TTls, TWs, TGrpc, TH2, THttp, TSplit>(

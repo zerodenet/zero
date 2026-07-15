@@ -696,12 +696,13 @@ fn vless_adapter_uses_protocol_option_refs_instead_of_private_profile_constructo
         );
     }
     for required in [
+        "VlessInboundBindPlan",
         "VlessOutboundBuildOptionsRef",
         "VlessOutboundOptionsRef",
         "VlessQuicBindOptionsRef",
         "VlessQuicClientOptionsRef",
         "VlessRealityClientOptionsRef",
-        "build_inbound_bind_plan(",
+        "VlessInboundBindPlan::from_options_refs",
         "build_outbound_leaf(",
     ] {
         assert!(
@@ -712,7 +713,6 @@ fn vless_adapter_uses_protocol_option_refs_instead_of_private_profile_constructo
 
     let transport = read(&workspace_root().join("protocols/vless/src/transport.rs"));
     for forbidden in [
-        "VlessInboundBindPlan",
         "VlessQuicBindProfile",
         "VlessQuicClientProfile",
         "VlessRealityClientProfile",

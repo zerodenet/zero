@@ -1,6 +1,6 @@
 #[cfg(feature = "vless")]
 use ::vless::transport::{
-    VlessOutboundBuildOptionsRef, VlessOutboundLeaf, VlessOutboundOptionsRef,
+    VlessInboundBindPlan, VlessOutboundBuildOptionsRef, VlessOutboundLeaf, VlessOutboundOptionsRef,
     VlessQuicBindOptionsRef, VlessQuicClientOptionsRef, VlessRealityClientOptionsRef,
     VlessTransportRuntime,
 };
@@ -226,7 +226,7 @@ impl InboundListenerCapability for VlessAdapter {
                 "vless inbound bind received non-vless inbound config",
             )));
         };
-        let plan = self.runtime.build_inbound_bind_plan(
+        let plan = VlessInboundBindPlan::from_options_refs(
             source_dir,
             quic.as_deref().map(|quic| VlessQuicBindOptionsRef {
                 cert_path: quic.cert_path.as_deref(),
