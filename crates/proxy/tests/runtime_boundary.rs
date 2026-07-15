@@ -1243,6 +1243,27 @@ fn heavy_protocol_inbound_transport_requests_do_not_keep_listener_config_wrapper
 }
 
 #[test]
+fn heavy_protocol_outbound_transport_leaves_do_not_keep_leaf_config_wrappers() {
+    for relative in [
+        "protocols/vless/src/transport/leaf.rs",
+        "protocols/vmess/src/transport/leaf.rs",
+        "protocols/trojan/src/transport/leaf.rs",
+    ] {
+        let source = read(&workspace_root().join(relative));
+        assert!(
+            !source.contains("OwnedVlessOutboundLeafConfig")
+                && !source.contains("OwnedVmessOutboundLeafConfig")
+                && !source.contains("OwnedTrojanOutboundLeafConfig"),
+            "{relative} must construct final outbound leaves directly instead of keeping leaf-config wrapper intermediates"
+        );
+        assert!(
+            !source.contains("impl From<Owned"),
+            "{relative} must not rely on wrapper-to-leaf conversion shims"
+        );
+    }
+}
+
+#[test]
 fn mieru_adapter_uses_protocol_outbound_option_refs() {
     let adapter = read(&proxy_src().join("adapters/mieru.rs"));
     let forbidden = "MieruTransportLeaf::new(";

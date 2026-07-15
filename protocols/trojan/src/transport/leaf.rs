@@ -16,44 +16,6 @@ use super::options::{TrojanOutboundBuildOptionsRef, TrojanOutboundOptionsRef};
 use super::outbound::{OwnedTrojanOutboundTlsPlan, TrojanTcpStreamOpen};
 
 #[derive(Clone)]
-struct OwnedTrojanOutboundLeafConfig {
-    tag: String,
-    server: String,
-    port: u16,
-    transport: OwnedTrojanOutboundTlsPlan,
-    protocol: crate::outbound::PreparedTrojanOutboundRequestBundle,
-}
-
-impl OwnedTrojanOutboundLeafConfig {
-    #[allow(clippy::too_many_arguments)]
-    fn from_parts(
-        source_dir: Option<&Path>,
-        tag: &str,
-        server: &str,
-        port: u16,
-        password: &str,
-        sni: Option<&str>,
-        insecure: bool,
-        client_fingerprint: Option<&str>,
-    ) -> Self {
-        let protocol = crate::outbound::PreparedTrojanOutboundRequestBundle::from_config(
-            password,
-            sni,
-            insecure,
-            client_fingerprint,
-        );
-        let transport = OwnedTrojanOutboundTlsPlan::from_parts(source_dir, server, port);
-        Self {
-            tag: tag.to_owned(),
-            server: server.to_owned(),
-            port,
-            transport,
-            protocol,
-        }
-    }
-}
-
-#[derive(Clone)]
 pub struct TrojanOutboundLeaf {
     tag: String,
     server: String,
@@ -74,17 +36,14 @@ impl TrojanOutboundLeaf {
         insecure: bool,
         client_fingerprint: Option<&str>,
     ) -> Self {
-        OwnedTrojanOutboundLeafConfig::from_parts(
-            source_dir,
-            tag,
-            server,
-            port,
+        let protocol = crate::outbound::PreparedTrojanOutboundRequestBundle::from_config(
             password,
             sni,
             insecure,
             client_fingerprint,
-        )
-        .into()
+        );
+        let transport = OwnedTrojanOutboundTlsPlan::from_parts(source_dir, server, port);
+        Self::new(tag, server, port, transport, protocol)
     }
 
     pub(in crate::transport) fn from_options_refs(
@@ -182,19 +141,6 @@ impl TrojanOutboundLeaf {
             self.owned_transport_plan(),
             self.protocol.udp_relay_flow_plan(),
         )
-    }
-}
-
-impl From<OwnedTrojanOutboundLeafConfig> for TrojanOutboundLeaf {
-    fn from(config: OwnedTrojanOutboundLeafConfig) -> Self {
-        let OwnedTrojanOutboundLeafConfig {
-            tag,
-            server,
-            port,
-            transport,
-            protocol,
-        } = config;
-        Self::new(&tag, &server, port, transport, protocol)
     }
 }
 

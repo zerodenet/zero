@@ -26,7 +26,7 @@ use super::outbound::OwnedVlessOutboundTransportPlan;
 use super::profile::{VlessQuicClientProfile, VlessRealityClientProfile};
 
 #[derive(Clone)]
-struct OwnedVlessOutboundLeafConfig {
+pub struct VlessOutboundLeaf {
     tag: String,
     server: String,
     port: u16,
@@ -35,9 +35,9 @@ struct OwnedVlessOutboundLeafConfig {
     mux_pool: crate::mux_pool::MuxConnectionPool,
 }
 
-impl OwnedVlessOutboundLeafConfig {
+impl VlessOutboundLeaf {
     #[allow(clippy::too_many_arguments)]
-    fn from_profile_refs<TTls, TWs, TGrpc, TH2, THttp, TSplit>(
+    pub(in crate::transport) fn from_profile_refs<TTls, TWs, TGrpc, TH2, THttp, TSplit>(
         source_dir: Option<&Path>,
         tag: &str,
         server: &str,
@@ -83,74 +83,7 @@ impl OwnedVlessOutboundLeafConfig {
                 mux_concurrency,
                 transport.mux_transport_hints(),
             )?;
-        Ok(Self {
-            tag: tag.to_owned(),
-            server: server.to_owned(),
-            port,
-            transport,
-            protocol,
-            mux_pool,
-        })
-    }
-}
-
-#[derive(Clone)]
-pub struct VlessOutboundLeaf {
-    tag: String,
-    server: String,
-    port: u16,
-    transport: OwnedVlessOutboundTransportPlan,
-    protocol: crate::outbound::PreparedVlessOutboundRequestBundle,
-    mux_pool: crate::mux_pool::MuxConnectionPool,
-}
-
-impl VlessOutboundLeaf {
-    #[allow(clippy::too_many_arguments)]
-    pub(in crate::transport) fn from_profile_refs<TTls, TWs, TGrpc, TH2, THttp, TSplit>(
-        source_dir: Option<&Path>,
-        tag: &str,
-        server: &str,
-        port: u16,
-        id: &str,
-        flow: Option<&str>,
-        mux_concurrency: Option<u32>,
-        tls: Option<&TTls>,
-        reality: Option<&VlessRealityClientProfile>,
-        ws: Option<&TWs>,
-        grpc: Option<&TGrpc>,
-        h2: Option<&TH2>,
-        http_upgrade: Option<&THttp>,
-        split_http: Option<&TSplit>,
-        quic: Option<&VlessQuicClientProfile>,
-        mux_pool: crate::mux_pool::MuxConnectionPool,
-    ) -> Result<Self, zero_core::Error>
-    where
-        TTls: ClientTlsProfile + ?Sized,
-        TWs: WebSocketTransportProfile + ?Sized,
-        TGrpc: GrpcTransportProfile + ?Sized,
-        TH2: H2TransportProfile + ?Sized,
-        THttp: HttpUpgradeTransportProfile + ?Sized,
-        TSplit: SplitHttpTransportProfile + ?Sized,
-    {
-        OwnedVlessOutboundLeafConfig::from_profile_refs(
-            source_dir,
-            tag,
-            server,
-            port,
-            id,
-            flow,
-            mux_concurrency,
-            tls,
-            reality,
-            ws,
-            grpc,
-            h2,
-            http_upgrade,
-            split_http,
-            quic,
-            mux_pool,
-        )
-        .map(Into::into)
+        Ok(Self::new(tag, server, port, transport, protocol, mux_pool))
     }
 
     pub(super) fn new(
@@ -258,20 +191,6 @@ impl VlessOutboundLeaf {
             self.protocol.udp_relay_final_hop_plan(),
             self.owned_transport_plan(),
         )
-    }
-}
-
-impl From<OwnedVlessOutboundLeafConfig> for VlessOutboundLeaf {
-    fn from(config: OwnedVlessOutboundLeafConfig) -> Self {
-        let OwnedVlessOutboundLeafConfig {
-            tag,
-            server,
-            port,
-            transport,
-            protocol,
-            mux_pool,
-        } = config;
-        Self::new(&tag, &server, port, transport, protocol, mux_pool)
     }
 }
 

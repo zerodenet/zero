@@ -17,57 +17,6 @@ use super::managed_udp::{VmessManagedStreamUdpResume, VmessManagedUdpFlowResume}
 use super::outbound::OwnedVmessOutboundTransportPlan;
 
 #[derive(Clone)]
-struct OwnedVmessOutboundLeafConfig {
-    tag: String,
-    server: String,
-    port: u16,
-    transport: OwnedVmessOutboundTransportPlan,
-    protocol: crate::outbound::PreparedVmessOutboundRequestBundle,
-    mux_pool: crate::mux::VmessMuxConnectionPool,
-}
-
-impl OwnedVmessOutboundLeafConfig {
-    #[allow(clippy::too_many_arguments)]
-    fn from_profile_refs<TTls, TWs, TGrpc>(
-        source_dir: Option<&Path>,
-        tag: &str,
-        server: &str,
-        port: u16,
-        id: &str,
-        cipher: &str,
-        mux_concurrency: Option<u32>,
-        tls: Option<&TTls>,
-        ws: Option<&TWs>,
-        grpc: Option<&TGrpc>,
-        mux_pool: crate::mux::VmessMuxConnectionPool,
-    ) -> Result<Self, zero_core::Error>
-    where
-        TTls: ClientTlsProfile + ?Sized,
-        TWs: WebSocketTransportProfile + ?Sized,
-        TGrpc: GrpcTransportProfile + ?Sized,
-    {
-        let transport = OwnedVmessOutboundTransportPlan::from_profile_refs(
-            source_dir, server, port, tls, ws, grpc,
-        );
-        let protocol =
-            crate::outbound::PreparedVmessOutboundRequestBundle::from_config_with_transport_hints(
-                id,
-                cipher,
-                mux_concurrency,
-                transport.mux_transport_hints(),
-            )?;
-        Ok(Self {
-            tag: tag.to_owned(),
-            server: server.to_owned(),
-            port,
-            transport,
-            protocol,
-            mux_pool,
-        })
-    }
-}
-
-#[derive(Clone)]
 pub struct VmessOutboundLeaf {
     tag: String,
     server: String,
@@ -97,20 +46,17 @@ impl VmessOutboundLeaf {
         TWs: WebSocketTransportProfile + ?Sized,
         TGrpc: GrpcTransportProfile + ?Sized,
     {
-        OwnedVmessOutboundLeafConfig::from_profile_refs(
-            source_dir,
-            tag,
-            server,
-            port,
-            id,
-            cipher,
-            mux_concurrency,
-            tls,
-            ws,
-            grpc,
-            mux_pool,
-        )
-        .map(Into::into)
+        let transport = OwnedVmessOutboundTransportPlan::from_profile_refs(
+            source_dir, server, port, tls, ws, grpc,
+        );
+        let protocol =
+            crate::outbound::PreparedVmessOutboundRequestBundle::from_config_with_transport_hints(
+                id,
+                cipher,
+                mux_concurrency,
+                transport.mux_transport_hints(),
+            )?;
+        Ok(Self::new(tag, server, port, transport, protocol, mux_pool))
     }
 
     pub(super) fn new(
@@ -186,20 +132,6 @@ impl VmessOutboundLeaf {
             self.protocol.udp_relay_flow_plan(),
             self.owned_transport_plan(),
         )
-    }
-}
-
-impl From<OwnedVmessOutboundLeafConfig> for VmessOutboundLeaf {
-    fn from(config: OwnedVmessOutboundLeafConfig) -> Self {
-        let OwnedVmessOutboundLeafConfig {
-            tag,
-            server,
-            port,
-            transport,
-            protocol,
-            mux_pool,
-        } = config;
-        Self::new(&tag, &server, port, transport, protocol, mux_pool)
     }
 }
 
