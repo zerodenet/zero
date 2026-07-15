@@ -1,14 +1,14 @@
 #[cfg(feature = "vless")]
 use ::vless::transport::{
-    VlessInboundBindPlan, VlessOutboundLeaf, VlessQuicBindProfile, VlessQuicClientProfile,
-    VlessRealityClientProfile, VlessTransportRuntime,
+    VlessOutboundLeaf, VlessQuicBindOptionsRef, VlessQuicClientOptionsRef,
+    VlessRealityClientOptionsRef, VlessTransportRuntime,
 };
 #[cfg(feature = "vless")]
 use async_trait::async_trait;
 #[cfg(feature = "vless")]
 mod listener;
 #[cfg(feature = "vless")]
-use zero_config::{InboundConfig, QuicConfig, RealityConfig};
+use zero_config::InboundConfig;
 use zero_config::{InboundProtocolConfig, OutboundProtocolConfig};
 #[cfg(feature = "vless")]
 use zero_engine::{EngineError, ResolvedLeafOutbound};
@@ -39,34 +39,6 @@ pub(crate) struct VlessAdapter {
 
 #[cfg(feature = "vless")]
 const TCP_PATH: TcpPathCategory = TcpPathCategory::Tunnel;
-
-#[cfg(feature = "vless")]
-fn outbound_reality_profile(reality: Option<&RealityConfig>) -> Option<VlessRealityClientProfile> {
-    reality.map(|reality| {
-        VlessRealityClientProfile::new(
-            reality.public_key.clone(),
-            reality.short_id.clone(),
-            reality.server_name.clone(),
-            reality.cipher_suites.clone(),
-        )
-    })
-}
-
-#[cfg(feature = "vless")]
-fn quic_client_profile(quic: Option<&QuicConfig>) -> Option<VlessQuicClientProfile> {
-    quic.map(|quic| {
-        VlessQuicClientProfile::new(
-            quic.server_name.clone(),
-            quic.insecure,
-            quic.ca_cert_path.clone(),
-        )
-    })
-}
-
-#[cfg(feature = "vless")]
-fn quic_bind_profile(quic: Option<&QuicConfig>) -> Option<VlessQuicBindProfile> {
-    quic.map(|quic| VlessQuicBindProfile::new(quic.cert_path.clone(), quic.key_path.clone()))
-}
 
 #[cfg(feature = "vless")]
 impl NamedProtocolAdapter for VlessAdapter {
@@ -121,8 +93,13 @@ impl InboundListenerCapability for VlessAdapter {
                 "vless inbound bind received non-vless inbound config",
             )));
         };
-        let quic = quic_bind_profile(quic.as_deref());
-        let plan = VlessInboundBindPlan::from_quic_profile(source_dir, quic.as_ref());
+        let plan = self.runtime.build_inbound_bind_plan(
+            source_dir,
+            quic.as_deref().map(|quic| VlessQuicBindOptionsRef {
+                cert_path: quic.cert_path.as_deref(),
+                key_path: quic.key_path.as_deref(),
+            }),
+        );
         bind_transport_inbound(inbound, plan).await
     }
 
@@ -165,8 +142,6 @@ impl TcpOutboundCapability for VlessAdapter {
         else {
             return None;
         };
-        let reality = outbound_reality_profile(reality);
-        let quic = quic_client_profile(quic);
         Some(claim_transport_tcp_leaf(Some((server, port)), runtime, {
             let transport_runtime = self.runtime.clone();
             move |source_dir| {
@@ -179,13 +154,22 @@ impl TcpOutboundCapability for VlessAdapter {
                     flow,
                     mux_concurrency,
                     tls,
-                    reality.as_ref(),
+                    reality.map(|reality| VlessRealityClientOptionsRef {
+                        public_key: reality.public_key.as_str(),
+                        short_id: reality.short_id.as_str(),
+                        server_name: reality.server_name.as_deref(),
+                        cipher_suites: reality.cipher_suites.as_slice(),
+                    }),
                     ws,
                     grpc,
                     h2,
                     http_upgrade,
                     split_http,
-                    quic.as_ref(),
+                    quic.map(|quic| VlessQuicClientOptionsRef {
+                        server_name: quic.server_name.as_deref(),
+                        insecure: quic.insecure,
+                        ca_cert_path: quic.ca_cert_path.as_deref(),
+                    }),
                 )
             }
         }))
@@ -218,8 +202,6 @@ impl UdpFlowCapability for VlessAdapter {
         else {
             return None;
         };
-        let reality = outbound_reality_profile(reality);
-        let quic = quic_client_profile(quic);
         Some(claim_relay_two_stream_transport_udp_leaf(
             Some((server, port)),
             {
@@ -234,13 +216,22 @@ impl UdpFlowCapability for VlessAdapter {
                         flow,
                         mux_concurrency,
                         tls,
-                        reality.as_ref(),
+                        reality.map(|reality| VlessRealityClientOptionsRef {
+                            public_key: reality.public_key.as_str(),
+                            short_id: reality.short_id.as_str(),
+                            server_name: reality.server_name.as_deref(),
+                            cipher_suites: reality.cipher_suites.as_slice(),
+                        }),
                         ws,
                         grpc,
                         h2,
                         http_upgrade,
                         split_http,
-                        quic.as_ref(),
+                        quic.map(|quic| VlessQuicClientOptionsRef {
+                            server_name: quic.server_name.as_deref(),
+                            insecure: quic.insecure,
+                            ca_cert_path: quic.ca_cert_path.as_deref(),
+                        }),
                     )
                 }
             },

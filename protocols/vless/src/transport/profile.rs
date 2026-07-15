@@ -1,5 +1,13 @@
 const VLESS_QUIC_ALPN: &[u8] = b"h3";
 
+#[derive(Debug, Clone, Copy)]
+pub struct VlessRealityClientOptionsRef<'a> {
+    pub public_key: &'a str,
+    pub short_id: &'a str,
+    pub server_name: Option<&'a str>,
+    pub cipher_suites: &'a [String],
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct VlessRealityClientProfile {
     pub public_key: String,
@@ -24,6 +32,24 @@ impl VlessRealityClientProfile {
     }
 }
 
+impl From<VlessRealityClientOptionsRef<'_>> for VlessRealityClientProfile {
+    fn from(options: VlessRealityClientOptionsRef<'_>) -> Self {
+        Self::new(
+            options.public_key,
+            options.short_id,
+            options.server_name.map(str::to_owned),
+            options.cipher_suites.to_vec(),
+        )
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct VlessQuicClientOptionsRef<'a> {
+    pub server_name: Option<&'a str>,
+    pub insecure: bool,
+    pub ca_cert_path: Option<&'a str>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct VlessQuicClientProfile {
     pub server_name: Option<String>,
@@ -45,6 +71,22 @@ impl VlessQuicClientProfile {
     }
 }
 
+impl From<VlessQuicClientOptionsRef<'_>> for VlessQuicClientProfile {
+    fn from(options: VlessQuicClientOptionsRef<'_>) -> Self {
+        Self::new(
+            options.server_name.map(str::to_owned),
+            options.insecure,
+            options.ca_cert_path.map(str::to_owned),
+        )
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct VlessQuicBindOptionsRef<'a> {
+    pub cert_path: Option<&'a str>,
+    pub key_path: Option<&'a str>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct VlessQuicBindProfile {
     pub cert_path: Option<String>,
@@ -61,5 +103,14 @@ impl VlessQuicBindProfile {
 
     pub fn alpn_protocols(&self) -> Vec<Vec<u8>> {
         vec![VLESS_QUIC_ALPN.to_vec()]
+    }
+}
+
+impl From<VlessQuicBindOptionsRef<'_>> for VlessQuicBindProfile {
+    fn from(options: VlessQuicBindOptionsRef<'_>) -> Self {
+        Self::new(
+            options.cert_path.map(str::to_owned),
+            options.key_path.map(str::to_owned),
+        )
     }
 }

@@ -5,8 +5,12 @@ use zero_traits::{
     SplitHttpTransportProfile, WebSocketTransportProfile,
 };
 
+use super::inbound::VlessInboundBindPlan;
 use super::leaf::VlessOutboundLeaf;
-use super::profile::{VlessQuicClientProfile, VlessRealityClientProfile};
+use super::profile::{
+    VlessQuicBindOptionsRef, VlessQuicBindProfile, VlessQuicClientOptionsRef,
+    VlessQuicClientProfile, VlessRealityClientOptionsRef, VlessRealityClientProfile,
+};
 
 #[derive(Debug, Clone, Default)]
 pub struct VlessTransportRuntime {
@@ -16,6 +20,15 @@ pub struct VlessTransportRuntime {
 impl VlessTransportRuntime {
     pub fn on_config_reloaded(&self) {
         self.mux_pool.evict_all();
+    }
+
+    pub fn build_inbound_bind_plan(
+        &self,
+        source_dir: Option<&Path>,
+        quic: Option<VlessQuicBindOptionsRef<'_>>,
+    ) -> VlessInboundBindPlan {
+        let quic = quic.map(VlessQuicBindProfile::from);
+        VlessInboundBindPlan::from_quic_profile(source_dir, quic.as_ref())
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -29,13 +42,13 @@ impl VlessTransportRuntime {
         flow: Option<&str>,
         mux_concurrency: Option<u32>,
         tls: Option<&TTls>,
-        reality: Option<&VlessRealityClientProfile>,
+        reality: Option<VlessRealityClientOptionsRef<'_>>,
         ws: Option<&TWs>,
         grpc: Option<&TGrpc>,
         h2: Option<&TH2>,
         http_upgrade: Option<&THttp>,
         split_http: Option<&TSplit>,
-        quic: Option<&VlessQuicClientProfile>,
+        quic: Option<VlessQuicClientOptionsRef<'_>>,
     ) -> Result<VlessOutboundLeaf, zero_core::Error>
     where
         TTls: ClientTlsProfile + ?Sized,
@@ -45,6 +58,8 @@ impl VlessTransportRuntime {
         THttp: HttpUpgradeTransportProfile + ?Sized,
         TSplit: SplitHttpTransportProfile + ?Sized,
     {
+        let reality = reality.map(VlessRealityClientProfile::from);
+        let quic = quic.map(VlessQuicClientProfile::from);
         VlessOutboundLeaf::from_config_refs(
             source_dir,
             tag,
@@ -54,13 +69,13 @@ impl VlessTransportRuntime {
             flow,
             mux_concurrency,
             tls,
-            reality,
+            reality.as_ref(),
             ws,
             grpc,
             h2,
             http_upgrade,
             split_http,
-            quic,
+            quic.as_ref(),
             self.mux_pool.clone(),
         )
     }

@@ -580,6 +580,49 @@ fn vless_public_boundary_profiles_do_not_use_owned_prefixes() {
 }
 
 #[test]
+fn vless_adapter_uses_protocol_option_refs_instead_of_private_profile_constructors() {
+    let adapter = read(&proxy_src().join("adapters/vless.rs"));
+    for forbidden in [
+        "VlessQuicBindProfile",
+        "VlessQuicClientProfile",
+        "VlessRealityClientProfile",
+        "fn outbound_reality_profile(",
+        "fn quic_client_profile(",
+        "fn quic_bind_profile(",
+    ] {
+        assert!(
+            !adapter.contains(forbidden),
+            "adapters/vless.rs must not construct protocol-private VLESS profile `{forbidden}` inline"
+        );
+    }
+    for required in [
+        "VlessQuicBindOptionsRef",
+        "VlessQuicClientOptionsRef",
+        "VlessRealityClientOptionsRef",
+        "build_inbound_bind_plan(",
+        "build_outbound_leaf(",
+    ] {
+        assert!(
+            adapter.contains(required),
+            "adapters/vless.rs should project through protocol-owned VLESS option/runtime surface `{required}`"
+        );
+    }
+
+    let transport = read(&workspace_root().join("protocols/vless/src/transport.rs"));
+    for forbidden in [
+        "VlessInboundBindPlan",
+        "VlessQuicBindProfile",
+        "VlessQuicClientProfile",
+        "VlessRealityClientProfile",
+    ] {
+        assert!(
+            !transport.contains(forbidden),
+            "protocols/vless/src/transport.rs must not re-export protocol-private VLESS profile surface `{forbidden}`"
+        );
+    }
+}
+
+#[test]
 fn inventory_udp_dispatch_keeps_relay_choreography_outside_candidate_root() {
     let dispatch = read(&proxy_src().join("inventory/udp/dispatch.rs"));
     assert!(!dispatch.contains("ClaimedResolvedOutbound"));
