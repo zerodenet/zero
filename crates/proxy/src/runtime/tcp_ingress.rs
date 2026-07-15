@@ -9,6 +9,7 @@
 
 mod contract;
 mod lifecycle;
+mod runtime;
 
 #[cfg(any(
     feature = "vless",
@@ -35,3 +36,4 @@ pub(crate) use lifecycle::apply_kernel_rate_limits;
 pub(crate) use lifecycle::serve_inbound;
 #[cfg(any(feature = "socks5", feature = "hysteria2", feature = "mieru"))]
 pub(crate) use lifecycle::serve_inbound_with_client_response;
+pub(crate) use runtime::TcpIngressRuntime;

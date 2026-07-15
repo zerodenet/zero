@@ -872,6 +872,13 @@ fn udp_ingress_runtime_collapses_proxy_and_services_for_session_loops() {
     let route_runtime = read(&proxy_src().join("runtime/route_runtime.rs"));
     assert!(route_runtime.contains("struct InboundRouteRuntime"));
     assert!(route_runtime.contains("struct MuxSubstreamRuntime"));
+    assert!(route_runtime.contains("TcpIngressRuntime"));
+    assert!(route_runtime.contains("tcp_runtime: TcpIngressRuntime"));
+    assert!(!route_runtime.contains("fallback_proxy"));
+
+    let tcp_ingress_runtime = read(&proxy_src().join("runtime/tcp_ingress/runtime.rs"));
+    assert!(tcp_ingress_runtime.contains("struct TcpIngressRuntime"));
+    assert!(tcp_ingress_runtime.contains("serve_inbound("));
 
     for relative in [
         "runtime/inbound_route/stream/dispatch.rs",

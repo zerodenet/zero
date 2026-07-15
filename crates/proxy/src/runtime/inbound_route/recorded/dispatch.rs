@@ -171,12 +171,10 @@ where
             .await
         }
         RouteAcceptResult::Fallback(fallback) => {
-            crate::runtime::inbound_fallback::relay_recorded_fallback_replay(
-                request.runtime.fallback_proxy(),
-                fallback.config,
-                fallback.replay,
-            )
-            .await
+            request
+                .runtime
+                .relay_recorded_fallback_replay(fallback.config, fallback.replay)
+                .await
         }
     }
 }
