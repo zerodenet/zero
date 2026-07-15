@@ -123,6 +123,39 @@ impl PreparedTcpRelayChain<'_> {
 }
 
 impl ProtocolInventory {
+    pub(in crate::inventory) fn claim_tcp_relay_chain<'a>(
+        &self,
+        chain: &'a [ResolvedLeafOutbound<'a>],
+    ) -> Result<ClaimedRelayChain<'a>, TcpOutboundFailure> {
+        let first = chain
+            .first()
+            .expect("relay chain must have at least 2 hops");
+        let relay_hops = &chain[1..];
+        relay_hops
+            .first()
+            .expect("relay chain must have at least 2 hops");
+
+        let first = self
+            .claim_outbound_leaf(first)
+            .map_err(|error| TcpOutboundFailure {
+                stage: "outbound_leaf_runtime",
+                error,
+                upstream_endpoint: None,
+            })?;
+        let relay_hops = relay_hops
+            .iter()
+            .map(|next_hop| {
+                self.claim_outbound_leaf(next_hop)
+                    .map_err(|error| TcpOutboundFailure {
+                        stage: "relay_prepare",
+                        error,
+                        upstream_endpoint: None,
+                    })
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(ClaimedRelayChain::new(first, relay_hops))
+    }
+
     pub(crate) fn prepare_claimed_tcp_relay_chain<'a>(
         &self,
         ctx: OutboundAdapterContext,
@@ -146,43 +179,6 @@ impl ProtocolInventory {
             first: first_prepared,
             relay_hops: prepared_hops,
         })
-    }
-
-    pub(crate) fn prepare_tcp_relay_chain<'a>(
-        &self,
-        ctx: OutboundAdapterContext,
-        chain: &'a [ResolvedLeafOutbound<'a>],
-    ) -> Result<PreparedTcpRelayChain<'a>, TcpOutboundFailure> {
-        let first = chain
-            .first()
-            .expect("relay chain must have at least 2 hops");
-        let relay_hops = &chain[1..];
-        let _second = relay_hops
-            .first()
-            .expect("relay chain must have at least 2 hops");
-
-        let first = self
-            .claim_outbound_leaf(first)
-            .map_err(|error| TcpOutboundFailure {
-                stage: "outbound_leaf_runtime",
-                error,
-                upstream_endpoint: None,
-            })?;
-        let claimed_chain = ClaimedRelayChain::new(
-            first,
-            relay_hops
-                .iter()
-                .map(|next_hop| {
-                    self.claim_outbound_leaf(next_hop)
-                        .map_err(|error| TcpOutboundFailure {
-                            stage: "relay_prepare",
-                            error,
-                            upstream_endpoint: None,
-                        })
-                })
-                .collect::<Result<Vec<_>, _>>()?,
-        );
-        self.prepare_claimed_tcp_relay_chain(ctx, &claimed_chain)
     }
 }
 

@@ -55,6 +55,7 @@ impl ProtocolInventory {
         Ok(PreparedUdpLeafCandidate::Flow(operation))
     }
 
+    #[cfg(test)]
     pub(crate) fn prepare_udp_leaf_candidate<'a>(
         &self,
         ctx: UdpAdapterContext<'a>,

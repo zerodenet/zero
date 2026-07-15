@@ -39,6 +39,7 @@ use crate::runtime::udp_dispatch::operation::PreparedUdpFlowOperation;
     feature = "mieru"
 ))]
 use crate::transport::RelayCarrier;
+#[derive(Clone)]
 pub(crate) struct ClaimedOutboundLeaf<'a> {
     #[cfg(any(
         feature = "socks5",

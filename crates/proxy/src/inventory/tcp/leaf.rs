@@ -100,6 +100,7 @@ impl ProtocolInventory {
         })
     }
 
+    #[cfg(test)]
     pub(crate) fn prepare_tcp_candidate<'a>(
         &self,
         ctx: OutboundAdapterContext,
@@ -128,6 +129,7 @@ impl ProtocolInventory {
         })
     }
 
+    #[cfg(test)]
     #[cfg(test)]
     pub(crate) fn prepare_tcp_relay_hop<'a>(
         &self,

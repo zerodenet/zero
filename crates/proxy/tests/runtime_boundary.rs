@@ -359,15 +359,31 @@ fn protocol_adapter_roots_do_not_construct_transport_plans_or_request_bundles_in
 #[test]
 fn inventory_udp_dispatch_keeps_relay_choreography_outside_candidate_root() {
     let dispatch = read(&proxy_src().join("inventory/udp/dispatch.rs"));
+    assert!(dispatch.contains("ClaimedResolvedOutbound"));
+    assert!(dispatch.contains("claim_udp_outbound(resolved)?"));
     assert!(dispatch.contains("prepare_udp_outbound("));
     assert!(!dispatch.contains("dispatch_tcp_relay_prefix"));
     assert!(!dispatch.contains("prepare_udp_packet_path_pair"));
+    assert!(!dispatch.contains("prepare_udp_leaf_candidate("));
+    assert!(!dispatch.contains("prepare_udp_relay_chain("));
     assert!(!dispatch.contains("UdpPacketRef"));
     assert!(!dispatch.contains("ResolvedLeafOutbound"));
     assert!(!dispatch.contains("enum UdpCandidate"));
     assert!(!dispatch.contains("outbound_leaf_runtime"));
     assert!(!dispatch.contains("start_udp_leaf_flow("));
     assert!(!dispatch.contains("start_udp_relay_chain("));
+}
+
+#[test]
+fn inventory_tcp_dispatch_claims_resolved_outbound_before_prepare() {
+    let dispatch = read(&proxy_src().join("inventory/tcp/dispatch.rs"));
+    assert!(dispatch.contains("ClaimedResolvedOutbound"));
+    assert!(dispatch.contains("claim_tcp_outbound(resolved)?"));
+    assert!(dispatch.contains("prepare_tcp_outbound("));
+    assert!(!dispatch.contains("prepare_tcp_candidate("));
+    assert!(!dispatch.contains("prepare_tcp_relay_chain("));
+    assert!(!dispatch.contains("ResolvedLeafOutbound"));
+    assert!(!dispatch.contains("outbound_leaf_runtime"));
 }
 
 #[test]
@@ -431,11 +447,15 @@ fn inventory_udp_relay_executes_final_hop_without_start_helper_roundtrip() {
         "udp relay chain should prepare and execute the final hop locally instead of bouncing through a second start helper"
     );
     assert!(
+        !relay.contains("claim_owned_outbound_leaf("),
+        "udp relay chain should reuse the already claimed final hop instead of reclaiming a raw leaf"
+    );
+    assert!(
         !relay.contains("PreparedUdpRelayChain::FinalHop"),
         "udp relay chain should collapse the relay prefix into an opaque prepared operation before execution"
     );
     assert!(relay.contains("PreparedUdpRelayChain"));
-    assert!(relay.contains("prepare_udp_relay_chain<'a>("));
+    assert!(relay.contains("prepare_claimed_udp_relay_chain<'a>("));
     assert!(relay.contains("prepare_udp_relay_final_hop_operation"));
 }
 
@@ -594,6 +614,9 @@ fn inventory_tcp_candidate_and_dispatch_use_runtime_services_instead_of_proxy() 
 #[test]
 fn inventory_runtime_delegates_leaf_claim_logic_to_registry() {
     let runtime = read(&proxy_src().join("inventory/runtime.rs"));
+    assert!(runtime.contains("enum ClaimedResolvedOutbound"));
+    assert!(runtime.contains("fn claim_tcp_outbound"));
+    assert!(runtime.contains("fn claim_udp_outbound"));
     assert!(runtime.contains("self.registry.claim_outbound_leaf(leaf)"));
     assert!(!runtime.contains("claimed_tcp_outbound_leaf"));
     assert!(!runtime.contains("claimed_udp_flow_leaf"));

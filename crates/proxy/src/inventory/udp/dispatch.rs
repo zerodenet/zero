@@ -1,7 +1,7 @@
 use zero_core::Session;
 use zero_engine::{EngineError, ResolvedOutbound};
 
-use super::super::ProtocolInventory;
+use super::super::{ClaimedResolvedOutbound, ProtocolInventory};
 use crate::protocol_registry::UdpAdapterContext;
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
 
@@ -50,23 +50,23 @@ impl PreparedUdpOutbound<'_> {
 }
 
 impl ProtocolInventory {
-    async fn prepare_udp_outbound<'a>(
+    async fn prepare_claimed_udp_outbound<'a>(
         &self,
         ctx: UdpAdapterContext<'a>,
         session: &'a Session,
-        resolved: &'a ResolvedOutbound<'a>,
+        claimed: ClaimedResolvedOutbound<'a>,
         payload: &'a [u8],
     ) -> Result<PreparedUdpOutbound<'a>, FlowFailure> {
-        match resolved {
-            ResolvedOutbound::Single(candidate) => Ok(PreparedUdpOutbound::Single(
-                self.prepare_udp_leaf_candidate(ctx, candidate)?,
+        match claimed {
+            ClaimedResolvedOutbound::Single(candidate) => Ok(PreparedUdpOutbound::Single(
+                self.prepare_claimed_udp_leaf_candidate(ctx, &candidate)?,
             )),
-            ResolvedOutbound::Fallback { candidates } => {
+            ClaimedResolvedOutbound::Fallback(candidates) => {
                 let mut prepared = Vec::with_capacity(candidates.len());
                 let mut last_failure = None;
 
                 for candidate in candidates {
-                    match self.prepare_udp_leaf_candidate(ctx.clone(), candidate) {
+                    match self.prepare_claimed_udp_leaf_candidate(ctx.clone(), &candidate) {
                         Ok(candidate) => prepared.push(candidate),
                         Err(failure) => last_failure = Some(failure),
                     }
@@ -84,11 +84,23 @@ impl ProtocolInventory {
                     Ok(PreparedUdpOutbound::Fallback(prepared))
                 }
             }
-            ResolvedOutbound::Relay { chain } => Ok(PreparedUdpOutbound::Relay(Box::new(
-                self.prepare_udp_relay_chain(ctx, session, chain, payload)
+            ClaimedResolvedOutbound::Relay(chain) => Ok(PreparedUdpOutbound::Relay(Box::new(
+                self.prepare_claimed_udp_relay_chain(ctx, session, &chain, payload)
                     .await?,
             ))),
         }
+    }
+
+    async fn prepare_udp_outbound<'a>(
+        &self,
+        ctx: UdpAdapterContext<'a>,
+        session: &'a Session,
+        resolved: &'a ResolvedOutbound<'a>,
+        payload: &'a [u8],
+    ) -> Result<PreparedUdpOutbound<'a>, FlowFailure> {
+        let claimed = self.claim_udp_outbound(resolved)?;
+        self.prepare_claimed_udp_outbound(ctx, session, claimed, payload)
+            .await
     }
 }
 
