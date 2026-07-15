@@ -10,7 +10,7 @@ use zero_transport::tls;
 use zero_transport::RuntimeError;
 
 #[derive(Clone)]
-struct OwnedVmessInboundListenerConfig {
+pub struct VmessInboundListenerRequest {
     profile: crate::inbound::VmessInboundProfile,
     tls_acceptor: tls::TlsAcceptor,
     ws: Option<OwnedWebSocketProfile>,
@@ -18,9 +18,15 @@ struct OwnedVmessInboundListenerConfig {
     protocol_name: &'static str,
 }
 
-impl OwnedVmessInboundListenerConfig {
-    #[allow(clippy::too_many_arguments)]
-    fn from_profile_refs<TTls, TWs, TGrpc>(
+impl VmessInboundListenerRequest {
+    pub const ERROR_PROTOCOL_NAME: &'static str = "vmess";
+    pub const UDP_PROTOCOL: &'static str = "vmess_udp";
+    pub const MUX_PROTOCOL: &'static str = "vmess_mux";
+    pub const PANIC_MESSAGE: &'static str = "vmess mux task panicked";
+    pub const ABORT_ON_END: bool = false;
+    pub const READ_ERROR_LOG: &'static str = "vmess mux frame read failed";
+
+    pub(in crate::transport) fn from_profile_refs<TTls, TWs, TGrpc>(
         source_dir: Option<&Path>,
         profile: crate::inbound::VmessInboundProfile,
         tls: Option<&TTls>,
@@ -55,40 +61,6 @@ impl OwnedVmessInboundListenerConfig {
             grpc: grpc.map(OwnedGrpcProfile::from_profile),
             protocol_name,
         })
-    }
-}
-
-#[derive(Clone)]
-pub struct VmessInboundListenerRequest {
-    profile: crate::inbound::VmessInboundProfile,
-    tls_acceptor: tls::TlsAcceptor,
-    ws: Option<OwnedWebSocketProfile>,
-    grpc: Option<OwnedGrpcProfile>,
-    protocol_name: &'static str,
-}
-
-impl VmessInboundListenerRequest {
-    pub const ERROR_PROTOCOL_NAME: &'static str = "vmess";
-    pub const UDP_PROTOCOL: &'static str = "vmess_udp";
-    pub const MUX_PROTOCOL: &'static str = "vmess_mux";
-    pub const PANIC_MESSAGE: &'static str = "vmess mux task panicked";
-    pub const ABORT_ON_END: bool = false;
-    pub const READ_ERROR_LOG: &'static str = "vmess mux frame read failed";
-
-    pub(in crate::transport) fn from_profile_refs<TTls, TWs, TGrpc>(
-        source_dir: Option<&Path>,
-        profile: crate::inbound::VmessInboundProfile,
-        tls: Option<&TTls>,
-        ws: Option<&TWs>,
-        grpc: Option<&TGrpc>,
-    ) -> Result<Self, RuntimeError>
-    where
-        TTls: ServerTlsProfile + ?Sized,
-        TWs: WebSocketTransportProfile + ?Sized,
-        TGrpc: GrpcTransportProfile + ?Sized,
-    {
-        OwnedVmessInboundListenerConfig::from_profile_refs(source_dir, profile, tls, ws, grpc)
-            .map(Into::into)
     }
 
     pub fn protocol_name(&self) -> &'static str {
@@ -134,24 +106,5 @@ impl VmessInboundListenerRequest {
             .await
             .map(OpaqueMuxRoute::new)
             .map_err(RuntimeError::from)
-    }
-}
-
-impl From<OwnedVmessInboundListenerConfig> for VmessInboundListenerRequest {
-    fn from(config: OwnedVmessInboundListenerConfig) -> Self {
-        let OwnedVmessInboundListenerConfig {
-            profile,
-            tls_acceptor,
-            ws,
-            grpc,
-            protocol_name,
-        } = config;
-        Self {
-            profile,
-            tls_acceptor,
-            ws,
-            grpc,
-            protocol_name,
-        }
     }
 }

@@ -1222,6 +1222,27 @@ fn protocol_mux_servers_dispatch_opened_routes_without_handler_wrappers() {
 }
 
 #[test]
+fn heavy_protocol_inbound_transport_requests_do_not_keep_listener_config_wrappers() {
+    for relative in [
+        "protocols/vless/src/transport/inbound.rs",
+        "protocols/vmess/src/transport/inbound.rs",
+        "protocols/trojan/src/transport/inbound.rs",
+    ] {
+        let source = read(&workspace_root().join(relative));
+        assert!(
+            !source.contains("OwnedVlessInboundListenerConfig")
+                && !source.contains("OwnedVmessInboundListenerConfig")
+                && !source.contains("OwnedTrojanInboundListenerConfig"),
+            "{relative} must build final inbound listener requests directly instead of keeping listener-config wrapper intermediates"
+        );
+        assert!(
+            !source.contains("impl From<Owned"),
+            "{relative} must not rely on wrapper-to-request conversion shims"
+        );
+    }
+}
+
+#[test]
 fn mieru_adapter_uses_protocol_outbound_option_refs() {
     let adapter = read(&proxy_src().join("adapters/mieru.rs"));
     let forbidden = "MieruTransportLeaf::new(";

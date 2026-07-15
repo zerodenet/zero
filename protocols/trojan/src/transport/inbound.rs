@@ -11,32 +11,6 @@ use super::options::TrojanInboundOptionsRef;
 type TrojanInboundTlsStream = InboundTlsStream<TokioSocket>;
 
 #[derive(Clone)]
-struct OwnedTrojanInboundListenerConfig {
-    profile: crate::inbound::TrojanInboundProfile,
-    tls_acceptor: TlsAcceptor,
-}
-
-impl OwnedTrojanInboundListenerConfig {
-    fn from_profile_refs<TTls>(
-        source_dir: Option<&Path>,
-        profile: crate::inbound::TrojanInboundProfile,
-        tls: Option<&TTls>,
-    ) -> Result<Self, RuntimeError>
-    where
-        TTls: ServerTlsProfile + ?Sized,
-    {
-        Ok(Self {
-            profile,
-            tls_acceptor: zero_transport::inbound_stack::build_required_tls_acceptor(
-                source_dir,
-                tls,
-                "trojan requires TLS",
-            )?,
-        })
-    }
-}
-
-#[derive(Clone)]
 pub struct TrojanInboundListenerRequest {
     profile: crate::inbound::TrojanInboundProfile,
     tls_acceptor: TlsAcceptor,
@@ -61,8 +35,14 @@ impl TrojanInboundListenerRequest {
     where
         TTls: ServerTlsProfile + ?Sized,
     {
-        OwnedTrojanInboundListenerConfig::from_profile_refs(source_dir, profile, tls)
-            .map(Into::into)
+        Ok(Self::new(
+            profile,
+            zero_transport::inbound_stack::build_required_tls_acceptor(
+                source_dir,
+                tls,
+                "trojan requires TLS",
+            )?,
+        ))
     }
 
     pub(in crate::transport) fn from_options_refs<TTls>(
@@ -109,15 +89,5 @@ impl TrojanInboundListenerRequest {
             .await
             .map(OpaqueStreamRoute::new)
             .map_err(RuntimeError::from)
-    }
-}
-
-impl From<OwnedTrojanInboundListenerConfig> for TrojanInboundListenerRequest {
-    fn from(config: OwnedTrojanInboundListenerConfig) -> Self {
-        let OwnedTrojanInboundListenerConfig {
-            profile,
-            tls_acceptor,
-        } = config;
-        Self::new(profile, tls_acceptor)
     }
 }
