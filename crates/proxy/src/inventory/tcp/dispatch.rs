@@ -1,7 +1,7 @@
 use zero_core::Session;
 use zero_engine::ResolvedOutbound;
 
-use super::super::{ClaimedResolvedOutbound, ProtocolInventory};
+use super::super::ProtocolInventory;
 use super::{dispatch_prepared_tcp_candidate, dispatch_prepared_tcp_relay_chain};
 use crate::protocol_registry::OutboundAdapterContext;
 use crate::protocol_registry::TcpRuntimeServices;
@@ -46,24 +46,46 @@ impl PreparedTcpOutbound<'_> {
 }
 
 impl ProtocolInventory {
-    fn prepare_claimed_tcp_outbound<'a>(
+    pub(crate) fn prepare_tcp_outbound<'a>(
         &self,
         ctx: OutboundAdapterContext,
-        claimed: ClaimedResolvedOutbound<'a>,
+        resolved: &'a ResolvedOutbound<'a>,
     ) -> Result<PreparedTcpOutbound<'a>, TcpOutboundFailure> {
-        match claimed {
-            ClaimedResolvedOutbound::Relay(chain) => Ok(PreparedTcpOutbound::Relay(
-                self.prepare_claimed_tcp_relay_chain(ctx, &chain)?,
-            )),
-            ClaimedResolvedOutbound::Single(candidate) => Ok(PreparedTcpOutbound::Single(
-                self.prepare_claimed_tcp_candidate(ctx, &candidate)?,
-            )),
-            ClaimedResolvedOutbound::Fallback(candidates) => {
+        match resolved {
+            ResolvedOutbound::Relay { chain } => {
+                let claimed = self.claim_tcp_relay_chain(chain.iter().cloned())?;
+                Ok(PreparedTcpOutbound::Relay(
+                    self.prepare_claimed_tcp_relay_chain(ctx, &claimed)?,
+                ))
+            }
+            ResolvedOutbound::Single(candidate) => {
+                let claimed = self
+                    .claim_outbound_leaf(candidate.clone())
+                    .map_err(|error| TcpOutboundFailure {
+                        stage: "outbound_leaf_runtime",
+                        error,
+                        upstream_endpoint: None,
+                    })?;
+                Ok(PreparedTcpOutbound::Single(
+                    self.prepare_claimed_tcp_candidate(ctx, &claimed)?,
+                ))
+            }
+            ResolvedOutbound::Fallback { candidates } => {
                 let mut prepared = Vec::with_capacity(candidates.len());
                 let mut last_failure = None;
 
-                for candidate in candidates {
-                    match self.prepare_claimed_tcp_candidate(ctx.clone(), &candidate) {
+                for candidate in candidates.iter().cloned() {
+                    let prepared_candidate = self
+                        .claim_outbound_leaf(candidate)
+                        .map_err(|error| TcpOutboundFailure {
+                            stage: "outbound_leaf_runtime",
+                            error,
+                            upstream_endpoint: None,
+                        })
+                        .and_then(|claimed| {
+                            self.prepare_claimed_tcp_candidate(ctx.clone(), &claimed)
+                        });
+                    match prepared_candidate {
                         Ok(candidate) => prepared.push(candidate),
                         Err(failure) => last_failure = Some(failure),
                     }
@@ -77,15 +99,6 @@ impl ProtocolInventory {
                 }
             }
         }
-    }
-
-    pub(crate) fn prepare_tcp_outbound<'a>(
-        &self,
-        ctx: OutboundAdapterContext,
-        resolved: &'a ResolvedOutbound<'a>,
-    ) -> Result<PreparedTcpOutbound<'a>, TcpOutboundFailure> {
-        let claimed = self.claim_tcp_outbound(resolved)?;
-        self.prepare_claimed_tcp_outbound(ctx, claimed)
     }
 }
 

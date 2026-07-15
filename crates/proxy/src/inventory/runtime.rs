@@ -10,7 +10,7 @@
 use std::iter;
 use std::path::Path;
 
-use zero_engine::{EngineError, ResolvedLeafOutbound, ResolvedOutbound};
+use zero_engine::{EngineError, ResolvedLeafOutbound};
 
 use super::ProtocolInventory;
 use crate::protocol_registry::{ClaimedOutboundLeaf, OutboundLeafRuntime};
@@ -27,17 +27,6 @@ use crate::runtime::tcp_dispatch::operation::{
     feature = "mieru"
 ))]
 use crate::runtime::udp_dispatch::operation::PreparedUdpFlowOperation;
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
-))]
-use crate::runtime::udp_dispatch::FlowFailure;
-use crate::transport::TcpOutboundFailure;
 
 #[derive(Clone)]
 pub(crate) struct ClaimedInventoryLeaf<'a> {
@@ -132,12 +121,6 @@ impl<'a> ClaimedInventoryLeaf<'a> {
     }
 }
 
-pub(crate) enum ClaimedResolvedOutbound<'a> {
-    Relay(ClaimedRelayChain<'a>),
-    Single(ClaimedInventoryLeaf<'a>),
-    Fallback(Vec<ClaimedInventoryLeaf<'a>>),
-}
-
 #[derive(Clone)]
 pub(crate) struct ClaimedRelayChain<'a> {
     first: ClaimedInventoryLeaf<'a>,
@@ -207,115 +190,11 @@ impl ProtocolInventory {
         self.registry.on_config_reloaded();
     }
 
-    pub(super) fn claim_tcp_outbound<'a>(
-        &self,
-        resolved: &'a ResolvedOutbound<'a>,
-    ) -> Result<ClaimedResolvedOutbound<'a>, TcpOutboundFailure> {
-        match resolved {
-            ResolvedOutbound::Single(candidate) => Ok(ClaimedResolvedOutbound::Single(
-                self.claim_outbound_leaf(candidate.clone())
-                    .map_err(map_tcp_outbound_leaf_runtime_failure)?,
-            )),
-            ResolvedOutbound::Relay { chain } => Ok(ClaimedResolvedOutbound::Relay(
-                self.claim_tcp_relay_chain(chain.iter().cloned())?,
-            )),
-            ResolvedOutbound::Fallback { candidates } => {
-                let mut claimed = Vec::with_capacity(candidates.len());
-                let mut last_failure = None;
-
-                for candidate in candidates.iter().cloned() {
-                    match self.claim_outbound_leaf(candidate) {
-                        Ok(candidate) => claimed.push(candidate),
-                        Err(error) => {
-                            last_failure = Some(map_tcp_outbound_leaf_runtime_failure(error))
-                        }
-                    }
-                }
-
-                if claimed.is_empty() {
-                    Err(last_failure
-                        .expect("validated fallback groups always have at least one candidate"))
-                } else {
-                    Ok(ClaimedResolvedOutbound::Fallback(claimed))
-                }
-            }
-        }
-    }
-
-    #[cfg(any(
-        feature = "socks5",
-        feature = "vless",
-        feature = "hysteria2",
-        feature = "shadowsocks",
-        feature = "trojan",
-        feature = "vmess",
-        feature = "mieru"
-    ))]
-    pub(super) fn claim_udp_outbound<'a>(
-        &self,
-        resolved: &'a ResolvedOutbound<'a>,
-    ) -> Result<ClaimedResolvedOutbound<'a>, FlowFailure> {
-        match resolved {
-            ResolvedOutbound::Single(candidate) => Ok(ClaimedResolvedOutbound::Single(
-                self.claim_outbound_leaf(candidate.clone())
-                    .map_err(map_udp_outbound_leaf_runtime_failure)?,
-            )),
-            ResolvedOutbound::Relay { chain } => Ok(ClaimedResolvedOutbound::Relay(
-                self.claim_udp_relay_chain(chain.iter().cloned())?,
-            )),
-            ResolvedOutbound::Fallback { candidates } => {
-                let mut claimed = Vec::with_capacity(candidates.len());
-                let mut last_failure = None;
-
-                for candidate in candidates.iter().cloned() {
-                    match self.claim_outbound_leaf(candidate) {
-                        Ok(candidate) => claimed.push(candidate),
-                        Err(error) => {
-                            last_failure = Some(map_udp_outbound_leaf_runtime_failure(error))
-                        }
-                    }
-                }
-
-                if claimed.is_empty() {
-                    Err(last_failure
-                        .expect("validated fallback groups always have at least one candidate"))
-                } else {
-                    Ok(ClaimedResolvedOutbound::Fallback(claimed))
-                }
-            }
-        }
-    }
-
     pub(crate) fn claim_outbound_leaf<'a>(
         &self,
         leaf: ResolvedLeafOutbound<'a>,
     ) -> Result<ClaimedInventoryLeaf<'a>, EngineError> {
         let claimed = self.registry.claim_outbound_leaf(leaf)?;
         Ok(ClaimedInventoryLeaf::new(claimed))
-    }
-}
-
-fn map_tcp_outbound_leaf_runtime_failure(error: EngineError) -> TcpOutboundFailure {
-    TcpOutboundFailure {
-        stage: "outbound_leaf_runtime",
-        error,
-        upstream_endpoint: None,
-    }
-}
-
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
-))]
-fn map_udp_outbound_leaf_runtime_failure(error: EngineError) -> FlowFailure {
-    FlowFailure {
-        stage: "outbound_leaf_runtime",
-        error,
-        upstream: None,
     }
 }
