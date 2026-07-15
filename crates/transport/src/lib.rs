@@ -40,4 +40,4 @@ pub mod ws;
 
 pub use metered::{MeteredStream, StreamTraffic};
 pub use stream::{ClientStream, PrefixedSocket, RecordingStream, RelayCarrier, TcpRelayStream};
-pub use zero_runtime_error::RuntimeError;
+pub use zero_engine_contract::RuntimeError;

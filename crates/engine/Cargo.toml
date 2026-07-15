@@ -19,7 +19,7 @@ tracing.workspace = true
 zero-api = { path = "../api" }
 zero-config = { path = "../config" }
 zero-core = { path = "../core" }
-zero-runtime-error = { path = "../runtime-error" }
+zero-engine-contract = { path = "../engine-contract" }
 zero-router = { path = "../router" }
 
 [dev-dependencies]

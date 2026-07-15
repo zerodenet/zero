@@ -388,6 +388,30 @@ fn protocol_adapter_listener_modules_do_not_construct_transport_listener_request
 }
 
 #[test]
+fn protocol_transport_roots_do_not_reexport_internal_outbound_plan_types() {
+    for (relative, forbidden) in [
+        (
+            "protocols/vless/src/transport.rs",
+            "pub use outbound::OwnedVlessOutboundTransportPlan;",
+        ),
+        (
+            "protocols/vmess/src/transport.rs",
+            "pub use outbound::OwnedVmessOutboundTransportPlan;",
+        ),
+        (
+            "protocols/trojan/src/transport.rs",
+            "pub use outbound::OwnedTrojanOutboundTlsPlan;",
+        ),
+    ] {
+        let source = read(&workspace_root().join(relative));
+        assert!(
+            !source.contains(forbidden),
+            "{relative} must keep transport plan internals behind leaf-owned entrypoints instead of re-exporting `{forbidden}`"
+        );
+    }
+}
+
+#[test]
 fn inventory_udp_dispatch_keeps_relay_choreography_outside_candidate_root() {
     let dispatch = read(&proxy_src().join("inventory/udp/dispatch.rs"));
     assert!(!dispatch.contains("ClaimedResolvedOutbound"));

@@ -36,7 +36,7 @@ x25519-dalek = { version = "2.0.1", default-features = false, features = ["stati
 tungstenite = "0.23"
 webpki-roots = "1"
 zero-core = { path = "../core" }
-zero-runtime-error = { path = "../runtime-error" }
+zero-engine-contract = { path = "../engine-contract" }
 ztls = { path = "../ztls" }
 zero-platform-tokio = { path = "../platform/tokio" }
 zero-traits = { path = "../traits" }

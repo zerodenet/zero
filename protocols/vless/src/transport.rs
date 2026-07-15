@@ -16,7 +16,6 @@ pub use inbound::{
     OwnedVlessInboundBindPlan, OwnedVlessInboundListenerConfig, VlessInboundListenerRequest,
 };
 pub use leaf::{OwnedVlessOutboundLeafConfig, VlessOutboundLeaf};
-pub use outbound::OwnedVlessOutboundTransportPlan;
 pub use profile::{
     OwnedVlessQuicBindProfile, OwnedVlessQuicClientProfile, OwnedVlessRealityClientProfile,
 };

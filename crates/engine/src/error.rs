@@ -3,7 +3,7 @@ use std::io;
 use thiserror::Error;
 use zero_config::ConfigError;
 use zero_core::Error as CoreError;
-use zero_runtime_error::RuntimeError;
+use zero_engine_contract::RuntimeError;
 
 #[derive(Debug, Error)]
 pub enum EngineError {

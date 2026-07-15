@@ -41,7 +41,7 @@ grpc_api = ["dep:zero-grpc"]
 members = [
     "crates/traits",
     "crates/core",
-    "crates/runtime-error",
+    "crates/engine-contract",
     "crates/api",
     "crates/config",
     "crates/connector",
