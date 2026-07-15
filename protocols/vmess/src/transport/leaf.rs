@@ -15,6 +15,7 @@ use zero_transport::StreamTraffic;
 
 use super::managed_udp::{VmessManagedStreamUdpResume, VmessManagedUdpFlowResume};
 use super::outbound::OwnedVmessOutboundTransportPlan;
+use super::runtime::VmessTransportRuntime;
 
 #[derive(Clone)]
 pub struct VmessOutboundLeaf {
@@ -27,6 +28,40 @@ pub struct VmessOutboundLeaf {
 }
 
 impl VmessOutboundLeaf {
+    pub fn from_options_refs<TTls, TWs, TGrpc>(
+        source_dir: Option<&Path>,
+        options: super::options::VmessOutboundBuildOptionsRef<'_, TTls, TWs, TGrpc>,
+        runtime: &VmessTransportRuntime,
+    ) -> Result<Self, zero_core::Error>
+    where
+        TTls: ClientTlsProfile + ?Sized,
+        TWs: WebSocketTransportProfile + ?Sized,
+        TGrpc: GrpcTransportProfile + ?Sized,
+    {
+        let super::options::VmessOutboundBuildOptionsRef {
+            tag,
+            server,
+            port,
+            protocol,
+            tls,
+            ws,
+            grpc,
+        } = options;
+        Self::from_profile_refs(
+            source_dir,
+            tag,
+            server,
+            port,
+            protocol.id,
+            protocol.cipher,
+            protocol.mux_concurrency,
+            tls,
+            ws,
+            grpc,
+            runtime.mux_pool(),
+        )
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub(in crate::transport) fn from_profile_refs<TTls, TWs, TGrpc>(
         source_dir: Option<&Path>,

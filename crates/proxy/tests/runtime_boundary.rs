@@ -703,7 +703,7 @@ fn vless_adapter_uses_protocol_option_refs_instead_of_private_profile_constructo
         "VlessQuicClientOptionsRef",
         "VlessRealityClientOptionsRef",
         "VlessInboundBindPlan::from_options_refs",
-        "build_outbound_leaf(",
+        "VlessOutboundLeaf::from_options_refs",
     ] {
         assert!(
             adapter.contains(required),
@@ -759,7 +759,7 @@ fn vmess_adapter_uses_protocol_outbound_option_refs() {
         "VmessOutboundBuildOptionsRef",
         "VmessOutboundOptionsRef",
         "VmessTransportRuntime",
-        "build_outbound_leaf(",
+        "VmessOutboundLeaf::from_options_refs",
     ] {
         assert!(
             adapter.contains(required),
@@ -908,28 +908,26 @@ fn trojan_adapter_uses_protocol_option_refs_directly() {
 }
 
 #[test]
-fn carrier_rich_protocol_transport_runtimes_keep_outbound_profile_constructors_internal() {
-    for (relative, required, forbidden) in [
-        (
-            "protocols/vless/src/transport/runtime.rs",
-            "VlessOutboundLeaf::from_profile_refs",
-            "VlessOutboundLeaf::from_config_refs",
-        ),
-        (
-            "protocols/vmess/src/transport/runtime.rs",
-            "VmessOutboundLeaf::from_profile_refs",
-            "VmessOutboundLeaf::from_config_refs",
-        ),
+fn carrier_rich_protocol_transport_runtimes_only_keep_reloadable_state() {
+    for relative in [
+        "protocols/vless/src/transport/runtime.rs",
+        "protocols/vmess/src/transport/runtime.rs",
     ] {
         let source = read(&workspace_root().join(relative));
         assert!(
-            source.contains(required),
-            "{relative} should build transport-owned state through `{required}`"
+            source.contains("evict_all()"),
+            "{relative} should keep reload-driven pool eviction state"
         );
-        assert!(
-            !source.contains(forbidden),
-            "{relative} must not call legacy public config constructor `{forbidden}`"
-        );
+        for forbidden in [
+            "build_outbound_leaf(",
+            "from_profile_refs(",
+            "from_options_refs(",
+        ] {
+            assert!(
+                !source.contains(forbidden),
+                "{relative} must not keep constructor passthrough `{forbidden}`"
+            );
+        }
     }
 }
 
@@ -969,6 +967,30 @@ fn heavy_protocol_transport_files_do_not_expose_public_config_constructors() {
         assert!(
             !source.contains("pub fn from_config_refs"),
             "{relative} must not expose legacy public config constructor `pub fn from_config_refs`"
+        );
+    }
+}
+
+#[test]
+fn carrier_rich_outbound_transport_leaves_expose_public_option_ref_constructors() {
+    for (relative, required) in [
+        (
+            "protocols/vless/src/transport/leaf.rs",
+            "pub fn from_options_refs",
+        ),
+        (
+            "protocols/vmess/src/transport/leaf.rs",
+            "pub fn from_options_refs",
+        ),
+        (
+            "protocols/trojan/src/transport/leaf.rs",
+            "pub fn from_options_refs",
+        ),
+    ] {
+        let source = read(&workspace_root().join(relative));
+        assert!(
+            source.contains(required),
+            "{relative} should expose typed public outbound option constructor `{required}`"
         );
     }
 }

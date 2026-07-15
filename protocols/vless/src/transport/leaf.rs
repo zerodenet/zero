@@ -24,6 +24,7 @@ use zero_transport::StreamTraffic;
 use super::managed_udp::{VlessManagedStreamUdpResume, VlessManagedUdpFlowResume};
 use super::outbound::OwnedVlessOutboundTransportPlan;
 use super::profile::{VlessQuicClientProfile, VlessRealityClientProfile};
+use super::runtime::VlessTransportRuntime;
 
 #[derive(Clone)]
 pub struct VlessOutboundLeaf {
@@ -36,6 +37,61 @@ pub struct VlessOutboundLeaf {
 }
 
 impl VlessOutboundLeaf {
+    pub fn from_options_refs<TTls, TWs, TGrpc, TH2, THttp, TSplit>(
+        source_dir: Option<&Path>,
+        options: super::options::VlessOutboundBuildOptionsRef<
+            '_,
+            TTls,
+            TWs,
+            TGrpc,
+            TH2,
+            THttp,
+            TSplit,
+        >,
+        runtime: &VlessTransportRuntime,
+    ) -> Result<Self, zero_core::Error>
+    where
+        TTls: ClientTlsProfile + ?Sized,
+        TWs: WebSocketTransportProfile + ?Sized,
+        TGrpc: GrpcTransportProfile + ?Sized,
+        TH2: H2TransportProfile + ?Sized,
+        THttp: HttpUpgradeTransportProfile + ?Sized,
+        TSplit: SplitHttpTransportProfile + ?Sized,
+    {
+        let super::options::VlessOutboundBuildOptionsRef {
+            tag,
+            server,
+            port,
+            protocol,
+            tls,
+            ws,
+            grpc,
+            h2,
+            http_upgrade,
+            split_http,
+        } = options;
+        let reality = protocol.reality.map(VlessRealityClientProfile::from);
+        let quic = protocol.quic.map(VlessQuicClientProfile::from);
+        Self::from_profile_refs(
+            source_dir,
+            tag,
+            server,
+            port,
+            protocol.id,
+            protocol.flow,
+            protocol.mux_concurrency,
+            tls,
+            reality.as_ref(),
+            ws,
+            grpc,
+            h2,
+            http_upgrade,
+            split_http,
+            quic.as_ref(),
+            runtime.mux_pool(),
+        )
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub(in crate::transport) fn from_profile_refs<TTls, TWs, TGrpc, TH2, THttp, TSplit>(
         source_dir: Option<&Path>,

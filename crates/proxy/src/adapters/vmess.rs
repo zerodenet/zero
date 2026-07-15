@@ -122,10 +122,18 @@ impl VmessAdapter {
         Some(OutboundLeafClaim {
             runtime: runtime.clone(),
             tcp: claim_transport_tcp_leaf(endpoint, runtime, move |source_dir| {
-                tcp_runtime.build_outbound_leaf(source_dir, projection.build_options())
+                VmessOutboundLeaf::from_options_refs(
+                    source_dir,
+                    projection.build_options(),
+                    &tcp_runtime,
+                )
             }),
             udp: Some(claim_transport_udp_leaf(endpoint, move |source_dir| {
-                udp_runtime.build_outbound_leaf(source_dir, projection.build_options())
+                VmessOutboundLeaf::from_options_refs(
+                    source_dir,
+                    projection.build_options(),
+                    &udp_runtime,
+                )
             })),
             packet_path: None,
         })
