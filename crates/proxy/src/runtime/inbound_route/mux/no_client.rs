@@ -16,14 +16,11 @@ use crate::runtime::mux_udp::run_protocol_mux_udp_task;
 use crate::runtime::route_runtime::{InboundRouteRuntime, MuxSubstreamRuntime};
 use crate::runtime::stream_udp::run_mapped_protocol_stream_udp_relay;
 use crate::runtime::tcp_ingress::NoClientResponseInboundProtocol;
-use crate::runtime::Proxy;
 use crate::transport::TcpRelayStream;
 
 pub(crate) async fn dispatch_no_client_mux_route<R, FTcp, FTcpFut, FUdp, FUdpFut>(
     route: R,
-    proxy: Proxy,
-    inbound_tag: String,
-    source_addr: Option<std::net::SocketAddr>,
+    runtime: InboundRouteRuntime,
     defaults: NoClientMuxRouteDefaults,
     spawn_tcp: FTcp,
     spawn_udp: FUdp,
@@ -55,7 +52,7 @@ where
     dispatch_protocol_mux_route(
         route,
         MuxRouteBridge {
-            runtime: InboundRouteRuntime::new(proxy, inbound_tag, source_addr),
+            runtime,
             protocol: NoClientResponseInboundProtocol,
             map_tcp_stream: TcpRelayStream::new,
             run_udp: move |runtime: InboundRouteRuntime,
@@ -105,9 +102,7 @@ where
 
 pub(crate) async fn dispatch_no_client_mux_route_with_defaults<R, FTcp, FTcpFut, FUdp, FUdpFut>(
     route: R,
-    proxy: Proxy,
-    inbound_tag: String,
-    source_addr: Option<std::net::SocketAddr>,
+    runtime: InboundRouteRuntime,
     defaults: NoClientMuxRouteDefaults,
     spawn_tcp: FTcp,
     spawn_udp: FUdp,
@@ -136,23 +131,12 @@ where
         + Send,
     FUdpFut: Future<Output = ()> + Send + 'static,
 {
-    dispatch_no_client_mux_route(
-        route,
-        proxy,
-        inbound_tag,
-        source_addr,
-        defaults,
-        spawn_tcp,
-        spawn_udp,
-    )
-    .await
+    dispatch_no_client_mux_route(route, runtime, defaults, spawn_tcp, spawn_udp).await
 }
 
 pub(crate) async fn dispatch_no_client_mux_route_request_with_defaults<R>(
     route: R,
-    proxy: Proxy,
-    inbound_tag: String,
-    source_addr: Option<std::net::SocketAddr>,
+    runtime: InboundRouteRuntime,
     defaults: NoClientMuxRouteDefaults,
 ) -> Result<(), EngineError>
 where
@@ -170,9 +154,7 @@ where
 {
     dispatch_no_client_mux_route_with_defaults(
         route,
-        proxy,
-        inbound_tag,
-        source_addr,
+        runtime,
         defaults,
         move |runtime, session, relay| {
             run_protocol_mux_tcp_task(runtime, session, relay, defaults.mux_protocol)

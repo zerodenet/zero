@@ -5,13 +5,12 @@ use tokio::sync::watch;
 use zero_engine::EngineError;
 
 use crate::protocol_registry::BoundInbound;
+use crate::runtime::route_runtime::InboundRouteRuntime;
 use crate::runtime::Proxy;
 
 #[derive(Clone)]
 pub(crate) struct InboundConnectionContext {
-    proxy: Proxy,
-    inbound_tag: String,
-    source_addr: Option<std::net::SocketAddr>,
+    runtime: InboundRouteRuntime,
 }
 
 impl InboundConnectionContext {
@@ -27,11 +26,13 @@ impl InboundConnectionContext {
         S: crate::transport::ClientStream,
         H: zero_core::InboundUdpAssociation + zero_core::InboundUdpAssociationResponder,
     {
+        let runtime = self.runtime;
+        let inbound_tag = runtime.inbound_tag().to_owned();
         crate::runtime::udp_association::run_udp_association_loop(
             crate::runtime::udp_association::UdpAssociationLoopRequest {
-                runtime: crate::runtime::udp_ingress::UdpIngressRuntime::from_proxy(&self.proxy),
+                runtime: runtime.udp_runtime(),
                 client: &mut client,
-                inbound_tag: &self.inbound_tag,
+                inbound_tag: &inbound_tag,
                 relay,
                 pending_control_traffic,
                 handler,
@@ -47,17 +48,9 @@ impl InboundConnectionContext {
         protocol: P,
     ) -> Result<(), EngineError>
     where
-        P: crate::runtime::tcp_ingress::InboundProtocol,
+        P: crate::runtime::tcp_ingress::InboundProtocol + 'static,
     {
-        crate::runtime::tcp_ingress::serve_inbound(
-            &self.proxy,
-            session,
-            client,
-            &protocol,
-            &self.inbound_tag,
-            self.source_addr,
-        )
-        .await
+        self.runtime.serve(session, client, &protocol).await
     }
 
     #[cfg(feature = "http")]
@@ -65,10 +58,7 @@ impl InboundConnectionContext {
         &self,
         session: &zero_core::Session,
     ) -> Option<(u16, String)> {
-        crate::runtime::http_redirect::select_redirect_target(
-            &self.proxy.config.route.url_rewrite,
-            session,
-        )
+        self.runtime.select_http_redirect(session)
     }
 
     #[cfg(any(feature = "socks5", feature = "hysteria2", feature = "mieru"))]
@@ -82,15 +72,9 @@ impl InboundConnectionContext {
         P: zero_core::InboundClientResponse<S> + Send + Sync,
         S: tokio::io::AsyncRead + tokio::io::AsyncWrite + zero_traits::AsyncSocket + Unpin + Send,
     {
-        crate::runtime::tcp_ingress::serve_inbound_with_client_response(
-            &self.proxy,
-            session,
-            client,
-            response_protocol,
-            &self.inbound_tag,
-            self.source_addr,
-        )
-        .await
+        self.runtime
+            .serve_with_client_response(session, client, response_protocol)
+            .await
     }
 
     #[cfg(any(
@@ -110,11 +94,13 @@ impl InboundConnectionContext {
         R::Stream: tokio::io::AsyncRead + tokio::io::AsyncWrite + Send + Sync + Unpin + 'static,
         R::Responder: zero_core::StreamUdpResponder<R::Stream>,
     {
+        let runtime = self.runtime;
+        let inbound_tag = runtime.inbound_tag().to_owned();
         crate::runtime::stream_udp::run_mapped_protocol_stream_udp_relay(
-            crate::runtime::udp_ingress::UdpIngressRuntime::from_proxy(&self.proxy),
+            runtime.udp_runtime(),
             &session,
             relay,
-            &self.inbound_tag,
+            &inbound_tag,
             protocol,
             core::convert::identity,
             None,
@@ -139,9 +125,7 @@ impl InboundConnectionContext {
     {
         crate::runtime::inbound_route::dispatch_no_client_stream_route(
             route,
-            self.proxy,
-            self.inbound_tag,
-            self.source_addr,
+            self.runtime,
             udp_protocol,
         )
         .await
@@ -170,9 +154,7 @@ impl InboundConnectionContext {
     {
         crate::runtime::inbound_route::dispatch_no_client_mux_route_request_with_defaults(
             route,
-            self.proxy,
-            self.inbound_tag,
-            self.source_addr,
+            self.runtime,
             defaults,
         )
         .await
@@ -212,9 +194,7 @@ impl InboundConnectionContext {
     {
         crate::runtime::inbound_route::dispatch_recorded_protocol_mux_tcp_request_with_defaults(
             accept_result,
-            self.proxy,
-            self.inbound_tag,
-            self.source_addr,
+            self.runtime,
             protocol,
             defaults,
         )
@@ -252,9 +232,7 @@ impl InboundConnectionContext {
     {
         crate::runtime::inbound_route::dispatch_recorded_protocol_mux_stream_request_with_defaults(
             accept_result,
-            self.proxy,
-            self.inbound_tag,
-            self.source_addr,
+            self.runtime,
             protocol,
             defaults,
         )
@@ -319,9 +297,11 @@ where
                                 request,
                                 socket,
                                 InboundConnectionContext {
-                                    proxy,
-                                    inbound_tag,
-                                    source_addr,
+                                    runtime: InboundRouteRuntime::new(
+                                        proxy,
+                                        inbound_tag,
+                                        source_addr,
+                                    ),
                                 },
                             )
                             .await
@@ -517,9 +497,7 @@ where
                     break;
                 };
                 let context = InboundConnectionContext {
-                    proxy: proxy.clone(),
-                    inbound_tag: inbound_tag.clone(),
-                    source_addr: None,
+                    runtime: InboundRouteRuntime::new(proxy.clone(), inbound_tag.clone(), None),
                 };
                 let response = connection.response_protocol();
                 tasks.spawn(async move {
@@ -605,9 +583,11 @@ where
                                         request,
                                         socket,
                                         InboundConnectionContext {
-                                            proxy,
-                                            inbound_tag,
-                                            source_addr,
+                                            runtime: InboundRouteRuntime::new(
+                                                proxy,
+                                                inbound_tag,
+                                                source_addr,
+                                            ),
                                         },
                                     )
                                     .await
@@ -634,9 +614,11 @@ where
                                         request,
                                         stream,
                                         InboundConnectionContext {
-                                            proxy,
-                                            inbound_tag,
-                                            source_addr: None,
+                                            runtime: InboundRouteRuntime::new(
+                                                proxy,
+                                                inbound_tag,
+                                                None,
+                                            ),
                                         },
                                     )
                                     .await

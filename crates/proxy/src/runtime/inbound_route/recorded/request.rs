@@ -11,7 +11,6 @@ use crate::runtime::mux_tcp::run_protocol_mux_tcp_task;
 use crate::runtime::mux_udp::run_protocol_mux_udp_task_with_accept_log;
 use crate::runtime::route_runtime::{InboundRouteRuntime, MuxSubstreamRuntime};
 use crate::runtime::tcp_ingress::InboundProtocol;
-use crate::runtime::Proxy;
 use crate::transport::{ClientStream, MeteredStream, RecordingStream, TcpRelayStream};
 
 pub(crate) async fn dispatch_recorded_protocol_mux_tcp_request_result<
@@ -118,9 +117,7 @@ where
 
 pub(crate) async fn dispatch_recorded_protocol_mux_tcp_request_with_defaults<R, P, S, FR>(
     accept_result: Result<Option<RouteAcceptResult<R, FR>>, EngineError>,
-    proxy: Proxy,
-    inbound_tag: String,
-    source_addr: Option<std::net::SocketAddr>,
+    runtime: InboundRouteRuntime,
     protocol: P,
     defaults: RecordedProtocolMuxRouteDefaults,
 ) -> Result<(), EngineError>
@@ -143,7 +140,7 @@ where
     dispatch_recorded_protocol_mux_tcp_request_result(
         accept_result,
         RecordedProtocolMuxDispatch {
-            runtime: InboundRouteRuntime::new(proxy, inbound_tag, source_addr),
+            runtime,
             protocol,
             defaults,
         },
@@ -164,9 +161,7 @@ where
 
 pub(crate) async fn dispatch_recorded_protocol_mux_stream_request_with_defaults<R, P, S, FR>(
     accept_result: Result<RouteAcceptResult<R, FR>, EngineError>,
-    proxy: Proxy,
-    inbound_tag: String,
-    source_addr: Option<std::net::SocketAddr>,
+    runtime: InboundRouteRuntime,
     protocol: P,
     defaults: RecordedProtocolMuxRouteDefaults,
 ) -> Result<(), EngineError>
@@ -189,7 +184,7 @@ where
     dispatch_recorded_protocol_mux_stream_request_result(
         accept_result,
         RecordedProtocolMuxDispatch {
-            runtime: InboundRouteRuntime::new(proxy, inbound_tag, source_addr),
+            runtime,
             protocol,
             defaults,
         },

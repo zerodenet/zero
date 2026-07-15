@@ -7,14 +7,11 @@ use super::model::StreamRouteBridge;
 use crate::runtime::route_runtime::InboundRouteRuntime;
 use crate::runtime::stream_udp::run_mapped_protocol_stream_udp_relay;
 use crate::runtime::tcp_ingress::NoClientResponseInboundProtocol;
-use crate::runtime::Proxy;
 use crate::transport::TcpRelayStream;
 
 pub(crate) async fn dispatch_no_client_stream_route<R>(
     route: R,
-    proxy: Proxy,
-    inbound_tag: String,
-    source_addr: Option<std::net::SocketAddr>,
+    runtime: InboundRouteRuntime,
     udp_protocol: &'static str,
 ) -> Result<(), EngineError>
 where
@@ -29,7 +26,7 @@ where
     dispatch_protocol_stream_route(
         route,
         StreamRouteBridge {
-            runtime: InboundRouteRuntime::new(proxy, inbound_tag, source_addr),
+            runtime,
             protocol: NoClientResponseInboundProtocol,
             map_tcp_stream: TcpRelayStream::new,
             run_udp: move |runtime: InboundRouteRuntime,
