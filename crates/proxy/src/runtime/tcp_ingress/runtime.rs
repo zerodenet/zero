@@ -1,11 +1,8 @@
 use std::net::SocketAddr;
-use std::sync::Arc;
 use std::time::Duration;
 
-use zero_config::RuntimeConfig;
 use zero_core::{Address, Session};
-use zero_dns::DnsSystem;
-use zero_engine::{Engine, EngineError, ResolvedOutbound, RouteDecision, SessionHandle};
+use zero_engine::{EngineError, ResolvedOutbound, RouteDecision, SessionHandle};
 
 use super::contract::InboundProtocol;
 use super::lifecycle::{apply_kernel_rate_limits_from_config, serve_inbound};
@@ -18,9 +15,6 @@ use crate::transport::TcpRouteResult;
 
 #[derive(Clone)]
 pub(crate) struct TcpIngressRuntime {
-    engine: Engine,
-    config: Arc<RuntimeConfig>,
-    resolver: Arc<DnsSystem>,
     services: TcpRuntimeServices,
     inbound_tag: String,
     source_addr: Option<SocketAddr>,
@@ -28,17 +22,11 @@ pub(crate) struct TcpIngressRuntime {
 
 impl TcpIngressRuntime {
     pub(crate) fn new(
-        engine: Engine,
-        config: Arc<RuntimeConfig>,
-        resolver: Arc<DnsSystem>,
         services: TcpRuntimeServices,
         inbound_tag: String,
         source_addr: Option<SocketAddr>,
     ) -> Self {
         Self {
-            engine,
-            config,
-            resolver,
             services,
             inbound_tag,
             source_addr,
@@ -56,9 +44,6 @@ impl TcpIngressRuntime {
     #[cfg(any(feature = "vless", feature = "vmess"))]
     pub(crate) fn without_source_addr(&self) -> Self {
         Self {
-            engine: self.engine.clone(),
-            config: self.config.clone(),
-            resolver: self.resolver.clone(),
             services: self.services.clone(),
             inbound_tag: self.inbound_tag.clone(),
             source_addr: None,
@@ -71,7 +56,7 @@ impl TcpIngressRuntime {
         session: &zero_core::Session,
     ) -> Option<(u16, String)> {
         crate::runtime::http_redirect::select_redirect_target(
-            &self.config.route.url_rewrite,
+            &self.services.config().route.url_rewrite,
             session,
         )
     }
@@ -146,13 +131,13 @@ impl TcpIngressRuntime {
             Address::Ipv6(octets) => IpAddress::V6(*octets),
             _ => return,
         };
-        if let Some(domain) = self.resolver.lookup_fake_ip(&ip).await {
+        if let Some(domain) = self.services.resolver().lookup_fake_ip(&ip).await {
             session.target = Address::Domain(domain);
         }
     }
 
     pub(crate) fn route_decision(&self, session: &Session) -> RouteDecision {
-        self.engine.route_decision_with_inbound(
+        self.services.engine().route_decision_with_inbound(
             &session.target,
             session.sni.as_deref(),
             session.inbound_tag.as_deref(),
@@ -163,13 +148,14 @@ impl TcpIngressRuntime {
         &self,
         action: &RouteDecision,
     ) -> Result<ResolvedOutbound<'static>, EngineError> {
-        self.engine
+        self.services
+            .engine()
             .resolve_route_decision(action.clone())
             .map(|(resolved, _)| resolved)
     }
 
     pub(crate) fn apply_url_rewrite(&self, session: &mut Session) {
-        let rules = &self.config.route.url_rewrite;
+        let rules = &self.services.config().route.url_rewrite;
         if rules.is_empty() {
             return;
         }
@@ -196,7 +182,7 @@ impl TcpIngressRuntime {
     }
 
     pub(crate) fn apply_kernel_rate_limits(&self, session: &mut Session) {
-        apply_kernel_rate_limits_from_config(self.config.as_ref(), session, &self.inbound_tag);
+        apply_kernel_rate_limits_from_config(self.services.config(), session, &self.inbound_tag);
     }
 
     pub(crate) fn prepare_session(&self, session: &mut Session) {
@@ -207,7 +193,9 @@ impl TcpIngressRuntime {
             });
             session.source_port = Some(addr.port());
         }
-        self.engine.prepare_session(session, &self.inbound_tag);
+        self.services
+            .engine()
+            .prepare_session(session, &self.inbound_tag);
 
         if let Some(addr) = self.source_addr {
             if let Some(info) = crate::process_lookup::lookup_process(addr) {
@@ -218,20 +206,21 @@ impl TcpIngressRuntime {
     }
 
     pub(crate) fn track_session(&self, session_id: u64) -> SessionHandle {
-        self.engine.track_session(session_id)
+        self.services.engine().track_session(session_id)
     }
 
     pub(crate) fn log_session_accepted(&self, session: &Session, action: &RouteDecision) {
-        log_session_accepted(session, action, self.config.mode.kind());
+        log_session_accepted(session, action, self.services.config().mode.kind());
     }
 
     pub(crate) fn set_session_outbound(&self, session: &Session) {
-        self.engine.set_session_outbound(session);
+        self.services.engine().set_session_outbound(session);
     }
 
     pub(crate) fn idle_timeout(&self) -> Duration {
         Duration::from_secs(
-            self.config
+            self.services
+                .config()
                 .inbounds
                 .iter()
                 .find(|i| i.tag == self.inbound_tag)

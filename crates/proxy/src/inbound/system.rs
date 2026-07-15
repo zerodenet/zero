@@ -25,7 +25,9 @@ use zero_engine::EngineError;
 use zero_stack::SystemTcpStack;
 
 use crate::runtime::listener_loop::{run_system_tcp_stack_loop, SystemTcpStackLoopRequest};
-use crate::runtime::route_runtime::{InboundRouteRuntime, InboundRouteRuntimeFactory};
+use crate::runtime::route_runtime::{
+    InboundRouteRuntime, InboundRouteRuntimeFactory, SharedIngressRuntimeServices,
+};
 use crate::runtime::tcp_ingress::InboundProtocol;
 use crate::runtime::Proxy;
 
@@ -57,7 +59,10 @@ async fn system_tcp_loop(
     shutdown: watch::Receiver<bool>,
 ) {
     run_system_tcp_stack_loop(SystemTcpStackLoopRequest {
-        runtime_factory: InboundRouteRuntimeFactory::new(&proxy, tag),
+        runtime_factory: InboundRouteRuntimeFactory::new(
+            SharedIngressRuntimeServices::from_proxy(&proxy),
+            tag,
+        ),
         stack,
         shutdown,
         handler: |runtime: InboundRouteRuntime,

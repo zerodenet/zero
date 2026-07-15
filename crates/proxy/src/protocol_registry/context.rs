@@ -39,6 +39,18 @@ impl TcpRuntimeServices {
         )
     }
 
+    pub(crate) fn engine(&self) -> &Engine {
+        &self.engine
+    }
+
+    pub(crate) fn config(&self) -> &RuntimeConfig {
+        self.config.as_ref()
+    }
+
+    pub(crate) fn resolver(&self) -> &DnsSystem {
+        self.resolver.as_ref()
+    }
+
     #[cfg(any(
         feature = "socks5",
         feature = "vless",

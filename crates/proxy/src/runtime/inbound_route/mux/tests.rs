@@ -7,7 +7,9 @@ use zero_core::{
 };
 
 use super::{dispatch_protocol_mux_route, MuxRouteBridge};
-use crate::runtime::route_runtime::{InboundRouteRuntime, MuxSubstreamRuntime};
+use crate::runtime::route_runtime::{
+    InboundRouteRuntime, MuxSubstreamRuntime, SharedIngressRuntimeServices,
+};
 use crate::runtime::tcp_ingress::NoClientResponseInboundProtocol;
 use crate::runtime::Proxy;
 use crate::transport::TcpRelayStream;
@@ -92,6 +94,10 @@ fn proxy() -> Proxy {
     Proxy::new(config).expect("minimal proxy")
 }
 
+fn shared_services(proxy: &Proxy) -> SharedIngressRuntimeServices {
+    SharedIngressRuntimeServices::from_proxy(proxy)
+}
+
 #[tokio::test]
 async fn mux_route_preserves_udp_session_and_inbound_tag() {
     let session = Session::new(
@@ -106,7 +112,14 @@ async fn mux_route_preserves_udp_session_and_inbound_tag() {
     dispatch_protocol_mux_route(
         DummyMuxRoute::Udp(session),
         MuxRouteBridge {
-            runtime: InboundRouteRuntime::new(proxy(), "vless-mux-in".to_owned(), None),
+            runtime: {
+                let proxy = proxy();
+                InboundRouteRuntime::new(
+                    shared_services(&proxy),
+                    "vless-mux-in".to_owned(),
+                    None,
+                )
+            },
             protocol: NoClientResponseInboundProtocol,
             map_tcp_stream: TcpRelayStream::new,
             run_udp: move |runtime: InboundRouteRuntime,
@@ -137,7 +150,10 @@ async fn mux_route_preserves_mux_objects_and_inbound_tag() {
             server: "mux-server",
         },
         MuxRouteBridge {
-            runtime: InboundRouteRuntime::new(proxy(), "vmess-mux-in".to_owned(), None),
+            runtime: {
+                let proxy = proxy();
+                InboundRouteRuntime::new(shared_services(&proxy), "vmess-mux-in".to_owned(), None)
+            },
             protocol: NoClientResponseInboundProtocol,
             map_tcp_stream: TcpRelayStream::new,
             run_udp: |_: InboundRouteRuntime, _: Session, _: DummyUdpRelay| async {

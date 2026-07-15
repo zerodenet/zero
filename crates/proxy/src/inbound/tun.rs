@@ -110,9 +110,6 @@ async fn tun_loop<S: NetworkStack + Send + Sync + 'static>(
                 let t = tag.clone();
                 tokio::spawn(async move {
                     let runtime = TcpIngressRuntime::new(
-                        p.engine().clone(),
-                        p.config.clone(),
-                        p.resolver.clone(),
                         TcpRuntimeServices::from_proxy(&p),
                         t,
                         Some(src_addr),

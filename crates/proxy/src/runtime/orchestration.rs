@@ -9,7 +9,7 @@ use tracing::{info, warn};
 use zero_engine::EngineError;
 
 use super::{listeners, reload, Proxy};
-use crate::runtime::route_runtime::InboundListenerRuntimeFactory;
+use crate::runtime::route_runtime::{InboundListenerRuntimeFactory, SharedIngressRuntimeServices};
 
 pub(super) async fn run_until<F>(proxy: &Proxy, shutdown: F) -> Result<(), EngineError>
 where
@@ -25,7 +25,8 @@ where
     let mut urltests: JoinSet<Result<(), EngineError>> = JoinSet::new();
     let mut reload_async_rx = reload::subscribe_reload_bridge(proxy.engine.subscribe_reload());
     let source_dir: Option<PathBuf> = proxy.config.source_dir().map(|path| path.to_path_buf());
-    let inbound_runtime_factory = InboundListenerRuntimeFactory::new(proxy);
+    let inbound_runtime_factory =
+        InboundListenerRuntimeFactory::new(SharedIngressRuntimeServices::from_proxy(proxy));
 
     for inbound in &proxy.config.inbounds {
         let (tx, rx) = watch::channel(false);

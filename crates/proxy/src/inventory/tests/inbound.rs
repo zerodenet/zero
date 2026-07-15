@@ -51,7 +51,10 @@ async fn inventory_binds_before_spawning_the_same_inbound_capability() {
         .spawn_inbound(
             inbound.clone(),
             proxy.config.source_dir(),
-            crate::runtime::route_runtime::InboundListenerRuntime::new(&proxy, inbound.tag),
+            crate::runtime::route_runtime::InboundListenerRuntime::new(
+                crate::runtime::route_runtime::SharedIngressRuntimeServices::from_proxy(&proxy),
+                inbound.tag,
+            ),
             bound,
             shutdown_rx,
             &mut listeners,
