@@ -8,6 +8,14 @@ pub struct VlessRealityClientOptionsRef<'a> {
     pub cipher_suites: &'a [String],
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct VlessRealityServerOptionsRef<'a> {
+    pub private_key: &'a str,
+    pub short_ids: &'a [String],
+    pub server_name: Option<&'a str>,
+    pub cipher_suites: &'a [String],
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct VlessRealityClientProfile {
     pub public_key: String,
@@ -38,6 +46,17 @@ impl From<VlessRealityClientOptionsRef<'_>> for VlessRealityClientProfile {
             options.public_key,
             options.short_id,
             options.server_name.map(str::to_owned),
+            options.cipher_suites.to_vec(),
+        )
+    }
+}
+
+impl From<VlessRealityServerOptionsRef<'_>> for crate::reality::VlessRealityServerProfile {
+    fn from(options: VlessRealityServerOptionsRef<'_>) -> Self {
+        Self::new(
+            options.private_key,
+            options.short_ids.to_vec(),
+            options.server_name,
             options.cipher_suites.to_vec(),
         )
     }

@@ -1,4 +1,6 @@
-use ::vmess::transport::VmessInboundListenerRequest;
+use ::vmess::transport::{
+    BorrowedVmessInboundUserConfigParts, VmessInboundListenerRequest, VmessTransportRuntime,
+};
 use zero_config::{InboundConfig, InboundProtocolConfig};
 use zero_engine::EngineError;
 
@@ -6,6 +8,7 @@ use crate::runtime::inbound_operation::TcpInboundListenerOperation;
 use crate::runtime::inbound_route::NoClientMuxRouteDefaults;
 
 pub(super) fn prepare(
+    runtime: VmessTransportRuntime,
     inbound: InboundConfig,
     source_dir: Option<&std::path::Path>,
 ) -> Result<Box<dyn crate::runtime::inbound_operation::PreparedInboundListenerOperation>, EngineError>
@@ -16,30 +19,26 @@ pub(super) fn prepare(
             tls,
             ws,
             grpc,
-        } => {
-            let profile = ::vmess::inbound::VmessInboundProfile::from_config_users(
-                users.iter().map(|user| {
-                    (
-                        user.id.as_str(),
-                        user.cipher.as_str(),
-                        user.credential_id.as_deref(),
-                        user.principal_key.as_deref(),
-                        user.up_bps,
-                        user.down_bps,
-                    )
-                }),
-            )
-            .map_err(|error| {
-                EngineError::Io(std::io::Error::new(std::io::ErrorKind::InvalidInput, error))
-            })?;
-            VmessInboundListenerRequest::from_config_refs(
+        } => runtime
+            .build_inbound_listener_request(
                 source_dir,
-                profile,
+                users
+                    .iter()
+                    .map(|user| -> BorrowedVmessInboundUserConfigParts<'_> {
+                        (
+                            user.id.as_str(),
+                            user.cipher.as_str(),
+                            user.credential_id.as_deref(),
+                            user.principal_key.as_deref(),
+                            user.up_bps,
+                            user.down_bps,
+                        )
+                    }),
                 tls.as_deref(),
                 ws.as_deref(),
                 grpc.as_deref(),
-            )?
-        }
+            )
+            .map_err(EngineError::from)?,
         _ => {
             return Err(EngineError::Io(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,

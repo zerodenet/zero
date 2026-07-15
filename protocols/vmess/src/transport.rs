@@ -6,6 +6,7 @@ mod managed_udp;
 mod outbound;
 mod runtime;
 
+pub use crate::inbound::BorrowedVmessInboundUserConfigParts;
 pub use inbound::VmessInboundListenerRequest;
 pub use leaf::VmessOutboundLeaf;
 pub use runtime::VmessTransportRuntime;

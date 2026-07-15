@@ -11,9 +11,11 @@ mod outbound;
 mod profile;
 mod runtime;
 
+pub use crate::inbound::BorrowedVlessInboundUserConfigParts;
 pub use inbound::VlessInboundListenerRequest;
 pub use leaf::VlessOutboundLeaf;
 pub use profile::{
     VlessQuicBindOptionsRef, VlessQuicClientOptionsRef, VlessRealityClientOptionsRef,
+    VlessRealityServerOptionsRef,
 };
 pub use runtime::VlessTransportRuntime;

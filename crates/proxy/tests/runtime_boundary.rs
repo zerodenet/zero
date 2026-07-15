@@ -623,6 +623,56 @@ fn vless_adapter_uses_protocol_option_refs_instead_of_private_profile_constructo
 }
 
 #[test]
+fn vless_listener_adapter_uses_protocol_runtime_input_refs() {
+    let listener = read(&proxy_src().join("adapters/vless/listener.rs"));
+    for forbidden in [
+        "VlessInboundProfile::from_config_users",
+        "VlessRealityServerProfile::from_config_server",
+        "VlessInboundListenerRequest::from_config_refs",
+    ] {
+        assert!(
+            !listener.contains(forbidden),
+            "adapters/vless/listener.rs must not construct VLESS inbound listener state via `{forbidden}`"
+        );
+    }
+    for required in [
+        "BorrowedVlessInboundUserConfigParts",
+        "VlessRealityServerOptionsRef",
+        "VlessTransportRuntime",
+        "build_inbound_listener_request(",
+    ] {
+        assert!(
+            listener.contains(required),
+            "adapters/vless/listener.rs should project through protocol-owned VLESS inbound runtime surface `{required}`"
+        );
+    }
+}
+
+#[test]
+fn vmess_listener_adapter_uses_protocol_runtime_input_refs() {
+    let listener = read(&proxy_src().join("adapters/vmess/listener.rs"));
+    for forbidden in [
+        "VmessInboundProfile::from_config_users",
+        "VmessInboundListenerRequest::from_config_refs",
+    ] {
+        assert!(
+            !listener.contains(forbidden),
+            "adapters/vmess/listener.rs must not construct VMess inbound listener state via `{forbidden}`"
+        );
+    }
+    for required in [
+        "BorrowedVmessInboundUserConfigParts",
+        "VmessTransportRuntime",
+        "build_inbound_listener_request(",
+    ] {
+        assert!(
+            listener.contains(required),
+            "adapters/vmess/listener.rs should project through protocol-owned VMess inbound runtime surface `{required}`"
+        );
+    }
+}
+
+#[test]
 fn inventory_udp_dispatch_keeps_relay_choreography_outside_candidate_root() {
     let dispatch = read(&proxy_src().join("inventory/udp/dispatch.rs"));
     assert!(!dispatch.contains("ClaimedResolvedOutbound"));

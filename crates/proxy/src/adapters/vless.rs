@@ -111,7 +111,7 @@ impl InboundListenerCapability for VlessAdapter {
         Box<dyn crate::runtime::inbound_operation::PreparedInboundListenerOperation>,
         EngineError,
     > {
-        listener::prepare(inbound, source_dir)
+        listener::prepare(self.runtime.clone(), inbound, source_dir)
     }
 }
 
