@@ -24,7 +24,8 @@ pub(crate) use capability::ManagedUdpHandlerProvider;
 #[cfg(feature = "socks5")]
 pub(crate) use capability::UpstreamUdpHandlerProvider;
 pub(crate) use capability::{
-    InboundListenerCapability, ProtocolSupportCapability, TcpOutboundCapability,
+    ClaimedTcpOutboundLeaf, InboundListenerCapability, ProtocolSupportCapability,
+    TcpOutboundCapability,
 };
 #[cfg(any(
     feature = "socks5",

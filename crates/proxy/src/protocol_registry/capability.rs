@@ -31,6 +31,18 @@ use crate::runtime::udp_flow::managed::ManagedStreamHandlerPair;
 use crate::runtime::udp_flow::registered::UpstreamAssociationHandler;
 use crate::transport::TcpOutboundFailure;
 
+pub(crate) trait ClaimedTcpOutboundLeaf<'a>: Send + Sync {
+    fn prepare_tcp_connect(
+        &self,
+        source_dir: Option<&std::path::Path>,
+    ) -> Result<Box<dyn PreparedTcpConnectOperation + 'a>, TcpOutboundFailure>;
+
+    fn prepare_tcp_relay_hop(
+        &self,
+        source_dir: Option<&std::path::Path>,
+    ) -> Result<Box<dyn PreparedTcpRelayOperation + 'a>, EngineError>;
+}
+
 pub(crate) trait ProtocolSupportCapability: ProtocolMetadata + Send + Sync {
     fn name(&self) -> &'static str;
     fn feature_name(&self) -> &'static str;
@@ -75,6 +87,13 @@ pub(crate) trait InboundListenerCapability: Send + Sync {
 pub(crate) trait TcpOutboundCapability: Send + Sync {
     fn claims_outbound_leaf(&self, _leaf: &ResolvedLeafOutbound<'_>) -> bool {
         false
+    }
+
+    fn claim_tcp_outbound_leaf<'a>(
+        &self,
+        _leaf: ResolvedLeafOutbound<'a>,
+    ) -> Option<Box<dyn ClaimedTcpOutboundLeaf<'a> + 'a>> {
+        None
     }
 
     fn outbound_leaf_runtime(

@@ -15,15 +15,17 @@ use crate::adapters::identity::{
     named_protocol_supports_outbound, NamedProtocolAdapter, ProtocolTransportBridgeAdapter,
 };
 use crate::adapters::transport_bridge::{
-    prepare_transport_bridge_leaf, transport_bridge_connect_prepare_failure,
-    transport_bridge_relay_prepare_error, transport_bridge_udp_direct_prepare_failure,
-    transport_bridge_udp_relay_final_prepare_failure, ProtocolTransportLeafResolver,
+    claim_transport_bridge_tcp_leaf, prepare_transport_bridge_leaf,
+    transport_bridge_connect_prepare_failure, transport_bridge_relay_prepare_error,
+    transport_bridge_udp_direct_prepare_failure, transport_bridge_udp_relay_final_prepare_failure,
+    ProtocolTransportLeafResolver,
 };
 use crate::protocol_registry::{
     prepare_owned_transport_bridge_udp_relay_final_hop, prepare_transport_bridge_tcp_connect,
     prepare_transport_bridge_tcp_relay, prepare_transport_bridge_udp_direct, proxy_leaf_runtime,
-    InboundListenerCapability, ManagedUdpHandlerProvider, OutboundLeafRuntime,
-    ProtocolSupportCapability, TcpOutboundCapability, UdpFlowCapability, UdpPacketPathCapability,
+    ClaimedTcpOutboundLeaf, InboundListenerCapability, ManagedUdpHandlerProvider,
+    OutboundLeafRuntime, ProtocolSupportCapability, TcpOutboundCapability, UdpFlowCapability,
+    UdpPacketPathCapability,
 };
 use crate::runtime::path::TcpPathCategory;
 #[cfg(feature = "trojan")]
@@ -160,6 +162,41 @@ impl InboundListenerCapability for TrojanAdapter {
 impl TcpOutboundCapability for TrojanAdapter {
     fn claims_outbound_leaf(&self, leaf: &ResolvedLeafOutbound<'_>) -> bool {
         named_protocol_claims_runtime_leaf::<Self>(leaf)
+    }
+
+    fn claim_tcp_outbound_leaf<'a>(
+        &self,
+        leaf: ResolvedLeafOutbound<'a>,
+    ) -> Option<Box<dyn ClaimedTcpOutboundLeaf<'a> + 'a>> {
+        let ResolvedLeafOutbound::Trojan {
+            tag,
+            server,
+            port,
+            password,
+            sni,
+            insecure,
+            client_fingerprint,
+        } = leaf
+        else {
+            return None;
+        };
+        let bridge = self.bridge;
+        Some(claim_transport_bridge_tcp_leaf(
+            bridge,
+            Some((server, port)),
+            move |source_dir| {
+                Ok::<TrojanOutboundLeaf, zero_core::Error>(TrojanOutboundLeaf::from_config_refs(
+                    source_dir,
+                    tag,
+                    server,
+                    port,
+                    password,
+                    sni,
+                    insecure,
+                    client_fingerprint,
+                ))
+            },
+        ))
     }
 
     fn outbound_leaf_runtime(

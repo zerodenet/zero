@@ -19,18 +19,18 @@ use crate::adapters::identity::{
     named_protocol_supports_outbound, NamedProtocolAdapter, ProtocolTransportBridgeAdapter,
 };
 use crate::adapters::transport_bridge::{
-    prepare_transport_bridge_leaf, transport_bridge_connect_prepare_failure,
-    transport_bridge_relay_prepare_error, transport_bridge_udp_direct_prepare_failure,
-    transport_bridge_udp_relay_final_prepare_failure,
+    claim_transport_bridge_tcp_leaf, prepare_transport_bridge_leaf,
+    transport_bridge_connect_prepare_failure, transport_bridge_relay_prepare_error,
+    transport_bridge_udp_direct_prepare_failure, transport_bridge_udp_relay_final_prepare_failure,
     transport_bridge_udp_two_stream_prepare_failure, ProtocolTransportLeafResolver,
 };
 use crate::protocol_registry::{
     bind_transport_inbound, prepare_owned_transport_bridge_udp_relay_final_hop,
     prepare_owned_transport_bridge_udp_relay_two_stream, prepare_transport_bridge_tcp_connect,
     prepare_transport_bridge_tcp_relay, prepare_transport_bridge_udp_direct, proxy_leaf_runtime,
-    transport_bridge_udp_relay_needs_two_streams, BoundInbound, InboundListenerCapability,
-    ManagedUdpHandlerProvider, OutboundLeafRuntime, ProtocolSupportCapability,
-    TcpOutboundCapability, UdpFlowCapability, UdpPacketPathCapability,
+    transport_bridge_udp_relay_needs_two_streams, BoundInbound, ClaimedTcpOutboundLeaf,
+    InboundListenerCapability, ManagedUdpHandlerProvider, OutboundLeafRuntime,
+    ProtocolSupportCapability, TcpOutboundCapability, UdpFlowCapability, UdpPacketPathCapability,
 };
 use crate::runtime::path::TcpPathCategory;
 #[cfg(feature = "vless")]
@@ -223,6 +223,58 @@ impl InboundListenerCapability for VlessAdapter {
 impl TcpOutboundCapability for VlessAdapter {
     fn claims_outbound_leaf(&self, leaf: &ResolvedLeafOutbound<'_>) -> bool {
         named_protocol_claims_runtime_leaf::<Self>(leaf)
+    }
+
+    fn claim_tcp_outbound_leaf<'a>(
+        &self,
+        leaf: ResolvedLeafOutbound<'a>,
+    ) -> Option<Box<dyn ClaimedTcpOutboundLeaf<'a> + 'a>> {
+        let ResolvedLeafOutbound::Vless {
+            tag,
+            server,
+            port,
+            id,
+            flow,
+            mux_concurrency,
+            tls,
+            reality,
+            ws,
+            grpc,
+            h2,
+            http_upgrade,
+            split_http,
+            quic,
+            ..
+        } = leaf
+        else {
+            return None;
+        };
+        let bridge = self.bridge.clone();
+        let reality = outbound_reality_profile(reality);
+        let quic = quic_client_profile(quic);
+        Some(claim_transport_bridge_tcp_leaf(
+            bridge,
+            Some((server, port)),
+            move |source_dir| {
+                VlessOutboundLeaf::from_profile_refs(
+                    source_dir,
+                    tag,
+                    server,
+                    port,
+                    id,
+                    flow,
+                    mux_concurrency,
+                    tls,
+                    reality.as_ref(),
+                    ws,
+                    grpc,
+                    h2,
+                    http_upgrade,
+                    split_http,
+                    quic.as_ref(),
+                )
+            },
+        ))
     }
 
     fn outbound_leaf_runtime(

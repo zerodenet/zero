@@ -4,7 +4,7 @@ use std::sync::Arc;
 use zero_engine::{EngineError, ResolvedLeafOutbound};
 
 use super::{ProtocolRegistry, RegisteredProtocolEntry};
-use crate::protocol_registry::OutboundLeafRuntime;
+use crate::protocol_registry::{ClaimedTcpOutboundLeaf, OutboundLeafRuntime};
 use crate::runtime::path::TcpPathCategory;
 use crate::runtime::tcp_dispatch::operation::{
     PreparedTcpConnectOperation, PreparedTcpRelayOperation,
@@ -123,8 +123,7 @@ type UdpPacketPathPrepareHook<'a> = dyn Fn() -> Option<
 
 #[derive(Clone, Default)]
 struct ClaimedTcpHooks<'a> {
-    connect: Option<Arc<TcpConnectPrepareHook<'a>>>,
-    relay_hop: Option<Arc<TcpRelayPrepareHook<'a>>>,
+    capability: Option<Arc<dyn ClaimedTcpOutboundLeaf<'a> + 'a>>,
 }
 
 #[cfg(any(
@@ -185,7 +184,7 @@ impl<'a> ClaimedOutboundLeaf<'a> {
 
     #[cfg(test)]
     pub(crate) fn has_tcp_capability(&self) -> bool {
-        self.tcp.connect.is_some()
+        self.tcp.capability.is_some()
     }
 
     #[cfg(any(
@@ -221,12 +220,12 @@ impl<'a> ClaimedOutboundLeaf<'a> {
         source_dir: Option<&Path>,
     ) -> Result<Box<dyn PreparedTcpConnectOperation + 'a>, crate::transport::TcpOutboundFailure>
     {
-        let prepare = self
+        let capability = self
             .tcp
-            .connect
+            .capability
             .as_ref()
             .expect("non-block tcp leaf must expose a tcp capability");
-        prepare(source_dir.map(Path::to_path_buf))
+        capability.prepare_tcp_connect(source_dir)
     }
 
     pub(crate) fn prepare_tcp_relay_hop(
@@ -239,12 +238,12 @@ impl<'a> ClaimedOutboundLeaf<'a> {
                 "relay hop resolved without upstream endpoint",
             ))
         })?;
-        let prepare = self
+        let capability = self
             .tcp
-            .relay_hop
+            .capability
             .as_ref()
             .expect("tcp relay hop must expose a tcp capability");
-        let operation = prepare(source_dir.map(Path::to_path_buf))?;
+        let operation = capability.prepare_tcp_relay_hop(source_dir)?;
         Ok((endpoint.server, endpoint.port, operation))
     }
 
@@ -357,6 +356,28 @@ impl<'a> ClaimedOutboundLeaf<'a> {
     }
 }
 
+struct HookClaimedTcpLeaf<'a> {
+    connect: Arc<TcpConnectPrepareHook<'a>>,
+    relay_hop: Arc<TcpRelayPrepareHook<'a>>,
+}
+
+impl<'a> ClaimedTcpOutboundLeaf<'a> for HookClaimedTcpLeaf<'a> {
+    fn prepare_tcp_connect(
+        &self,
+        source_dir: Option<&Path>,
+    ) -> Result<Box<dyn PreparedTcpConnectOperation + 'a>, crate::transport::TcpOutboundFailure>
+    {
+        (self.connect)(source_dir.map(Path::to_path_buf))
+    }
+
+    fn prepare_tcp_relay_hop(
+        &self,
+        source_dir: Option<&Path>,
+    ) -> Result<Box<dyn PreparedTcpRelayOperation + 'a>, EngineError> {
+        (self.relay_hop)(source_dir.map(Path::to_path_buf))
+    }
+}
+
 fn build_tcp_hooks<'a>(
     entry: Option<&RegisteredProtocolEntry>,
     leaf: ResolvedLeafOutbound<'a>,
@@ -364,6 +385,11 @@ fn build_tcp_hooks<'a>(
     let Some(entry) = entry else {
         return ClaimedTcpHooks::default();
     };
+    if let Some(claimed) = entry.tcp.claim_tcp_outbound_leaf(leaf.clone()) {
+        return ClaimedTcpHooks {
+            capability: Some(Arc::from(claimed)),
+        };
+    }
     let tcp_connect = {
         let tcp = entry.tcp.clone();
         let leaf = leaf.clone();
@@ -379,8 +405,10 @@ fn build_tcp_hooks<'a>(
         }) as Arc<TcpRelayPrepareHook<'a>>
     };
     ClaimedTcpHooks {
-        connect: Some(tcp_connect),
-        relay_hop: Some(tcp_relay_hop),
+        capability: Some(Arc::new(HookClaimedTcpLeaf {
+            connect: tcp_connect,
+            relay_hop: tcp_relay_hop,
+        })),
     }
 }
 

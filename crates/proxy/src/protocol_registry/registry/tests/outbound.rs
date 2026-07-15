@@ -116,3 +116,166 @@ fn packet_path_leaf_lookup_matches_tcp_claim_policy() {
         );
     }
 }
+
+#[cfg(feature = "socks5")]
+#[test]
+fn registry_prefers_adapter_claimed_tcp_leaf_over_fallback_prepare_methods() {
+    use std::future::Future;
+    use std::pin::Pin;
+    use std::sync::Arc;
+
+    use zero_config::{InboundProtocolConfig, OutboundProtocolConfig};
+    use zero_core::Session;
+    use zero_engine::EngineError;
+    use zero_traits::{ProtocolCapabilityDescriptor, ProtocolMetadata};
+
+    use crate::protocol_catalog::protocol_descriptor;
+    use crate::protocol_registry::TcpRuntimeServices;
+    use crate::protocol_registry::{
+        proxy_leaf_runtime, ClaimedTcpOutboundLeaf, InboundListenerCapability, OutboundLeafRuntime,
+        ProtocolSupportCapability, TcpOutboundCapability, UdpFlowCapability,
+        UdpPacketPathCapability,
+    };
+    use crate::runtime::tcp_dispatch::operation::{
+        PreparedTcpConnectOperation, PreparedTcpRelayOperation,
+    };
+    use crate::transport::{TcpOutboundFailure, TcpRelayStream};
+
+    struct FakeClaimedLeaf;
+
+    impl<'a> ClaimedTcpOutboundLeaf<'a> for FakeClaimedLeaf {
+        fn prepare_tcp_connect(
+            &self,
+            _source_dir: Option<&std::path::Path>,
+        ) -> Result<Box<dyn PreparedTcpConnectOperation + 'a>, TcpOutboundFailure> {
+            Ok(Box::new(
+                crate::runtime::tcp_dispatch::operation::DirectTcpConnectOperation {
+                    tag: "claimed".to_owned(),
+                },
+            ))
+        }
+
+        fn prepare_tcp_relay_hop(
+            &self,
+            _source_dir: Option<&std::path::Path>,
+        ) -> Result<Box<dyn PreparedTcpRelayOperation + 'a>, EngineError> {
+            Ok(Box::new(FakeRelayOperation))
+        }
+    }
+
+    struct FakeRelayOperation;
+
+    impl PreparedTcpRelayOperation for FakeRelayOperation {
+        fn execute<'a>(
+            self: Box<Self>,
+            _services: TcpRuntimeServices,
+            stream: TcpRelayStream,
+            _session: &'a Session,
+        ) -> Pin<Box<dyn Future<Output = Result<TcpRelayStream, EngineError>> + Send + 'a>>
+        where
+            Self: 'a,
+        {
+            Box::pin(async move { Ok(stream) })
+        }
+    }
+
+    struct FakeClaimedAdapter;
+
+    impl ProtocolMetadata for FakeClaimedAdapter {
+        fn descriptor(&self) -> ProtocolCapabilityDescriptor {
+            protocol_descriptor("fake-claimed", "test")
+        }
+    }
+
+    impl ProtocolSupportCapability for FakeClaimedAdapter {
+        fn name(&self) -> &'static str {
+            "fake-claimed"
+        }
+
+        fn feature_name(&self) -> &'static str {
+            "test"
+        }
+
+        fn supports_inbound(&self, _config: &InboundProtocolConfig) -> bool {
+            false
+        }
+
+        fn supports_outbound(&self, _config: &OutboundProtocolConfig) -> bool {
+            false
+        }
+
+        fn has_inbound(&self) -> bool {
+            false
+        }
+
+        fn has_outbound(&self) -> bool {
+            true
+        }
+    }
+
+    impl InboundListenerCapability for FakeClaimedAdapter {}
+
+    impl TcpOutboundCapability for FakeClaimedAdapter {
+        fn claims_outbound_leaf(&self, leaf: &ResolvedLeafOutbound<'_>) -> bool {
+            matches!(leaf, ResolvedLeafOutbound::Socks5 { .. })
+        }
+
+        fn claim_tcp_outbound_leaf<'a>(
+            &self,
+            leaf: ResolvedLeafOutbound<'a>,
+        ) -> Option<Box<dyn ClaimedTcpOutboundLeaf<'a> + 'a>> {
+            match leaf {
+                ResolvedLeafOutbound::Socks5 { .. } => Some(Box::new(FakeClaimedLeaf)),
+                _ => None,
+            }
+        }
+
+        fn outbound_leaf_runtime(
+            &self,
+            leaf: &ResolvedLeafOutbound<'_>,
+        ) -> Option<OutboundLeafRuntime> {
+            proxy_leaf_runtime(leaf, TcpPathCategory::Tunnel)
+        }
+
+        fn prepare_tcp_connect<'a>(
+            &self,
+            _leaf: ResolvedLeafOutbound<'a>,
+            _source_dir: Option<&std::path::Path>,
+        ) -> Result<Box<dyn PreparedTcpConnectOperation + 'a>, TcpOutboundFailure> {
+            panic!("fallback tcp prepare should not run once the adapter provides a claimed leaf")
+        }
+
+        fn prepare_tcp_relay_hop<'a>(
+            &self,
+            _leaf: ResolvedLeafOutbound<'a>,
+            _source_dir: Option<&std::path::Path>,
+        ) -> Result<Box<dyn PreparedTcpRelayOperation + 'a>, EngineError> {
+            panic!("fallback relay prepare should not run once the adapter provides a claimed leaf")
+        }
+    }
+
+    impl UdpFlowCapability for FakeClaimedAdapter {}
+    impl UdpPacketPathCapability for FakeClaimedAdapter {}
+
+    let mut registry = super::super::ProtocolRegistry::default();
+    registry.register_capability(Arc::new(FakeClaimedAdapter));
+
+    let claimed = registry
+        .claim_outbound_leaf(ResolvedLeafOutbound::Socks5 {
+            tag: "claimed",
+            server: "127.0.0.1",
+            port: 1080,
+            username: None,
+            password: None,
+        })
+        .expect("claim-time tcp leaf");
+
+    match claimed.prepare_tcp_connect(None) {
+        Ok(_) => {}
+        Err(_) => panic!("claimed tcp connect operation"),
+    }
+    match claimed.prepare_tcp_relay_hop(None) {
+        Ok(_) => {}
+        Err(_) => panic!("claimed tcp relay operation"),
+    }
+}

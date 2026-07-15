@@ -689,9 +689,33 @@ fn claimed_outbound_leaf_owns_capability_preparation() {
     }
     assert!(!outbound.contains("pub(crate) struct ClaimedOutboundLeaf<'a> {\r\n    leaf:"));
     assert!(!outbound.contains("pub(crate) struct ClaimedOutboundLeaf<'a> {\n    leaf:"));
+    assert!(outbound.contains("claim_tcp_outbound_leaf(leaf.clone())"));
     assert!(outbound.contains("struct ClaimedTcpHooks"));
     assert!(outbound.contains("struct ClaimedUdpHooks"));
     assert!(!outbound.contains("self.leaf"));
+}
+
+#[test]
+fn transport_bridge_adapters_offer_claim_time_tcp_projection() {
+    let helper = read(&proxy_src().join("adapters/transport_bridge.rs"));
+    assert!(helper.contains("struct ClaimedTransportBridgeTcpLeaf"));
+    assert!(helper.contains("claim_transport_bridge_tcp_leaf"));
+
+    for relative in [
+        "adapters/vless.rs",
+        "adapters/vmess.rs",
+        "adapters/trojan.rs",
+    ] {
+        let source = read(&proxy_src().join(relative));
+        assert!(
+            source.contains("fn claim_tcp_outbound_leaf<'a>("),
+            "{relative} should expose a claim-time TCP leaf projection path"
+        );
+        assert!(
+            source.contains("claim_transport_bridge_tcp_leaf("),
+            "{relative} should project into the shared claimed transport-bridge helper"
+        );
+    }
 }
 
 #[test]
