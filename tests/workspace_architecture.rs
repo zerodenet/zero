@@ -276,6 +276,20 @@ fn transport_does_not_hardcode_protocol_service_or_alpn_defaults() {
 }
 
 #[test]
+fn generic_config_models_do_not_hardcode_protocol_transport_defaults() {
+    let transport_model = read(&workspace_root().join("crates/config/src/model/transport.rs"));
+    for forbidden in [
+        "/v2ray.core.proxy.vless.encap.GrpcService/Tun",
+        "default_grpc_service_names",
+    ] {
+        assert!(
+            !transport_model.contains(forbidden),
+            "generic config transport model must not own protocol default `{forbidden}`"
+        );
+    }
+}
+
+#[test]
 fn transport_does_not_depend_on_config_protocol_adts() {
     let transport = workspace_root().join("crates/transport/src");
     for path in rust_sources(&transport) {

@@ -368,6 +368,34 @@ fn rejects_vmess_ws_and_grpc_together() {
 }
 
 #[test]
+fn rejects_grpc_transport_without_service_names() {
+    let error = RuntimeConfig::parse(
+        r#"{
+            "outbounds": [
+                {
+                    "tag": "vless-grpc-chain",
+                    "protocol": {
+                        "type": "vless",
+                        "server": "example.com",
+                        "port": 443,
+                        "id": "11111111-2222-3333-4444-555555555555",
+                        "grpc": {}
+                    }
+                }
+            ],
+            "route": {
+                "rules": [],
+                "final": { "type": "route", "outbound": "vless-grpc-chain" }
+            }
+        }"#,
+    )
+    .expect_err("grpc transport without service_names should fail");
+
+    assert!(matches!(error, zero_config::ConfigError::ParseConfig(_)));
+    assert!(error.to_string().contains("service_names"));
+}
+
+#[test]
 fn parses_vless_tls_config() {
     let config = RuntimeConfig::parse(
         r#"{

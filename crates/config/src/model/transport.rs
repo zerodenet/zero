@@ -134,10 +134,7 @@ fn default_ws_path() -> String {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct GrpcConfig {
-    #[serde(
-        default = "default_grpc_service_names",
-        deserialize_with = "deserialize_service_names"
-    )]
+    #[serde(deserialize_with = "deserialize_service_names")]
     pub service_names: Vec<String>,
 }
 
@@ -145,10 +142,6 @@ impl GrpcTransportProfile for GrpcConfig {
     fn service_names(&self) -> &[String] {
         self.service_names.as_slice()
     }
-}
-
-fn default_grpc_service_names() -> Vec<String> {
-    vec!["/v2ray.core.proxy.vless.encap.GrpcService/Tun".to_string()]
 }
 
 fn deserialize_service_names<'de, D>(deserializer: D) -> Result<Vec<String>, D::Error>
