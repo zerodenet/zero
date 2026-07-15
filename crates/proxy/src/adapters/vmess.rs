@@ -9,16 +9,16 @@ use zero_engine::{EngineError, ResolvedLeafOutbound};
 use zero_traits::{ProtocolCapabilityDescriptor, ProtocolMetadata};
 
 use crate::adapters::identity::{
-    named_protocol_claims_runtime_leaf, named_protocol_supports_inbound,
-    named_protocol_supports_outbound, NamedProtocolAdapter, ProtocolTransportBridgeAdapter,
+    named_protocol_supports_inbound, named_protocol_supports_outbound, NamedProtocolAdapter,
+    ProtocolTransportBridgeAdapter,
 };
 use crate::adapters::transport_bridge::{
     claim_transport_bridge_tcp_leaf, claim_transport_bridge_udp_leaf,
 };
 use crate::protocol_registry::{
     proxy_leaf_runtime, ClaimedTcpOutboundLeaf, ClaimedUdpFlowLeaf, InboundListenerCapability,
-    ManagedUdpHandlerProvider, OutboundLeafRuntime, ProtocolSupportCapability,
-    TcpOutboundCapability, UdpFlowCapability, UdpPacketPathCapability,
+    ManagedUdpHandlerProvider, ProtocolSupportCapability, TcpOutboundCapability, UdpFlowCapability,
+    UdpPacketPathCapability,
 };
 use crate::runtime::path::TcpPathCategory;
 #[cfg(feature = "vmess")]
@@ -94,14 +94,11 @@ impl InboundListenerCapability for VmessAdapter {
 
 #[cfg(feature = "vmess")]
 impl TcpOutboundCapability for VmessAdapter {
-    fn claims_outbound_leaf(&self, leaf: &ResolvedLeafOutbound<'_>) -> bool {
-        named_protocol_claims_runtime_leaf::<Self>(leaf)
-    }
-
     fn claim_tcp_outbound_leaf<'a>(
         &self,
         leaf: ResolvedLeafOutbound<'a>,
     ) -> Option<Box<dyn ClaimedTcpOutboundLeaf<'a> + 'a>> {
+        let runtime = proxy_leaf_runtime(&leaf, Self::TCP_PATH)?;
         let ResolvedLeafOutbound::Vmess {
             tag,
             server,
@@ -121,6 +118,7 @@ impl TcpOutboundCapability for VmessAdapter {
         Some(claim_transport_bridge_tcp_leaf(
             bridge,
             Some((server, port)),
+            runtime,
             move |source_dir| {
                 VmessOutboundLeaf::from_profile_refs(
                     source_dir,
@@ -136,13 +134,6 @@ impl TcpOutboundCapability for VmessAdapter {
                 )
             },
         ))
-    }
-
-    fn outbound_leaf_runtime(
-        &self,
-        leaf: &ResolvedLeafOutbound<'_>,
-    ) -> Option<OutboundLeafRuntime> {
-        proxy_leaf_runtime(leaf, Self::TCP_PATH)
     }
 }
 

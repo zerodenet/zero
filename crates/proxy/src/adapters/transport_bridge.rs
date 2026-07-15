@@ -25,7 +25,7 @@ use crate::protocol_registry::{
 };
 use crate::protocol_registry::{
     prepare_transport_bridge_tcp_connect, prepare_transport_bridge_tcp_relay,
-    ClaimedTcpOutboundLeaf,
+    ClaimedTcpOutboundLeaf, OutboundLeafRuntime,
 };
 use crate::runtime::tcp_dispatch::operation::{
     PreparedTcpConnectOperation, PreparedTcpRelayOperation,
@@ -42,6 +42,7 @@ use crate::transport::TcpOutboundFailure;
 pub(crate) fn claim_transport_bridge_tcp_leaf<'a, TBridge, TLeaf, F, E>(
     bridge: TBridge,
     upstream: Option<(&'a str, u16)>,
+    runtime: OutboundLeafRuntime,
     prepare_leaf: F,
 ) -> Box<dyn ClaimedTcpOutboundLeaf<'a> + 'a>
 where
@@ -59,6 +60,7 @@ where
     Box::new(ClaimedTransportBridgeTcpLeaf {
         bridge,
         upstream,
+        runtime,
         prepare_leaf,
     })
 }
@@ -67,6 +69,7 @@ where
 struct ClaimedTransportBridgeTcpLeaf<'a, TBridge, F> {
     bridge: TBridge,
     upstream: Option<(&'a str, u16)>,
+    runtime: OutboundLeafRuntime,
     prepare_leaf: F,
 }
 
@@ -85,6 +88,10 @@ where
     F: Fn(Option<&Path>) -> Result<TLeaf, E> + Send + Sync + 'a,
     E: std::fmt::Display,
 {
+    fn runtime(&self) -> OutboundLeafRuntime {
+        self.runtime.clone()
+    }
+
     fn prepare_tcp_connect(
         &self,
         source_dir: Option<&Path>,

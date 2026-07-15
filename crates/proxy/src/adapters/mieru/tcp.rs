@@ -1,7 +1,8 @@
 use zero_engine::{EngineError, ResolvedLeafOutbound};
 
 use crate::adapters::mieru::MieruAdapter;
-use crate::protocol_registry::ClaimedTcpOutboundLeaf;
+use crate::protocol_registry::{proxy_leaf_runtime, ClaimedTcpOutboundLeaf, OutboundLeafRuntime};
+use crate::runtime::path::TcpPathCategory;
 use crate::runtime::tcp_dispatch::operation::{
     PreparedTcpConnectOperation, PreparedTcpRelayOperation, SocketTcpConnectOperation,
     SocketTcpRelayOperation,
@@ -10,9 +11,14 @@ use crate::transport::TcpOutboundFailure;
 
 struct ClaimedMieruTcpLeaf {
     leaf: ::mieru::transport::MieruTransportLeaf,
+    runtime: OutboundLeafRuntime,
 }
 
 impl<'a> ClaimedTcpOutboundLeaf<'a> for ClaimedMieruTcpLeaf {
+    fn runtime(&self) -> OutboundLeafRuntime {
+        self.runtime.clone()
+    }
+
     fn prepare_tcp_connect(
         &self,
         _source_dir: Option<&std::path::Path>,
@@ -37,8 +43,10 @@ impl MieruAdapter {
         &self,
         leaf: ResolvedLeafOutbound<'a>,
     ) -> Option<Box<dyn ClaimedTcpOutboundLeaf<'a> + 'a>> {
+        let runtime = proxy_leaf_runtime(&leaf, TcpPathCategory::Session)?;
         Some(Box::new(ClaimedMieruTcpLeaf {
             leaf: super::transport_leaf(&leaf)?,
+            runtime,
         }))
     }
 }

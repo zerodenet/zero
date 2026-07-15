@@ -4,15 +4,13 @@ use zero_engine::{EngineError, ResolvedLeafOutbound};
 use zero_traits::{ProtocolCapabilityDescriptor, ProtocolMetadata};
 
 use crate::adapters::identity::{
-    named_protocol_claims_runtime_leaf, named_protocol_supports_inbound,
-    named_protocol_supports_outbound, NamedProtocolAdapter,
+    named_protocol_supports_inbound, named_protocol_supports_outbound, NamedProtocolAdapter,
 };
 use crate::protocol_registry::{
-    proxy_leaf_runtime, ClaimedTcpOutboundLeaf, ClaimedUdpFlowLeaf, ClaimedUdpPacketPathLeaf,
-    InboundListenerCapability, OutboundLeafRuntime, ProtocolSupportCapability,
-    TcpOutboundCapability, UdpFlowCapability, UdpPacketPathCapability, UpstreamUdpHandlerProvider,
+    ClaimedTcpOutboundLeaf, ClaimedUdpFlowLeaf, ClaimedUdpPacketPathLeaf,
+    InboundListenerCapability, ProtocolSupportCapability, TcpOutboundCapability, UdpFlowCapability,
+    UdpPacketPathCapability, UpstreamUdpHandlerProvider,
 };
-use crate::runtime::path::TcpPathCategory;
 use crate::runtime::udp_flow::registered::UpstreamAssociationHandler;
 
 #[cfg(feature = "socks5")]
@@ -95,22 +93,11 @@ impl InboundListenerCapability for Socks5Adapter {
 
 #[cfg(feature = "socks5")]
 impl TcpOutboundCapability for Socks5Adapter {
-    fn claims_outbound_leaf(&self, leaf: &ResolvedLeafOutbound<'_>) -> bool {
-        named_protocol_claims_runtime_leaf::<Self>(leaf)
-    }
-
     fn claim_tcp_outbound_leaf<'a>(
         &self,
         leaf: ResolvedLeafOutbound<'a>,
     ) -> Option<Box<dyn ClaimedTcpOutboundLeaf<'a> + 'a>> {
         self.claim_tcp_outbound_leaf_impl(leaf)
-    }
-
-    fn outbound_leaf_runtime(
-        &self,
-        leaf: &ResolvedLeafOutbound<'_>,
-    ) -> Option<OutboundLeafRuntime> {
-        proxy_leaf_runtime(leaf, TcpPathCategory::Tunnel)
     }
 }
 

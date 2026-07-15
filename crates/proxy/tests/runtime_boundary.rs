@@ -191,6 +191,9 @@ fn capability_surface_is_split_and_context_is_narrow() {
     assert!(!capability.contains("trait ProtocolAdapter"));
     assert!(!capability.contains("proxy: &Proxy"));
     assert!(capability.contains("BoundInbound"));
+    assert!(capability.contains("fn runtime(&self) -> OutboundLeafRuntime;"));
+    assert!(!capability.contains("fn claims_outbound_leaf("));
+    assert!(!capability.contains("fn outbound_leaf_runtime("));
     assert!(context.contains(
         "pub(crate) struct OutboundAdapterContext {\n    source_dir: Option<std::path::PathBuf>,"
     ));
@@ -669,6 +672,7 @@ fn registry_outbound_claim_surface_replaces_lookup_only_helpers() {
     assert!(!outbound.contains("fn find_outbound_leaf"));
     assert!(!outbound.contains("fn find_udp_flow_leaf"));
     assert!(!outbound.contains("fn find_udp_packet_path_leaf"));
+    assert!(!outbound.contains("fn outbound_leaf_runtime("));
 }
 
 #[test]
@@ -700,6 +704,7 @@ fn claimed_outbound_leaf_owns_capability_preparation() {
     assert!(!outbound.contains("HookClaimedUdpLeaf"));
     assert!(!outbound.contains("HookClaimedUdpPacketPathLeaf"));
     assert!(!outbound.contains("self.leaf"));
+    assert!(outbound.contains("let runtime = claimed_tcp.runtime();"));
     assert!(!capability.contains(
         "fn prepare_tcp_connect<'a>(\n        &self,\n        _leaf: ResolvedLeafOutbound<'a>,"
     ));

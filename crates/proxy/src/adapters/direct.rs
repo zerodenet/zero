@@ -3,8 +3,7 @@ use zero_engine::{EngineError, ResolvedLeafOutbound};
 use zero_traits::{ProtocolCapabilityDescriptor, ProtocolMetadata};
 
 use crate::adapters::identity::{
-    named_protocol_claims_runtime_leaf, named_protocol_supports_inbound,
-    named_protocol_supports_outbound, NamedProtocolAdapter,
+    named_protocol_supports_inbound, named_protocol_supports_outbound, NamedProtocolAdapter,
 };
 use crate::protocol_catalog::protocol_descriptor;
 #[cfg(any(
@@ -18,8 +17,8 @@ use crate::protocol_catalog::protocol_descriptor;
 ))]
 use crate::protocol_registry::ClaimedUdpFlowLeaf;
 use crate::protocol_registry::{
-    direct_leaf_runtime, ClaimedTcpOutboundLeaf, InboundListenerCapability, OutboundLeafRuntime,
-    ProtocolSupportCapability, TcpOutboundCapability,
+    ClaimedTcpOutboundLeaf, InboundListenerCapability, ProtocolSupportCapability,
+    TcpOutboundCapability,
 };
 #[cfg(any(
     feature = "socks5",
@@ -98,22 +97,11 @@ impl InboundListenerCapability for DirectAdapter {
 }
 
 impl TcpOutboundCapability for DirectAdapter {
-    fn claims_outbound_leaf(&self, leaf: &ResolvedLeafOutbound<'_>) -> bool {
-        named_protocol_claims_runtime_leaf::<Self>(leaf)
-    }
-
     fn claim_tcp_outbound_leaf<'a>(
         &self,
         leaf: ResolvedLeafOutbound<'a>,
     ) -> Option<Box<dyn ClaimedTcpOutboundLeaf<'a> + 'a>> {
         self.claim_tcp_outbound_leaf_impl(leaf)
-    }
-
-    fn outbound_leaf_runtime(
-        &self,
-        leaf: &ResolvedLeafOutbound<'_>,
-    ) -> Option<OutboundLeafRuntime> {
-        direct_leaf_runtime(leaf)
     }
 }
 
