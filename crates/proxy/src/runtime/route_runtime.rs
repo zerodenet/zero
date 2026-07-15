@@ -1,3 +1,5 @@
+use std::net::SocketAddr;
+
 use zero_core::Session;
 use zero_engine::EngineError;
 
@@ -30,11 +32,7 @@ pub(crate) struct InboundRouteRuntime {
 }
 
 impl InboundRouteRuntime {
-    pub(crate) fn new(
-        proxy: Proxy,
-        inbound_tag: String,
-        source_addr: Option<std::net::SocketAddr>,
-    ) -> Self {
+    pub(crate) fn new(proxy: Proxy, inbound_tag: String, source_addr: Option<SocketAddr>) -> Self {
         let tcp_runtime = TcpIngressRuntime::new(proxy.clone(), inbound_tag, source_addr);
         Self {
             #[cfg(any(
@@ -55,7 +53,7 @@ impl InboundRouteRuntime {
         self.tcp_runtime.inbound_tag()
     }
 
-    pub(crate) fn source_addr(&self) -> Option<std::net::SocketAddr> {
+    pub(crate) fn source_addr(&self) -> Option<SocketAddr> {
         self.tcp_runtime.source_addr()
     }
 
@@ -125,6 +123,84 @@ impl InboundRouteRuntime {
         self.tcp_runtime
             .relay_recorded_fallback_replay(fallback, replay)
             .await
+    }
+}
+
+#[derive(Clone)]
+pub(crate) struct InboundRouteRuntimeFactory {
+    proxy: Proxy,
+    inbound_tag: String,
+}
+
+impl InboundRouteRuntimeFactory {
+    pub(crate) fn new(proxy: &Proxy, inbound_tag: String) -> Self {
+        Self {
+            proxy: proxy.clone(),
+            inbound_tag,
+        }
+    }
+
+    pub(crate) fn inbound_tag(&self) -> &str {
+        &self.inbound_tag
+    }
+
+    pub(crate) fn for_connection(&self, source_addr: Option<SocketAddr>) -> InboundRouteRuntime {
+        InboundRouteRuntime::new(self.proxy.clone(), self.inbound_tag.clone(), source_addr)
+    }
+}
+
+#[derive(Clone)]
+pub(crate) struct InboundListenerRuntime {
+    route_factory: InboundRouteRuntimeFactory,
+    #[cfg(any(
+        feature = "socks5",
+        feature = "vless",
+        feature = "hysteria2",
+        feature = "shadowsocks",
+        feature = "trojan",
+        feature = "vmess",
+        feature = "mieru"
+    ))]
+    udp_runtime: UdpIngressRuntime,
+}
+
+impl InboundListenerRuntime {
+    pub(crate) fn new(proxy: &Proxy, inbound_tag: String) -> Self {
+        Self {
+            route_factory: InboundRouteRuntimeFactory::new(proxy, inbound_tag),
+            #[cfg(any(
+                feature = "socks5",
+                feature = "vless",
+                feature = "hysteria2",
+                feature = "shadowsocks",
+                feature = "trojan",
+                feature = "vmess",
+                feature = "mieru"
+            ))]
+            udp_runtime: UdpIngressRuntime::from_proxy(proxy),
+        }
+    }
+
+    #[cfg(feature = "shadowsocks")]
+    pub(crate) fn inbound_tag(&self) -> &str {
+        self.route_factory.inbound_tag()
+    }
+
+    pub(crate) fn route_factory(&self) -> InboundRouteRuntimeFactory {
+        self.route_factory.clone()
+    }
+
+    #[cfg(any(
+        feature = "socks5",
+        feature = "vless",
+        feature = "hysteria2",
+        feature = "shadowsocks",
+        feature = "trojan",
+        feature = "vmess",
+        feature = "mieru"
+    ))]
+    pub(crate) fn udp_runtime(&self) -> UdpIngressRuntime {
+        self.udp_runtime.clone()
     }
 }
 

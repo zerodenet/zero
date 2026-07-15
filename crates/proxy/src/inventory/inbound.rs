@@ -6,7 +6,7 @@ use tokio::task::JoinSet;
 
 use super::ProtocolInventory;
 use crate::protocol_registry::{BoundInbound, InboundListenerCapability};
-use crate::runtime::Proxy;
+use crate::runtime::route_runtime::InboundListenerRuntime;
 
 impl ProtocolInventory {
     pub(crate) fn check_inbound_enabled(
@@ -41,8 +41,9 @@ impl ProtocolInventory {
     /// and holding adapter trait objects itself.
     pub(crate) fn spawn_inbound(
         &self,
-        proxy: &Proxy,
         inbound: zero_config::InboundConfig,
+        source_dir: Option<&std::path::Path>,
+        runtime: InboundListenerRuntime,
         bound: BoundInbound,
         shutdown_rx: watch::Receiver<bool>,
         listeners: &mut JoinSet<Result<(), EngineError>>,
@@ -51,9 +52,9 @@ impl ProtocolInventory {
         let operation = InboundListenerCapability::prepare_inbound_listener(
             adapter.as_ref(),
             inbound,
-            proxy.config.source_dir(),
+            source_dir,
         )?;
-        listeners.spawn(operation.execute(proxy.clone(), bound, shutdown_rx));
+        listeners.spawn(operation.execute(runtime, bound, shutdown_rx));
         Ok(())
     }
 }

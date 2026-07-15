@@ -32,7 +32,6 @@ impl crate::adapters::shadowsocks::ShadowsocksAdapter {
         };
         let (acceptor, udp_relay) = profile;
         Ok(Box::new(TcpAndDatagramInboundListenerOperation {
-            inbound_tag: inbound.tag,
             protocol_name: "shadowsocks",
             error_protocol_name: "shadowsocks",
             listen_address: inbound.listen.address,

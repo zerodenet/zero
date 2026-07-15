@@ -103,7 +103,6 @@ impl crate::adapters::mixed::MixedAdapter {
             http_handler: HttpConnectInboundHandler::default(),
         };
         Ok(Box::new(TcpInboundListenerOperation {
-            inbound_tag: inbound.tag,
             protocol_name: "mixed",
             error_protocol_name: "mixed",
             request,

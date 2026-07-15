@@ -15,7 +15,6 @@ use crate::transport::TcpRelayStream;
 
 #[derive(Debug)]
 pub(crate) struct DirectInboundListenerOperation {
-    pub(crate) inbound_tag: String,
     pub(crate) target: Option<Address>,
     pub(crate) port: Option<u16>,
 }
@@ -23,14 +22,13 @@ pub(crate) struct DirectInboundListenerOperation {
 impl PreparedInboundListenerOperation for DirectInboundListenerOperation {
     fn execute(
         self: Box<Self>,
-        proxy: crate::runtime::Proxy,
+        runtime: crate::runtime::route_runtime::InboundListenerRuntime,
         bound: crate::protocol_registry::BoundInbound,
         shutdown: tokio::sync::watch::Receiver<bool>,
     ) -> std::pin::Pin<
         Box<dyn std::future::Future<Output = Result<(), EngineError>> + Send + 'static>,
     > {
         let operation = TcpInboundListenerOperation {
-            inbound_tag: self.inbound_tag,
             protocol_name: "direct",
             error_protocol_name: "direct",
             request: (self.target, self.port),
@@ -56,6 +54,6 @@ impl PreparedInboundListenerOperation for DirectInboundListenerOperation {
                     .await
             },
         };
-        Box::new(operation).execute(proxy, bound, shutdown)
+        Box::new(operation).execute(runtime, bound, shutdown)
     }
 }

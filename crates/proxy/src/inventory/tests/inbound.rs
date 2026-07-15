@@ -48,7 +48,14 @@ async fn inventory_binds_before_spawning_the_same_inbound_capability() {
     let mut listeners = tokio::task::JoinSet::new();
     proxy
         .protocols
-        .spawn_inbound(&proxy, inbound, bound, shutdown_rx, &mut listeners)
+        .spawn_inbound(
+            inbound.clone(),
+            proxy.config.source_dir(),
+            crate::runtime::route_runtime::InboundListenerRuntime::new(&proxy, inbound.tag),
+            bound,
+            shutdown_rx,
+            &mut listeners,
+        )
         .expect("fake inbound spawn delegation");
 
     assert_eq!(calls.inbound_binds(), 2);

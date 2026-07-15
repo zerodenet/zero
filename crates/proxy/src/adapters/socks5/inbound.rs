@@ -39,7 +39,6 @@ impl Socks5Adapter {
             }
         };
         Ok(Box::new(TcpInboundListenerOperation {
-            inbound_tag: inbound.tag,
             protocol_name: "socks5",
             error_protocol_name: "socks5",
             request: acceptor,

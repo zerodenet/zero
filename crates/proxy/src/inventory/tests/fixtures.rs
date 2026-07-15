@@ -283,7 +283,7 @@ struct FakeInboundOperation;
 impl crate::runtime::inbound_operation::PreparedInboundListenerOperation for FakeInboundOperation {
     fn execute(
         self: Box<Self>,
-        _: crate::runtime::Proxy,
+        _: crate::runtime::route_runtime::InboundListenerRuntime,
         bound: crate::protocol_registry::BoundInbound,
         _: tokio::sync::watch::Receiver<bool>,
     ) -> std::pin::Pin<

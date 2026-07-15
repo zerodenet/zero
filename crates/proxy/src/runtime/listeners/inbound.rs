@@ -7,6 +7,7 @@ use zero_config::{InboundConfig, RuntimeConfig};
 use zero_engine::EngineError;
 
 use super::super::Proxy;
+use crate::runtime::route_runtime::InboundListenerRuntime;
 
 pub(in crate::runtime) async fn bind_inbound_listener(
     proxy: &Proxy,
@@ -33,11 +34,14 @@ pub(in crate::runtime) fn spawn_inbound_listener(
         return;
     }
 
-    if let Err(error) =
-        proxy
-            .protocols
-            .spawn_inbound(proxy, inbound.clone(), bound, shutdown_rx, listeners)
-    {
+    if let Err(error) = proxy.protocols.spawn_inbound(
+        inbound.clone(),
+        proxy.config.source_dir(),
+        InboundListenerRuntime::new(proxy, inbound.tag.clone()),
+        bound,
+        shutdown_rx,
+        listeners,
+    ) {
         warn!(tag = %inbound.tag, error = %error, "skipping inbound listener: adapter dispatch failed");
     }
 }

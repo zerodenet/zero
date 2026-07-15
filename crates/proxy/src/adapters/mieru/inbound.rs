@@ -30,7 +30,6 @@ impl crate::adapters::mieru::MieruAdapter {
             }
         };
         Ok(Box::new(TcpInboundListenerOperation {
-            inbound_tag: inbound.tag,
             protocol_name: "mieru",
             error_protocol_name: "mieru",
             request: profile,

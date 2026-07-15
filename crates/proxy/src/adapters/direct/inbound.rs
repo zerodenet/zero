@@ -28,7 +28,6 @@ impl DirectAdapter {
             }
         });
         Ok(Box::new(crate::inbound::DirectInboundListenerOperation {
-            inbound_tag: inbound.tag,
             target,
             port,
         }))

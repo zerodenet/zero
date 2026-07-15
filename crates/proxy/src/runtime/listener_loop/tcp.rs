@@ -5,12 +5,10 @@ use tokio::task::JoinSet;
 use tracing::{error, info};
 use zero_engine::EngineError;
 
-use crate::runtime::route_runtime::InboundRouteRuntime;
-use crate::runtime::Proxy;
+use crate::runtime::route_runtime::{InboundRouteRuntime, InboundRouteRuntimeFactory};
 
-pub(crate) struct TcpListenerLoopRequest<'a, H> {
-    pub(crate) proxy: &'a Proxy,
-    pub(crate) inbound_tag: String,
+pub(crate) struct TcpListenerLoopRequest<H> {
+    pub(crate) runtime_factory: InboundRouteRuntimeFactory,
     pub(crate) protocol_name: &'static str,
     pub(crate) listener: zero_platform_tokio::TokioListener,
     pub(crate) shutdown: watch::Receiver<bool>,
@@ -18,7 +16,7 @@ pub(crate) struct TcpListenerLoopRequest<'a, H> {
 }
 
 pub(crate) async fn run_tcp_listener_loop<H, Fut>(
-    request: TcpListenerLoopRequest<'_, H>,
+    request: TcpListenerLoopRequest<H>,
 ) -> Result<(), EngineError>
 where
     H: Fn(InboundRouteRuntime, zero_platform_tokio::TokioSocket) -> Fut
@@ -29,8 +27,7 @@ where
     Fut: Future<Output = ()> + Send + 'static,
 {
     let TcpListenerLoopRequest {
-        proxy,
-        inbound_tag,
+        runtime_factory,
         protocol_name,
         listener,
         mut shutdown,
@@ -40,7 +37,7 @@ where
     let mut connections = JoinSet::new();
 
     info!(
-        inbound_tag = %inbound_tag,
+        inbound_tag = %runtime_factory.inbound_tag(),
         protocol = protocol_name,
         listen = %local_addr,
         "inbound listener ready"
@@ -58,9 +55,7 @@ where
             accept_result = listener.accept() => {
                 match accept_result {
                     Ok((stream, remote_addr)) => {
-                        let runtime = InboundRouteRuntime::new(
-                            proxy.clone(),
-                            inbound_tag.clone(),
+                        let runtime = runtime_factory.for_connection(
                             zero_platform_tokio::remote_ip_to_socket_addr(remote_addr),
                         );
                         let handler = handler.clone();
@@ -91,7 +86,7 @@ where
     }
 
     info!(
-        inbound_tag = %inbound_tag,
+        inbound_tag = %runtime_factory.inbound_tag(),
         protocol = protocol_name,
         listen = %local_addr,
         "inbound listener stopped"
@@ -99,9 +94,8 @@ where
     Ok(())
 }
 
-pub(crate) struct LoggedTcpSocketListenerRequest<'a, R, D> {
-    pub(crate) proxy: &'a Proxy,
-    pub(crate) inbound_tag: String,
+pub(crate) struct LoggedTcpSocketListenerRequest<R, D> {
+    pub(crate) runtime_factory: InboundRouteRuntimeFactory,
     pub(crate) protocol_name: &'static str,
     pub(crate) error_protocol_name: &'static str,
     pub(crate) request: R,
@@ -111,7 +105,7 @@ pub(crate) struct LoggedTcpSocketListenerRequest<'a, R, D> {
 }
 
 pub(crate) async fn run_logged_tcp_socket_listener_loop<R, D, Fut>(
-    request: LoggedTcpSocketListenerRequest<'_, R, D>,
+    request: LoggedTcpSocketListenerRequest<R, D>,
 ) -> Result<(), EngineError>
 where
     R: Clone + Send + Sync + 'static,
@@ -123,8 +117,7 @@ where
     Fut: Future<Output = Result<(), EngineError>> + Send + 'static,
 {
     let LoggedTcpSocketListenerRequest {
-        proxy,
-        inbound_tag,
+        runtime_factory,
         protocol_name,
         error_protocol_name,
         request,
@@ -134,8 +127,7 @@ where
     } = request;
 
     run_tcp_listener_loop(TcpListenerLoopRequest {
-        proxy,
-        inbound_tag,
+        runtime_factory,
         protocol_name,
         listener,
         shutdown,

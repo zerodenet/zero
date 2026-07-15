@@ -4,13 +4,11 @@ use tokio::task::JoinSet;
 use tracing::{error, info};
 use zero_engine::EngineError;
 
-use crate::runtime::route_runtime::InboundRouteRuntime;
-use crate::runtime::Proxy;
+use crate::runtime::route_runtime::{InboundRouteRuntime, InboundRouteRuntimeFactory};
 
 #[cfg(feature = "hysteria2")]
-pub(crate) struct QuicListenerLoopRequest<'a, H> {
-    pub(crate) proxy: &'a Proxy,
-    pub(crate) inbound_tag: String,
+pub(crate) struct QuicListenerLoopRequest<H> {
+    pub(crate) runtime_factory: InboundRouteRuntimeFactory,
     pub(crate) protocol_name: &'static str,
     pub(crate) listener: crate::transport::QuicInbound,
     pub(crate) shutdown: watch::Receiver<bool>,
@@ -19,15 +17,14 @@ pub(crate) struct QuicListenerLoopRequest<'a, H> {
 
 #[cfg(feature = "hysteria2")]
 pub(crate) async fn run_quic_listener_loop<H, Fut>(
-    request: QuicListenerLoopRequest<'_, H>,
+    request: QuicListenerLoopRequest<H>,
 ) -> Result<(), EngineError>
 where
     H: Fn(InboundRouteRuntime, quinn::Connection) -> Fut + Clone + Send + Sync + 'static,
     Fut: Future<Output = ()> + Send + 'static,
 {
     let QuicListenerLoopRequest {
-        proxy,
-        inbound_tag,
+        runtime_factory,
         protocol_name,
         listener,
         mut shutdown,
@@ -36,7 +33,7 @@ where
     let mut connections = JoinSet::new();
 
     info!(
-        inbound_tag = %inbound_tag,
+        inbound_tag = %runtime_factory.inbound_tag(),
         protocol = protocol_name,
         "inbound listener ready"
     );
@@ -53,7 +50,7 @@ where
             accept_result = listener.accept_connection() => {
                 match accept_result {
                     Ok(conn) => {
-                        let runtime = InboundRouteRuntime::new(proxy.clone(), inbound_tag.clone(), None);
+                        let runtime = runtime_factory.for_connection(None);
                         let handler = handler.clone();
                         connections.spawn(handler(runtime, conn));
                     }
@@ -83,7 +80,7 @@ where
     }
 
     info!(
-        inbound_tag = %inbound_tag,
+        inbound_tag = %runtime_factory.inbound_tag(),
         protocol = protocol_name,
         "inbound listener stopped"
     );
@@ -91,9 +88,8 @@ where
 }
 
 #[cfg(feature = "vless")]
-pub(crate) struct QuicStreamListenerLoopRequest<'a, H> {
-    pub(crate) proxy: &'a Proxy,
-    pub(crate) inbound_tag: String,
+pub(crate) struct QuicStreamListenerLoopRequest<H> {
+    pub(crate) runtime_factory: InboundRouteRuntimeFactory,
     pub(crate) protocol_name: &'static str,
     pub(crate) listener: crate::transport::QuicInbound,
     pub(crate) shutdown: watch::Receiver<bool>,
@@ -102,15 +98,14 @@ pub(crate) struct QuicStreamListenerLoopRequest<'a, H> {
 
 #[cfg(feature = "vless")]
 pub(crate) async fn run_quic_stream_listener_loop<H, Fut>(
-    request: QuicStreamListenerLoopRequest<'_, H>,
+    request: QuicStreamListenerLoopRequest<H>,
 ) -> Result<(), EngineError>
 where
     H: Fn(InboundRouteRuntime, crate::transport::QuicStream) -> Fut + Clone + Send + Sync + 'static,
     Fut: Future<Output = ()> + Send + 'static,
 {
     let QuicStreamListenerLoopRequest {
-        proxy,
-        inbound_tag,
+        runtime_factory,
         protocol_name,
         listener,
         mut shutdown,
@@ -119,7 +114,7 @@ where
     let mut connections = JoinSet::new();
 
     info!(
-        inbound_tag = %inbound_tag,
+        inbound_tag = %runtime_factory.inbound_tag(),
         protocol = protocol_name,
         transport = "quic",
         "inbound listener ready"
@@ -137,7 +132,7 @@ where
             accept_result = listener.accept() => {
                 match accept_result {
                     Ok(stream) => {
-                        let runtime = InboundRouteRuntime::new(proxy.clone(), inbound_tag.clone(), None);
+                        let runtime = runtime_factory.for_connection(None);
                         let handler = handler.clone();
                         connections.spawn(handler(runtime, stream));
                     }
@@ -167,7 +162,7 @@ where
     }
 
     info!(
-        inbound_tag = %inbound_tag,
+        inbound_tag = %runtime_factory.inbound_tag(),
         protocol = protocol_name,
         transport = "quic",
         "inbound listener stopped"
@@ -176,9 +171,8 @@ where
 }
 
 #[cfg(feature = "vless")]
-pub(crate) struct LoggedQuicStreamListenerRequest<'a, R, D> {
-    pub(crate) proxy: &'a Proxy,
-    pub(crate) inbound_tag: String,
+pub(crate) struct LoggedQuicStreamListenerRequest<R, D> {
+    pub(crate) runtime_factory: InboundRouteRuntimeFactory,
     pub(crate) protocol_name: &'static str,
     pub(crate) error_protocol_name: &'static str,
     pub(crate) request: R,
@@ -189,7 +183,7 @@ pub(crate) struct LoggedQuicStreamListenerRequest<'a, R, D> {
 
 #[cfg(feature = "vless")]
 pub(crate) async fn run_logged_quic_stream_listener_loop<R, D, Fut>(
-    request: LoggedQuicStreamListenerRequest<'_, R, D>,
+    request: LoggedQuicStreamListenerRequest<R, D>,
 ) -> Result<(), EngineError>
 where
     R: Clone + Send + Sync + 'static,
@@ -201,8 +195,7 @@ where
     Fut: Future<Output = Result<(), EngineError>> + Send + 'static,
 {
     let LoggedQuicStreamListenerRequest {
-        proxy,
-        inbound_tag,
+        runtime_factory,
         protocol_name,
         error_protocol_name,
         request,
@@ -212,8 +205,7 @@ where
     } = request;
 
     run_quic_stream_listener_loop(QuicStreamListenerLoopRequest {
-        proxy,
-        inbound_tag,
+        runtime_factory,
         protocol_name,
         listener,
         shutdown,

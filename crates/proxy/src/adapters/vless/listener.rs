@@ -67,7 +67,6 @@ pub(super) fn prepare(
         }
     };
     Ok(Box::new(TcpOrQuicInboundListenerOperation {
-        inbound_tag: inbound.tag,
         protocol_name: request.protocol_name(),
         error_protocol_name: request.error_protocol_name(),
         request,

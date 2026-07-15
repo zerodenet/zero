@@ -7,18 +7,16 @@ use tracing::{error, info};
 use zero_stack::SystemTcpStack;
 use zero_traits::TcpStack;
 
-use crate::runtime::route_runtime::InboundRouteRuntime;
-use crate::runtime::Proxy;
+use crate::runtime::route_runtime::{InboundRouteRuntime, InboundRouteRuntimeFactory};
 
-pub(crate) struct SystemTcpStackLoopRequest<'a, H> {
-    pub(crate) proxy: &'a Proxy,
-    pub(crate) inbound_tag: String,
+pub(crate) struct SystemTcpStackLoopRequest<H> {
+    pub(crate) runtime_factory: InboundRouteRuntimeFactory,
     pub(crate) stack: SystemTcpStack,
     pub(crate) shutdown: watch::Receiver<bool>,
     pub(crate) handler: H,
 }
 
-pub(crate) async fn run_system_tcp_stack_loop<H, Fut>(request: SystemTcpStackLoopRequest<'_, H>)
+pub(crate) async fn run_system_tcp_stack_loop<H, Fut>(request: SystemTcpStackLoopRequest<H>)
 where
     H: Fn(InboundRouteRuntime, TcpStream, zero_traits::SocketAddress) -> Fut
         + Clone
@@ -28,8 +26,7 @@ where
     Fut: Future<Output = ()> + Send + 'static,
 {
     let SystemTcpStackLoopRequest {
-        proxy,
-        inbound_tag,
+        runtime_factory,
         stack,
         mut shutdown,
         handler,
@@ -43,7 +40,7 @@ where
             changed = shutdown.changed() => {
                 match changed {
                     Ok(()) if *shutdown.borrow() => {
-                        info!(inbound_tag = %inbound_tag, "system inbound shutdown");
+                        info!(inbound_tag = %runtime_factory.inbound_tag(), "system inbound shutdown");
                         break;
                     }
                     Ok(()) => {}
@@ -54,9 +51,7 @@ where
             accepted = stack.accept() => {
                 match accepted {
                     Some((stream, source, destination)) => {
-                        let runtime = InboundRouteRuntime::new(
-                            proxy.clone(),
-                            inbound_tag.clone(),
+                        let runtime = runtime_factory.for_connection(
                             Some(zero_platform_tokio::socket_address_to_socket_addr(source)),
                         );
                         let handler = handler.clone();

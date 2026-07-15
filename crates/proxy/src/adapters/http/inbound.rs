@@ -56,13 +56,12 @@ impl InboundProtocol for HttpConnectInboundHandler {
 impl crate::adapters::http::HttpConnectAdapter {
     pub(super) fn prepare_inbound_listener_impl(
         &self,
-        inbound: zero_config::InboundConfig,
+        _inbound: zero_config::InboundConfig,
     ) -> Result<
         Box<dyn crate::runtime::inbound_operation::PreparedInboundListenerOperation>,
         EngineError,
     > {
         Ok(Box::new(TcpInboundListenerOperation {
-            inbound_tag: inbound.tag,
             protocol_name: "http",
             error_protocol_name: "http",
             request: HttpConnectInboundHandler::default(),

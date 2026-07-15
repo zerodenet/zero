@@ -871,10 +871,21 @@ fn udp_ingress_runtime_collapses_proxy_and_services_for_session_loops() {
 
     let route_runtime = read(&proxy_src().join("runtime/route_runtime.rs"));
     assert!(route_runtime.contains("struct InboundRouteRuntime"));
+    assert!(route_runtime.contains("struct InboundListenerRuntime"));
     assert!(route_runtime.contains("struct MuxSubstreamRuntime"));
     assert!(route_runtime.contains("TcpIngressRuntime"));
     assert!(route_runtime.contains("tcp_runtime: TcpIngressRuntime"));
     assert!(!route_runtime.contains("fallback_proxy"));
+
+    let inbound_operation = read(&proxy_src().join("runtime/inbound_operation.rs"));
+    assert!(inbound_operation.contains("InboundListenerRuntime"));
+    assert!(!inbound_operation.contains("proxy: Proxy"));
+    assert!(!inbound_operation.contains("execute(proxy"));
+
+    let inventory_inbound = read(&proxy_src().join("inventory/inbound.rs"));
+    assert!(inventory_inbound.contains("InboundListenerRuntime"));
+    assert!(!inventory_inbound.contains("use crate::runtime::Proxy"));
+    assert!(!inventory_inbound.contains("execute(proxy.clone()"));
 
     let tcp_ingress_runtime = read(&proxy_src().join("runtime/tcp_ingress/runtime.rs"));
     assert!(tcp_ingress_runtime.contains("struct TcpIngressRuntime"));
@@ -886,6 +897,14 @@ fn udp_ingress_runtime_collapses_proxy_and_services_for_session_loops() {
         "runtime/listener_loop/system.rs",
     ] {
         let source = read(&proxy_src().join(relative));
+        assert!(
+            !source.contains("use crate::runtime::Proxy"),
+            "{relative} must not import Proxy directly"
+        );
+        assert!(
+            !source.contains("proxy: &'a Proxy"),
+            "{relative} must not retain raw Proxy in listener-loop request models"
+        );
         assert!(
             !source.contains("Fn(Proxy"),
             "{relative} must not expose raw Proxy in listener-loop handler contracts"

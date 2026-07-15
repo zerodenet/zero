@@ -5,6 +5,7 @@ use tokio::sync::{watch, Notify};
 use zero_config::RuntimeConfig;
 
 use super::{run_tcp_listener_loop, TcpListenerLoopRequest};
+use crate::runtime::route_runtime::InboundRouteRuntimeFactory;
 
 #[tokio::test]
 async fn tcp_listener_accepts_connection_and_stops_on_shutdown() {
@@ -24,8 +25,10 @@ async fn tcp_listener_accepts_connection_and_stops_on_shutdown() {
         let observations = observations.clone();
         tokio::spawn(async move {
             run_tcp_listener_loop(TcpListenerLoopRequest {
-                proxy: &proxy,
-                inbound_tag: "listener-test".to_owned(),
+                runtime_factory: InboundRouteRuntimeFactory::new(
+                    &proxy,
+                    "listener-test".to_owned(),
+                ),
                 protocol_name: "test",
                 listener,
                 shutdown: shutdown_rx,

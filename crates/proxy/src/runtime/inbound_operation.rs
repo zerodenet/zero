@@ -5,8 +5,7 @@ use tokio::sync::watch;
 use zero_engine::EngineError;
 
 use crate::protocol_registry::BoundInbound;
-use crate::runtime::route_runtime::InboundRouteRuntime;
-use crate::runtime::Proxy;
+use crate::runtime::route_runtime::{InboundListenerRuntime, InboundRouteRuntime};
 
 #[derive(Clone)]
 pub(crate) struct InboundConnectionContext {
@@ -247,14 +246,13 @@ impl InboundConnectionContext {
 pub(crate) trait PreparedInboundListenerOperation: Send {
     fn execute(
         self: Box<Self>,
-        proxy: Proxy,
+        runtime: InboundListenerRuntime,
         bound: BoundInbound,
         shutdown: watch::Receiver<bool>,
     ) -> Pin<Box<dyn Future<Output = Result<(), EngineError>> + Send + 'static>>;
 }
 
 pub(crate) struct TcpInboundListenerOperation<R, D> {
-    pub(crate) inbound_tag: String,
     pub(crate) protocol_name: &'static str,
     pub(crate) error_protocol_name: &'static str,
     pub(crate) request: R,
@@ -273,13 +271,12 @@ where
 {
     fn execute(
         self: Box<Self>,
-        proxy: Proxy,
+        runtime: InboundListenerRuntime,
         bound: BoundInbound,
         shutdown: watch::Receiver<bool>,
     ) -> Pin<Box<dyn Future<Output = Result<(), EngineError>> + Send + 'static>> {
         Box::pin(async move {
             let TcpInboundListenerOperation {
-                inbound_tag,
                 protocol_name,
                 error_protocol_name,
                 request,
@@ -287,8 +284,7 @@ where
             } = *self;
             crate::runtime::listener_loop::run_logged_tcp_socket_listener_loop(
                 crate::runtime::listener_loop::LoggedTcpSocketListenerRequest {
-                    proxy: &proxy,
-                    inbound_tag,
+                    runtime_factory: runtime.route_factory(),
                     protocol_name,
                     error_protocol_name,
                     request,
@@ -309,7 +305,6 @@ where
 
 #[cfg(feature = "shadowsocks")]
 pub(crate) struct TcpAndDatagramInboundListenerOperation<R, D, U> {
-    pub(crate) inbound_tag: String,
     pub(crate) protocol_name: &'static str,
     pub(crate) error_protocol_name: &'static str,
     pub(crate) listen_address: String,
@@ -334,13 +329,12 @@ where
 {
     fn execute(
         self: Box<Self>,
-        proxy: Proxy,
+        runtime: InboundListenerRuntime,
         bound: BoundInbound,
         shutdown: watch::Receiver<bool>,
     ) -> Pin<Box<dyn Future<Output = Result<(), EngineError>> + Send + 'static>> {
         Box::pin(async move {
             let TcpAndDatagramInboundListenerOperation {
-                inbound_tag,
                 protocol_name,
                 error_protocol_name,
                 listen_address,
@@ -361,12 +355,12 @@ where
                 }
             };
             let udp_task = udp_socket.as_ref().map(|socket| {
-                let runtime = crate::runtime::udp_ingress::UdpIngressRuntime::from_proxy(&proxy);
-                let inbound_tag = inbound_tag.clone();
+                let udp_runtime = runtime.udp_runtime();
+                let inbound_tag = runtime.inbound_tag().to_owned();
                 let socket = socket.clone();
                 tokio::spawn(async move {
                     crate::runtime::datagram_udp::run_protocol_datagram_udp_relay(
-                        runtime,
+                        udp_runtime,
                         socket,
                         udp_relay,
                         &inbound_tag,
@@ -377,13 +371,12 @@ where
             });
 
             let result = Box::new(TcpInboundListenerOperation {
-                inbound_tag,
                 protocol_name,
                 error_protocol_name,
                 request: tcp_request,
                 dispatch: tcp_dispatch,
             })
-            .execute(proxy, bound, shutdown)
+            .execute(runtime, bound, shutdown)
             .await;
 
             if let Some(task) = udp_task {
@@ -397,7 +390,6 @@ where
 
 #[cfg(feature = "hysteria2")]
 pub(crate) struct AuthenticatedQuicInboundListenerOperation<P> {
-    pub(crate) inbound_tag: String,
     pub(crate) protocol_name: &'static str,
     pub(crate) profile: P,
 }
@@ -409,7 +401,7 @@ where
 {
     fn execute(
         self: Box<Self>,
-        proxy: Proxy,
+        runtime: InboundListenerRuntime,
         bound: BoundInbound,
         shutdown: watch::Receiver<bool>,
     ) -> Pin<Box<dyn Future<Output = Result<(), EngineError>> + Send + 'static>> {
@@ -427,8 +419,7 @@ where
             let protocol_name = self.protocol_name;
             crate::runtime::listener_loop::run_quic_listener_loop(
                 crate::runtime::listener_loop::QuicListenerLoopRequest {
-                    proxy: &proxy,
-                    inbound_tag: self.inbound_tag,
+                    runtime_factory: runtime.route_factory(),
                     protocol_name,
                     listener,
                     shutdown,
@@ -513,7 +504,6 @@ where
 
 #[cfg(feature = "vless")]
 pub(crate) struct TcpOrQuicInboundListenerOperation<R, TD, QD> {
-    pub(crate) inbound_tag: String,
     pub(crate) protocol_name: &'static str,
     pub(crate) error_protocol_name: &'static str,
     pub(crate) request: R,
@@ -541,25 +531,24 @@ where
 {
     fn execute(
         self: Box<Self>,
-        proxy: Proxy,
+        runtime: InboundListenerRuntime,
         bound: BoundInbound,
         shutdown: watch::Receiver<bool>,
     ) -> Pin<Box<dyn Future<Output = Result<(), EngineError>> + Send + 'static>> {
         Box::pin(async move {
             let TcpOrQuicInboundListenerOperation {
-                inbound_tag,
                 protocol_name,
                 error_protocol_name,
                 request,
                 dispatch_tcp,
                 dispatch_quic,
             } = *self;
+            let runtime_factory = runtime.route_factory();
             match bound {
                 BoundInbound::Tcp(listener) => {
                     crate::runtime::listener_loop::run_logged_tcp_socket_listener_loop(
                         crate::runtime::listener_loop::LoggedTcpSocketListenerRequest {
-                            proxy: &proxy,
-                            inbound_tag,
+                            runtime_factory,
                             protocol_name,
                             error_protocol_name,
                             request,
@@ -583,8 +572,7 @@ where
                 BoundInbound::Quic(listener) => {
                     crate::runtime::listener_loop::run_logged_quic_stream_listener_loop(
                         crate::runtime::listener_loop::LoggedQuicStreamListenerRequest {
-                            proxy: &proxy,
-                            inbound_tag,
+                            runtime_factory,
                             protocol_name,
                             error_protocol_name,
                             request,

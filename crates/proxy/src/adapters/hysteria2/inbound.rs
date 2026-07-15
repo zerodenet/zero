@@ -25,7 +25,6 @@ impl crate::adapters::hysteria2::Hysteria2Adapter {
             }
         };
         Ok(Box::new(AuthenticatedQuicInboundListenerOperation {
-            inbound_tag: inbound.tag,
             protocol_name: "hysteria2",
             profile,
         }))
