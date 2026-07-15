@@ -189,32 +189,6 @@ impl VlessInboundMuxOpenedRoute {
             state: VlessInboundMuxOpenedRouteState::Udp { relay },
         }
     }
-
-    fn session_id(&self) -> u16 {
-        match &self.state {
-            VlessInboundMuxOpenedRouteState::Tcp { relay, .. } => relay.session_id(),
-            VlessInboundMuxOpenedRouteState::Udp { relay } => relay.session_id(),
-        }
-    }
-
-    async fn dispatch_with_handlers<E, FTcp, FTcpFut, FUdp, FUdpFut>(
-        self,
-        on_tcp_opened: FTcp,
-        on_udp_opened: FUdp,
-    ) -> Result<bool, E>
-    where
-        FTcp: FnOnce(Session, VlessInboundMuxTcpRelay) -> FTcpFut,
-        FTcpFut: core::future::Future<Output = Result<bool, E>>,
-        FUdp: FnOnce(VlessInboundMuxUdpRelay) -> FUdpFut,
-        FUdpFut: core::future::Future<Output = Result<bool, E>>,
-    {
-        match self.state {
-            VlessInboundMuxOpenedRouteState::Tcp { session, relay } => {
-                on_tcp_opened(session, relay).await
-            }
-            VlessInboundMuxOpenedRouteState::Udp { relay } => on_udp_opened(relay).await,
-        }
-    }
 }
 
 #[cfg(feature = "reality")]
@@ -236,10 +210,6 @@ impl VlessInboundMuxTcpRelay {
             up_rx,
             writer,
         }
-    }
-
-    fn session_id(&self) -> u16 {
-        self.session_id
     }
 
     async fn relay_stream<S>(self, upstream: S)
@@ -342,10 +312,6 @@ impl VlessInboundMuxUdpRelay {
             responder,
             auth,
         }
-    }
-
-    fn session_id(&self) -> u16 {
-        self.session_id
     }
 }
 
@@ -496,53 +462,6 @@ impl VlessInboundMuxServer {
         self.next_opened_route_with_auth(stream, auth.as_ref())
             .await
     }
-
-    pub(crate) async fn dispatch_next_opened_route_with_handlers<
-        S,
-        E,
-        FTcp,
-        FTcpFut,
-        FUdp,
-        FUdpFut,
-    >(
-        &mut self,
-        stream: &mut S,
-        on_tcp_opened: FTcp,
-        on_udp_opened: FUdp,
-    ) -> Result<bool, E>
-    where
-        S: AsyncSocket,
-        E: From<Error>,
-        FTcp: FnOnce(Session, VlessInboundMuxTcpRelay) -> FTcpFut,
-        FTcpFut: core::future::Future<Output = Result<bool, E>>,
-        FUdp: FnOnce(VlessInboundMuxUdpRelay) -> FUdpFut,
-        FUdpFut: core::future::Future<Output = Result<bool, E>>,
-    {
-        let Some(route) = self.next_opened_route(stream).await? else {
-            return Ok(false);
-        };
-        let session_id = route.session_id();
-        let accepted = route
-            .dispatch_with_handlers(on_tcp_opened, on_udp_opened)
-            .await?;
-        if !accepted {
-            self.reject_opened_stream(stream, session_id).await?;
-        }
-        Ok(accepted)
-    }
-
-    pub(crate) async fn reject_opened_stream<S>(
-        &mut self,
-        stream: &mut S,
-        session_id: u16,
-    ) -> Result<(), Error>
-    where
-        S: AsyncSocket,
-    {
-        self.streams
-            .reject_opened_stream(&mut self.mux, stream, session_id)
-            .await
-    }
 }
 
 #[cfg(feature = "reality")]
@@ -565,15 +484,20 @@ where
         FTcp: FnOnce(Session, Self::TcpRelay) -> Result<(), E> + Send,
         FUdp: FnOnce(Self::UdpRelay) -> Result<(), E> + Send,
     {
-        self.dispatch_next_opened_route_with_handlers(
-            stream,
-            |session, relay| async move {
+        let Some(route) = self.next_opened_route(stream).await? else {
+            return Ok(false);
+        };
+
+        match route.state {
+            VlessInboundMuxOpenedRouteState::Tcp { session, relay } => {
                 on_tcp_opened(session, relay)?;
-                Ok::<bool, E>(true)
-            },
-            |relay| async move { on_udp_opened(relay).map(|_| true) },
-        )
-        .await
+            }
+            VlessInboundMuxOpenedRouteState::Udp { relay } => {
+                on_udp_opened(relay)?;
+            }
+        }
+
+        Ok(true)
     }
 }
 
@@ -643,20 +567,6 @@ impl VlessInboundMuxStreams {
                 Ok(None)
             }
         }
-    }
-
-    async fn reject_opened_stream<S>(
-        &mut self,
-        mux: &mut VlessInboundMuxSession,
-        stream: &mut S,
-        session_id: u16,
-    ) -> Result<(), Error>
-    where
-        S: AsyncSocket,
-    {
-        mux.reject_inbound_stream(stream).await?;
-        self.close_inbound_stream(session_id);
-        Ok(())
     }
 
     async fn send_inbound_downlink<S>(

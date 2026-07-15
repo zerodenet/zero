@@ -1203,6 +1203,25 @@ fn socks5_adapter_accepts_protocol_request_before_runtime_handoff() {
 }
 
 #[test]
+fn protocol_mux_servers_dispatch_opened_routes_without_handler_wrappers() {
+    for relative in ["protocols/vless/src/mux.rs", "protocols/vmess/src/mux.rs"] {
+        let source = read(&workspace_root().join(relative));
+        assert!(
+            !source.contains("dispatch_with_handlers("),
+            "{relative} must not keep callback-style opened-route dispatch helpers"
+        );
+        assert!(
+            !source.contains("dispatch_next_opened_route_with_handlers("),
+            "{relative} must not keep secondary handler-wrapper dispatch entrypoints"
+        );
+        assert!(
+            source.contains("match route.state"),
+            "{relative} should branch explicitly on opened mux routes"
+        );
+    }
+}
+
+#[test]
 fn mieru_adapter_uses_protocol_outbound_option_refs() {
     let adapter = read(&proxy_src().join("adapters/mieru.rs"));
     let forbidden = "MieruTransportLeaf::new(";

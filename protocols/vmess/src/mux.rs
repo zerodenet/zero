@@ -498,25 +498,6 @@ impl VmessInboundMuxOpenedRoute {
             state: VmessInboundMuxOpenedRouteState::Udp { relay },
         }
     }
-
-    async fn dispatch_with_handlers<E, FTcp, FTcpFut, FUdp, FUdpFut>(
-        self,
-        on_tcp_opened: FTcp,
-        on_udp_opened: FUdp,
-    ) -> Result<(), E>
-    where
-        FTcp: FnOnce(Session, VmessInboundMuxTcpRelay) -> FTcpFut,
-        FTcpFut: core::future::Future<Output = Result<(), E>>,
-        FUdp: FnOnce(VmessInboundMuxUdpRelay) -> FUdpFut,
-        FUdpFut: core::future::Future<Output = Result<(), E>>,
-    {
-        match self.state {
-            VmessInboundMuxOpenedRouteState::Tcp { session, relay } => {
-                on_tcp_opened(*session, relay).await
-            }
-            VmessInboundMuxOpenedRouteState::Udp { relay } => on_udp_opened(relay).await,
-        }
-    }
 }
 
 pub struct VmessInboundMuxTcpRelay {
@@ -1108,36 +1089,6 @@ impl VmessInboundMuxServer {
             .map(|opened| opened.map(|opened| opened.into_route(writer)))
     }
 
-    pub(crate) async fn dispatch_next_opened_route_with_handlers<
-        R,
-        E,
-        FTcp,
-        FTcpFut,
-        FUdp,
-        FUdpFut,
-    >(
-        &mut self,
-        reader: &mut R,
-        on_tcp_opened: FTcp,
-        on_udp_opened: FUdp,
-    ) -> Result<bool, E>
-    where
-        R: tokio::io::AsyncRead + Unpin,
-        E: From<Error>,
-        FTcp: FnOnce(Session, VmessInboundMuxTcpRelay) -> FTcpFut,
-        FTcpFut: core::future::Future<Output = Result<(), E>>,
-        FUdp: FnOnce(VmessInboundMuxUdpRelay) -> FUdpFut,
-        FUdpFut: core::future::Future<Output = Result<(), E>>,
-    {
-        let Some(route) = self.next_opened_route(reader).await? else {
-            return Ok(true);
-        };
-        route
-            .dispatch_with_handlers(on_tcp_opened, on_udp_opened)
-            .await?;
-        Ok(true)
-    }
-
     fn writer(&self) -> VmessInboundMuxWriter {
         self.writer.clone()
     }
@@ -1162,12 +1113,20 @@ where
         FTcp: FnOnce(Session, Self::TcpRelay) -> Result<(), E> + Send,
         FUdp: FnOnce(Self::UdpRelay) -> Result<(), E> + Send,
     {
-        self.dispatch_next_opened_route_with_handlers(
-            reader,
-            |session, relay| async move { on_tcp_opened(session, relay) },
-            |relay| async move { on_udp_opened(relay) },
-        )
-        .await
+        let Some(route) = self.next_opened_route(reader).await? else {
+            return Ok(true);
+        };
+
+        match route.state {
+            VmessInboundMuxOpenedRouteState::Tcp { session, relay } => {
+                on_tcp_opened(*session, relay)?;
+            }
+            VmessInboundMuxOpenedRouteState::Udp { relay } => {
+                on_udp_opened(relay)?;
+            }
+        }
+
+        Ok(true)
     }
 }
 
