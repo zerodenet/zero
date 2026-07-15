@@ -10,7 +10,6 @@ use zero_engine::EngineError;
     feature = "mieru"
 ))]
 use crate::runtime::udp_dispatch::FlowFailure;
-use crate::transport::TcpOutboundFailure;
 
 fn unsupported_io(message: &'static str) -> EngineError {
     EngineError::Io(std::io::Error::new(
@@ -19,32 +18,8 @@ fn unsupported_io(message: &'static str) -> EngineError {
     ))
 }
 
-pub(in crate::protocol_registry) fn tcp_outbound_unsupported() -> TcpOutboundFailure {
-    TcpOutboundFailure {
-        stage: "no_tcp_outbound",
-        error: unsupported_io("this adapter does not provide a TCP outbound"),
-        upstream_endpoint: None,
-    }
-}
-
 pub(in crate::protocol_registry) fn relay_hop_unsupported() -> EngineError {
     unsupported_io("this adapter does not support relay hop")
-}
-
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
-))]
-pub(in crate::protocol_registry) fn udp_outbound_unsupported() -> FlowFailure {
-    udp_flow_unsupported(
-        "no_udp_outbound",
-        "this adapter does not provide a UDP outbound",
-    )
 }
 
 #[cfg(any(
@@ -77,35 +52,6 @@ pub(in crate::protocol_registry) fn udp_relay_final_hop_unsupported() -> FlowFai
         "no_udp_relay_final_hop",
         "this adapter does not support UDP relay final hop",
     )
-}
-
-pub(crate) fn unreachable_leaf(adapter: &'static str) -> TcpOutboundFailure {
-    TcpOutboundFailure {
-        stage: "outbound_leaf_mismatch",
-        error: EngineError::Io(std::io::Error::other(format!(
-            "{adapter} adapter received a non-matching outbound leaf"
-        ))),
-        upstream_endpoint: None,
-    }
-}
-
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
-))]
-pub(crate) fn unreachable_udp_leaf(adapter: &'static str) -> FlowFailure {
-    FlowFailure {
-        stage: "udp_leaf_mismatch",
-        error: EngineError::Io(std::io::Error::other(format!(
-            "{adapter} adapter received a non-matching UDP leaf"
-        ))),
-        upstream: None,
-    }
 }
 
 #[cfg(any(

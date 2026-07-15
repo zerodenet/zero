@@ -1,5 +1,3 @@
-use async_trait::async_trait;
-
 use zero_config::{InboundConfig, InboundProtocolConfig, OutboundProtocolConfig};
 use zero_engine::{EngineError, ResolvedLeafOutbound};
 use zero_traits::{ProtocolCapabilityDescriptor, ProtocolMetadata};
@@ -33,17 +31,6 @@ use crate::protocol_registry::{
     feature = "mieru"
 ))]
 use crate::protocol_registry::{UdpFlowCapability, UdpPacketPathCapability};
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
-))]
-use crate::runtime::udp_dispatch::FlowFailure;
-use crate::transport::TcpOutboundFailure;
 
 mod inbound;
 mod tcp;
@@ -68,7 +55,6 @@ impl NamedProtocolAdapter for DirectAdapter {
     const HAS_OUTBOUND: bool = false;
 }
 
-#[async_trait]
 #[cfg(any(
     feature = "socks5",
     feature = "vless",
@@ -84,17 +70,6 @@ impl UdpFlowCapability for DirectAdapter {
         leaf: ResolvedLeafOutbound<'a>,
     ) -> Option<Box<dyn ClaimedUdpFlowLeaf<'a> + 'a>> {
         self.claim_udp_flow_leaf_impl(leaf)
-    }
-
-    fn prepare_udp_flow<'a>(
-        &self,
-        leaf: ResolvedLeafOutbound<'a>,
-        _source_dir: Option<&std::path::Path>,
-    ) -> Result<
-        Box<dyn crate::runtime::udp_dispatch::operation::PreparedUdpFlowOperation + 'a>,
-        FlowFailure,
-    > {
-        self.prepare_udp_flow_impl(leaf)
     }
 }
 
@@ -122,7 +97,6 @@ impl InboundListenerCapability for DirectAdapter {
     }
 }
 
-#[async_trait]
 impl TcpOutboundCapability for DirectAdapter {
     fn claims_outbound_leaf(&self, leaf: &ResolvedLeafOutbound<'_>) -> bool {
         named_protocol_claims_runtime_leaf::<Self>(leaf)
@@ -140,16 +114,6 @@ impl TcpOutboundCapability for DirectAdapter {
         leaf: &ResolvedLeafOutbound<'_>,
     ) -> Option<OutboundLeafRuntime> {
         direct_leaf_runtime(leaf)
-    }
-    fn prepare_tcp_connect<'a>(
-        &self,
-        leaf: ResolvedLeafOutbound<'a>,
-        _source_dir: Option<&std::path::Path>,
-    ) -> Result<
-        Box<dyn crate::runtime::tcp_dispatch::operation::PreparedTcpConnectOperation + 'a>,
-        TcpOutboundFailure,
-    > {
-        self.prepare_tcp_connect_impl(leaf)
     }
 }
 

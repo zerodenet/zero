@@ -52,17 +52,6 @@ pub(crate) use context::{OutboundAdapterContext, TcpRuntimeServices};
 pub(crate) use context::{UdpAdapterContext, UdpAssociationCloseKind, UdpRuntimeServices};
 #[cfg(feature = "transport_quic")]
 pub(crate) use defaults::bind_transport_inbound;
-pub(crate) use defaults::unreachable_leaf;
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
-))]
-pub(crate) use defaults::unreachable_udp_leaf;
 pub(crate) use model::{BoundInbound, OutboundLeafRuntime};
 pub(crate) use registry::direct_leaf_runtime;
 #[cfg(test)]

@@ -1,5 +1,3 @@
-use async_trait::async_trait;
-
 use ::mieru::transport::MieruTransportLeaf;
 
 use zero_config::{InboundConfig, InboundProtocolConfig, OutboundProtocolConfig};
@@ -16,9 +14,7 @@ use crate::protocol_registry::{
     TcpOutboundCapability, UdpFlowCapability, UdpPacketPathCapability,
 };
 use crate::runtime::path::TcpPathCategory;
-use crate::runtime::udp_dispatch::FlowFailure;
 use crate::runtime::udp_flow::managed::ManagedStreamHandlerPair;
-use crate::transport::TcpOutboundFailure;
 
 #[cfg(feature = "mieru")]
 mod inbound;
@@ -54,35 +50,12 @@ impl NamedProtocolAdapter for MieruAdapter {
 }
 
 #[cfg(feature = "mieru")]
-#[async_trait]
 impl UdpFlowCapability for MieruAdapter {
     fn claim_udp_flow_leaf<'a>(
         &self,
         leaf: ResolvedLeafOutbound<'a>,
     ) -> Option<Box<dyn ClaimedUdpFlowLeaf<'a> + 'a>> {
         self.claim_udp_flow_leaf_impl(leaf)
-    }
-
-    fn prepare_udp_flow<'a>(
-        &self,
-        leaf: ResolvedLeafOutbound<'a>,
-        _source_dir: Option<&std::path::Path>,
-    ) -> Result<
-        Box<dyn crate::runtime::udp_dispatch::operation::PreparedUdpFlowOperation + 'a>,
-        FlowFailure,
-    > {
-        self.prepare_udp_flow_impl(leaf)
-    }
-    fn prepare_owned_udp_relay_final_hop<'a>(
-        &self,
-        carrier: crate::transport::RelayCarrier,
-        leaf: ResolvedLeafOutbound<'a>,
-        _source_dir: Option<&std::path::Path>,
-    ) -> Result<
-        Box<dyn crate::runtime::udp_dispatch::operation::PreparedUdpFlowOperation + 'a>,
-        FlowFailure,
-    > {
-        self.prepare_owned_udp_relay_final_hop_impl(carrier, leaf)
     }
 }
 
@@ -111,7 +84,6 @@ impl InboundListenerCapability for MieruAdapter {
 }
 
 #[cfg(feature = "mieru")]
-#[async_trait]
 impl TcpOutboundCapability for MieruAdapter {
     fn claims_outbound_leaf(&self, leaf: &ResolvedLeafOutbound<'_>) -> bool {
         named_protocol_claims_runtime_leaf::<Self>(leaf)
@@ -129,28 +101,6 @@ impl TcpOutboundCapability for MieruAdapter {
         leaf: &ResolvedLeafOutbound<'_>,
     ) -> Option<OutboundLeafRuntime> {
         proxy_leaf_runtime(leaf, TcpPathCategory::Session)
-    }
-
-    fn prepare_tcp_connect<'a>(
-        &self,
-        leaf: ResolvedLeafOutbound<'a>,
-        _source_dir: Option<&std::path::Path>,
-    ) -> Result<
-        Box<dyn crate::runtime::tcp_dispatch::operation::PreparedTcpConnectOperation + 'a>,
-        TcpOutboundFailure,
-    > {
-        self.prepare_tcp_connect_impl(leaf)
-    }
-
-    fn prepare_tcp_relay_hop<'a>(
-        &self,
-        leaf: ResolvedLeafOutbound<'a>,
-        _source_dir: Option<&std::path::Path>,
-    ) -> Result<
-        Box<dyn crate::runtime::tcp_dispatch::operation::PreparedTcpRelayOperation + 'a>,
-        EngineError,
-    > {
-        self.prepare_tcp_relay_hop_impl(leaf)
     }
 }
 

@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::Arc;
 
 use zero_engine::{EngineError, ResolvedLeafOutbound};
@@ -40,79 +40,6 @@ use crate::runtime::udp_dispatch::operation::PreparedUdpFlowOperation;
 ))]
 use crate::transport::RelayCarrier;
 
-type TcpConnectPrepareHook<'a> = dyn Fn(
-        Option<PathBuf>,
-    )
-        -> Result<Box<dyn PreparedTcpConnectOperation + 'a>, crate::transport::TcpOutboundFailure>
-    + Send
-    + Sync
-    + 'a;
-type TcpRelayPrepareHook<'a> = dyn Fn(Option<PathBuf>) -> Result<Box<dyn PreparedTcpRelayOperation + 'a>, EngineError>
-    + Send
-    + Sync
-    + 'a;
-
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
-))]
-type UdpFlowPrepareHook<'a> = dyn Fn(
-        Option<PathBuf>,
-    )
-        -> Result<Box<dyn PreparedUdpFlowOperation + 'a>, crate::runtime::udp_dispatch::FlowFailure>
-    + Send
-    + Sync
-    + 'a;
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
-))]
-type UdpRelayNeedsTwoStreamsHook<'a> = dyn Fn(Option<PathBuf>) -> bool + Send + Sync + 'a;
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
-))]
-type UdpRelayFinalHopPrepareHook<'a> = dyn Fn(
-        RelayCarrier,
-        Option<PathBuf>,
-    )
-        -> Result<Box<dyn PreparedUdpFlowOperation + 'a>, crate::runtime::udp_dispatch::FlowFailure>
-    + Send
-    + Sync
-    + 'a;
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
-))]
-type UdpRelayTwoStreamPrepareHook<'a> = dyn Fn(
-        RelayCarrier,
-        RelayCarrier,
-        Option<PathBuf>,
-    )
-        -> Result<Box<dyn PreparedUdpFlowOperation + 'a>, crate::runtime::udp_dispatch::FlowFailure>
-    + Send
-    + Sync
-    + 'a;
 #[cfg(any(
     feature = "socks5",
     feature = "vless",
@@ -172,10 +99,10 @@ impl<'a> ClaimedOutboundLeaf<'a> {
         leaf: ResolvedLeafOutbound<'a>,
         runtime: OutboundLeafRuntime,
         entry: Option<&RegisteredProtocolEntry>,
-    ) -> Self {
-        Self {
+    ) -> Result<Self, EngineError> {
+        Ok(Self {
             runtime,
-            tcp: build_tcp_hooks(entry, leaf.clone()),
+            tcp: build_tcp_hooks(entry, leaf.clone())?,
             #[cfg(any(
                 feature = "socks5",
                 feature = "vless",
@@ -185,8 +112,8 @@ impl<'a> ClaimedOutboundLeaf<'a> {
                 feature = "vmess",
                 feature = "mieru"
             ))]
-            udp: build_udp_hooks(entry, leaf),
-        }
+            udp: build_udp_hooks(entry, leaf)?,
+        })
     }
 
     #[cfg(test)]
@@ -362,86 +289,6 @@ impl<'a> ClaimedOutboundLeaf<'a> {
     }
 }
 
-struct HookClaimedTcpLeaf<'a> {
-    connect: Arc<TcpConnectPrepareHook<'a>>,
-    relay_hop: Arc<TcpRelayPrepareHook<'a>>,
-}
-
-impl<'a> ClaimedTcpOutboundLeaf<'a> for HookClaimedTcpLeaf<'a> {
-    fn prepare_tcp_connect(
-        &self,
-        source_dir: Option<&Path>,
-    ) -> Result<Box<dyn PreparedTcpConnectOperation + 'a>, crate::transport::TcpOutboundFailure>
-    {
-        (self.connect)(source_dir.map(Path::to_path_buf))
-    }
-
-    fn prepare_tcp_relay_hop(
-        &self,
-        source_dir: Option<&Path>,
-    ) -> Result<Box<dyn PreparedTcpRelayOperation + 'a>, EngineError> {
-        (self.relay_hop)(source_dir.map(Path::to_path_buf))
-    }
-}
-
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
-))]
-struct HookClaimedUdpLeaf<'a> {
-    flow: Arc<UdpFlowPrepareHook<'a>>,
-    relay_needs_two_streams: Arc<UdpRelayNeedsTwoStreamsHook<'a>>,
-    relay_final_hop: Arc<UdpRelayFinalHopPrepareHook<'a>>,
-    relay_two_stream: Arc<UdpRelayTwoStreamPrepareHook<'a>>,
-}
-
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
-))]
-impl<'a> ClaimedUdpFlowLeaf<'a> for HookClaimedUdpLeaf<'a> {
-    fn prepare_udp_flow(
-        &self,
-        source_dir: Option<&Path>,
-    ) -> Result<Box<dyn PreparedUdpFlowOperation + 'a>, crate::runtime::udp_dispatch::FlowFailure>
-    {
-        (self.flow)(source_dir.map(Path::to_path_buf))
-    }
-
-    fn udp_relay_needs_two_streams(&self, source_dir: Option<&Path>) -> bool {
-        (self.relay_needs_two_streams)(source_dir.map(Path::to_path_buf))
-    }
-
-    fn prepare_owned_udp_relay_final_hop(
-        &self,
-        carrier: RelayCarrier,
-        source_dir: Option<&Path>,
-    ) -> Result<Box<dyn PreparedUdpFlowOperation + 'a>, crate::runtime::udp_dispatch::FlowFailure>
-    {
-        (self.relay_final_hop)(carrier, source_dir.map(Path::to_path_buf))
-    }
-
-    fn prepare_owned_udp_relay_two_stream(
-        &self,
-        post_carrier: RelayCarrier,
-        get_carrier: RelayCarrier,
-        source_dir: Option<&Path>,
-    ) -> Result<Box<dyn PreparedUdpFlowOperation + 'a>, crate::runtime::udp_dispatch::FlowFailure>
-    {
-        (self.relay_two_stream)(post_carrier, get_carrier, source_dir.map(Path::to_path_buf))
-    }
-}
-
 #[cfg(any(
     feature = "socks5",
     feature = "vless",
@@ -480,35 +327,17 @@ impl<'a> ClaimedUdpPacketPathLeaf<'a> for HookClaimedUdpPacketPathLeaf<'a> {
 fn build_tcp_hooks<'a>(
     entry: Option<&RegisteredProtocolEntry>,
     leaf: ResolvedLeafOutbound<'a>,
-) -> ClaimedTcpHooks<'a> {
+) -> Result<ClaimedTcpHooks<'a>, EngineError> {
     let Some(entry) = entry else {
-        return ClaimedTcpHooks::default();
+        return Ok(ClaimedTcpHooks::default());
     };
     if let Some(claimed) = entry.tcp.claim_tcp_outbound_leaf(leaf.clone()) {
-        return ClaimedTcpHooks {
+        return Ok(ClaimedTcpHooks {
             capability: Some(Arc::from(claimed)),
-        };
+        });
     }
-    let tcp_connect = {
-        let tcp = entry.tcp.clone();
-        let leaf = leaf.clone();
-        Arc::new(move |source_dir: Option<PathBuf>| {
-            tcp.prepare_tcp_connect(leaf.clone(), source_dir.as_deref())
-        }) as Arc<TcpConnectPrepareHook<'a>>
-    };
-    let tcp_relay_hop = {
-        let tcp = entry.tcp.clone();
-        let leaf = leaf.clone();
-        Arc::new(move |source_dir: Option<PathBuf>| {
-            tcp.prepare_tcp_relay_hop(leaf.clone(), source_dir.as_deref())
-        }) as Arc<TcpRelayPrepareHook<'a>>
-    };
-    ClaimedTcpHooks {
-        capability: Some(Arc::new(HookClaimedTcpLeaf {
-            connect: tcp_connect,
-            relay_hop: tcp_relay_hop,
-        })),
-    }
+
+    Err(missing_claimed_tcp_leaf(entry.support.name(), &leaf))
 }
 
 #[cfg(any(
@@ -523,9 +352,9 @@ fn build_tcp_hooks<'a>(
 fn build_udp_hooks<'a>(
     entry: Option<&RegisteredProtocolEntry>,
     leaf: ResolvedLeafOutbound<'a>,
-) -> ClaimedUdpHooks<'a> {
+) -> Result<ClaimedUdpHooks<'a>, EngineError> {
     let Some(entry) = entry else {
-        return ClaimedUdpHooks::default();
+        return Ok(ClaimedUdpHooks::default());
     };
     let packet_path = entry.packet_path.as_ref().map(|packet_path| {
         if let Some(claimed) = packet_path.claim_udp_packet_path_leaf(leaf.clone()) {
@@ -540,63 +369,18 @@ fn build_udp_hooks<'a>(
         }
     });
     let Some(udp) = entry.udp.clone() else {
-        return ClaimedUdpHooks {
+        return Ok(ClaimedUdpHooks {
             packet_path,
             ..ClaimedUdpHooks::default()
-        };
+        });
     };
     if let Some(claimed) = udp.claim_udp_flow_leaf(leaf.clone()) {
-        return ClaimedUdpHooks {
+        return Ok(ClaimedUdpHooks {
             capability: Some(Arc::from(claimed)),
             packet_path,
-        };
+        });
     }
-
-    let flow = {
-        let udp = udp.clone();
-        let leaf = leaf.clone();
-        Arc::new(move |source_dir: Option<PathBuf>| {
-            udp.prepare_udp_flow(leaf.clone(), source_dir.as_deref())
-        }) as Arc<UdpFlowPrepareHook<'a>>
-    };
-    let relay_needs_two_streams = {
-        let udp = udp.clone();
-        let leaf = leaf.clone();
-        Arc::new(move |source_dir: Option<PathBuf>| {
-            udp.udp_relay_needs_two_streams(&leaf, source_dir.as_deref())
-        }) as Arc<UdpRelayNeedsTwoStreamsHook<'a>>
-    };
-    let relay_final_hop = {
-        let udp = udp.clone();
-        let leaf = leaf.clone();
-        Arc::new(move |carrier, source_dir: Option<PathBuf>| {
-            udp.prepare_owned_udp_relay_final_hop(carrier, leaf.clone(), source_dir.as_deref())
-        }) as Arc<UdpRelayFinalHopPrepareHook<'a>>
-    };
-    let relay_two_stream = {
-        let udp = udp.clone();
-        let leaf = leaf.clone();
-        Arc::new(
-            move |post_carrier, get_carrier, source_dir: Option<PathBuf>| {
-                udp.prepare_owned_udp_relay_two_stream(
-                    post_carrier,
-                    get_carrier,
-                    leaf.clone(),
-                    source_dir.as_deref(),
-                )
-            },
-        ) as Arc<UdpRelayTwoStreamPrepareHook<'a>>
-    };
-
-    ClaimedUdpHooks {
-        capability: Some(Arc::new(HookClaimedUdpLeaf {
-            flow,
-            relay_needs_two_streams,
-            relay_final_hop,
-            relay_two_stream,
-        })),
-        packet_path,
-    }
+    Err(missing_claimed_udp_leaf(entry.support.name(), &leaf))
 }
 
 pub(crate) fn direct_leaf_runtime(leaf: &ResolvedLeafOutbound<'_>) -> Option<OutboundLeafRuntime> {
@@ -742,7 +526,7 @@ impl ProtocolRegistry {
         leaf: ResolvedLeafOutbound<'a>,
     ) -> Result<ClaimedOutboundLeaf<'a>, EngineError> {
         let (runtime, entry) = self.claimed_runtime_and_entry(&leaf)?;
-        Ok(ClaimedOutboundLeaf::new(leaf, runtime, entry))
+        ClaimedOutboundLeaf::new(leaf, runtime, entry)
     }
 
     /// Return neutral runtime facts for a resolved outbound leaf.
@@ -800,4 +584,27 @@ fn missing_udp_relay_capability() -> crate::runtime::udp_dispatch::FlowFailure {
         )),
         upstream: None,
     }
+}
+
+fn missing_claimed_tcp_leaf(protocol: &str, leaf: &ResolvedLeafOutbound<'_>) -> EngineError {
+    EngineError::Io(std::io::Error::other(format!(
+        "{protocol} adapter claims outbound leaf `{}` but did not provide a claimed TCP leaf",
+        leaf.protocol_name()
+    )))
+}
+
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
+fn missing_claimed_udp_leaf(protocol: &str, leaf: &ResolvedLeafOutbound<'_>) -> EngineError {
+    EngineError::Io(std::io::Error::other(format!(
+        "{protocol} adapter claims outbound leaf `{}` but did not provide a claimed UDP leaf",
+        leaf.protocol_name()
+    )))
 }

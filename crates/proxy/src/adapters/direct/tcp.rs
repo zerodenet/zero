@@ -1,10 +1,9 @@
-use zero_engine::{EngineError, ResolvedLeafOutbound};
+use zero_engine::ResolvedLeafOutbound;
 
 use crate::adapters::direct::DirectAdapter;
-use crate::protocol_registry::ProtocolSupportCapability;
-use crate::protocol_registry::{unreachable_leaf, ClaimedTcpOutboundLeaf};
+use crate::protocol_registry::ClaimedTcpOutboundLeaf;
 use crate::runtime::tcp_dispatch::operation::{
-    DirectTcpConnectOperation, PreparedTcpConnectOperation, PreparedTcpRelayOperation,
+    DirectTcpConnectOperation, PreparedTcpConnectOperation,
 };
 use crate::transport::TcpOutboundFailure;
 
@@ -21,16 +20,6 @@ impl<'a> ClaimedTcpOutboundLeaf<'a> for ClaimedDirectTcpLeaf {
             tag: self.tag.clone(),
         }))
     }
-
-    fn prepare_tcp_relay_hop(
-        &self,
-        _source_dir: Option<&std::path::Path>,
-    ) -> Result<Box<dyn PreparedTcpRelayOperation + 'a>, EngineError> {
-        Err(EngineError::Io(std::io::Error::new(
-            std::io::ErrorKind::Unsupported,
-            "this adapter does not support relay hop",
-        )))
-    }
 }
 
 impl DirectAdapter {
@@ -42,18 +31,6 @@ impl DirectAdapter {
             return None;
         };
         Some(Box::new(ClaimedDirectTcpLeaf {
-            tag: (*tag).unwrap_or("direct").to_owned(),
-        }))
-    }
-
-    pub(super) fn prepare_tcp_connect_impl<'a>(
-        &self,
-        leaf: ResolvedLeafOutbound<'a>,
-    ) -> Result<Box<dyn PreparedTcpConnectOperation + 'a>, TcpOutboundFailure> {
-        let ResolvedLeafOutbound::Direct { tag } = &leaf else {
-            return Err(unreachable_leaf(self.name()));
-        };
-        Ok(Box::new(DirectTcpConnectOperation {
             tag: (*tag).unwrap_or("direct").to_owned(),
         }))
     }

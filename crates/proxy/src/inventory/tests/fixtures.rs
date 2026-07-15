@@ -9,8 +9,9 @@ use zero_traits::{ProtocolCapabilityDescriptor, ProtocolMetadata};
 
 use crate::protocol_catalog::protocol_descriptor;
 use crate::protocol_registry::{
-    InboundListenerCapability, OutboundLeafRuntime, ProtocolSupportCapability,
-    TcpOutboundCapability, TcpRuntimeServices, UdpFlowCapability, UdpPacketPathCapability,
+    ClaimedTcpOutboundLeaf, ClaimedUdpFlowLeaf, InboundListenerCapability, OutboundLeafRuntime,
+    ProtocolSupportCapability, TcpOutboundCapability, TcpRuntimeServices, UdpFlowCapability,
+    UdpPacketPathCapability,
 };
 use crate::runtime::path::{OutboundEndpoint, TcpPathCategory};
 use crate::runtime::tcp_dispatch::operation::{
@@ -367,6 +368,51 @@ struct FakeUdpOperation {
     kind: FakeUdpOperationKind,
 }
 
+struct FakeClaimedUdpLeaf {
+    calls: Arc<TcpCapabilityCalls>,
+}
+
+impl<'a> ClaimedUdpFlowLeaf<'a> for FakeClaimedUdpLeaf {
+    fn prepare_udp_flow(
+        &self,
+        _source_dir: Option<&std::path::Path>,
+    ) -> Result<Box<dyn PreparedUdpFlowOperation + 'a>, FlowFailure> {
+        Ok(Box::new(FakeUdpOperation {
+            calls: self.calls.clone(),
+            kind: FakeUdpOperationKind::Leaf,
+        }))
+    }
+
+    fn udp_relay_needs_two_streams(&self, _source_dir: Option<&std::path::Path>) -> bool {
+        true
+    }
+
+    fn prepare_owned_udp_relay_two_stream(
+        &self,
+        post_carrier: crate::transport::RelayCarrier,
+        get_carrier: crate::transport::RelayCarrier,
+        _source_dir: Option<&std::path::Path>,
+    ) -> Result<Box<dyn PreparedUdpFlowOperation + 'a>, FlowFailure> {
+        assert_eq!(post_carrier.port, 9443);
+        assert_eq!(get_carrier.port, 9444);
+        Ok(Box::new(FakeUdpOperation {
+            calls: self.calls.clone(),
+            kind: FakeUdpOperationKind::TwoStream,
+        }))
+    }
+
+    fn prepare_owned_udp_relay_final_hop(
+        &self,
+        carrier: crate::transport::RelayCarrier,
+        _source_dir: Option<&std::path::Path>,
+    ) -> Result<Box<dyn PreparedUdpFlowOperation + 'a>, FlowFailure> {
+        Ok(Box::new(FakeUdpOperation {
+            calls: self.calls.clone(),
+            kind: FakeUdpOperationKind::FinalHop(carrier.port),
+        }))
+    }
+}
+
 impl PreparedUdpFlowOperation for FakeUdpOperation {
     fn execute<'a>(
         self: Box<Self>,
@@ -423,49 +469,12 @@ impl PreparedUdpFlowOperation for FakeUdpOperation {
 }
 
 impl UdpFlowCapability for FakeTcpCapability {
-    fn prepare_udp_flow<'a>(
+    fn claim_udp_flow_leaf<'a>(
         &self,
         _: ResolvedLeafOutbound<'a>,
-        _: Option<&std::path::Path>,
-    ) -> Result<Box<dyn PreparedUdpFlowOperation + 'a>, FlowFailure> {
-        Ok(Box::new(FakeUdpOperation {
+    ) -> Option<Box<dyn ClaimedUdpFlowLeaf<'a> + 'a>> {
+        Some(Box::new(FakeClaimedUdpLeaf {
             calls: self.calls.clone(),
-            kind: FakeUdpOperationKind::Leaf,
-        }))
-    }
-
-    fn udp_relay_needs_two_streams(
-        &self,
-        _: &ResolvedLeafOutbound<'_>,
-        _: Option<&std::path::Path>,
-    ) -> bool {
-        true
-    }
-
-    fn prepare_owned_udp_relay_two_stream<'a>(
-        &self,
-        post_carrier: crate::transport::RelayCarrier,
-        get_carrier: crate::transport::RelayCarrier,
-        _: ResolvedLeafOutbound<'a>,
-        _: Option<&std::path::Path>,
-    ) -> Result<Box<dyn PreparedUdpFlowOperation + 'a>, FlowFailure> {
-        assert_eq!(post_carrier.port, 9443);
-        assert_eq!(get_carrier.port, 9444);
-        Ok(Box::new(FakeUdpOperation {
-            calls: self.calls.clone(),
-            kind: FakeUdpOperationKind::TwoStream,
-        }))
-    }
-
-    fn prepare_owned_udp_relay_final_hop<'a>(
-        &self,
-        carrier: crate::transport::RelayCarrier,
-        _: ResolvedLeafOutbound<'a>,
-        _: Option<&std::path::Path>,
-    ) -> Result<Box<dyn PreparedUdpFlowOperation + 'a>, FlowFailure> {
-        Ok(Box::new(FakeUdpOperation {
-            calls: self.calls.clone(),
-            kind: FakeUdpOperationKind::FinalHop(carrier.port),
         }))
     }
 }
@@ -610,6 +619,30 @@ struct FakeTcpRelayOperation {
     calls: Arc<TcpCapabilityCalls>,
 }
 
+struct FakeClaimedTcpLeaf {
+    calls: Arc<TcpCapabilityCalls>,
+}
+
+impl<'a> ClaimedTcpOutboundLeaf<'a> for FakeClaimedTcpLeaf {
+    fn prepare_tcp_connect(
+        &self,
+        _source_dir: Option<&std::path::Path>,
+    ) -> Result<Box<dyn PreparedTcpConnectOperation + 'a>, TcpOutboundFailure> {
+        Ok(Box::new(FakeTcpConnectOperation {
+            calls: self.calls.clone(),
+        }))
+    }
+
+    fn prepare_tcp_relay_hop(
+        &self,
+        _source_dir: Option<&std::path::Path>,
+    ) -> Result<Box<dyn PreparedTcpRelayOperation + 'a>, EngineError> {
+        Ok(Box::new(FakeTcpRelayOperation {
+            calls: self.calls.clone(),
+        }))
+    }
+}
+
 impl PreparedTcpRelayOperation for FakeTcpRelayOperation {
     fn execute<'a>(
         self: Box<Self>,
@@ -635,6 +668,15 @@ impl PreparedTcpRelayOperation for FakeTcpRelayOperation {
 impl TcpOutboundCapability for FakeTcpCapability {
     fn claims_outbound_leaf(&self, _: &ResolvedLeafOutbound<'_>) -> bool {
         true
+    }
+
+    fn claim_tcp_outbound_leaf<'a>(
+        &self,
+        _: ResolvedLeafOutbound<'a>,
+    ) -> Option<Box<dyn ClaimedTcpOutboundLeaf<'a> + 'a>> {
+        Some(Box::new(FakeClaimedTcpLeaf {
+            calls: self.calls.clone(),
+        }))
     }
 
     fn outbound_leaf_runtime(
@@ -672,25 +714,5 @@ impl TcpOutboundCapability for FakeTcpCapability {
             ))]
             udp_policy_tag: tag.map(str::to_owned),
         })
-    }
-
-    fn prepare_tcp_connect<'a>(
-        &self,
-        _: ResolvedLeafOutbound<'a>,
-        _: Option<&std::path::Path>,
-    ) -> Result<Box<dyn PreparedTcpConnectOperation + 'a>, TcpOutboundFailure> {
-        Ok(Box::new(FakeTcpConnectOperation {
-            calls: self.calls.clone(),
-        }))
-    }
-
-    fn prepare_tcp_relay_hop<'a>(
-        &self,
-        _: ResolvedLeafOutbound<'a>,
-        _: Option<&std::path::Path>,
-    ) -> Result<Box<dyn PreparedTcpRelayOperation + 'a>, EngineError> {
-        Ok(Box::new(FakeTcpRelayOperation {
-            calls: self.calls.clone(),
-        }))
     }
 }

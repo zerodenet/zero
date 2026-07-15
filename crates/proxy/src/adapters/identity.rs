@@ -19,8 +19,6 @@ pub(crate) trait ProtocolTransportBridgeAdapter: NamedProtocolAdapter {
     type Bridge;
 
     const TCP_PATH: TcpPathCategory;
-
-    fn bridge(&self) -> &Self::Bridge;
 }
 
 pub(crate) fn named_protocol_claims_runtime_leaf<A>(leaf: &ResolvedLeafOutbound<'_>) -> bool

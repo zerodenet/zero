@@ -1,6 +1,4 @@
 use ::socks5::transport::Socks5TransportLeaf;
-use async_trait::async_trait;
-
 use zero_config::{InboundConfig, InboundProtocolConfig, OutboundProtocolConfig};
 use zero_engine::{EngineError, ResolvedLeafOutbound};
 use zero_traits::{ProtocolCapabilityDescriptor, ProtocolMetadata};
@@ -15,9 +13,7 @@ use crate::protocol_registry::{
     TcpOutboundCapability, UdpFlowCapability, UdpPacketPathCapability, UpstreamUdpHandlerProvider,
 };
 use crate::runtime::path::TcpPathCategory;
-use crate::runtime::udp_dispatch::FlowFailure;
 use crate::runtime::udp_flow::registered::UpstreamAssociationHandler;
-use crate::transport::TcpOutboundFailure;
 
 #[cfg(feature = "socks5")]
 pub(super) mod inbound;
@@ -79,24 +75,12 @@ impl UdpPacketPathCapability for Socks5Adapter {
 }
 
 #[cfg(feature = "socks5")]
-#[async_trait]
 impl UdpFlowCapability for Socks5Adapter {
     fn claim_udp_flow_leaf<'a>(
         &self,
         leaf: ResolvedLeafOutbound<'a>,
     ) -> Option<Box<dyn ClaimedUdpFlowLeaf<'a> + 'a>> {
         self.claim_udp_flow_leaf_impl(leaf)
-    }
-
-    fn prepare_udp_flow<'a>(
-        &self,
-        leaf: ResolvedLeafOutbound<'a>,
-        _source_dir: Option<&std::path::Path>,
-    ) -> Result<
-        Box<dyn crate::runtime::udp_dispatch::operation::PreparedUdpFlowOperation + 'a>,
-        FlowFailure,
-    > {
-        self.prepare_udp_flow_impl(leaf)
     }
 }
 
@@ -122,7 +106,6 @@ impl InboundListenerCapability for Socks5Adapter {
 }
 
 #[cfg(feature = "socks5")]
-#[async_trait]
 impl TcpOutboundCapability for Socks5Adapter {
     fn claims_outbound_leaf(&self, leaf: &ResolvedLeafOutbound<'_>) -> bool {
         named_protocol_claims_runtime_leaf::<Self>(leaf)
@@ -140,28 +123,6 @@ impl TcpOutboundCapability for Socks5Adapter {
         leaf: &ResolvedLeafOutbound<'_>,
     ) -> Option<OutboundLeafRuntime> {
         proxy_leaf_runtime(leaf, TcpPathCategory::Tunnel)
-    }
-
-    fn prepare_tcp_connect<'a>(
-        &self,
-        leaf: ResolvedLeafOutbound<'a>,
-        _source_dir: Option<&std::path::Path>,
-    ) -> Result<
-        Box<dyn crate::runtime::tcp_dispatch::operation::PreparedTcpConnectOperation + 'a>,
-        TcpOutboundFailure,
-    > {
-        self.prepare_tcp_connect_impl(leaf)
-    }
-
-    fn prepare_tcp_relay_hop<'a>(
-        &self,
-        leaf: ResolvedLeafOutbound<'a>,
-        _source_dir: Option<&std::path::Path>,
-    ) -> Result<
-        Box<dyn crate::runtime::tcp_dispatch::operation::PreparedTcpRelayOperation + 'a>,
-        EngineError,
-    > {
-        self.prepare_tcp_relay_hop_impl(leaf)
     }
 }
 

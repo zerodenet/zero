@@ -1,6 +1,4 @@
 #[cfg(feature = "trojan")]
-use async_trait::async_trait;
-#[cfg(feature = "trojan")]
 mod listener;
 use ::trojan::transport::{TrojanOutboundLeaf, TrojanTlsBridge};
 #[cfg(feature = "trojan")]
@@ -16,32 +14,17 @@ use crate::adapters::identity::{
 };
 use crate::adapters::transport_bridge::{
     claim_transport_bridge_tcp_leaf, claim_transport_bridge_udp_leaf,
-    prepare_transport_bridge_leaf, transport_bridge_connect_prepare_failure,
-    transport_bridge_relay_prepare_error, transport_bridge_udp_direct_prepare_failure,
-    transport_bridge_udp_relay_final_prepare_failure, ProtocolTransportLeafResolver,
 };
 use crate::protocol_registry::{
-    prepare_owned_transport_bridge_udp_relay_final_hop, prepare_transport_bridge_tcp_connect,
-    prepare_transport_bridge_tcp_relay, prepare_transport_bridge_udp_direct, proxy_leaf_runtime,
-    ClaimedTcpOutboundLeaf, ClaimedUdpFlowLeaf, InboundListenerCapability,
+    proxy_leaf_runtime, ClaimedTcpOutboundLeaf, ClaimedUdpFlowLeaf, InboundListenerCapability,
     ManagedUdpHandlerProvider, OutboundLeafRuntime, ProtocolSupportCapability,
     TcpOutboundCapability, UdpFlowCapability, UdpPacketPathCapability,
 };
 use crate::runtime::path::TcpPathCategory;
 #[cfg(feature = "trojan")]
-use crate::runtime::tcp_dispatch::operation::{
-    PreparedTcpConnectOperation, PreparedTcpRelayOperation,
-};
-#[cfg(feature = "trojan")]
-use crate::runtime::udp_dispatch::operation::PreparedUdpFlowOperation;
-#[cfg(feature = "trojan")]
-use crate::runtime::udp_dispatch::FlowFailure;
-#[cfg(feature = "trojan")]
 use crate::runtime::udp_flow::managed::{
     bridge::managed_stream_udp_handler_for_bridge, ManagedStreamHandlerPair,
 };
-#[cfg(feature = "trojan")]
-use crate::transport::TcpOutboundFailure;
 
 #[cfg(feature = "trojan")]
 #[derive(Debug)]
@@ -69,45 +52,6 @@ impl ProtocolTransportBridgeAdapter for TrojanAdapter {
     type Bridge = TrojanTlsBridge;
 
     const TCP_PATH: TcpPathCategory = TcpPathCategory::Tunnel;
-
-    fn bridge(&self) -> &Self::Bridge {
-        &self.bridge
-    }
-}
-
-#[cfg(feature = "trojan")]
-impl ProtocolTransportLeafResolver for TrojanTlsBridge {
-    type TransportLeaf = TrojanOutboundLeaf;
-    type ResolveError = zero_core::Error;
-
-    fn resolve_transport_leaf<'a>(
-        &self,
-        source_dir: Option<&std::path::Path>,
-        leaf: &ResolvedLeafOutbound<'a>,
-    ) -> Result<Option<Self::TransportLeaf>, Self::ResolveError> {
-        let ResolvedLeafOutbound::Trojan {
-            tag,
-            server,
-            port,
-            password,
-            sni,
-            insecure,
-            client_fingerprint,
-        } = leaf
-        else {
-            return Ok(None);
-        };
-        Ok(Some(TrojanOutboundLeaf::from_config_refs(
-            source_dir,
-            tag,
-            server,
-            *port,
-            password,
-            *sni,
-            *insecure,
-            *client_fingerprint,
-        )))
-    }
 }
 
 #[cfg(feature = "trojan")]
@@ -158,7 +102,6 @@ impl InboundListenerCapability for TrojanAdapter {
 }
 
 #[cfg(feature = "trojan")]
-#[async_trait]
 impl TcpOutboundCapability for TrojanAdapter {
     fn claims_outbound_leaf(&self, leaf: &ResolvedLeafOutbound<'_>) -> bool {
         named_protocol_claims_runtime_leaf::<Self>(leaf)
@@ -205,35 +148,9 @@ impl TcpOutboundCapability for TrojanAdapter {
     ) -> Option<OutboundLeafRuntime> {
         proxy_leaf_runtime(leaf, Self::TCP_PATH)
     }
-
-    fn prepare_tcp_connect<'a>(
-        &self,
-        leaf: ResolvedLeafOutbound<'a>,
-        source_dir: Option<&std::path::Path>,
-    ) -> Result<Box<dyn PreparedTcpConnectOperation + 'a>, TcpOutboundFailure> {
-        let prepared =
-            prepare_transport_bridge_leaf(self.bridge(), source_dir, &leaf).map_err(|error| {
-                transport_bridge_connect_prepare_failure::<TrojanTlsBridge, _>(&leaf, error)
-            })?;
-        Ok(prepare_transport_bridge_tcp_connect(
-            self.bridge(),
-            prepared,
-        ))
-    }
-
-    fn prepare_tcp_relay_hop<'a>(
-        &self,
-        leaf: ResolvedLeafOutbound<'a>,
-        source_dir: Option<&std::path::Path>,
-    ) -> Result<Box<dyn PreparedTcpRelayOperation + 'a>, EngineError> {
-        let prepared = prepare_transport_bridge_leaf(self.bridge(), source_dir, &leaf)
-            .map_err(transport_bridge_relay_prepare_error::<TrojanTlsBridge, _>)?;
-        Ok(prepare_transport_bridge_tcp_relay(self.bridge(), prepared))
-    }
 }
 
 #[cfg(feature = "trojan")]
-#[async_trait]
 impl UdpFlowCapability for TrojanAdapter {
     fn claim_udp_flow_leaf<'a>(
         &self,
@@ -267,35 +184,6 @@ impl UdpFlowCapability for TrojanAdapter {
                     client_fingerprint,
                 ))
             },
-        ))
-    }
-
-    fn prepare_udp_flow<'a>(
-        &self,
-        leaf: ResolvedLeafOutbound<'a>,
-        source_dir: Option<&std::path::Path>,
-    ) -> Result<Box<dyn PreparedUdpFlowOperation + 'a>, FlowFailure> {
-        let prepared =
-            prepare_transport_bridge_leaf(self.bridge(), source_dir, &leaf).map_err(|error| {
-                transport_bridge_udp_direct_prepare_failure::<TrojanTlsBridge, _>(&leaf, error)
-            })?;
-        Ok(prepare_transport_bridge_udp_direct(self.bridge(), prepared))
-    }
-
-    fn prepare_owned_udp_relay_final_hop<'a>(
-        &self,
-        carrier: crate::transport::RelayCarrier,
-        leaf: ResolvedLeafOutbound<'a>,
-        source_dir: Option<&std::path::Path>,
-    ) -> Result<Box<dyn PreparedUdpFlowOperation + 'a>, FlowFailure> {
-        let prepared =
-            prepare_transport_bridge_leaf(self.bridge(), source_dir, &leaf).map_err(|error| {
-                transport_bridge_udp_relay_final_prepare_failure::<TrojanTlsBridge, _>(&leaf, error)
-            })?;
-        Ok(prepare_owned_transport_bridge_udp_relay_final_hop(
-            self.bridge(),
-            carrier,
-            prepared,
         ))
     }
 }

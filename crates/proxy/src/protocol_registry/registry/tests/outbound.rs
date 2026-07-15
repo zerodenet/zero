@@ -119,7 +119,7 @@ fn packet_path_leaf_lookup_matches_tcp_claim_policy() {
 
 #[cfg(feature = "socks5")]
 #[test]
-fn registry_prefers_adapter_claimed_tcp_leaf_over_fallback_prepare_methods() {
+fn registry_executes_adapter_claimed_tcp_leaf_operations() {
     use std::future::Future;
     use std::pin::Pin;
     use std::sync::Arc;
@@ -132,13 +132,17 @@ fn registry_prefers_adapter_claimed_tcp_leaf_over_fallback_prepare_methods() {
     use crate::protocol_catalog::protocol_descriptor;
     use crate::protocol_registry::TcpRuntimeServices;
     use crate::protocol_registry::{
-        proxy_leaf_runtime, ClaimedTcpOutboundLeaf, InboundListenerCapability, OutboundLeafRuntime,
-        ProtocolSupportCapability, TcpOutboundCapability, UdpFlowCapability,
+        proxy_leaf_runtime, ClaimedTcpOutboundLeaf, ClaimedUdpFlowLeaf, InboundListenerCapability,
+        OutboundLeafRuntime, ProtocolSupportCapability, TcpOutboundCapability, UdpFlowCapability,
         UdpPacketPathCapability,
     };
     use crate::runtime::tcp_dispatch::operation::{
         PreparedTcpConnectOperation, PreparedTcpRelayOperation,
     };
+    use crate::runtime::udp_dispatch::operation::{
+        DirectUdpFlowOperation, PreparedUdpFlowOperation,
+    };
+    use crate::runtime::udp_dispatch::FlowFailure;
     use crate::transport::{TcpOutboundFailure, TcpRelayStream};
 
     struct FakeClaimedLeaf;
@@ -160,6 +164,19 @@ fn registry_prefers_adapter_claimed_tcp_leaf_over_fallback_prepare_methods() {
             _source_dir: Option<&std::path::Path>,
         ) -> Result<Box<dyn PreparedTcpRelayOperation + 'a>, EngineError> {
             Ok(Box::new(FakeRelayOperation))
+        }
+    }
+
+    struct FakeClaimedUdpLeaf;
+
+    impl<'a> ClaimedUdpFlowLeaf<'a> for FakeClaimedUdpLeaf {
+        fn prepare_udp_flow(
+            &self,
+            _source_dir: Option<&std::path::Path>,
+        ) -> Result<Box<dyn PreparedUdpFlowOperation + 'a>, FlowFailure> {
+            Ok(Box::new(DirectUdpFlowOperation {
+                tag: "claimed".to_owned(),
+            }))
         }
     }
 
@@ -236,25 +253,19 @@ fn registry_prefers_adapter_claimed_tcp_leaf_over_fallback_prepare_methods() {
         ) -> Option<OutboundLeafRuntime> {
             proxy_leaf_runtime(leaf, TcpPathCategory::Tunnel)
         }
-
-        fn prepare_tcp_connect<'a>(
-            &self,
-            _leaf: ResolvedLeafOutbound<'a>,
-            _source_dir: Option<&std::path::Path>,
-        ) -> Result<Box<dyn PreparedTcpConnectOperation + 'a>, TcpOutboundFailure> {
-            panic!("fallback tcp prepare should not run once the adapter provides a claimed leaf")
-        }
-
-        fn prepare_tcp_relay_hop<'a>(
-            &self,
-            _leaf: ResolvedLeafOutbound<'a>,
-            _source_dir: Option<&std::path::Path>,
-        ) -> Result<Box<dyn PreparedTcpRelayOperation + 'a>, EngineError> {
-            panic!("fallback relay prepare should not run once the adapter provides a claimed leaf")
-        }
     }
 
-    impl UdpFlowCapability for FakeClaimedAdapter {}
+    impl UdpFlowCapability for FakeClaimedAdapter {
+        fn claim_udp_flow_leaf<'a>(
+            &self,
+            leaf: ResolvedLeafOutbound<'a>,
+        ) -> Option<Box<dyn ClaimedUdpFlowLeaf<'a> + 'a>> {
+            match leaf {
+                ResolvedLeafOutbound::Socks5 { .. } => Some(Box::new(FakeClaimedUdpLeaf)),
+                _ => None,
+            }
+        }
+    }
     impl UdpPacketPathCapability for FakeClaimedAdapter {}
 
     let mut registry = super::super::ProtocolRegistry::default();
@@ -282,24 +293,23 @@ fn registry_prefers_adapter_claimed_tcp_leaf_over_fallback_prepare_methods() {
 
 #[cfg(feature = "socks5")]
 #[test]
-fn registry_prefers_adapter_claimed_udp_leaf_over_fallback_prepare_methods() {
+fn registry_executes_adapter_claimed_udp_leaf_operations() {
     use std::future::Future;
     use std::pin::Pin;
     use std::sync::Arc;
 
     use zero_config::{InboundProtocolConfig, OutboundProtocolConfig};
     use zero_core::Session;
-    use zero_engine::EngineError;
     use zero_traits::{ProtocolCapabilityDescriptor, ProtocolMetadata};
 
     use crate::protocol_catalog::protocol_descriptor;
     use crate::protocol_registry::{
-        proxy_leaf_runtime, ClaimedUdpFlowLeaf, InboundListenerCapability, OutboundLeafRuntime,
-        ProtocolSupportCapability, TcpOutboundCapability, UdpFlowCapability,
+        proxy_leaf_runtime, ClaimedTcpOutboundLeaf, ClaimedUdpFlowLeaf, InboundListenerCapability,
+        OutboundLeafRuntime, ProtocolSupportCapability, TcpOutboundCapability, UdpFlowCapability,
         UdpPacketPathCapability,
     };
     use crate::runtime::tcp_dispatch::operation::{
-        DirectTcpConnectOperation, PreparedTcpConnectOperation, PreparedTcpRelayOperation,
+        DirectTcpConnectOperation, PreparedTcpConnectOperation,
     };
     use crate::runtime::udp_dispatch::operation::PreparedUdpFlowOperation;
     use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
@@ -321,6 +331,19 @@ fn registry_prefers_adapter_claimed_udp_leaf_over_fallback_prepare_methods() {
             _source_dir: Option<&std::path::Path>,
         ) -> Result<Box<dyn PreparedUdpFlowOperation + 'a>, FlowFailure> {
             Ok(Box::new(FakeUdpFlowOperation))
+        }
+    }
+
+    struct FakeClaimedTcpLeaf;
+
+    impl<'a> ClaimedTcpOutboundLeaf<'a> for FakeClaimedTcpLeaf {
+        fn prepare_tcp_connect(
+            &self,
+            _source_dir: Option<&std::path::Path>,
+        ) -> Result<Box<dyn PreparedTcpConnectOperation + 'a>, TcpOutboundFailure> {
+            Ok(Box::new(DirectTcpConnectOperation {
+                tag: "fake-claimed-udp".to_owned(),
+            }))
         }
     }
 
@@ -386,29 +409,21 @@ fn registry_prefers_adapter_claimed_udp_leaf_over_fallback_prepare_methods() {
             matches!(leaf, ResolvedLeafOutbound::Socks5 { .. })
         }
 
+        fn claim_tcp_outbound_leaf<'a>(
+            &self,
+            leaf: ResolvedLeafOutbound<'a>,
+        ) -> Option<Box<dyn ClaimedTcpOutboundLeaf<'a> + 'a>> {
+            match leaf {
+                ResolvedLeafOutbound::Socks5 { .. } => Some(Box::new(FakeClaimedTcpLeaf)),
+                _ => None,
+            }
+        }
+
         fn outbound_leaf_runtime(
             &self,
             leaf: &ResolvedLeafOutbound<'_>,
         ) -> Option<OutboundLeafRuntime> {
             proxy_leaf_runtime(leaf, TcpPathCategory::Tunnel)
-        }
-
-        fn prepare_tcp_connect<'a>(
-            &self,
-            _leaf: ResolvedLeafOutbound<'a>,
-            _source_dir: Option<&std::path::Path>,
-        ) -> Result<Box<dyn PreparedTcpConnectOperation + 'a>, TcpOutboundFailure> {
-            Ok(Box::new(DirectTcpConnectOperation {
-                tag: "fake-claimed-udp".to_owned(),
-            }))
-        }
-
-        fn prepare_tcp_relay_hop<'a>(
-            &self,
-            _leaf: ResolvedLeafOutbound<'a>,
-            _source_dir: Option<&std::path::Path>,
-        ) -> Result<Box<dyn PreparedTcpRelayOperation + 'a>, EngineError> {
-            panic!("relay prepare is irrelevant for this UDP-only claim test")
         }
     }
 
@@ -421,25 +436,6 @@ fn registry_prefers_adapter_claimed_udp_leaf_over_fallback_prepare_methods() {
                 ResolvedLeafOutbound::Socks5 { .. } => Some(Box::new(FakeClaimedUdpLeaf)),
                 _ => None,
             }
-        }
-
-        fn prepare_udp_flow<'a>(
-            &self,
-            _leaf: ResolvedLeafOutbound<'a>,
-            _source_dir: Option<&std::path::Path>,
-        ) -> Result<Box<dyn PreparedUdpFlowOperation + 'a>, FlowFailure> {
-            panic!("fallback udp prepare should not run once the adapter provides a claimed leaf")
-        }
-
-        fn prepare_owned_udp_relay_final_hop<'a>(
-            &self,
-            _carrier: RelayCarrier,
-            _leaf: ResolvedLeafOutbound<'a>,
-            _source_dir: Option<&std::path::Path>,
-        ) -> Result<Box<dyn PreparedUdpFlowOperation + 'a>, FlowFailure> {
-            panic!(
-                "fallback udp relay-final prepare should not run once the adapter provides a claimed leaf"
-            )
         }
     }
 
@@ -479,26 +475,60 @@ fn registry_prefers_adapter_claimed_udp_leaf_over_fallback_prepare_methods() {
 
 #[cfg(feature = "socks5")]
 #[test]
-fn registry_prefers_adapter_claimed_udp_packet_path_leaf_over_fallback_prepare_methods() {
+fn registry_executes_adapter_claimed_udp_packet_path_operations() {
     use std::sync::Arc;
 
     use zero_config::{InboundProtocolConfig, OutboundProtocolConfig};
-    use zero_engine::EngineError;
     use zero_traits::{ProtocolCapabilityDescriptor, ProtocolMetadata};
 
     use crate::protocol_catalog::protocol_descriptor;
     use crate::protocol_registry::{
-        proxy_leaf_runtime, ClaimedUdpPacketPathLeaf, InboundListenerCapability,
-        OutboundLeafRuntime, ProtocolSupportCapability, TcpOutboundCapability, UdpFlowCapability,
-        UdpPacketPathCapability,
+        proxy_leaf_runtime, ClaimedTcpOutboundLeaf, ClaimedUdpFlowLeaf, ClaimedUdpPacketPathLeaf,
+        InboundListenerCapability, OutboundLeafRuntime, ProtocolSupportCapability,
+        TcpOutboundCapability, UdpFlowCapability, UdpPacketPathCapability,
     };
     use crate::runtime::tcp_dispatch::operation::{
-        DirectTcpConnectOperation, PreparedTcpConnectOperation, PreparedTcpRelayOperation,
+        DirectTcpConnectOperation, PreparedTcpConnectOperation,
     };
+    use crate::runtime::udp_dispatch::operation::PreparedUdpFlowOperation;
     use crate::runtime::udp_dispatch::packet_path_operation::PreparedUdpPacketPathOperation;
+    use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
+    use crate::transport::RelayCarrier;
     use crate::transport::TcpOutboundFailure;
 
     struct FakeClaimedUdpPacketPathLeaf;
+
+    struct FakeClaimedTcpLeaf;
+
+    impl<'a> ClaimedTcpOutboundLeaf<'a> for FakeClaimedTcpLeaf {
+        fn prepare_tcp_connect(
+            &self,
+            _source_dir: Option<&std::path::Path>,
+        ) -> Result<Box<dyn PreparedTcpConnectOperation + 'a>, TcpOutboundFailure> {
+            Ok(Box::new(DirectTcpConnectOperation {
+                tag: "fake-claimed-udp-packet-path".to_owned(),
+            }))
+        }
+    }
+
+    struct FakeClaimedUdpLeaf;
+
+    impl<'a> ClaimedUdpFlowLeaf<'a> for FakeClaimedUdpLeaf {
+        fn prepare_udp_flow(
+            &self,
+            _source_dir: Option<&std::path::Path>,
+        ) -> Result<Box<dyn PreparedUdpFlowOperation + 'a>, FlowFailure> {
+            Ok(Box::new(FakeClaimedUdpFlowOperation))
+        }
+
+        fn prepare_owned_udp_relay_final_hop(
+            &self,
+            _carrier: RelayCarrier,
+            _source_dir: Option<&std::path::Path>,
+        ) -> Result<Box<dyn PreparedUdpFlowOperation + 'a>, FlowFailure> {
+            Ok(Box::new(FakeClaimedUdpFlowOperation))
+        }
+    }
 
     impl<'a> ClaimedUdpPacketPathLeaf<'a> for FakeClaimedUdpPacketPathLeaf {
         fn prepare_udp_packet_path(&self) -> Option<Box<dyn PreparedUdpPacketPathOperation + 'a>> {
@@ -509,6 +539,29 @@ fn registry_prefers_adapter_claimed_udp_packet_path_leaf_over_fallback_prepare_m
     struct FakeUdpPacketPathOperation;
 
     impl PreparedUdpPacketPathOperation for FakeUdpPacketPathOperation {}
+
+    struct FakeClaimedUdpFlowOperation;
+
+    impl PreparedUdpFlowOperation for FakeClaimedUdpFlowOperation {
+        fn execute<'a>(
+            self: Box<Self>,
+            _dispatch: &'a mut UdpDispatch,
+            _ctx: crate::protocol_registry::UdpAdapterContext<'a>,
+            _session: &'a zero_core::Session,
+            _payload: &'a [u8],
+        ) -> std::pin::Pin<
+            Box<dyn std::future::Future<Output = Result<FlowStartResult, FlowFailure>> + Send + 'a>,
+        >
+        where
+            Self: 'a,
+        {
+            Box::pin(async move {
+                Ok(FlowStartResult::Blocked {
+                    tag: "fake-claimed-udp-packet-path".to_owned(),
+                })
+            })
+        }
+    }
 
     struct FakeClaimedUdpPacketPathAdapter;
 
@@ -551,33 +604,35 @@ fn registry_prefers_adapter_claimed_udp_packet_path_leaf_over_fallback_prepare_m
             matches!(leaf, ResolvedLeafOutbound::Socks5 { .. })
         }
 
+        fn claim_tcp_outbound_leaf<'a>(
+            &self,
+            leaf: ResolvedLeafOutbound<'a>,
+        ) -> Option<Box<dyn ClaimedTcpOutboundLeaf<'a> + 'a>> {
+            match leaf {
+                ResolvedLeafOutbound::Socks5 { .. } => Some(Box::new(FakeClaimedTcpLeaf)),
+                _ => None,
+            }
+        }
+
         fn outbound_leaf_runtime(
             &self,
             leaf: &ResolvedLeafOutbound<'_>,
         ) -> Option<OutboundLeafRuntime> {
             proxy_leaf_runtime(leaf, TcpPathCategory::Tunnel)
         }
-
-        fn prepare_tcp_connect<'a>(
-            &self,
-            _leaf: ResolvedLeafOutbound<'a>,
-            _source_dir: Option<&std::path::Path>,
-        ) -> Result<Box<dyn PreparedTcpConnectOperation + 'a>, TcpOutboundFailure> {
-            Ok(Box::new(DirectTcpConnectOperation {
-                tag: "fake-claimed-udp-packet-path".to_owned(),
-            }))
-        }
-
-        fn prepare_tcp_relay_hop<'a>(
-            &self,
-            _leaf: ResolvedLeafOutbound<'a>,
-            _source_dir: Option<&std::path::Path>,
-        ) -> Result<Box<dyn PreparedTcpRelayOperation + 'a>, EngineError> {
-            panic!("relay prepare is irrelevant for this packet-path claim test")
-        }
     }
 
-    impl UdpFlowCapability for FakeClaimedUdpPacketPathAdapter {}
+    impl UdpFlowCapability for FakeClaimedUdpPacketPathAdapter {
+        fn claim_udp_flow_leaf<'a>(
+            &self,
+            leaf: ResolvedLeafOutbound<'a>,
+        ) -> Option<Box<dyn ClaimedUdpFlowLeaf<'a> + 'a>> {
+            match leaf {
+                ResolvedLeafOutbound::Socks5 { .. } => Some(Box::new(FakeClaimedUdpLeaf)),
+                _ => None,
+            }
+        }
+    }
 
     impl UdpPacketPathCapability for FakeClaimedUdpPacketPathAdapter {
         fn claim_udp_packet_path_leaf<'a>(

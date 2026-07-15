@@ -222,15 +222,15 @@ fn transport_bridge_operations_are_generic() {
 }
 
 #[test]
-fn transport_leaf_resolution_helpers_stay_leaf_scoped() {
+fn transport_bridge_helpers_drop_raw_leaf_resolution_paths() {
     let resolve = read(&proxy_src().join("adapters/transport_bridge.rs"));
     let tcp = read(&proxy_src().join("protocol_registry/transport_leaf/tcp.rs"));
     let udp = read(&proxy_src().join("protocol_registry/transport_leaf/udp.rs"));
     assert!(!resolve.contains("prepare_last_transport_bridge_leaf"));
-    assert!(resolve.contains("prepare_transport_bridge_leaf"));
-    assert!(resolve.contains("trait ProtocolTransportLeafResolver {"));
+    assert!(!resolve.contains("prepare_transport_bridge_leaf"));
+    assert!(!resolve.contains("trait ProtocolTransportLeafResolver {"));
     assert!(!resolve.contains("trait ProtocolTransportLeafResolver<'a>"));
-    assert!(resolve.contains("ResolvedLeafOutbound"));
+    assert!(!resolve.contains("ResolvedLeafOutbound"));
     assert!(!tcp.contains("ResolvedLeafOutbound"));
     assert!(!udp.contains("ResolvedLeafOutbound"));
     assert_sources_exclude(
@@ -256,9 +256,10 @@ fn tcp_prepared_operations_do_not_borrow_inventory_or_runtime_services() {
 fn udp_prepared_operations_do_not_borrow_adapters_or_bridges() {
     let capability = read(&proxy_src().join("protocol_registry/capability.rs"));
     let udp = read(&proxy_src().join("protocol_registry/transport_leaf/udp.rs"));
-    assert!(capability.contains("fn prepare_udp_flow<'a>(\n        &self,"));
-    assert!(capability.contains("fn prepare_owned_udp_relay_final_hop<'a>(\n        &self,"));
-    assert!(capability.contains("fn prepare_owned_udp_relay_two_stream<'a>(\n        &self,"));
+    assert!(capability.contains("trait ClaimedUdpFlowLeaf<'a>"));
+    assert!(capability.contains("fn prepare_udp_flow("));
+    assert!(capability.contains("fn prepare_owned_udp_relay_final_hop("));
+    assert!(capability.contains("fn prepare_owned_udp_relay_two_stream("));
     assert!(!capability.contains("fn prepare_udp_relay_final_hop<'a>(\n        &self,"));
     assert!(
         !udp.contains("bridge: &'a TBridge"),
@@ -673,6 +674,7 @@ fn registry_outbound_claim_surface_replaces_lookup_only_helpers() {
 #[test]
 fn claimed_outbound_leaf_owns_capability_preparation() {
     let outbound = read(&proxy_src().join("protocol_registry/registry/outbound.rs"));
+    let capability = read(&proxy_src().join("protocol_registry/capability.rs"));
     for method in [
         "fn prepare_tcp_connect(",
         "fn prepare_tcp_relay_hop(",
@@ -694,7 +696,15 @@ fn claimed_outbound_leaf_owns_capability_preparation() {
     assert!(outbound.contains("claim_udp_packet_path_leaf(leaf.clone())"));
     assert!(outbound.contains("struct ClaimedTcpHooks"));
     assert!(outbound.contains("struct ClaimedUdpHooks"));
+    assert!(!outbound.contains("HookClaimedTcpLeaf"));
+    assert!(!outbound.contains("HookClaimedUdpLeaf"));
     assert!(!outbound.contains("self.leaf"));
+    assert!(!capability.contains(
+        "fn prepare_tcp_connect<'a>(\n        &self,\n        _leaf: ResolvedLeafOutbound<'a>,"
+    ));
+    assert!(!capability.contains(
+        "fn prepare_udp_flow<'a>(\n        &self,\n        _leaf: ResolvedLeafOutbound<'a>,"
+    ));
 }
 
 #[test]

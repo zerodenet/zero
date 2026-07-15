@@ -1,9 +1,7 @@
 use zero_engine::{EngineError, ResolvedLeafOutbound};
 
 use crate::adapters::shadowsocks::ShadowsocksAdapter;
-use crate::protocol_registry::{
-    unreachable_udp_leaf, ClaimedUdpFlowLeaf, ClaimedUdpPacketPathLeaf, ProtocolSupportCapability,
-};
+use crate::protocol_registry::{ClaimedUdpFlowLeaf, ClaimedUdpPacketPathLeaf};
 use crate::runtime::udp_dispatch::operation::PreparedUdpFlowOperation;
 use crate::runtime::udp_dispatch::packet_path_operation::PreparedUdpPacketPathOperation;
 use crate::runtime::udp_dispatch::FlowFailure;
@@ -168,28 +166,5 @@ impl ShadowsocksAdapter {
         Some(Box::new(ShadowsocksPacketPathOperation {
             plan: leaf.udp_packet_path_plan().ok()?,
         }))
-    }
-
-    pub(super) fn prepare_udp_flow_impl<'a>(
-        &self,
-        leaf: ResolvedLeafOutbound<'a>,
-    ) -> Result<
-        Box<dyn crate::runtime::udp_dispatch::operation::PreparedUdpFlowOperation + 'a>,
-        FlowFailure,
-    > {
-        let Some(leaf) = super::transport_leaf(&leaf) else {
-            return Err(unreachable_udp_leaf(self.name()));
-        };
-        let plan = leaf.udp_flow_plan().map_err(|error| FlowFailure {
-            stage: "udp_shadowsocks_resume",
-            error: EngineError::Io(std::io::Error::other(error.to_string())),
-            upstream: Some((leaf.server().to_string(), leaf.port())),
-        })?;
-        Ok(Box::new(
-            crate::runtime::udp_dispatch::operation::ManagedDatagramUdpOperation {
-                plan: plan.into_start_plan(),
-                needs_proxy: true,
-            },
-        ))
     }
 }
