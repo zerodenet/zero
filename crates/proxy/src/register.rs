@@ -73,7 +73,7 @@ fn compiled_protocol_registry() -> ProtocolRegistry {
     registry.register_managed_capability(Arc::new(ShadowsocksAdapter));
     #[cfg(feature = "trojan")]
     {
-        let adapter = Arc::new(TrojanAdapter::default());
+        let adapter = Arc::new(TrojanAdapter);
         registry.register_managed_capability_with_outbound_claimer(
             adapter,
             TrojanAdapter::claim_outbound_leaf_impl,
