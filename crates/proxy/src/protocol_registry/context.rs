@@ -167,14 +167,16 @@ impl UdpRuntimeServices {
         ),
         zero_transport::RuntimeError,
     > {
-        let (peer, socket) = crate::runtime::udp_socket::resolve_udp_peer_endpoint(
-            &self.proxy,
-            address,
-            port,
-            context,
-        )
-        .await
-        .map_err(zero_transport::RuntimeError::from)?;
+        let peer = self
+            .proxy
+            .protocols
+            .direct_connector()
+            .resolve_address(address, port, self.proxy.resolver.as_ref(), context)
+            .await
+            .map_err(zero_transport::RuntimeError::from)?;
+        let socket = crate::runtime::udp_socket::bind_datagram_socket_for_peer(peer)
+            .await
+            .map_err(zero_transport::RuntimeError::from)?;
         Ok((
             zero_platform_tokio::socket_addr_to_socket_address(peer),
             socket,
@@ -225,6 +227,28 @@ impl UdpRuntimeServices {
             .record_session_outbound_traffic(session_id, traffic);
     }
 
+    pub(crate) fn record_session_inbound_rx(&self, session_id: u64, bytes: u64) {
+        self.proxy.record_session_inbound_rx(session_id, bytes);
+    }
+
+    pub(crate) fn record_session_inbound_tx(&self, session_id: u64, bytes: u64) {
+        self.proxy.record_session_inbound_tx(session_id, bytes);
+    }
+
+    pub(crate) fn record_session_outbound_rx(&self, session_id: u64, bytes: u64) {
+        self.proxy.record_session_outbound_rx(session_id, bytes);
+    }
+
+    #[cfg(any(feature = "socks5", feature = "vless"))]
+    pub(crate) fn record_session_inbound_traffic(
+        &self,
+        session_id: u64,
+        traffic: zero_transport::StreamTraffic,
+    ) {
+        self.proxy
+            .record_session_inbound_traffic(session_id, traffic);
+    }
+
     pub(crate) fn udp_enabled_for_outbound(&self, outbound_tag: Option<&str>) -> bool {
         self.proxy.udp_enabled_for_outbound(outbound_tag)
     }
@@ -253,6 +277,16 @@ impl UdpRuntimeServices {
         self.proxy.record_udp_upstream_packet_sent();
     }
 
+    #[cfg(feature = "socks5")]
+    pub(crate) fn record_udp_upstream_recv_failure(&self) {
+        self.proxy.record_udp_upstream_recv_failure();
+    }
+
+    #[cfg(feature = "socks5")]
+    pub(crate) fn record_udp_upstream_packet_received(&self) {
+        self.proxy.record_udp_upstream_packet_received();
+    }
+
     pub(crate) fn record_association_close(&self, kind: UdpAssociationCloseKind) {
         match kind {
             UdpAssociationCloseKind::Closed => self.proxy.record_udp_upstream_association_closed(),
@@ -278,10 +312,7 @@ impl UdpRuntimeServices {
         zero_engine::EngineError,
     > {
         crate::runtime::udp_flow::packet_path_chain::carriers::udp_socket_carrier::build(
-            &self.proxy,
-            server,
-            port,
-            codec,
+            self, server, port, codec,
         )
         .await
     }

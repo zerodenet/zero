@@ -7,6 +7,7 @@ use super::contract::{
     PacketSessionUdpFailurePolicy, PacketSessionUdpHandler, PacketSessionUdpReadFailureAction,
     PacketSessionUdpReadResult, PacketSessionUdpRelayRequest,
 };
+use crate::protocol_registry::UdpRuntimeServices;
 #[cfg(feature = "socks5")]
 use crate::runtime::udp_delivery::write_upstream_response;
 use crate::runtime::udp_delivery::{
@@ -48,8 +49,9 @@ where
             .await;
         }
     };
+    let services = UdpRuntimeServices::from_proxy(proxy);
 
-    let timeout = proxy.udp_upstream_idle_timeout();
+    let timeout = services.udp_upstream_idle_timeout();
     let mut last_activity = TokioInstant::now();
     let mut direct_buf = vec![0_u8; 64 * 1024];
     #[cfg(feature = "socks5")]
@@ -109,7 +111,7 @@ where
                     Ok((n, sender)) => {
                         last_activity = TokioInstant::now();
                         let response = record_direct_udp_response_parts(
-                            proxy,
+                            &services,
                             &dispatch,
                             sender,
                             &direct_buf[..n],
@@ -154,7 +156,7 @@ where
                     Ok(pkt) => {
                         last_activity = TokioInstant::now();
                         let response = record_upstream_udp_response_received(
-                            proxy,
+                            &services,
                             &mut dispatch,
                             timeout,
                             pkt,
@@ -190,7 +192,7 @@ where
                     Ok(Ok((target, port, payload, session_id))) => {
                         last_activity = TokioInstant::now();
                         let response =
-                            record_chain_udp_response_parts(proxy, target, port, payload, session_id);
+                            record_chain_udp_response_parts(&services, target, port, payload, session_id);
                         if let Err(error) = write_chain_response(&response, || async {
                             handler
                                 .write_response_for_target(
@@ -257,7 +259,7 @@ where
                 match recv {
                     Ok((n, sender)) => {
                         last_activity = TokioInstant::now();
-                        let response = record_direct_udp_response_parts(proxy, &dispatch, sender, &direct_buf[..n]);
+                        let response = record_direct_udp_response_parts(&services, &dispatch, sender, &direct_buf[..n]);
                         if let Err(error) = write_direct_response(&response, || async {
                             handler.write_response_for_target(&response.target, response.port, response.payload).await
                         }).await {
@@ -279,7 +281,7 @@ where
                 match chain_result {
                     Ok(Ok((target, port, payload, session_id))) => {
                         last_activity = TokioInstant::now();
-                        let response = record_chain_udp_response_parts(proxy, target, port, payload, session_id);
+                        let response = record_chain_udp_response_parts(&services, target, port, payload, session_id);
                         if let Err(error) = write_chain_response(&response, || async {
                             handler.write_response_for_target(&response.target, response.port, &response.payload).await
                         }).await {

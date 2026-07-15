@@ -6,22 +6,19 @@ use zero_engine::EngineError;
 use zero_traits::DatagramCodec;
 use zero_transport::udp_packet_path::UdpSocketPacketPath;
 
+use crate::protocol_registry::UdpRuntimeServices;
 use crate::runtime::udp_flow::packet_path::PacketPathCarrier;
-use crate::runtime::Proxy;
 
 pub(crate) async fn build(
-    proxy: &Proxy,
+    services: &UdpRuntimeServices,
     server: &str,
     port: u16,
     codec: Arc<dyn DatagramCodec<Address, Error = zero_core::Error>>,
 ) -> Result<Arc<dyn PacketPathCarrier>, EngineError> {
-    let endpoint = proxy
-        .protocols
-        .direct_connector()
-        .resolve_address(
+    let endpoint = services
+        .resolve_direct_address(
             &Address::Domain(server.to_owned()),
             port,
-            proxy.resolver.as_ref(),
             "failed to resolve UDP socket packet-path carrier",
         )
         .await?;

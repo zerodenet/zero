@@ -14,7 +14,7 @@ pub(crate) use helpers::*;
     feature = "mieru"
 ))]
 pub(crate) async fn write_direct_response<F, Fut, E>(
-    response: &UdpDirectResponseParts<'_, '_>,
+    response: &UdpDirectResponseParts<'_>,
     write: F,
 ) -> Result<usize, E>
 where
@@ -28,7 +28,7 @@ where
 
 #[cfg(any(feature = "hysteria2", feature = "shadowsocks"))]
 pub(crate) async fn write_optional_direct_response<F, Fut, E>(
-    response: &UdpDirectResponseParts<'_, '_>,
+    response: &UdpDirectResponseParts<'_>,
     write: F,
 ) -> Result<Option<usize>, E>
 where
@@ -44,7 +44,7 @@ where
 
 #[cfg(feature = "socks5")]
 pub(crate) async fn write_upstream_response<F, Fut, E>(
-    response: &UdpUpstreamResponseParts<'_>,
+    response: &UdpUpstreamResponseParts,
     write: F,
 ) -> Result<usize, E>
 where
@@ -61,7 +61,7 @@ where
     any(feature = "hysteria2", feature = "shadowsocks")
 ))]
 pub(crate) async fn write_optional_upstream_response<F, Fut, E>(
-    response: &UdpUpstreamResponseParts<'_>,
+    response: &UdpUpstreamResponseParts,
     write: F,
 ) -> Result<Option<usize>, E>
 where
@@ -83,7 +83,7 @@ where
     feature = "mieru"
 ))]
 pub(crate) async fn write_chain_response<F, Fut, E>(
-    response: &UdpChainResponseParts<'_>,
+    response: &UdpChainResponseParts,
     write: F,
 ) -> Result<usize, E>
 where
@@ -97,7 +97,7 @@ where
 
 #[cfg(any(feature = "hysteria2", feature = "shadowsocks"))]
 pub(crate) async fn write_optional_chain_response<F, Fut, E>(
-    response: &UdpChainResponseParts<'_>,
+    response: &UdpChainResponseParts,
     write: F,
 ) -> Result<Option<usize>, E>
 where

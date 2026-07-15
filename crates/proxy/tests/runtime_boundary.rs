@@ -773,6 +773,37 @@ fn packet_path_start_surfaces_use_adapter_context_instead_of_proxy() {
 }
 
 #[test]
+fn udp_socket_helpers_use_runtime_services_instead_of_proxy() {
+    for relative in [
+        "runtime/udp_socket.rs",
+        "runtime/udp_flow/packet_path_chain/carriers/udp_socket_carrier.rs",
+    ] {
+        let source = read(&proxy_src().join(relative));
+        assert!(
+            !source.contains("use crate::runtime::Proxy"),
+            "{relative} must not import Proxy directly"
+        );
+        assert!(
+            !source.contains("&Proxy"),
+            "{relative} must not carry raw Proxy references"
+        );
+    }
+
+    let carrier = read(
+        &proxy_src().join("runtime/udp_flow/packet_path_chain/carriers/udp_socket_carrier.rs"),
+    );
+    assert!(carrier.contains("UdpRuntimeServices"));
+}
+
+#[test]
+fn udp_delivery_helpers_use_runtime_services_instead_of_proxy() {
+    let helpers = read(&proxy_src().join("runtime/udp_delivery/helpers.rs"));
+    assert!(helpers.contains("UdpRuntimeServices"));
+    assert!(!helpers.contains("use crate::runtime::Proxy"));
+    assert!(!helpers.contains("&Proxy"));
+}
+
+#[test]
 fn inventory_tcp_relay_root_is_not_a_proxy_impl_bucket() {
     let relay = read(&proxy_src().join("inventory/tcp/relay.rs"));
     assert!(!relay.contains("impl Proxy"));

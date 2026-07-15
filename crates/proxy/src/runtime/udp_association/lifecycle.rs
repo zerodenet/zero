@@ -7,6 +7,7 @@ use super::contract::{UdpAssociationHandler, UdpAssociationLoopRequest};
 use crate::logging::{
     log_udp_upstream_association_dropped, log_udp_upstream_association_idle_timeout,
 };
+use crate::protocol_registry::UdpRuntimeServices;
 use crate::runtime::udp_delivery::{
     log_completed_udp_flow, record_chain_udp_response_parts, record_upstream_udp_response_received,
     wait_for_upstream_idle,
@@ -18,7 +19,6 @@ use crate::runtime::udp_delivery::{
 use crate::runtime::udp_dispatch::UdpDispatch;
 use crate::runtime::udp_flow::packet_path::ChainTask;
 use crate::runtime::udp_flow::response::UpstreamUdpResponse;
-use crate::runtime::Proxy;
 use crate::transport::ClientStream;
 
 pub(crate) async fn run_udp_association_loop<S, H>(
@@ -38,6 +38,7 @@ where
     } = request;
 
     let mut dispatch = UdpDispatch::new(inbound_tag, &proxy.protocols).await?;
+    let services = UdpRuntimeServices::from_proxy(proxy);
     let mut control_probe = [0_u8; 1];
     let mut packet = vec![0_u8; 64 * 1024];
     let mut direct_buf = vec![0_u8; 64 * 1024];
@@ -58,6 +59,7 @@ where
                 let (read, sender) = recv?;
                 handler.handle_client_datagram(
                     proxy,
+                    &services,
                     &mut dispatch,
                     &relay,
                     &mut pending_control_traffic,
@@ -69,7 +71,7 @@ where
             recv = direct_sock.recv_from_addr(&mut direct_buf) => {
                 let (read, sender) = recv?;
                 if let Err(error) = handler
-                    .write_direct_response(proxy, &dispatch, &relay, sender, &direct_buf[..read])
+                    .write_direct_response(&services, &dispatch, &relay, sender, &direct_buf[..read])
                     .await
                 {
                     tracing::warn!(
@@ -80,13 +82,13 @@ where
                 }
             }
             upstream = upstream_udp.recv_response(&mut upstream_buf) => {
-                handle_upstream_response(proxy, &mut dispatch, &mut handler, &relay, inbound_tag, upstream).await?;
+                handle_upstream_response(&services, &mut dispatch, &mut handler, &relay, inbound_tag, upstream).await?;
             }
             Some(chain_result) = chain_tasks.join_next() => {
-                handle_chain_result(proxy, &mut handler, &relay, inbound_tag, chain_result).await;
+                handle_chain_result(&services, &mut handler, &relay, inbound_tag, chain_result).await;
             }
             _ = wait_for_upstream_idle(idle_deadline) => {
-                handle_idle_timeout(proxy, &mut dispatch, inbound_tag);
+                handle_idle_timeout(&services, &mut dispatch, inbound_tag);
             }
         }
     }
@@ -102,20 +104,24 @@ fn finish_dispatch(dispatch: UdpDispatch) {
     }
 }
 
-fn handle_idle_timeout(proxy: &Proxy, dispatch: &mut UdpDispatch, inbound_tag: &str) {
+fn handle_idle_timeout(
+    services: &UdpRuntimeServices,
+    dispatch: &mut UdpDispatch,
+    inbound_tag: &str,
+) {
     if let Some(closed) = dispatch.drop_idle_upstream_association() {
         log_udp_upstream_association_idle_timeout(
             inbound_tag,
             &closed.outbound_tag,
             &closed.server,
             closed.port,
-            proxy.udp_upstream_idle_timeout(),
+            services.udp_upstream_idle_timeout(),
         );
     }
 }
 
 async fn handle_upstream_response<H>(
-    proxy: &Proxy,
+    services: &UdpRuntimeServices,
     dispatch: &mut UdpDispatch,
     handler: &mut H,
     relay: &TokioDatagramSocket,
@@ -128,9 +134,9 @@ where
     match upstream {
         Ok(response) => {
             let response = record_upstream_udp_response_received(
-                proxy,
+                services,
                 dispatch,
-                proxy.udp_upstream_idle_timeout(),
+                services.udp_upstream_idle_timeout(),
                 response,
             );
             write_upstream_udp_response(&response, || async {
@@ -140,7 +146,7 @@ where
         }
         Err(error) => {
             if let Some(closed) = dispatch.drop_upstream_association() {
-                proxy.record_udp_upstream_recv_failure();
+                services.record_udp_upstream_recv_failure();
                 log_udp_upstream_association_dropped(
                     inbound_tag,
                     &closed.outbound_tag,
@@ -156,7 +162,7 @@ where
 }
 
 async fn handle_chain_result<H>(
-    proxy: &Proxy,
+    services: &UdpRuntimeServices,
     handler: &mut H,
     relay: &TokioDatagramSocket,
     inbound_tag: &str,
@@ -167,7 +173,7 @@ async fn handle_chain_result<H>(
     match chain_result {
         Ok(Ok((target, port, payload, session_id))) => {
             let response =
-                record_chain_udp_response_parts(proxy, target, port, payload, session_id);
+                record_chain_udp_response_parts(services, target, port, payload, session_id);
             if let Err(error) = write_chain_udp_response(&response, || async {
                 handler.write_chain_response(relay, &response).await
             })

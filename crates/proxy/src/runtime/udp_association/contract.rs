@@ -9,6 +9,7 @@ use zero_engine::EngineError;
 use zero_platform_tokio::TokioDatagramSocket;
 use zero_traits::DnsResolver;
 
+use crate::protocol_registry::UdpRuntimeServices;
 use crate::runtime::udp_delivery::write_direct_response as write_direct_udp_response;
 use crate::runtime::udp_delivery::{
     record_direct_udp_response_parts, UdpChainResponseParts, UdpUpstreamResponseParts,
@@ -31,6 +32,7 @@ enum UdpAssociationDispatchOutcome {
 
 struct UdpAssociationDispatchBridge<'a> {
     proxy: &'a Proxy,
+    services: UdpRuntimeServices,
     dispatch: &'a mut UdpDispatch,
     pending_control_traffic: &'a mut StreamTraffic,
     outcome: UdpAssociationDispatchOutcome,
@@ -52,10 +54,10 @@ impl InboundUdpAssociationDispatcher for UdpAssociationDispatchBridge<'_> {
         let session_id =
             dispatch_inbound_udp_packet(self.proxy, self.dispatch, &inbound_dispatch, None).await?;
 
-        self.proxy
+        self.services
             .record_session_inbound_traffic(session_id, *self.pending_control_traffic);
         *self.pending_control_traffic = StreamTraffic::default();
-        self.proxy
+        self.services
             .record_session_inbound_rx(session_id, protocol_overhead_bytes);
 
         Ok(())
@@ -86,6 +88,7 @@ pub(crate) trait UdpAssociationHandler {
     async fn handle_client_datagram(
         &mut self,
         proxy: &Proxy,
+        services: &UdpRuntimeServices,
         dispatch: &mut UdpDispatch,
         relay: &TokioDatagramSocket,
         pending_control_traffic: &mut StreamTraffic,
@@ -95,7 +98,7 @@ pub(crate) trait UdpAssociationHandler {
 
     async fn write_direct_response(
         &mut self,
-        proxy: &Proxy,
+        services: &UdpRuntimeServices,
         dispatch: &UdpDispatch,
         relay: &TokioDatagramSocket,
         sender: SocketAddr,
@@ -105,13 +108,13 @@ pub(crate) trait UdpAssociationHandler {
     async fn write_upstream_response(
         &mut self,
         relay: &TokioDatagramSocket,
-        response: &UdpUpstreamResponseParts<'_>,
+        response: &UdpUpstreamResponseParts,
     ) -> Result<usize, EngineError>;
 
     async fn write_chain_response(
         &mut self,
         relay: &TokioDatagramSocket,
-        response: &UdpChainResponseParts<'_>,
+        response: &UdpChainResponseParts,
     ) -> Result<usize, EngineError>;
 }
 
@@ -122,6 +125,7 @@ where
     async fn handle_client_datagram(
         &mut self,
         proxy: &Proxy,
+        services: &UdpRuntimeServices,
         dispatch: &mut UdpDispatch,
         relay: &TokioDatagramSocket,
         pending_control_traffic: &mut StreamTraffic,
@@ -132,6 +136,7 @@ where
         let sender = zero_platform_tokio::socket_addr_to_socket_address(sender);
         let mut dispatch_bridge = UdpAssociationDispatchBridge {
             proxy,
+            services: services.clone(),
             dispatch,
             pending_control_traffic,
             outcome: UdpAssociationDispatchOutcome::ClientHandled,
@@ -147,7 +152,7 @@ where
                     let sender_socket_addr =
                         zero_platform_tokio::socket_address_to_socket_addr(sender);
                     let response = record_direct_udp_response_parts(
-                        proxy,
+                        services,
                         dispatch_bridge.dispatch,
                         sender_socket_addr,
                         &payload,
@@ -179,13 +184,13 @@ where
 
     async fn write_direct_response(
         &mut self,
-        proxy: &Proxy,
+        services: &UdpRuntimeServices,
         dispatch: &UdpDispatch,
         relay: &TokioDatagramSocket,
         sender: SocketAddr,
         payload: &[u8],
     ) -> Result<(), EngineError> {
-        let response = record_direct_udp_response_parts(proxy, dispatch, sender, payload);
+        let response = record_direct_udp_response_parts(services, dispatch, sender, payload);
         write_direct_udp_response(&response, || async {
             write_target_response(
                 self,
@@ -204,7 +209,7 @@ where
     async fn write_upstream_response(
         &mut self,
         relay: &TokioDatagramSocket,
-        response: &UdpUpstreamResponseParts<'_>,
+        response: &UdpUpstreamResponseParts,
     ) -> Result<usize, EngineError> {
         write_target_response(
             self,
@@ -219,7 +224,7 @@ where
     async fn write_chain_response(
         &mut self,
         relay: &TokioDatagramSocket,
-        response: &UdpChainResponseParts<'_>,
+        response: &UdpChainResponseParts,
     ) -> Result<usize, EngineError> {
         write_target_response(
             self,
