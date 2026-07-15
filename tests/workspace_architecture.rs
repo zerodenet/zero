@@ -61,6 +61,13 @@ fn dependency_line_is_optional(manifest: &str, dependency: &str) -> bool {
     })
 }
 
+fn manifest_line<'a>(manifest: &'a str, prefix: &str) -> &'a str {
+    manifest
+        .lines()
+        .find(|line| line.trim_start().starts_with(prefix))
+        .unwrap_or_else(|| panic!("missing manifest line `{prefix}`"))
+}
+
 #[test]
 fn protocol_crates_keep_runtime_support_deps_optional_and_out_of_config_space() {
     let protocols = workspace_root().join("protocols");
@@ -198,6 +205,28 @@ fn config_delegates_protocol_private_value_validation() {
             "config must not recreate protocol validator `{duplicate}`"
         );
     }
+}
+
+#[test]
+fn config_protocol_dependencies_use_validation_features() {
+    let manifest = read(&workspace_root().join("crates/config/Cargo.toml"));
+    for dependency in ["socks5", "shadowsocks", "vmess", "vless"] {
+        let line = manifest_line(&manifest, dependency);
+        assert!(
+            line.contains("default-features = false"),
+            "config dependency `{dependency}` must disable protocol default features"
+        );
+        assert!(
+            line.contains("validation"),
+            "config dependency `{dependency}` must depend on the protocol validation surface"
+        );
+    }
+
+    let shadowsocks = manifest_line(&manifest, "shadowsocks");
+    assert!(
+        shadowsocks.contains("blake3"),
+        "config Shadowsocks dependency must keep the `blake3` validation surface enabled"
+    );
 }
 
 #[test]

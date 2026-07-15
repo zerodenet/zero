@@ -10,69 +10,17 @@ use alloc::vec::Vec;
 use zero_core::{Address, Error};
 use zero_traits::AsyncSocket;
 
+#[cfg(feature = "blake3")]
+use crate::validation::decode_blake3_master_key;
+pub use crate::CipherKind;
+
 pub const ADDR_TYPE_IPV4: u8 = 0x01;
 pub const ADDR_TYPE_DOMAIN: u8 = 0x03;
 pub const ADDR_TYPE_IPV6: u8 = 0x04;
 pub const TCP_CHUNK_SIZE_LEN: usize = 2;
 pub const MAX_TCP_PAYLOAD_SIZE: usize = 0x3fff;
 
-/// AEAD cipher methods.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum CipherKind {
-    Aes128Gcm,
-    Aes256Gcm,
-    Chacha20Poly1305,
-    Blake3Aes128Gcm,
-    Blake3Aes256Gcm,
-    Blake3Chacha20Poly1305,
-}
-
 impl CipherKind {
-    pub fn key_len(&self) -> usize {
-        match self {
-            Self::Aes128Gcm | Self::Blake3Aes128Gcm => 16,
-            Self::Aes256Gcm | Self::Blake3Aes256Gcm => 32,
-            Self::Chacha20Poly1305 | Self::Blake3Chacha20Poly1305 => 32,
-        }
-    }
-
-    pub fn salt_len(&self) -> usize {
-        self.key_len()
-    }
-
-    pub fn udp_salt_len(&self) -> usize {
-        match self {
-            Self::Blake3Aes128Gcm | Self::Blake3Aes256Gcm => 12,
-            Self::Blake3Chacha20Poly1305 => 24,
-            _ => self.salt_len(),
-        }
-    }
-
-    pub fn tag_len(&self) -> usize {
-        16
-    }
-
-    pub const fn is_blake3(&self) -> bool {
-        matches!(
-            self,
-            Self::Blake3Aes128Gcm | Self::Blake3Aes256Gcm | Self::Blake3Chacha20Poly1305
-        )
-    }
-
-    #[allow(clippy::should_implement_trait)]
-    pub fn from_str(s: &str) -> Option<Self> {
-        match s {
-            "aes-128-gcm" => Some(Self::Aes128Gcm),
-            "aes-256-gcm" => Some(Self::Aes256Gcm),
-            "chacha20-ietf-poly1305" => Some(Self::Chacha20Poly1305),
-            "2022-blake3-aes-128-gcm" => Some(Self::Blake3Aes128Gcm),
-            "2022-blake3-aes-256-gcm" => Some(Self::Blake3Aes256Gcm),
-            "2022-blake3-chacha20-poly1305" => Some(Self::Blake3Chacha20Poly1305),
-            _ => None,
-        }
-    }
-
-    #[cfg(feature = "crypto")]
     fn ring_algorithm(self) -> &'static ring::aead::Algorithm {
         use ring::aead;
         match self {
@@ -132,40 +80,6 @@ pub fn derive_key_blake3(
         hasher.update(material);
     }
     hasher.finalize_xof().fill(&mut key);
-    Ok(key)
-}
-
-#[cfg(feature = "blake3")]
-pub fn decode_blake3_master_key(cipher: CipherKind, password: &[u8]) -> Result<Vec<u8>, Error> {
-    use base64::{
-        alphabet,
-        engine::{DecodePaddingMode, GeneralPurpose, GeneralPurposeConfig},
-        Engine,
-    };
-
-    let password = core::str::from_utf8(password)
-        .map_err(|_| Error::Protocol("ss: 2022 password must be utf-8 base64"))?;
-    let password = match cipher {
-        CipherKind::Blake3Aes128Gcm | CipherKind::Blake3Aes256Gcm => {
-            password.rsplit(':').next().unwrap_or(password)
-        }
-        CipherKind::Blake3Chacha20Poly1305 => password,
-        _ => return Err(Error::Protocol("ss: cipher is not a 2022 method")),
-    };
-
-    const ENGINE: GeneralPurpose = GeneralPurpose::new(
-        &alphabet::STANDARD,
-        GeneralPurposeConfig::new()
-            .with_encode_padding(true)
-            .with_decode_padding_mode(DecodePaddingMode::Indifferent),
-    );
-
-    let key = ENGINE
-        .decode(password)
-        .map_err(|_| Error::Protocol("ss: invalid 2022 base64 password"))?;
-    if key.len() != cipher.key_len() {
-        return Err(Error::Protocol("ss: invalid 2022 password key length"));
-    }
     Ok(key)
 }
 

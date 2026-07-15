@@ -13,6 +13,7 @@ use crate::shared::{
     SOCKS5_VERSION, USERPASS_STATUS_SUCCESS, USERPASS_VERSION,
 };
 use crate::udp::{Socks5OwnedUdpAssociationConfig, Socks5UdpAssociationTarget};
+use crate::validate_credential_part;
 
 #[derive(Debug, Default, Clone, Copy)]
 pub struct Socks5Outbound;
@@ -379,26 +380,6 @@ where
 fn validate_outbound_auth(auth: Socks5OutboundAuth<'_>) -> Result<(), Error> {
     validate_credential_part(auth.username, "username")?;
     validate_credential_part(auth.password, "password")
-}
-
-pub fn validate_credential_part(value: &str, field: &'static str) -> Result<(), Error> {
-    let len = value.len();
-    if len == 0 {
-        return Err(Error::Config(match field {
-            "username" => "SOCKS5 username must not be empty",
-            "password" => "SOCKS5 password must not be empty",
-            _ => "SOCKS5 credential must not be empty",
-        }));
-    }
-    if len > u8::MAX as usize {
-        return Err(Error::Config(match field {
-            "username" => "SOCKS5 username is too long",
-            "password" => "SOCKS5 password is too long",
-            _ => "SOCKS5 credential is too long",
-        }));
-    }
-
-    Ok(())
 }
 
 async fn read_response<S>(stream: &mut S) -> Result<(Address, u16), Error>

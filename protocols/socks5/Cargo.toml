@@ -9,7 +9,9 @@ homepage.workspace = true
 
 [features]
 default = []
+validation = []
 runtime = [
+    "validation",
     "dep:async-trait",
     "dep:zero-platform-tokio",
     "dep:zero-transport",
@@ -24,3 +26,7 @@ zero-traits = { path = "../../crates/traits" }
 
 [dev-dependencies]
 tokio.workspace = true
+
+[[test]]
+name = "handshake"
+required-features = ["runtime"]

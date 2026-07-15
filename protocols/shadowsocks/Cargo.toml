@@ -9,17 +9,26 @@ homepage.workspace = true
 
 [features]
 default = []
-crypto = ["dep:aes", "dep:chacha20poly1305", "dep:md-5", "dep:ring", "dep:tokio"]
+crypto = [
+    "validation",
+    "dep:aes",
+    "dep:chacha20poly1305",
+    "dep:md-5",
+    "dep:ring",
+    "dep:tokio",
+]
+validation = []
 blake3 = ["dep:base64", "dep:blake3"]
 runtime = [
     "crypto",
+    "dep:async-trait",
     "dep:tracing",
     "dep:zero-platform-tokio",
     "dep:zero-transport",
 ]
 
 [dependencies]
-async-trait = "0.1"
+async-trait = { version = "0.1", optional = true }
 aes = { version = "0.8", optional = true }
 base64 = { version = "0.22", optional = true }
 blake3 = { version = "1", optional = true }
@@ -38,3 +47,11 @@ tokio.workspace = true
 ring = { version = "0.17" }
 chacha20poly1305 = "0.10"
 aes = "0.8"
+
+[[test]]
+name = "outbound"
+required-features = ["runtime"]
+
+[[test]]
+name = "shared"
+required-features = ["runtime"]
