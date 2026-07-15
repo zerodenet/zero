@@ -51,15 +51,12 @@ impl InboundRouteRuntime {
         }
     }
 
-    #[cfg(any(
-        feature = "socks5",
-        feature = "vless",
-        feature = "trojan",
-        feature = "vmess",
-        feature = "mieru"
-    ))]
     pub(crate) fn inbound_tag(&self) -> &str {
         self.tcp_runtime.inbound_tag()
+    }
+
+    pub(crate) fn source_addr(&self) -> Option<std::net::SocketAddr> {
+        self.tcp_runtime.source_addr()
     }
 
     #[cfg(feature = "http")]

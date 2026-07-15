@@ -26,15 +26,12 @@ impl TcpIngressRuntime {
         }
     }
 
-    #[cfg(any(
-        feature = "socks5",
-        feature = "vless",
-        feature = "trojan",
-        feature = "vmess",
-        feature = "mieru"
-    ))]
     pub(crate) fn inbound_tag(&self) -> &str {
         &self.inbound_tag
+    }
+
+    pub(crate) fn source_addr(&self) -> Option<SocketAddr> {
+        self.source_addr
     }
 
     #[cfg(any(feature = "vless", feature = "vmess"))]

@@ -881,6 +881,22 @@ fn udp_ingress_runtime_collapses_proxy_and_services_for_session_loops() {
     assert!(tcp_ingress_runtime.contains("serve_inbound("));
 
     for relative in [
+        "runtime/listener_loop/tcp.rs",
+        "runtime/listener_loop/quic.rs",
+        "runtime/listener_loop/system.rs",
+    ] {
+        let source = read(&proxy_src().join(relative));
+        assert!(
+            !source.contains("Fn(Proxy"),
+            "{relative} must not expose raw Proxy in listener-loop handler contracts"
+        );
+        assert!(
+            !source.contains("FnMut(Proxy"),
+            "{relative} must not expose raw Proxy in listener-loop handler contracts"
+        );
+    }
+
+    for relative in [
         "runtime/inbound_route/stream/dispatch.rs",
         "runtime/inbound_route/mux/dispatch.rs",
         "runtime/mux_session.rs",

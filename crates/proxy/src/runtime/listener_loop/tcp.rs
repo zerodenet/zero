@@ -5,6 +5,7 @@ use tokio::task::JoinSet;
 use tracing::{error, info};
 use zero_engine::EngineError;
 
+use crate::runtime::route_runtime::InboundRouteRuntime;
 use crate::runtime::Proxy;
 
 pub(crate) struct TcpListenerLoopRequest<'a, H> {
@@ -20,7 +21,7 @@ pub(crate) async fn run_tcp_listener_loop<H, Fut>(
     request: TcpListenerLoopRequest<'_, H>,
 ) -> Result<(), EngineError>
 where
-    H: Fn(Proxy, String, zero_platform_tokio::TokioSocket, Option<std::net::SocketAddr>) -> Fut
+    H: Fn(InboundRouteRuntime, zero_platform_tokio::TokioSocket) -> Fut
         + Clone
         + Send
         + Sync
@@ -57,11 +58,13 @@ where
             accept_result = listener.accept() => {
                 match accept_result {
                     Ok((stream, remote_addr)) => {
-                        let engine = proxy.clone();
-                        let tag = inbound_tag.clone();
-                        let source_addr = zero_platform_tokio::remote_ip_to_socket_addr(remote_addr);
+                        let runtime = InboundRouteRuntime::new(
+                            proxy.clone(),
+                            inbound_tag.clone(),
+                            zero_platform_tokio::remote_ip_to_socket_addr(remote_addr),
+                        );
                         let handler = handler.clone();
-                        connections.spawn(handler(engine, tag, stream, source_addr));
+                        connections.spawn(handler(runtime, stream));
                     }
                     Err(error) => {
                         error!(error = %error, protocol = protocol_name, "inbound accept error");
@@ -112,7 +115,7 @@ pub(crate) async fn run_logged_tcp_socket_listener_loop<R, D, Fut>(
 ) -> Result<(), EngineError>
 where
     R: Clone + Send + Sync + 'static,
-    D: Fn(Proxy, R, String, zero_platform_tokio::TokioSocket, Option<std::net::SocketAddr>) -> Fut
+    D: Fn(InboundRouteRuntime, R, zero_platform_tokio::TokioSocket) -> Fut
         + Clone
         + Send
         + Sync
@@ -136,15 +139,13 @@ where
         protocol_name,
         listener,
         shutdown,
-        handler: move |engine: Proxy,
-                       inbound_tag: String,
-                       stream: zero_platform_tokio::TokioSocket,
-                       source_addr: Option<std::net::SocketAddr>| {
+        handler: move |runtime: InboundRouteRuntime, stream: zero_platform_tokio::TokioSocket| {
             let request = request.clone();
             let dispatch = dispatch.clone();
             async move {
-                let log_tag = inbound_tag.clone();
-                let result = dispatch(engine, request, inbound_tag, stream, source_addr).await;
+                let log_tag = runtime.inbound_tag().to_owned();
+                let source_addr = runtime.source_addr();
+                let result = dispatch(runtime, request, stream).await;
                 if let Err(ref error) = result {
                     crate::logging::log_listener_connection_error(
                         crate::logging::INBOUND_ACCEPT_ROUTE_STAGE,

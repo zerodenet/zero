@@ -7,6 +7,7 @@ use tracing::{error, info};
 use zero_stack::SystemTcpStack;
 use zero_traits::TcpStack;
 
+use crate::runtime::route_runtime::InboundRouteRuntime;
 use crate::runtime::Proxy;
 
 pub(crate) struct SystemTcpStackLoopRequest<'a, H> {
@@ -19,7 +20,7 @@ pub(crate) struct SystemTcpStackLoopRequest<'a, H> {
 
 pub(crate) async fn run_system_tcp_stack_loop<H, Fut>(request: SystemTcpStackLoopRequest<'_, H>)
 where
-    H: Fn(Proxy, String, TcpStream, zero_traits::SocketAddress, zero_traits::SocketAddress) -> Fut
+    H: Fn(InboundRouteRuntime, TcpStream, zero_traits::SocketAddress) -> Fut
         + Clone
         + Send
         + Sync
@@ -53,10 +54,13 @@ where
             accepted = stack.accept() => {
                 match accepted {
                     Some((stream, source, destination)) => {
-                        let engine = proxy.clone();
-                        let tag = inbound_tag.clone();
+                        let runtime = InboundRouteRuntime::new(
+                            proxy.clone(),
+                            inbound_tag.clone(),
+                            Some(zero_platform_tokio::socket_address_to_socket_addr(source)),
+                        );
                         let handler = handler.clone();
-                        connections.spawn(handler(engine, tag, stream, source, destination));
+                        connections.spawn(handler(runtime, stream, destination));
                     }
                     None => break,
                 }

@@ -4,6 +4,7 @@ use tokio::task::JoinSet;
 use tracing::{error, info};
 use zero_engine::EngineError;
 
+use crate::runtime::route_runtime::InboundRouteRuntime;
 use crate::runtime::Proxy;
 
 #[cfg(feature = "hysteria2")]
@@ -21,7 +22,7 @@ pub(crate) async fn run_quic_listener_loop<H, Fut>(
     request: QuicListenerLoopRequest<'_, H>,
 ) -> Result<(), EngineError>
 where
-    H: Fn(Proxy, String, quinn::Connection) -> Fut + Clone + Send + Sync + 'static,
+    H: Fn(InboundRouteRuntime, quinn::Connection) -> Fut + Clone + Send + Sync + 'static,
     Fut: Future<Output = ()> + Send + 'static,
 {
     let QuicListenerLoopRequest {
@@ -52,10 +53,9 @@ where
             accept_result = listener.accept_connection() => {
                 match accept_result {
                     Ok(conn) => {
-                        let engine = proxy.clone();
-                        let tag = inbound_tag.clone();
+                        let runtime = InboundRouteRuntime::new(proxy.clone(), inbound_tag.clone(), None);
                         let handler = handler.clone();
-                        connections.spawn(handler(engine, tag, conn));
+                        connections.spawn(handler(runtime, conn));
                     }
                     Err(error) => {
                         error!(error = %error, protocol = protocol_name, "inbound accept error");
@@ -105,7 +105,7 @@ pub(crate) async fn run_quic_stream_listener_loop<H, Fut>(
     request: QuicStreamListenerLoopRequest<'_, H>,
 ) -> Result<(), EngineError>
 where
-    H: Fn(Proxy, String, crate::transport::QuicStream) -> Fut + Clone + Send + Sync + 'static,
+    H: Fn(InboundRouteRuntime, crate::transport::QuicStream) -> Fut + Clone + Send + Sync + 'static,
     Fut: Future<Output = ()> + Send + 'static,
 {
     let QuicStreamListenerLoopRequest {
@@ -137,10 +137,9 @@ where
             accept_result = listener.accept() => {
                 match accept_result {
                     Ok(stream) => {
-                        let engine = proxy.clone();
-                        let tag = inbound_tag.clone();
+                        let runtime = InboundRouteRuntime::new(proxy.clone(), inbound_tag.clone(), None);
                         let handler = handler.clone();
-                        connections.spawn(handler(engine, tag, stream));
+                        connections.spawn(handler(runtime, stream));
                     }
                     Err(error) => {
                         error!(error = %error, protocol = protocol_name, "inbound accept error");
@@ -194,7 +193,11 @@ pub(crate) async fn run_logged_quic_stream_listener_loop<R, D, Fut>(
 ) -> Result<(), EngineError>
 where
     R: Clone + Send + Sync + 'static,
-    D: Fn(Proxy, R, String, crate::transport::QuicStream) -> Fut + Clone + Send + Sync + 'static,
+    D: Fn(InboundRouteRuntime, R, crate::transport::QuicStream) -> Fut
+        + Clone
+        + Send
+        + Sync
+        + 'static,
     Fut: Future<Output = Result<(), EngineError>> + Send + 'static,
 {
     let LoggedQuicStreamListenerRequest {
@@ -214,14 +217,12 @@ where
         protocol_name,
         listener,
         shutdown,
-        handler: move |engine: Proxy,
-                       inbound_tag: String,
-                       quic_stream: crate::transport::QuicStream| {
+        handler: move |runtime: InboundRouteRuntime, quic_stream: crate::transport::QuicStream| {
             let request = request.clone();
             let dispatch = dispatch.clone();
             async move {
-                let log_tag = inbound_tag.clone();
-                let result = dispatch(engine, request, inbound_tag, quic_stream).await;
+                let log_tag = runtime.inbound_tag().to_owned();
+                let result = dispatch(runtime, request, quic_stream).await;
                 if let Err(error) = &result {
                     crate::logging::log_listener_connection_error(
                         crate::logging::INBOUND_ACCEPT_ROUTE_STAGE,

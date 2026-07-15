@@ -29,14 +29,14 @@ async fn tcp_listener_accepts_connection_and_stops_on_shutdown() {
                 protocol_name: "test",
                 listener,
                 shutdown: shutdown_rx,
-                handler: move |_, tag, _, source_addr| {
+                handler: move |runtime: crate::runtime::route_runtime::InboundRouteRuntime, _| {
                     let accepted = accepted.clone();
                     let observations = observations.clone();
                     async move {
                         observations
                             .lock()
                             .expect("observations lock")
-                            .push((tag, source_addr));
+                            .push((runtime.inbound_tag().to_owned(), runtime.source_addr()));
                         accepted.notify_one();
                     }
                 },

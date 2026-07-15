@@ -25,7 +25,8 @@ use zero_engine::EngineError;
 use zero_stack::SystemTcpStack;
 
 use crate::runtime::listener_loop::{run_system_tcp_stack_loop, SystemTcpStackLoopRequest};
-use crate::runtime::tcp_ingress::{serve_inbound, InboundProtocol};
+use crate::runtime::route_runtime::InboundRouteRuntime;
+use crate::runtime::tcp_ingress::InboundProtocol;
 use crate::runtime::Proxy;
 
 // ── Protocol handler ──────────────────────────────────────────────────
@@ -60,10 +61,8 @@ async fn system_tcp_loop(
         inbound_tag: tag,
         stack,
         shutdown,
-        handler: |proxy: Proxy,
-                  tag: String,
+        handler: |runtime: InboundRouteRuntime,
                   stream: TcpStream,
-                  source: zero_traits::SocketAddress,
                   destination: zero_traits::SocketAddress| async move {
             let session = Session::new(
                 0,
@@ -72,26 +71,13 @@ async fn system_tcp_loop(
                 Network::Tcp,
                 ProtocolType::Unknown,
             );
-            let source_addr = sockaddr_to_std(&source);
-            let _ = serve_inbound(
-                &proxy,
-                session,
-                stream,
-                &SystemProtocol,
-                &tag,
-                Some(source_addr),
-            )
-            .await;
+            let _ = runtime.serve(session, stream, &SystemProtocol).await;
         },
     })
     .await;
 }
 
 // ── Address helpers ────────────────────────────────────────────────────
-
-fn sockaddr_to_std(sa: &zero_traits::SocketAddress) -> SocketAddr {
-    zero_platform_tokio::socket_address_to_socket_addr(*sa)
-}
 
 fn sockaddr_to_address(sa: &zero_traits::SocketAddress) -> Address {
     match sa.ip {

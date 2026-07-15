@@ -14,6 +14,10 @@ pub(crate) struct InboundConnectionContext {
 }
 
 impl InboundConnectionContext {
+    pub(crate) fn new(runtime: InboundRouteRuntime) -> Self {
+        Self { runtime }
+    }
+
     #[cfg(feature = "socks5")]
     pub(crate) async fn run_udp_association<S, H>(
         self,
@@ -290,21 +294,10 @@ where
                     request,
                     listener: bound.into_tcp(),
                     shutdown,
-                    dispatch: move |proxy, request, inbound_tag, socket, source_addr| {
+                    dispatch: move |runtime, request, socket| {
                         let dispatch = dispatch.clone();
                         async move {
-                            dispatch(
-                                request,
-                                socket,
-                                InboundConnectionContext {
-                                    runtime: InboundRouteRuntime::new(
-                                        proxy,
-                                        inbound_tag,
-                                        source_addr,
-                                    ),
-                                },
-                            )
-                            .await
+                            dispatch(request, socket, InboundConnectionContext::new(runtime)).await
                         }
                     },
                 },
@@ -439,13 +432,12 @@ where
                     protocol_name,
                     listener,
                     shutdown,
-                    handler: move |proxy, inbound_tag, connection| {
+                    handler: move |runtime, connection| {
                         let profile = profile.clone();
                         async move {
                             if let Err(error) = run_authenticated_quic_connection(
                                 profile,
-                                proxy,
-                                inbound_tag,
+                                runtime,
                                 connection,
                             )
                             .await
@@ -464,8 +456,7 @@ where
 #[cfg(feature = "hysteria2")]
 async fn run_authenticated_quic_connection<P>(
     profile: P,
-    proxy: Proxy,
-    inbound_tag: String,
+    runtime: InboundRouteRuntime,
     connection: quinn::Connection,
 ) -> Result<(), EngineError>
 where
@@ -477,8 +468,8 @@ where
     let mut tasks = tokio::task::JoinSet::new();
     let udp_source = connection.datagram_source();
     let udp_relay = connection.udp_relay();
-    let udp_runtime = crate::runtime::udp_ingress::UdpIngressRuntime::from_proxy(&proxy);
-    let udp_tag = inbound_tag.clone();
+    let udp_runtime = runtime.udp_runtime();
+    let udp_tag = runtime.inbound_tag().to_owned();
     tasks.spawn(async move {
         crate::runtime::datagram_udp::run_protocol_datagram_udp_relay(
             udp_runtime,
@@ -496,9 +487,7 @@ where
                 let Some((session, stream)) = accepted? else {
                     break;
                 };
-                let context = InboundConnectionContext {
-                    runtime: InboundRouteRuntime::new(proxy.clone(), inbound_tag.clone(), None),
-                };
+                let context = InboundConnectionContext::new(runtime.clone());
                 let response = connection.response_protocol();
                 tasks.spawn(async move {
                     context.serve_with_client_response(session, stream, response).await
@@ -576,19 +565,13 @@ where
                             request,
                             listener,
                             shutdown,
-                            dispatch: move |proxy, request, inbound_tag, socket, source_addr| {
+                            dispatch: move |runtime, request, socket| {
                                 let dispatch = dispatch_tcp.clone();
                                 async move {
                                     dispatch(
                                         request,
                                         socket,
-                                        InboundConnectionContext {
-                                            runtime: InboundRouteRuntime::new(
-                                                proxy,
-                                                inbound_tag,
-                                                source_addr,
-                                            ),
-                                        },
+                                        InboundConnectionContext::new(runtime),
                                     )
                                     .await
                                 }
@@ -607,19 +590,13 @@ where
                             request,
                             listener,
                             shutdown,
-                            dispatch: move |proxy, request, inbound_tag, stream| {
+                            dispatch: move |runtime, request, stream| {
                                 let dispatch = dispatch_quic.clone();
                                 async move {
                                     dispatch(
                                         request,
                                         stream,
-                                        InboundConnectionContext {
-                                            runtime: InboundRouteRuntime::new(
-                                                proxy,
-                                                inbound_tag,
-                                                None,
-                                            ),
-                                        },
+                                        InboundConnectionContext::new(runtime),
                                     )
                                     .await
                                 }
