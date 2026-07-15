@@ -1713,7 +1713,9 @@ fn inventory_runtime_delegates_leaf_claim_logic_to_registry() {
 fn registry_outbound_claim_surface_replaces_lookup_only_helpers() {
     let outbound = read(&proxy_src().join("protocol_registry/registry/outbound.rs"));
     assert!(outbound.contains("fn claim_outbound_leaf"));
+    assert!(outbound.contains("fn outbound_protocol_entry("));
     assert!(!outbound.contains("fn claimed_tcp_outbound_leaf"));
+    assert!(!outbound.contains("fn claimed_tcp_entry"));
     assert!(!outbound.contains("fn claimed_udp_flow_leaf"));
     assert!(!outbound.contains("fn claimed_udp_packet_path_leaf"));
     assert!(!outbound.contains("fn find_outbound_leaf"));
@@ -1744,9 +1746,14 @@ fn claimed_outbound_leaf_owns_capability_preparation() {
     assert!(!outbound.contains("pub(crate) struct ClaimedOutboundLeaf<'a> {\n    leaf:"));
     assert!(!outbound.contains("fn new(\n        _leaf: ResolvedLeafOutbound<'a>,"));
     assert!(!outbound.contains("fn new(\r\n        _leaf: ResolvedLeafOutbound<'a>,"));
+    assert!(outbound.contains("leaf.protocol_name()"));
+    assert!(outbound.contains("entry.support.name() == protocol"));
+    assert!(!outbound.contains("for entry in &self.entries {\n            if let Some(claimed) = entry.tcp.claim_tcp_outbound_leaf(leaf.clone()) {"));
+    assert!(!outbound.contains("for entry in &self.entries {\r\n            if let Some(claimed) = entry.tcp.claim_tcp_outbound_leaf(leaf.clone()) {"));
     assert!(outbound.contains("claim_tcp_outbound_leaf(leaf.clone())"));
     assert!(outbound.contains("claim_udp_flow_leaf(leaf.clone())"));
     assert!(outbound.contains("claim_udp_packet_path_leaf(leaf.clone())"));
+    assert!(outbound.contains("fn claim_tcp_hooks<'a>("));
     assert!(outbound.contains("fn claim_udp_hooks<'a>("));
     assert!(outbound.contains("struct ClaimedTcpHooks"));
     assert!(outbound.contains("struct ClaimedUdpHooks"));
@@ -1754,7 +1761,7 @@ fn claimed_outbound_leaf_owns_capability_preparation() {
     assert!(!outbound.contains("HookClaimedUdpLeaf"));
     assert!(!outbound.contains("HookClaimedUdpPacketPathLeaf"));
     assert!(!outbound.contains("self.leaf"));
-    assert!(outbound.contains("let runtime = claimed_tcp.runtime();"));
+    assert!(outbound.contains("let runtime = capability.runtime();"));
     assert!(!outbound.contains("udp: build_udp_hooks("));
     assert!(!capability.contains(
         "fn prepare_tcp_connect<'a>(\n        &self,\n        _leaf: ResolvedLeafOutbound<'a>,"

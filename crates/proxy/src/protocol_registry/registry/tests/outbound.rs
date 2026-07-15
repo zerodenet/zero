@@ -5,27 +5,27 @@ use crate::runtime::path::TcpPathCategory;
 use super::fixtures::{compiled_in_outbound_leaves, outbound_leaf_name};
 
 #[test]
-fn compiled_in_outbound_leaf_variants_have_expected_adapter_claims() {
+fn compiled_in_outbound_leaf_variants_have_expected_protocol_owners() {
     let registry = crate::register::protocol_registry();
 
-    for (leaf, expected_claims) in compiled_in_outbound_leaves() {
-        let claim_count = registry
+    for (leaf, expected_owners) in compiled_in_outbound_leaves() {
+        let owner_count = registry
             .entries
             .iter()
-            .filter(|entry| entry.tcp.claim_tcp_outbound_leaf(leaf.clone()).is_some())
+            .filter(|entry| entry.support.name() == leaf.protocol_name())
             .count();
         assert_eq!(
-            claim_count,
-            expected_claims,
-            "{} outbound leaf should have {expected_claims} adapter claim(s)",
+            owner_count,
+            expected_owners,
+            "{} outbound leaf should have {expected_owners} registered protocol owner(s)",
             outbound_leaf_name(&leaf)
         );
 
         let claimed = registry.claim_outbound_leaf(leaf.clone());
         assert_eq!(
             claimed.as_ref().map(|claim| claim.has_tcp_capability()).ok(),
-            Some(expected_claims == 1),
-            "{} claimed outbound lookup should expose runtime facts and optional adapter with the same claim policy",
+            Some(expected_owners == 1),
+            "{} claimed outbound lookup should expose runtime facts and optional adapter with the same ownership policy",
             outbound_leaf_name(&leaf)
         );
     }
@@ -38,12 +38,15 @@ fn block_outbound_leaf_is_kernel_fact_not_adapter_protocol() {
         tag: Some("blocked"),
     };
 
-    let claim_count = registry
+    let owner_count = registry
         .entries
         .iter()
-        .filter(|entry| entry.tcp.claim_tcp_outbound_leaf(leaf.clone()).is_some())
+        .filter(|entry| entry.support.name() == leaf.protocol_name())
         .count();
-    assert_eq!(claim_count, 0, "block should not be claimed by adapters");
+    assert_eq!(
+        owner_count, 0,
+        "block should not have a registered protocol owner"
+    );
 
     let claimed = registry
         .claim_outbound_leaf(leaf.clone())
@@ -208,13 +211,13 @@ fn registry_executes_adapter_claimed_tcp_leaf_operations() {
 
     impl ProtocolMetadata for FakeClaimedAdapter {
         fn descriptor(&self) -> ProtocolCapabilityDescriptor {
-            protocol_descriptor("fake-claimed", "test")
+            protocol_descriptor("socks5", "test")
         }
     }
 
     impl ProtocolSupportCapability for FakeClaimedAdapter {
         fn name(&self) -> &'static str {
-            "fake-claimed"
+            "socks5"
         }
 
         fn feature_name(&self) -> &'static str {
@@ -376,13 +379,13 @@ fn registry_executes_adapter_claimed_udp_leaf_operations() {
 
     impl ProtocolMetadata for FakeClaimedUdpAdapter {
         fn descriptor(&self) -> ProtocolCapabilityDescriptor {
-            protocol_descriptor("fake-claimed-udp", "test")
+            protocol_descriptor("socks5", "test")
         }
     }
 
     impl ProtocolSupportCapability for FakeClaimedUdpAdapter {
         fn name(&self) -> &'static str {
-            "fake-claimed-udp"
+            "socks5"
         }
 
         fn feature_name(&self) -> &'static str {
@@ -569,13 +572,13 @@ fn registry_executes_adapter_claimed_udp_packet_path_operations() {
 
     impl ProtocolMetadata for FakeClaimedUdpPacketPathAdapter {
         fn descriptor(&self) -> ProtocolCapabilityDescriptor {
-            protocol_descriptor("fake-claimed-udp-packet-path", "test")
+            protocol_descriptor("socks5", "test")
         }
     }
 
     impl ProtocolSupportCapability for FakeClaimedUdpPacketPathAdapter {
         fn name(&self) -> &'static str {
-            "fake-claimed-udp-packet-path"
+            "socks5"
         }
 
         fn feature_name(&self) -> &'static str {

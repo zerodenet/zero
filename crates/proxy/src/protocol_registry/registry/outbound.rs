@@ -280,6 +280,23 @@ impl<'a> ClaimedOutboundLeaf<'a> {
     }
 }
 
+fn claim_tcp_hooks<'a>(
+    entry: &RegisteredProtocolEntry,
+    leaf: ResolvedLeafOutbound<'a>,
+) -> Result<(OutboundLeafRuntime, ClaimedTcpHooks<'a>), EngineError> {
+    let Some(claimed) = entry.tcp.claim_tcp_outbound_leaf(leaf.clone()) else {
+        return Err(missing_claimed_tcp_leaf(entry.support.name(), &leaf));
+    };
+    let capability = Arc::from(claimed) as Arc<dyn ClaimedTcpOutboundLeaf<'a> + 'a>;
+    let runtime = capability.runtime();
+    Ok((
+        runtime,
+        ClaimedTcpHooks {
+            capability: Some(capability),
+        },
+    ))
+}
+
 #[cfg(any(
     feature = "socks5",
     feature = "vless",
@@ -290,12 +307,9 @@ impl<'a> ClaimedOutboundLeaf<'a> {
     feature = "mieru"
 ))]
 fn claim_udp_hooks<'a>(
-    entry: Option<&RegisteredProtocolEntry>,
+    entry: &RegisteredProtocolEntry,
     leaf: ResolvedLeafOutbound<'a>,
 ) -> Result<ClaimedUdpHooks<'a>, EngineError> {
-    let Some(entry) = entry else {
-        return Ok(ClaimedUdpHooks::default());
-    };
     let packet_path = entry
         .packet_path
         .as_ref()
@@ -422,22 +436,10 @@ pub(crate) fn block_leaf_runtime(tag: Option<&str>) -> OutboundLeafRuntime {
 }
 
 impl ProtocolRegistry {
-    fn claimed_tcp_entry<'a>(
-        &self,
-        leaf: ResolvedLeafOutbound<'a>,
-    ) -> Result<
-        (
-            &RegisteredProtocolEntry,
-            Box<dyn ClaimedTcpOutboundLeaf<'a> + 'a>,
-        ),
-        EngineError,
-    > {
-        for entry in &self.entries {
-            if let Some(claimed) = entry.tcp.claim_tcp_outbound_leaf(leaf.clone()) {
-                return Ok((entry, claimed));
-            }
-        }
-        Err(unsupported_outbound_leaf())
+    fn outbound_protocol_entry(&self, protocol: &str) -> Option<&RegisteredProtocolEntry> {
+        self.entries
+            .iter()
+            .find(|entry| entry.support.name() == protocol)
     }
 
     /// Single dispatch point: the inventory claims a [`ResolvedLeafOutbound`]
@@ -474,11 +476,11 @@ impl ProtocolRegistry {
             ));
         }
 
-        let (entry, claimed_tcp) = self.claimed_tcp_entry(leaf.clone())?;
-        let runtime = claimed_tcp.runtime();
-        let tcp = ClaimedTcpHooks {
-            capability: Some(Arc::from(claimed_tcp)),
-        };
+        let protocol = leaf.protocol_name();
+        let entry = self
+            .outbound_protocol_entry(protocol)
+            .ok_or_else(|| unsupported_outbound_leaf(protocol))?;
+        let (runtime, tcp) = claim_tcp_hooks(entry, leaf.clone())?;
         #[cfg(any(
             feature = "socks5",
             feature = "vless",
@@ -488,7 +490,7 @@ impl ProtocolRegistry {
             feature = "vmess",
             feature = "mieru"
         ))]
-        let udp = claim_udp_hooks(Some(entry), leaf.clone())?;
+        let udp = claim_udp_hooks(entry, leaf.clone())?;
         #[cfg(not(any(
             feature = "socks5",
             feature = "vless",
@@ -516,10 +518,10 @@ impl ProtocolRegistry {
     }
 }
 
-fn unsupported_outbound_leaf() -> EngineError {
+fn unsupported_outbound_leaf(protocol: &str) -> EngineError {
     EngineError::Io(std::io::Error::new(
         std::io::ErrorKind::Unsupported,
-        "no compiled adapter handles this outbound leaf",
+        format!("no compiled adapter claims outbound protocol `{protocol}`"),
     ))
 }
 
@@ -541,6 +543,13 @@ fn missing_udp_relay_capability() -> crate::runtime::udp_dispatch::FlowFailure {
         )),
         upstream: None,
     }
+}
+
+fn missing_claimed_tcp_leaf(protocol: &str, leaf: &ResolvedLeafOutbound<'_>) -> EngineError {
+    EngineError::Io(std::io::Error::other(format!(
+        "{protocol} adapter owns outbound leaf `{}` but did not provide a claimed TCP leaf",
+        leaf.protocol_name()
+    )))
 }
 
 #[cfg(any(

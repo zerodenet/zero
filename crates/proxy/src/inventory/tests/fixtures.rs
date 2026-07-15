@@ -241,13 +241,13 @@ impl FakeTcpCapability {
 
 impl ProtocolMetadata for FakeTcpCapability {
     fn descriptor(&self) -> ProtocolCapabilityDescriptor {
-        protocol_descriptor("fake-tcp", "test")
+        protocol_descriptor("direct", "test")
     }
 }
 
 impl ProtocolSupportCapability for FakeTcpCapability {
     fn name(&self) -> &'static str {
-        "fake-tcp"
+        "direct"
     }
 
     fn feature_name(&self) -> &'static str {
