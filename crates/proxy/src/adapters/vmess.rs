@@ -1,7 +1,9 @@
 #[cfg(feature = "vmess")]
 mod listener;
 use ::vmess::transport::{
-    VmessOutboundBuildOptionsRef, VmessOutboundLeaf, VmessOutboundOptionsRef, VmessTransportRuntime,
+    VmessInboundListenerRequest, VmessInboundOptionsRef, VmessInboundUserRef,
+    VmessOutboundBuildOptionsRef, VmessOutboundLeaf, VmessOutboundOptionsRef,
+    VmessTransportRuntime,
 };
 #[cfg(feature = "vmess")]
 use zero_config::InboundConfig;
@@ -189,7 +191,37 @@ impl InboundListenerCapability for VmessAdapter {
         Box<dyn crate::runtime::inbound_operation::PreparedInboundListenerOperation>,
         EngineError,
     > {
-        listener::prepare(inbound, source_dir)
+        let request = match &inbound.protocol {
+            InboundProtocolConfig::Vmess {
+                users,
+                tls,
+                ws,
+                grpc,
+            } => VmessInboundListenerRequest::from_options_refs(
+                source_dir,
+                VmessInboundOptionsRef {
+                    users: users.iter().map(|user| VmessInboundUserRef {
+                        id: user.id.as_str(),
+                        cipher: user.cipher.as_str(),
+                        credential_id: user.credential_id.as_deref(),
+                        principal_key: user.principal_key.as_deref(),
+                        up_bps: user.up_bps,
+                        down_bps: user.down_bps,
+                    }),
+                    tls: tls.as_deref(),
+                    ws: ws.as_deref(),
+                    grpc: grpc.as_deref(),
+                },
+            )
+            .map_err(EngineError::from)?,
+            _ => {
+                return Err(EngineError::Io(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "vmess inbound listener received non-vmess inbound config",
+                )));
+            }
+        };
+        Ok(listener::prepare(request))
     }
 }
 

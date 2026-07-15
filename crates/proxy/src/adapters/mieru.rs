@@ -1,4 +1,6 @@
-use ::mieru::transport::{MieruOutboundOptionsRef, MieruTransportLeaf};
+use ::mieru::transport::{
+    MieruInboundListenerRequest, MieruInboundUserRef, MieruOutboundOptionsRef, MieruTransportLeaf,
+};
 
 use zero_config::{InboundConfig, InboundProtocolConfig, OutboundProtocolConfig};
 use zero_engine::{EngineError, ResolvedLeafOutbound};
@@ -80,7 +82,23 @@ impl InboundListenerCapability for MieruAdapter {
         Box<dyn crate::runtime::inbound_operation::PreparedInboundListenerOperation>,
         EngineError,
     > {
-        self.prepare_inbound_listener_impl(inbound)
+        let profile = match &inbound.protocol {
+            InboundProtocolConfig::Mieru { users } => {
+                MieruInboundListenerRequest::from_options_refs(users.iter().map(|user| {
+                    MieruInboundUserRef {
+                        username: user.username.as_str(),
+                        password: user.password.as_str(),
+                    }
+                }))
+            }
+            _ => {
+                return Err(EngineError::Io(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "mieru inbound listener received non-mieru inbound config",
+                )));
+            }
+        };
+        Ok(inbound::prepare(profile))
     }
 }
 

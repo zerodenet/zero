@@ -151,6 +151,32 @@ fn transport_integrations_do_not_parse_top_level_inbound_protocol_enum() {
 }
 
 #[test]
+fn adapter_inbound_helpers_do_not_parse_top_level_inbound_protocol_enum() {
+    for relative in [
+        "adapters/vless/listener.rs",
+        "adapters/vmess/listener.rs",
+        "adapters/trojan/listener.rs",
+        "adapters/hysteria2/inbound.rs",
+        "adapters/socks5/inbound.rs",
+        "adapters/shadowsocks/inbound.rs",
+        "adapters/mieru/inbound.rs",
+    ] {
+        let source = read(&proxy_src().join(relative));
+        for forbidden in [
+            "InboundProtocolConfig",
+            "match &inbound.protocol",
+            "match inbound.protocol",
+            "InboundConfig",
+        ] {
+            assert!(
+                !source.contains(forbidden),
+                "{relative} must receive typed protocol-owned inbound values instead of `{forbidden}`"
+            );
+        }
+    }
+}
+
+#[test]
 fn generic_runtime_does_not_dispatch_protocol_config_variants() {
     assert_sources_exclude(
         &proxy_src().join("runtime"),
@@ -725,20 +751,8 @@ fn vless_adapter_uses_protocol_option_refs_instead_of_private_profile_constructo
 }
 
 #[test]
-fn vless_listener_adapter_uses_protocol_option_refs_directly() {
-    let listener = read(&proxy_src().join("adapters/vless/listener.rs"));
-    for forbidden in [
-        "VlessInboundProfile::from_config_users",
-        "VlessRealityServerProfile::from_config_server",
-        "VlessInboundListenerRequest::from_config_refs",
-        "VlessInboundListenerRequest::from_profile_refs",
-        "VlessTransportRuntime",
-    ] {
-        assert!(
-            !listener.contains(forbidden),
-            "adapters/vless/listener.rs must not construct VLESS inbound listener state via `{forbidden}`"
-        );
-    }
+fn vless_inbound_projection_happens_at_adapter_boundary() {
+    let adapter = read(&proxy_src().join("adapters/vless.rs"));
     for required in [
         "VlessInboundOptionsRef",
         "VlessInboundUserRef",
@@ -746,8 +760,26 @@ fn vless_listener_adapter_uses_protocol_option_refs_directly() {
         "VlessInboundListenerRequest::from_options_refs",
     ] {
         assert!(
-            listener.contains(required),
-            "adapters/vless/listener.rs should project directly through protocol-owned VLESS inbound option surface `{required}`"
+            adapter.contains(required),
+            "adapters/vless.rs should project through protocol-owned VLESS inbound option surface `{required}`"
+        );
+    }
+
+    let listener = read(&proxy_src().join("adapters/vless/listener.rs"));
+    for forbidden in [
+        "VlessInboundProfile::from_config_users",
+        "VlessRealityServerProfile::from_config_server",
+        "VlessInboundListenerRequest::from_config_refs",
+        "VlessInboundListenerRequest::from_profile_refs",
+        "VlessTransportRuntime",
+        "VlessInboundOptionsRef",
+        "VlessInboundUserRef",
+        "VlessRealityServerOptionsRef",
+        "VlessInboundListenerRequest::from_options_refs",
+    ] {
+        assert!(
+            !listener.contains(forbidden),
+            "adapters/vless/listener.rs must consume prepared VLESS listener requests instead of `{forbidden}`"
         );
     }
 }
@@ -769,27 +801,32 @@ fn vmess_adapter_uses_protocol_outbound_option_refs() {
 }
 
 #[test]
-fn vmess_listener_adapter_uses_protocol_option_refs_directly() {
-    let listener = read(&proxy_src().join("adapters/vmess/listener.rs"));
-    for forbidden in [
-        "VmessInboundProfile::from_config_users",
-        "VmessInboundListenerRequest::from_config_refs",
-        "VmessInboundListenerRequest::from_profile_refs",
-        "VmessTransportRuntime",
-    ] {
-        assert!(
-            !listener.contains(forbidden),
-            "adapters/vmess/listener.rs must not construct VMess inbound listener state via `{forbidden}`"
-        );
-    }
+fn vmess_inbound_projection_happens_at_adapter_boundary() {
+    let adapter = read(&proxy_src().join("adapters/vmess.rs"));
     for required in [
         "VmessInboundOptionsRef",
         "VmessInboundUserRef",
         "VmessInboundListenerRequest::from_options_refs",
     ] {
         assert!(
-            listener.contains(required),
-            "adapters/vmess/listener.rs should project directly through protocol-owned VMess inbound option surface `{required}`"
+            adapter.contains(required),
+            "adapters/vmess.rs should project through protocol-owned VMess inbound option surface `{required}`"
+        );
+    }
+
+    let listener = read(&proxy_src().join("adapters/vmess/listener.rs"));
+    for forbidden in [
+        "VmessInboundProfile::from_config_users",
+        "VmessInboundListenerRequest::from_config_refs",
+        "VmessInboundListenerRequest::from_profile_refs",
+        "VmessTransportRuntime",
+        "VmessInboundOptionsRef",
+        "VmessInboundUserRef",
+        "VmessInboundListenerRequest::from_options_refs",
+    ] {
+        assert!(
+            !listener.contains(forbidden),
+            "adapters/vmess/listener.rs must consume prepared VMess listener requests instead of `{forbidden}`"
         );
     }
 }
@@ -1058,20 +1095,31 @@ fn hysteria2_adapter_uses_protocol_outbound_option_refs() {
 }
 
 #[test]
-fn hysteria2_listener_adapter_uses_protocol_option_refs() {
+fn hysteria2_inbound_projection_happens_at_adapter_boundary() {
+    let adapter = read(&proxy_src().join("adapters/hysteria2.rs"));
+    for required in [
+        "Hysteria2InboundOptionsRef",
+        "Hysteria2AuthenticatedInboundProfile::from_options_refs",
+    ] {
+        assert!(
+            adapter.contains(required),
+            "adapters/hysteria2.rs should project through protocol-owned hysteria2 inbound option surface `{required}`"
+        );
+    }
+
     let listener = read(&proxy_src().join("adapters/hysteria2/inbound.rs"));
     let forbidden = "inbound_profile_from_options";
     assert!(
         !listener.contains(forbidden),
         "adapters/hysteria2/inbound.rs must not construct hysteria2 inbound profile via `{forbidden}`"
     );
-    for required in [
+    for forbidden in [
         "Hysteria2InboundOptionsRef",
         "Hysteria2AuthenticatedInboundProfile::from_options_refs",
     ] {
         assert!(
-            listener.contains(required),
-            "adapters/hysteria2/inbound.rs should project through protocol-owned hysteria2 option surface `{required}`"
+            !listener.contains(forbidden),
+            "adapters/hysteria2/inbound.rs must consume prepared hysteria2 profiles instead of `{forbidden}`"
         );
     }
 }
@@ -1317,20 +1365,31 @@ fn mieru_adapter_uses_protocol_outbound_option_refs() {
 }
 
 #[test]
-fn mieru_listener_adapter_uses_protocol_option_refs() {
+fn mieru_inbound_projection_happens_at_adapter_boundary() {
+    let adapter = read(&proxy_src().join("adapters/mieru.rs"));
+    for required in [
+        "MieruInboundUserRef",
+        "MieruInboundListenerRequest::from_options_refs",
+    ] {
+        assert!(
+            adapter.contains(required),
+            "adapters/mieru.rs should project through protocol-owned mieru inbound option surface `{required}`"
+        );
+    }
+
     let listener = read(&proxy_src().join("adapters/mieru/inbound.rs"));
     let forbidden = "inbound_listener_request_from_users";
     assert!(
         !listener.contains(forbidden),
         "adapters/mieru/inbound.rs must not construct mieru inbound listener state via `{forbidden}`"
     );
-    for required in [
+    for forbidden in [
         "MieruInboundUserRef",
         "MieruInboundListenerRequest::from_options_refs",
     ] {
         assert!(
-            listener.contains(required),
-            "adapters/mieru/inbound.rs should project through protocol-owned mieru option surface `{required}`"
+            !listener.contains(forbidden),
+            "adapters/mieru/inbound.rs must consume prepared mieru listener requests instead of `{forbidden}`"
         );
     }
 }
@@ -1355,21 +1414,35 @@ fn shadowsocks_adapter_uses_protocol_outbound_option_refs() {
 }
 
 #[test]
-fn shadowsocks_listener_adapter_uses_protocol_option_refs() {
+fn shadowsocks_inbound_projection_happens_at_adapter_boundary() {
+    let adapter = read(&proxy_src().join("adapters/shadowsocks.rs"));
+    for required in [
+        "ShadowsocksInboundOptionsRef",
+        "ShadowsocksInboundBindings::from_options_refs",
+    ] {
+        assert!(
+            adapter.contains(required),
+            "adapters/shadowsocks.rs should project through protocol-owned shadowsocks inbound option surface `{required}`"
+        );
+    }
+
     let listener = read(&proxy_src().join("adapters/shadowsocks/inbound.rs"));
     let forbidden = "inbound_listener_parts_from_options";
     assert!(
         !listener.contains(forbidden),
         "adapters/shadowsocks/inbound.rs must not construct shadowsocks inbound listener state via `{forbidden}`"
     );
-    for required in [
-        "ShadowsocksInboundBindings",
+    assert!(
+        listener.contains("ShadowsocksInboundBindings"),
+        "adapters/shadowsocks/inbound.rs should consume prepared shadowsocks bindings"
+    );
+    for forbidden in [
         "ShadowsocksInboundOptionsRef",
         "ShadowsocksInboundBindings::from_options_refs",
     ] {
         assert!(
-            listener.contains(required),
-            "adapters/shadowsocks/inbound.rs should project through protocol-owned shadowsocks option surface `{required}`"
+            !listener.contains(forbidden),
+            "adapters/shadowsocks/inbound.rs must consume prepared shadowsocks bindings instead of `{forbidden}`"
         );
     }
 }
@@ -1394,20 +1467,35 @@ fn socks5_adapter_uses_protocol_outbound_option_refs() {
 }
 
 #[test]
-fn socks5_listener_adapter_uses_protocol_option_refs() {
+fn socks5_inbound_projection_happens_at_adapter_boundary() {
+    let adapter = read(&proxy_src().join("adapters/socks5.rs"));
+    for required in [
+        "Socks5InboundUserRef",
+        "Socks5InboundAcceptor::from_options_refs",
+    ] {
+        assert!(
+            adapter.contains(required),
+            "adapters/socks5.rs should project through protocol-owned socks5 inbound option surface `{required}`"
+        );
+    }
+
     let listener = read(&proxy_src().join("adapters/socks5/inbound.rs"));
     let forbidden = "inbound_acceptor_from_users";
     assert!(
         !listener.contains(forbidden),
         "adapters/socks5/inbound.rs must not construct socks5 inbound acceptors via `{forbidden}`"
     );
-    for required in [
+    assert!(
+        listener.contains("Socks5InboundAcceptor"),
+        "adapters/socks5/inbound.rs should consume a prepared socks5 acceptor"
+    );
+    for forbidden in [
         "Socks5InboundUserRef",
         "Socks5InboundAcceptor::from_options_refs",
     ] {
         assert!(
-            listener.contains(required),
-            "adapters/socks5/inbound.rs should project through protocol-owned socks5 option surface `{required}`"
+            !listener.contains(forbidden),
+            "adapters/socks5/inbound.rs must consume prepared socks5 acceptors instead of `{forbidden}`"
         );
     }
 }
@@ -1432,26 +1520,30 @@ fn mixed_listener_adapter_uses_protocol_socks5_option_refs() {
 }
 
 #[test]
-fn trojan_listener_adapter_uses_protocol_option_refs() {
+fn trojan_inbound_projection_happens_at_adapter_boundary() {
+    let adapter = read(&proxy_src().join("adapters/trojan.rs"));
+    for required in [
+        "TrojanInboundOptionsRef",
+        "TrojanInboundListenerRequest::from_options_refs",
+    ] {
+        assert!(
+            adapter.contains(required),
+            "adapters/trojan.rs should project through protocol-owned Trojan inbound option surface `{required}`"
+        );
+    }
+
     let listener = read(&proxy_src().join("adapters/trojan/listener.rs"));
     for forbidden in [
         "TrojanInboundProfile::from_config_password",
         "TrojanInboundListenerRequest::from_config_refs",
         "TrojanInboundListenerRequest::from_profile_refs",
         "TrojanTransportRuntime",
-    ] {
-        assert!(
-            !listener.contains(forbidden),
-            "adapters/trojan/listener.rs must not rely on legacy Trojan inbound surface `{forbidden}`"
-        );
-    }
-    for required in [
         "TrojanInboundOptionsRef",
         "TrojanInboundListenerRequest::from_options_refs",
     ] {
         assert!(
-            listener.contains(required),
-            "adapters/trojan/listener.rs should project directly through protocol-owned Trojan option surface `{required}`"
+            !listener.contains(forbidden),
+            "adapters/trojan/listener.rs must consume prepared Trojan listener requests instead of `{forbidden}`"
         );
     }
 }

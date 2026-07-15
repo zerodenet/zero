@@ -1,7 +1,8 @@
 #[cfg(feature = "trojan")]
 mod listener;
 use ::trojan::transport::{
-    TrojanOutboundBuildOptionsRef, TrojanOutboundLeaf, TrojanOutboundOptionsRef,
+    TrojanInboundListenerRequest, TrojanInboundOptionsRef, TrojanOutboundBuildOptionsRef,
+    TrojanOutboundLeaf, TrojanOutboundOptionsRef,
 };
 #[cfg(feature = "trojan")]
 use zero_config::InboundConfig;
@@ -163,7 +164,23 @@ impl InboundListenerCapability for TrojanAdapter {
         Box<dyn crate::runtime::inbound_operation::PreparedInboundListenerOperation>,
         EngineError,
     > {
-        listener::prepare(inbound, source_dir)
+        let request = match &inbound.protocol {
+            InboundProtocolConfig::Trojan { password, tls, .. } => {
+                TrojanInboundListenerRequest::from_options_refs(
+                    source_dir,
+                    TrojanInboundOptionsRef { password },
+                    tls.as_ref(),
+                )
+                .map_err(EngineError::from)?
+            }
+            _ => {
+                return Err(EngineError::Io(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "trojan inbound listener received non-trojan inbound config",
+                )));
+            }
+        };
+        Ok(listener::prepare(request))
     }
 }
 

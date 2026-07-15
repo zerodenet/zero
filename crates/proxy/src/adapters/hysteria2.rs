@@ -1,8 +1,8 @@
 use async_trait::async_trait;
 
 use ::hysteria2::transport::{
-    Hysteria2InboundBindOptionsRef, Hysteria2InboundBindPlan, Hysteria2OutboundOptionsRef,
-    Hysteria2TransportLeaf,
+    Hysteria2AuthenticatedInboundProfile, Hysteria2InboundBindOptionsRef, Hysteria2InboundBindPlan,
+    Hysteria2InboundOptionsRef, Hysteria2OutboundOptionsRef, Hysteria2TransportLeaf,
 };
 use zero_config::{InboundConfig, InboundProtocolConfig, OutboundProtocolConfig};
 use zero_engine::{EngineError, ResolvedLeafOutbound};
@@ -122,7 +122,22 @@ impl InboundListenerCapability for Hysteria2Adapter {
         Box<dyn crate::runtime::inbound_operation::PreparedInboundListenerOperation>,
         EngineError,
     > {
-        self.prepare_inbound_listener_impl(inbound)
+        let profile = match &inbound.protocol {
+            InboundProtocolConfig::Hysteria2 { password, .. } => {
+                Hysteria2AuthenticatedInboundProfile::from_options_refs(
+                    Hysteria2InboundOptionsRef {
+                        password: password.as_str(),
+                    },
+                )
+            }
+            _ => {
+                return Err(EngineError::Io(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "hysteria2 inbound listener received non-hysteria2 inbound config",
+                )));
+            }
+        };
+        Ok(inbound::prepare(profile))
     }
 }
 

@@ -1,4 +1,7 @@
-use ::shadowsocks::transport::{ShadowsocksOutboundOptionsRef, ShadowsocksTransportLeaf};
+use ::shadowsocks::transport::{
+    ShadowsocksInboundBindings, ShadowsocksInboundOptionsRef, ShadowsocksOutboundOptionsRef,
+    ShadowsocksTransportLeaf,
+};
 use zero_config::{InboundConfig, InboundProtocolConfig, OutboundProtocolConfig};
 use zero_engine::{EngineError, ResolvedLeafOutbound};
 use zero_traits::{ProtocolCapabilityDescriptor, ProtocolMetadata};
@@ -86,7 +89,25 @@ impl InboundListenerCapability for ShadowsocksAdapter {
         Box<dyn crate::runtime::inbound_operation::PreparedInboundListenerOperation>,
         EngineError,
     > {
-        self.prepare_inbound_listener_impl(inbound)
+        let bindings = match &inbound.protocol {
+            InboundProtocolConfig::Shadowsocks {
+                password, cipher, ..
+            } => ShadowsocksInboundBindings::from_options_refs(ShadowsocksInboundOptionsRef {
+                cipher: cipher.as_str(),
+                password: password.as_str(),
+            })?,
+            _ => {
+                return Err(EngineError::Io(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "shadowsocks inbound listener received non-shadowsocks inbound config",
+                )));
+            }
+        };
+        Ok(inbound::prepare(
+            inbound.listen.address,
+            inbound.listen.port,
+            bindings,
+        ))
     }
 }
 

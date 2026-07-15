@@ -1,4 +1,6 @@
-use ::socks5::transport::{Socks5OutboundOptionsRef, Socks5TransportLeaf};
+use ::socks5::transport::{
+    Socks5InboundAcceptor, Socks5InboundUserRef, Socks5OutboundOptionsRef, Socks5TransportLeaf,
+};
 use zero_config::{InboundConfig, InboundProtocolConfig, OutboundProtocolConfig};
 use zero_engine::{EngineError, ResolvedLeafOutbound};
 use zero_traits::{ProtocolCapabilityDescriptor, ProtocolMetadata};
@@ -89,7 +91,26 @@ impl InboundListenerCapability for Socks5Adapter {
         Box<dyn crate::runtime::inbound_operation::PreparedInboundListenerOperation>,
         EngineError,
     > {
-        self.prepare_inbound_listener_impl(inbound)
+        let acceptor = match &inbound.protocol {
+            InboundProtocolConfig::Socks5 { users } => {
+                Socks5InboundAcceptor::from_options_refs(users.iter().map(|user| {
+                    Socks5InboundUserRef {
+                        username: user.username.as_str(),
+                        password: user.password.as_str(),
+                        principal_key: user.principal_key.as_deref(),
+                        up_bps: user.up_bps,
+                        down_bps: user.down_bps,
+                    }
+                }))
+            }
+            _ => {
+                return Err(EngineError::Io(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "socks5 inbound listener received non-socks5 inbound config",
+                )));
+            }
+        };
+        Ok(inbound::prepare(acceptor))
     }
 }
 
