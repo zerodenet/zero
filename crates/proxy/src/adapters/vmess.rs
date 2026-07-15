@@ -181,7 +181,7 @@ impl InboundListenerCapability for VmessAdapter {
         Box<dyn crate::runtime::inbound_operation::PreparedInboundListenerOperation>,
         EngineError,
     > {
-        listener::prepare(self.runtime.clone(), inbound, source_dir)
+        listener::prepare(inbound, source_dir)
     }
 }
 

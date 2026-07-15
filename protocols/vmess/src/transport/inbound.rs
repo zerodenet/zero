@@ -9,6 +9,8 @@ use zero_transport::profile::{OwnedGrpcProfile, OwnedH2Profile, OwnedWebSocketPr
 use zero_transport::tls;
 use zero_transport::RuntimeError;
 
+use super::options::{VmessInboundOptionsRef, VmessInboundUserRef};
+
 #[derive(Clone)]
 pub struct VmessInboundListenerRequest {
     profile: crate::inbound::VmessInboundProfile,
@@ -61,6 +63,26 @@ impl VmessInboundListenerRequest {
             grpc: grpc.map(OwnedGrpcProfile::from_profile),
             protocol_name,
         })
+    }
+
+    pub fn from_options_refs<'a, I, TTls, TWs, TGrpc>(
+        source_dir: Option<&Path>,
+        options: VmessInboundOptionsRef<'a, I, TTls, TWs, TGrpc>,
+    ) -> Result<Self, RuntimeError>
+    where
+        I: IntoIterator<Item = VmessInboundUserRef<'a>>,
+        TTls: ServerTlsProfile + ?Sized,
+        TWs: WebSocketTransportProfile + ?Sized,
+        TGrpc: GrpcTransportProfile + ?Sized,
+    {
+        let VmessInboundOptionsRef {
+            users,
+            tls,
+            ws,
+            grpc,
+        } = options;
+        let profile = crate::inbound::VmessInboundProfile::from_config_users(users)?;
+        Self::from_profile_refs(source_dir, profile, tls, ws, grpc)
     }
 
     pub fn protocol_name(&self) -> &'static str {

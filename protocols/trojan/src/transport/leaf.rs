@@ -46,7 +46,7 @@ impl TrojanOutboundLeaf {
         Self::new(tag, server, port, transport, protocol)
     }
 
-    pub(in crate::transport) fn from_options_refs(
+    pub fn from_options_refs(
         source_dir: Option<&Path>,
         options: TrojanOutboundBuildOptionsRef<'_>,
     ) -> Self {

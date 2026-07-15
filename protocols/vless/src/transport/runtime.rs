@@ -2,15 +2,12 @@ use std::path::Path;
 
 use zero_traits::{
     ClientTlsProfile, GrpcTransportProfile, H2TransportProfile, HttpUpgradeTransportProfile,
-    InboundFallbackProfile, ServerTlsProfile, SplitHttpTransportProfile, WebSocketTransportProfile,
+    SplitHttpTransportProfile, WebSocketTransportProfile,
 };
 
-use super::inbound::{VlessInboundBindPlan, VlessInboundListenerRequest};
+use super::inbound::VlessInboundBindPlan;
 use super::leaf::VlessOutboundLeaf;
-use super::options::{
-    VlessInboundOptionsRef, VlessInboundUserRef, VlessOutboundBuildOptionsRef,
-    VlessQuicBindOptionsRef,
-};
+use super::options::{VlessOutboundBuildOptionsRef, VlessQuicBindOptionsRef};
 use super::profile::{VlessQuicBindProfile, VlessQuicClientProfile, VlessRealityClientProfile};
 
 #[derive(Debug, Clone, Default)]
@@ -30,49 +27,6 @@ impl VlessTransportRuntime {
     ) -> VlessInboundBindPlan {
         let quic = quic.map(VlessQuicBindProfile::from);
         VlessInboundBindPlan::from_quic_profile(source_dir, quic.as_ref())
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    pub fn build_inbound_listener_request<'a, I, TTls, TWs, TGrpc, TH2, THttp, TSplit, TFallback>(
-        &self,
-        source_dir: Option<&Path>,
-        options: VlessInboundOptionsRef<'a, I, TTls, TWs, TGrpc, TH2, THttp, TSplit, TFallback>,
-    ) -> Result<VlessInboundListenerRequest, zero_transport::RuntimeError>
-    where
-        I: IntoIterator<Item = VlessInboundUserRef<'a>>,
-        TTls: ServerTlsProfile + ?Sized,
-        TWs: WebSocketTransportProfile + ?Sized,
-        TGrpc: GrpcTransportProfile + ?Sized,
-        TH2: H2TransportProfile + ?Sized,
-        THttp: HttpUpgradeTransportProfile + ?Sized,
-        TSplit: SplitHttpTransportProfile + ?Sized,
-        TFallback: InboundFallbackProfile + ?Sized,
-    {
-        let VlessInboundOptionsRef {
-            users,
-            reality,
-            tls,
-            ws,
-            grpc,
-            h2,
-            http_upgrade,
-            split_http,
-            fallback,
-        } = options;
-        let profile = crate::inbound::VlessInboundProfile::from_config_users(users)?;
-        let reality = reality.map(crate::reality::VlessRealityServerProfile::from);
-        VlessInboundListenerRequest::from_profile_refs(
-            source_dir,
-            profile,
-            reality,
-            tls,
-            ws,
-            grpc,
-            h2,
-            http_upgrade,
-            split_http,
-            fallback,
-        )
     }
 
     pub fn build_outbound_leaf<TTls, TWs, TGrpc, TH2, THttp, TSplit>(

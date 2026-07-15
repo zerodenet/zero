@@ -725,13 +725,14 @@ fn vless_adapter_uses_protocol_option_refs_instead_of_private_profile_constructo
 }
 
 #[test]
-fn vless_listener_adapter_uses_protocol_runtime_input_refs() {
+fn vless_listener_adapter_uses_protocol_option_refs_directly() {
     let listener = read(&proxy_src().join("adapters/vless/listener.rs"));
     for forbidden in [
         "VlessInboundProfile::from_config_users",
         "VlessRealityServerProfile::from_config_server",
         "VlessInboundListenerRequest::from_config_refs",
         "VlessInboundListenerRequest::from_profile_refs",
+        "VlessTransportRuntime",
     ] {
         assert!(
             !listener.contains(forbidden),
@@ -742,12 +743,11 @@ fn vless_listener_adapter_uses_protocol_runtime_input_refs() {
         "VlessInboundOptionsRef",
         "VlessInboundUserRef",
         "VlessRealityServerOptionsRef",
-        "VlessTransportRuntime",
-        "build_inbound_listener_request(",
+        "VlessInboundListenerRequest::from_options_refs",
     ] {
         assert!(
             listener.contains(required),
-            "adapters/vless/listener.rs should project through protocol-owned VLESS inbound runtime surface `{required}`"
+            "adapters/vless/listener.rs should project directly through protocol-owned VLESS inbound option surface `{required}`"
         );
     }
 }
@@ -769,12 +769,13 @@ fn vmess_adapter_uses_protocol_outbound_option_refs() {
 }
 
 #[test]
-fn vmess_listener_adapter_uses_protocol_runtime_input_refs() {
+fn vmess_listener_adapter_uses_protocol_option_refs_directly() {
     let listener = read(&proxy_src().join("adapters/vmess/listener.rs"));
     for forbidden in [
         "VmessInboundProfile::from_config_users",
         "VmessInboundListenerRequest::from_config_refs",
         "VmessInboundListenerRequest::from_profile_refs",
+        "VmessTransportRuntime",
     ] {
         assert!(
             !listener.contains(forbidden),
@@ -784,12 +785,11 @@ fn vmess_listener_adapter_uses_protocol_runtime_input_refs() {
     for required in [
         "VmessInboundOptionsRef",
         "VmessInboundUserRef",
-        "VmessTransportRuntime",
-        "build_inbound_listener_request(",
+        "VmessInboundListenerRequest::from_options_refs",
     ] {
         assert!(
             listener.contains(required),
-            "adapters/vmess/listener.rs should project through protocol-owned VMess inbound runtime surface `{required}`"
+            "adapters/vmess/listener.rs should project directly through protocol-owned VMess inbound option surface `{required}`"
         );
     }
 }
@@ -852,18 +852,21 @@ fn heavy_protocol_inbound_modules_do_not_keep_borrowed_tuple_surfaces() {
 
 #[test]
 fn heavy_protocol_transport_roots_expose_named_outbound_build_surfaces() {
-    for (relative, required) in [
+    for (relative, required, forbidden) in [
         (
             "protocols/vless/src/transport.rs",
             "VlessOutboundBuildOptionsRef",
+            None,
         ),
         (
             "protocols/vmess/src/transport.rs",
             "VmessOutboundBuildOptionsRef",
+            None,
         ),
         (
             "protocols/trojan/src/transport.rs",
             "TrojanOutboundBuildOptionsRef",
+            Some("TrojanTransportRuntime"),
         ),
     ] {
         let source = read(&workspace_root().join(relative));
@@ -871,42 +874,42 @@ fn heavy_protocol_transport_roots_expose_named_outbound_build_surfaces() {
             source.contains(required),
             "{relative} should expose named outbound build surface `{required}`"
         );
+        if let Some(forbidden) = forbidden {
+            assert!(
+                !source.contains(forbidden),
+                "{relative} must not re-export transitional runtime wrapper `{forbidden}`"
+            );
+        }
     }
 }
 
 #[test]
-fn trojan_adapter_uses_protocol_runtime_input_refs() {
+fn trojan_adapter_uses_protocol_option_refs_directly() {
     let adapter = read(&proxy_src().join("adapters/trojan.rs"));
     for forbidden in [
         "TrojanOutboundLeaf::from_config_refs",
-        "TrojanOutboundLeaf::from_options_refs",
+        "TrojanTransportRuntime",
     ] {
         assert!(
             !adapter.contains(forbidden),
-            "adapters/trojan.rs must not construct Trojan outbound leaves via `{forbidden}`"
+            "adapters/trojan.rs must not rely on legacy Trojan outbound surface `{forbidden}`"
         );
     }
     for required in [
-        "TrojanTransportRuntime",
         "TrojanOutboundBuildOptionsRef",
         "TrojanOutboundOptionsRef",
-        "build_outbound_leaf(",
+        "TrojanOutboundLeaf::from_options_refs",
     ] {
         assert!(
             adapter.contains(required),
-            "adapters/trojan.rs should project through protocol-owned Trojan runtime surface `{required}`"
+            "adapters/trojan.rs should project directly through protocol-owned Trojan option surface `{required}`"
         );
     }
 }
 
 #[test]
-fn heavy_protocol_transport_runtimes_use_internal_profile_constructors() {
+fn carrier_rich_protocol_transport_runtimes_keep_outbound_profile_constructors_internal() {
     for (relative, required, forbidden) in [
-        (
-            "protocols/vless/src/transport/runtime.rs",
-            "VlessInboundListenerRequest::from_profile_refs",
-            "VlessInboundListenerRequest::from_config_refs",
-        ),
         (
             "protocols/vless/src/transport/runtime.rs",
             "VlessOutboundLeaf::from_profile_refs",
@@ -914,23 +917,8 @@ fn heavy_protocol_transport_runtimes_use_internal_profile_constructors() {
         ),
         (
             "protocols/vmess/src/transport/runtime.rs",
-            "VmessInboundListenerRequest::from_profile_refs",
-            "VmessInboundListenerRequest::from_config_refs",
-        ),
-        (
-            "protocols/vmess/src/transport/runtime.rs",
             "VmessOutboundLeaf::from_profile_refs",
             "VmessOutboundLeaf::from_config_refs",
-        ),
-        (
-            "protocols/trojan/src/transport/runtime.rs",
-            "TrojanInboundListenerRequest::from_options_refs",
-            "TrojanInboundListenerRequest::from_config_refs",
-        ),
-        (
-            "protocols/trojan/src/transport/runtime.rs",
-            "TrojanOutboundLeaf::from_options_refs",
-            "TrojanOutboundLeaf::from_config_refs",
         ),
     ] {
         let source = read(&workspace_root().join(relative));
@@ -966,11 +954,11 @@ fn heavy_protocol_transport_files_do_not_expose_public_config_constructors() {
         ),
         (
             "protocols/trojan/src/transport/inbound.rs",
-            "pub(in crate::transport) fn from_options_refs",
+            "pub fn from_options_refs",
         ),
         (
             "protocols/trojan/src/transport/leaf.rs",
-            "pub(in crate::transport) fn from_options_refs",
+            "pub fn from_options_refs",
         ),
     ] {
         let source = read(&workspace_root().join(relative));
@@ -981,6 +969,30 @@ fn heavy_protocol_transport_files_do_not_expose_public_config_constructors() {
         assert!(
             !source.contains("pub fn from_config_refs"),
             "{relative} must not expose legacy public config constructor `pub fn from_config_refs`"
+        );
+    }
+}
+
+#[test]
+fn heavy_protocol_inbound_transport_requests_expose_public_option_ref_constructors() {
+    for (relative, required) in [
+        (
+            "protocols/vless/src/transport/inbound.rs",
+            "pub fn from_options_refs",
+        ),
+        (
+            "protocols/vmess/src/transport/inbound.rs",
+            "pub fn from_options_refs",
+        ),
+        (
+            "protocols/trojan/src/transport/inbound.rs",
+            "pub fn from_options_refs",
+        ),
+    ] {
+        let source = read(&workspace_root().join(relative));
+        assert!(
+            source.contains(required),
+            "{relative} should expose typed public option constructor `{required}`"
         );
     }
 }
@@ -1404,21 +1416,20 @@ fn trojan_listener_adapter_uses_protocol_option_refs() {
         "TrojanInboundProfile::from_config_password",
         "TrojanInboundListenerRequest::from_config_refs",
         "TrojanInboundListenerRequest::from_profile_refs",
-        "TrojanInboundListenerRequest::from_options_refs",
+        "TrojanTransportRuntime",
     ] {
         assert!(
             !listener.contains(forbidden),
-            "adapters/trojan/listener.rs must not construct Trojan inbound listener state via `{forbidden}`"
+            "adapters/trojan/listener.rs must not rely on legacy Trojan inbound surface `{forbidden}`"
         );
     }
     for required in [
-        "TrojanTransportRuntime",
         "TrojanInboundOptionsRef",
-        "build_inbound_listener_request(",
+        "TrojanInboundListenerRequest::from_options_refs",
     ] {
         assert!(
             listener.contains(required),
-            "adapters/trojan/listener.rs should project through protocol-owned Trojan runtime surface `{required}`"
+            "adapters/trojan/listener.rs should project directly through protocol-owned Trojan option surface `{required}`"
         );
     }
 }

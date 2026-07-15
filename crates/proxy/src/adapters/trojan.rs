@@ -2,7 +2,6 @@
 mod listener;
 use ::trojan::transport::{
     TrojanOutboundBuildOptionsRef, TrojanOutboundLeaf, TrojanOutboundOptionsRef,
-    TrojanTransportRuntime,
 };
 #[cfg(feature = "trojan")]
 use zero_config::InboundConfig;
@@ -29,9 +28,7 @@ use crate::runtime::udp_flow::managed::{
 
 #[cfg(feature = "trojan")]
 #[derive(Debug, Default)]
-pub(crate) struct TrojanAdapter {
-    runtime: TrojanTransportRuntime,
-}
+pub(crate) struct TrojanAdapter;
 
 #[cfg(feature = "trojan")]
 #[derive(Clone, Copy)]
@@ -102,15 +99,19 @@ impl TrojanAdapter {
         let runtime = proxy_leaf_runtime(&leaf, TCP_PATH)?;
         let projection = TrojanOutboundProjection::from_leaf(leaf)?;
         let endpoint = Some(projection.endpoint());
-        let tcp_runtime = self.runtime.clone();
-        let udp_runtime = self.runtime.clone();
         Some(OutboundLeafClaim {
             runtime: runtime.clone(),
             tcp: claim_transport_tcp_leaf(endpoint, runtime, move |source_dir| {
-                tcp_runtime.build_outbound_leaf(source_dir, projection.build_options())
+                Ok::<TrojanOutboundLeaf, zero_core::Error>(TrojanOutboundLeaf::from_options_refs(
+                    source_dir,
+                    projection.build_options(),
+                ))
             }),
             udp: Some(claim_transport_udp_leaf(endpoint, move |source_dir| {
-                udp_runtime.build_outbound_leaf(source_dir, projection.build_options())
+                Ok::<TrojanOutboundLeaf, zero_core::Error>(TrojanOutboundLeaf::from_options_refs(
+                    source_dir,
+                    projection.build_options(),
+                ))
             })),
             packet_path: None,
         })
@@ -162,7 +163,7 @@ impl InboundListenerCapability for TrojanAdapter {
         Box<dyn crate::runtime::inbound_operation::PreparedInboundListenerOperation>,
         EngineError,
     > {
-        listener::prepare(self.runtime.clone(), inbound, source_dir)
+        listener::prepare(inbound, source_dir)
     }
 }
 

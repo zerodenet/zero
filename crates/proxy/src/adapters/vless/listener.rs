@@ -1,6 +1,6 @@
 use ::vless::transport::{
     VlessInboundListenerRequest, VlessInboundOptionsRef, VlessInboundUserRef,
-    VlessRealityServerOptionsRef, VlessTransportRuntime,
+    VlessRealityServerOptionsRef,
 };
 use zero_config::{InboundConfig, InboundProtocolConfig};
 use zero_engine::EngineError;
@@ -12,7 +12,6 @@ use crate::runtime::inbound_route::RecordedProtocolMuxRouteDefaults;
 use crate::runtime::tcp_ingress::ClientResponseInboundProtocol;
 
 pub(super) fn prepare(
-    runtime: VlessTransportRuntime,
     inbound: InboundConfig,
     source_dir: Option<&std::path::Path>,
 ) -> Result<Box<dyn crate::runtime::inbound_operation::PreparedInboundListenerOperation>, EngineError>
@@ -29,36 +28,35 @@ pub(super) fn prepare(
             split_http,
             fallback,
             ..
-        } => runtime
-            .build_inbound_listener_request(
-                source_dir,
-                VlessInboundOptionsRef {
-                    users: users.iter().map(|user| VlessInboundUserRef {
-                        id: user.id.as_str(),
-                        flow: user.flow.as_deref(),
-                        credential_id: user.credential_id.as_deref(),
-                        principal_key: user.principal_key.as_deref(),
-                        up_bps: user.up_bps,
-                        down_bps: user.down_bps,
+        } => VlessInboundListenerRequest::from_options_refs(
+            source_dir,
+            VlessInboundOptionsRef {
+                users: users.iter().map(|user| VlessInboundUserRef {
+                    id: user.id.as_str(),
+                    flow: user.flow.as_deref(),
+                    credential_id: user.credential_id.as_deref(),
+                    principal_key: user.principal_key.as_deref(),
+                    up_bps: user.up_bps,
+                    down_bps: user.down_bps,
+                }),
+                reality: reality
+                    .as_deref()
+                    .map(|reality| VlessRealityServerOptionsRef {
+                        private_key: reality.private_key.as_str(),
+                        short_ids: reality.short_ids.as_slice(),
+                        server_name: reality.server_name.as_deref(),
+                        cipher_suites: reality.cipher_suites.as_slice(),
                     }),
-                    reality: reality
-                        .as_deref()
-                        .map(|reality| VlessRealityServerOptionsRef {
-                            private_key: reality.private_key.as_str(),
-                            short_ids: reality.short_ids.as_slice(),
-                            server_name: reality.server_name.as_deref(),
-                            cipher_suites: reality.cipher_suites.as_slice(),
-                        }),
-                    tls: tls.as_deref(),
-                    ws: ws.as_deref(),
-                    grpc: grpc.as_deref(),
-                    h2: h2.as_deref(),
-                    http_upgrade: http_upgrade.as_deref(),
-                    split_http: split_http.as_deref(),
-                    fallback: fallback.as_deref(),
-                },
-            )
-            .map_err(EngineError::from)?,
+                tls: tls.as_deref(),
+                ws: ws.as_deref(),
+                grpc: grpc.as_deref(),
+                h2: h2.as_deref(),
+                http_upgrade: http_upgrade.as_deref(),
+                split_http: split_http.as_deref(),
+                fallback: fallback.as_deref(),
+            },
+        )
+        .map_err(EngineError::from)?,
         _ => {
             return Err(EngineError::Io(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,

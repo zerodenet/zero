@@ -14,6 +14,8 @@ mod bind;
 mod carrier;
 mod plan;
 
+use super::options::{VlessInboundOptionsRef, VlessInboundUserRef};
+
 pub use bind::VlessInboundBindPlan;
 use plan::{accept_vless_stream_route, OwnedVlessInboundTransportPlan};
 
@@ -91,6 +93,48 @@ impl VlessInboundListenerRequest {
             transport,
             fallback.map(OwnedInboundFallbackProfile::from_profile),
         ))
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn from_options_refs<'a, I, TTls, TWs, TGrpc, TH2, THttp, TSplit, TFallback>(
+        source_dir: Option<&Path>,
+        options: VlessInboundOptionsRef<'a, I, TTls, TWs, TGrpc, TH2, THttp, TSplit, TFallback>,
+    ) -> Result<Self, RuntimeError>
+    where
+        I: IntoIterator<Item = VlessInboundUserRef<'a>>,
+        TTls: ServerTlsProfile + ?Sized,
+        TWs: WebSocketTransportProfile + ?Sized,
+        TGrpc: GrpcTransportProfile + ?Sized,
+        TH2: H2TransportProfile + ?Sized,
+        THttp: HttpUpgradeTransportProfile + ?Sized,
+        TSplit: SplitHttpTransportProfile + ?Sized,
+        TFallback: InboundFallbackProfile + ?Sized,
+    {
+        let VlessInboundOptionsRef {
+            users,
+            reality,
+            tls,
+            ws,
+            grpc,
+            h2,
+            http_upgrade,
+            split_http,
+            fallback,
+        } = options;
+        let profile = crate::inbound::VlessInboundProfile::from_config_users(users)?;
+        let reality = reality.map(crate::reality::VlessRealityServerProfile::from);
+        Self::from_profile_refs(
+            source_dir,
+            profile,
+            reality,
+            tls,
+            ws,
+            grpc,
+            h2,
+            http_upgrade,
+            split_http,
+            fallback,
+        )
     }
 
     pub fn protocol_name(&self) -> &'static str {
