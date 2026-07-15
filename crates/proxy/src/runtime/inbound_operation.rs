@@ -29,7 +29,7 @@ impl InboundConnectionContext {
     {
         crate::runtime::udp_association::run_udp_association_loop(
             crate::runtime::udp_association::UdpAssociationLoopRequest {
-                proxy: &self.proxy,
+                runtime: crate::runtime::udp_ingress::UdpIngressRuntime::from_proxy(&self.proxy),
                 client: &mut client,
                 inbound_tag: &self.inbound_tag,
                 relay,

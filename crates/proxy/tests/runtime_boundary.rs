@@ -804,6 +804,40 @@ fn udp_delivery_helpers_use_runtime_services_instead_of_proxy() {
 }
 
 #[test]
+fn udp_ingress_runtime_collapses_proxy_and_services_for_session_loops() {
+    let ingress = read(&proxy_src().join("runtime/udp_ingress.rs"));
+    assert!(ingress.contains("struct UdpIngressRuntime"));
+    assert!(ingress.contains("services: UdpRuntimeServices"));
+
+    let association = read(&proxy_src().join("runtime/udp_association/contract.rs"));
+    assert!(association.contains("struct UdpAssociationDatagramRequest"));
+    assert!(association.contains("runtime: &'a UdpIngressRuntime"));
+    assert!(!association.contains("use crate::runtime::Proxy"));
+    assert!(!association.contains("proxy: &Proxy"));
+    assert!(!association.contains("services: &UdpRuntimeServices"));
+
+    for relative in [
+        "runtime/udp_association/lifecycle.rs",
+        "runtime/datagram_udp/lifecycle.rs",
+        "runtime/packet_session_udp/lifecycle.rs",
+    ] {
+        let source = read(&proxy_src().join(relative));
+        assert!(
+            source.contains("UdpIngressRuntime"),
+            "{relative} must route inbound UDP through the shared ingress runtime context"
+        );
+        assert!(
+            !source.contains("UdpRuntimeServices::from_proxy(proxy)"),
+            "{relative} must not rebuild services inline from raw Proxy"
+        );
+        assert!(
+            !source.contains("dispatch_inbound_udp_packet(proxy"),
+            "{relative} must not call the raw inbound UDP helper directly"
+        );
+    }
+}
+
+#[test]
 fn inventory_tcp_relay_root_is_not_a_proxy_impl_bucket() {
     let relay = read(&proxy_src().join("inventory/tcp/relay.rs"));
     assert!(!relay.contains("impl Proxy"));

@@ -7,7 +7,6 @@ use super::contract::{
     PacketSessionUdpFailurePolicy, PacketSessionUdpHandler, PacketSessionUdpReadFailureAction,
     PacketSessionUdpReadResult, PacketSessionUdpRelayRequest,
 };
-use crate::protocol_registry::UdpRuntimeServices;
 #[cfg(feature = "socks5")]
 use crate::runtime::udp_delivery::write_upstream_response;
 use crate::runtime::udp_delivery::{
@@ -16,8 +15,7 @@ use crate::runtime::udp_delivery::{
 #[cfg(feature = "socks5")]
 use crate::runtime::udp_delivery::{record_upstream_udp_response_received, wait_for_upstream_idle};
 use crate::runtime::udp_delivery::{write_chain_response, write_direct_response};
-use crate::runtime::udp_dispatch::UdpDispatch;
-use crate::runtime::udp_ingress::dispatch_inbound_udp_packet;
+use crate::runtime::udp_ingress::UdpIngressRuntime;
 use crate::runtime::Proxy;
 
 pub(crate) async fn run_packet_session_udp_relay<H>(
@@ -35,7 +33,8 @@ where
         failure_policy,
     } = request;
 
-    let mut dispatch = match UdpDispatch::new(inbound_tag, &proxy.protocols).await {
+    let runtime = UdpIngressRuntime::from_proxy(proxy);
+    let mut dispatch = match runtime.new_dispatch(inbound_tag).await {
         Ok(dispatch) => dispatch,
         Err(error) => {
             return handle_runtime_failure(
@@ -49,9 +48,8 @@ where
             .await;
         }
     };
-    let services = UdpRuntimeServices::from_proxy(proxy);
 
-    let timeout = services.udp_upstream_idle_timeout();
+    let timeout = runtime.services().udp_upstream_idle_timeout();
     let mut last_activity = TokioInstant::now();
     let mut direct_buf = vec![0_u8; 64 * 1024];
     #[cfg(feature = "socks5")]
@@ -80,13 +78,9 @@ where
                 match read {
                     Ok(PacketSessionUdpReadResult::Dispatch(inbound_dispatch)) => {
                         last_activity = TokioInstant::now();
-                        if let Err(error) = dispatch_inbound_udp_packet(
-                            proxy,
-                            &mut dispatch,
-                            &inbound_dispatch,
-                            auth.as_ref(),
-                        )
-                        .await
+                        if let Err(error) = runtime
+                            .dispatch_inbound_packet(&mut dispatch, &inbound_dispatch, auth.as_ref())
+                            .await
                         {
                             warn!(error = %error, protocol = protocol, "packet session udp dispatch failed");
                         }
@@ -111,7 +105,7 @@ where
                     Ok((n, sender)) => {
                         last_activity = TokioInstant::now();
                         let response = record_direct_udp_response_parts(
-                            &services,
+                            runtime.services(),
                             &dispatch,
                             sender,
                             &direct_buf[..n],
@@ -156,7 +150,7 @@ where
                     Ok(pkt) => {
                         last_activity = TokioInstant::now();
                         let response = record_upstream_udp_response_received(
-                            &services,
+                            runtime.services(),
                             &mut dispatch,
                             timeout,
                             pkt,
@@ -191,8 +185,13 @@ where
                 match chain_result {
                     Ok(Ok((target, port, payload, session_id))) => {
                         last_activity = TokioInstant::now();
-                        let response =
-                            record_chain_udp_response_parts(&services, target, port, payload, session_id);
+                        let response = record_chain_udp_response_parts(
+                            runtime.services(),
+                            target,
+                            port,
+                            payload,
+                            session_id,
+                        );
                         if let Err(error) = write_chain_response(&response, || async {
                             handler
                                 .write_response_for_target(
@@ -235,12 +234,10 @@ where
                 match read {
                     Ok(PacketSessionUdpReadResult::Dispatch(inbound_dispatch)) => {
                         last_activity = TokioInstant::now();
-                        if let Err(error) = dispatch_inbound_udp_packet(
-                            proxy,
-                            &mut dispatch,
-                            &inbound_dispatch,
-                            auth.as_ref(),
-                        ).await {
+                        if let Err(error) = runtime
+                            .dispatch_inbound_packet(&mut dispatch, &inbound_dispatch, auth.as_ref())
+                            .await
+                        {
                             warn!(error = %error, protocol = protocol, "packet session udp dispatch failed");
                         }
                     }
@@ -259,7 +256,12 @@ where
                 match recv {
                     Ok((n, sender)) => {
                         last_activity = TokioInstant::now();
-                        let response = record_direct_udp_response_parts(&services, &dispatch, sender, &direct_buf[..n]);
+                        let response = record_direct_udp_response_parts(
+                            runtime.services(),
+                            &dispatch,
+                            sender,
+                            &direct_buf[..n],
+                        );
                         if let Err(error) = write_direct_response(&response, || async {
                             handler.write_response_for_target(&response.target, response.port, response.payload).await
                         }).await {
@@ -281,7 +283,13 @@ where
                 match chain_result {
                     Ok(Ok((target, port, payload, session_id))) => {
                         last_activity = TokioInstant::now();
-                        let response = record_chain_udp_response_parts(&services, target, port, payload, session_id);
+                        let response = record_chain_udp_response_parts(
+                            runtime.services(),
+                            target,
+                            port,
+                            payload,
+                            session_id,
+                        );
                         if let Err(error) = write_chain_response(&response, || async {
                             handler.write_response_for_target(&response.target, response.port, &response.payload).await
                         }).await {

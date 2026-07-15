@@ -3,7 +3,6 @@ use zero_core::{DatagramUdpResponder, InboundDatagramUdpRelay, InboundUdpDispatc
 use zero_engine::EngineError;
 
 use super::contract::DatagramUdpRelayRequest;
-use crate::protocol_registry::UdpRuntimeServices;
 #[cfg(feature = "socks5")]
 use crate::runtime::udp_delivery::write_optional_upstream_response;
 use crate::runtime::udp_delivery::{
@@ -13,7 +12,7 @@ use crate::runtime::udp_delivery::{
 use crate::runtime::udp_delivery::{record_upstream_udp_response_received, wait_for_upstream_idle};
 use crate::runtime::udp_delivery::{write_optional_chain_response, write_optional_direct_response};
 use crate::runtime::udp_dispatch::UdpDispatch;
-use crate::runtime::udp_ingress::dispatch_inbound_udp_packet;
+use crate::runtime::udp_ingress::UdpIngressRuntime;
 use crate::runtime::Proxy;
 
 type ChainUdpResponseResult = Result<
@@ -61,8 +60,8 @@ where
         poll_upstream,
         auth,
     } = request;
-    let mut dispatch = UdpDispatch::new(inbound_tag, &proxy.protocols).await?;
-    let services = UdpRuntimeServices::from_proxy(proxy);
+    let runtime = UdpIngressRuntime::from_proxy(proxy);
+    let mut dispatch = runtime.new_dispatch(inbound_tag).await?;
     let mut direct_buf = vec![0_u8; 64 * 1024];
     #[cfg(feature = "socks5")]
     let mut upstream_buf = vec![0_u8; 64 * 1024];
@@ -76,14 +75,14 @@ where
                 dispatch.poll_refs();
             select! {
                 read = responder.read_inbound_dispatch(&source) => {
-                    if !process_datagram_read(proxy, &mut dispatch, &mut responder, auth.as_ref(), read).await {
+                    if !process_datagram_read(&runtime, &mut dispatch, &mut responder, auth.as_ref(), read).await {
                         break;
                     }
                 }
                 recv = direct_sock.recv_from_addr(&mut direct_buf) => {
                     let (n, sender) = recv?;
                     let response =
-                        record_direct_udp_response_parts(&services, &dispatch, sender, &direct_buf[..n]);
+                        record_direct_udp_response_parts(runtime.services(), &dispatch, sender, &direct_buf[..n]);
                     let _ = write_optional_direct_response(&response, || async {
                         responder
                             .write_response_for_session(
@@ -101,9 +100,9 @@ where
                     match upstream {
                         Ok(pkt) => {
                             let response = record_upstream_udp_response_received(
-                                &services,
+                                runtime.services(),
                                 &mut dispatch,
-                                services.udp_upstream_idle_timeout(),
+                                runtime.services().udp_upstream_idle_timeout(),
                                 pkt,
                             );
                             let _ = write_optional_upstream_response(&response, || async {
@@ -124,21 +123,21 @@ where
                 }
                 _ = wait_for_upstream_idle(upstream_idle_deadline) => {}
                 Some(chain_result) = chain_tasks.join_next() => {
-                    handle_chain_result(&services, &source, &mut responder, chain_result).await;
+                    handle_chain_result(&runtime, &source, &mut responder, chain_result).await;
                 }
             }
         } else {
             let (direct_sock, chain_tasks) = dispatch.poll_sockets();
             select! {
                 read = responder.read_inbound_dispatch(&source) => {
-                    if !process_datagram_read(proxy, &mut dispatch, &mut responder, auth.as_ref(), read).await {
+                    if !process_datagram_read(&runtime, &mut dispatch, &mut responder, auth.as_ref(), read).await {
                         break;
                     }
                 }
                 recv = direct_sock.recv_from_addr(&mut direct_buf) => {
                     let (n, sender) = recv?;
                     let response =
-                        record_direct_udp_response_parts(&services, &dispatch, sender, &direct_buf[..n]);
+                        record_direct_udp_response_parts(runtime.services(), &dispatch, sender, &direct_buf[..n]);
                     let _ = write_optional_direct_response(&response, || async {
                         responder
                             .write_response_for_session(
@@ -153,7 +152,7 @@ where
                     .await;
                 }
                 Some(chain_result) = chain_tasks.join_next() => {
-                    handle_chain_result(&services, &source, &mut responder, chain_result).await;
+                    handle_chain_result(&runtime, &source, &mut responder, chain_result).await;
                 }
             }
         }
@@ -162,14 +161,14 @@ where
             let (direct_sock, chain_tasks) = dispatch.poll_sockets();
             select! {
                 read = responder.read_inbound_dispatch(&source) => {
-                    if !process_datagram_read(proxy, &mut dispatch, &mut responder, auth.as_ref(), read).await {
+                    if !process_datagram_read(&runtime, &mut dispatch, &mut responder, auth.as_ref(), read).await {
                         break;
                     }
                 }
                 recv = direct_sock.recv_from_addr(&mut direct_buf) => {
                     let (n, sender) = recv?;
                     let response =
-                        record_direct_udp_response_parts(&services, &dispatch, sender, &direct_buf[..n]);
+                        record_direct_udp_response_parts(runtime.services(), &dispatch, sender, &direct_buf[..n]);
                     let _ = write_optional_direct_response(&response, || async {
                         responder
                             .write_response_for_session(
@@ -184,7 +183,7 @@ where
                     .await;
                 }
                 Some(chain_result) = chain_tasks.join_next() => {
-                    handle_chain_result(&services, &source, &mut responder, chain_result).await;
+                    handle_chain_result(&runtime, &source, &mut responder, chain_result).await;
                 }
             }
         }
@@ -198,7 +197,7 @@ where
 }
 
 async fn process_datagram_read<S, R>(
-    proxy: &Proxy,
+    runtime: &UdpIngressRuntime,
     dispatch: &mut UdpDispatch,
     responder: &mut R,
     request_auth: Option<&SessionAuth>,
@@ -217,7 +216,10 @@ where
         }
     };
     let auth = request_auth.or_else(|| responder.auth());
-    match dispatch_inbound_udp_packet(proxy, dispatch, &inbound_dispatch, auth).await {
+    match runtime
+        .dispatch_inbound_packet(dispatch, &inbound_dispatch, auth)
+        .await
+    {
         Ok(session_id) => responder.on_dispatch_success(session_id, &inbound_dispatch),
         Err(error) => tracing::warn!(error = %error, "datagram udp dispatch failed"),
     }
@@ -225,7 +227,7 @@ where
 }
 
 async fn handle_chain_result<S, R>(
-    services: &UdpRuntimeServices,
+    runtime: &UdpIngressRuntime,
     source: &S,
     responder: &mut R,
     chain_result: ChainUdpResponseResult,
@@ -235,8 +237,13 @@ async fn handle_chain_result<S, R>(
 {
     match chain_result {
         Ok(Ok((target, port, payload, session_id))) => {
-            let response =
-                record_chain_udp_response_parts(services, target, port, payload, session_id);
+            let response = record_chain_udp_response_parts(
+                runtime.services(),
+                target,
+                port,
+                payload,
+                session_id,
+            );
             let _ = write_optional_chain_response(&response, || async {
                 responder
                     .write_response_for_session(

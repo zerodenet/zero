@@ -7,16 +7,13 @@ use zero_core::{
 };
 use zero_engine::EngineError;
 use zero_platform_tokio::TokioDatagramSocket;
-use zero_traits::DnsResolver;
 
-use crate::protocol_registry::UdpRuntimeServices;
 use crate::runtime::udp_delivery::write_direct_response as write_direct_udp_response;
 use crate::runtime::udp_delivery::{
     record_direct_udp_response_parts, UdpChainResponseParts, UdpUpstreamResponseParts,
 };
 use crate::runtime::udp_dispatch::UdpDispatch;
-use crate::runtime::udp_ingress::dispatch_inbound_udp_packet;
-use crate::runtime::Proxy;
+use crate::runtime::udp_ingress::UdpIngressRuntime;
 use crate::transport::{MeteredStream, StreamTraffic};
 
 enum UdpAssociationDispatchOutcome {
@@ -31,8 +28,7 @@ enum UdpAssociationDispatchOutcome {
 }
 
 struct UdpAssociationDispatchBridge<'a> {
-    proxy: &'a Proxy,
-    services: UdpRuntimeServices,
+    runtime: &'a UdpIngressRuntime,
     dispatch: &'a mut UdpDispatch,
     pending_control_traffic: &'a mut StreamTraffic,
     outcome: UdpAssociationDispatchOutcome,
@@ -42,7 +38,7 @@ impl InboundUdpAssociationDispatcher for UdpAssociationDispatchBridge<'_> {
     type Error = EngineError;
 
     async fn dispatch_local_dns(&mut self, domain: &str) -> Result<(), Self::Error> {
-        let _ = self.proxy.resolver.resolve(domain).await;
+        self.runtime.resolve_local_dns(domain).await;
         Ok(())
     }
 
@@ -51,13 +47,17 @@ impl InboundUdpAssociationDispatcher for UdpAssociationDispatchBridge<'_> {
         inbound_dispatch: InboundUdpDispatch,
         protocol_overhead_bytes: u64,
     ) -> Result<(), Self::Error> {
-        let session_id =
-            dispatch_inbound_udp_packet(self.proxy, self.dispatch, &inbound_dispatch, None).await?;
+        let session_id = self
+            .runtime
+            .dispatch_inbound_packet(self.dispatch, &inbound_dispatch, None)
+            .await?;
 
-        self.services
+        self.runtime
+            .services()
             .record_session_inbound_traffic(session_id, *self.pending_control_traffic);
         *self.pending_control_traffic = StreamTraffic::default();
-        self.services
+        self.runtime
+            .services()
             .record_session_inbound_rx(session_id, protocol_overhead_bytes);
 
         Ok(())
@@ -84,21 +84,24 @@ impl InboundUdpAssociationDispatcher for UdpAssociationDispatchBridge<'_> {
     }
 }
 
+pub(crate) struct UdpAssociationDatagramRequest<'a> {
+    pub(crate) runtime: &'a UdpIngressRuntime,
+    pub(crate) dispatch: &'a mut UdpDispatch,
+    pub(crate) relay: &'a TokioDatagramSocket,
+    pub(crate) pending_control_traffic: &'a mut StreamTraffic,
+    pub(crate) sender: SocketAddr,
+    pub(crate) payload: &'a [u8],
+}
+
 pub(crate) trait UdpAssociationHandler {
     async fn handle_client_datagram(
         &mut self,
-        proxy: &Proxy,
-        services: &UdpRuntimeServices,
-        dispatch: &mut UdpDispatch,
-        relay: &TokioDatagramSocket,
-        pending_control_traffic: &mut StreamTraffic,
-        sender: SocketAddr,
-        payload: &[u8],
+        request: UdpAssociationDatagramRequest<'_>,
     ) -> Result<(), EngineError>;
 
     async fn write_direct_response(
         &mut self,
-        services: &UdpRuntimeServices,
+        runtime: &UdpIngressRuntime,
         dispatch: &UdpDispatch,
         relay: &TokioDatagramSocket,
         sender: SocketAddr,
@@ -124,19 +127,20 @@ where
 {
     async fn handle_client_datagram(
         &mut self,
-        proxy: &Proxy,
-        services: &UdpRuntimeServices,
-        dispatch: &mut UdpDispatch,
-        relay: &TokioDatagramSocket,
-        pending_control_traffic: &mut StreamTraffic,
-        sender: SocketAddr,
-        payload: &[u8],
+        request: UdpAssociationDatagramRequest<'_>,
     ) -> Result<(), EngineError> {
+        let UdpAssociationDatagramRequest {
+            runtime,
+            dispatch,
+            relay,
+            pending_control_traffic,
+            sender,
+            payload,
+        } = request;
         let inbound_tag = dispatch.inbound_tag().to_owned();
         let sender = zero_platform_tokio::socket_addr_to_socket_address(sender);
         let mut dispatch_bridge = UdpAssociationDispatchBridge {
-            proxy,
-            services: services.clone(),
+            runtime,
             dispatch,
             pending_control_traffic,
             outcome: UdpAssociationDispatchOutcome::ClientHandled,
@@ -152,7 +156,7 @@ where
                     let sender_socket_addr =
                         zero_platform_tokio::socket_address_to_socket_addr(sender);
                     let response = record_direct_udp_response_parts(
-                        services,
+                        runtime.services(),
                         dispatch_bridge.dispatch,
                         sender_socket_addr,
                         &payload,
@@ -184,13 +188,14 @@ where
 
     async fn write_direct_response(
         &mut self,
-        services: &UdpRuntimeServices,
+        runtime: &UdpIngressRuntime,
         dispatch: &UdpDispatch,
         relay: &TokioDatagramSocket,
         sender: SocketAddr,
         payload: &[u8],
     ) -> Result<(), EngineError> {
-        let response = record_direct_udp_response_parts(services, dispatch, sender, payload);
+        let response =
+            record_direct_udp_response_parts(runtime.services(), dispatch, sender, payload);
         write_direct_udp_response(&response, || async {
             write_target_response(
                 self,
@@ -238,7 +243,7 @@ where
 }
 
 pub(crate) struct UdpAssociationLoopRequest<'a, S, H> {
-    pub(crate) proxy: &'a Proxy,
+    pub(crate) runtime: UdpIngressRuntime,
     pub(crate) client: &'a mut MeteredStream<S>,
     pub(crate) inbound_tag: &'a str,
     pub(crate) relay: TokioDatagramSocket,

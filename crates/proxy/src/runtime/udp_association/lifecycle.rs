@@ -3,11 +3,12 @@ use tokio::select;
 use zero_engine::EngineError;
 use zero_platform_tokio::TokioDatagramSocket;
 
-use super::contract::{UdpAssociationHandler, UdpAssociationLoopRequest};
+use super::contract::{
+    UdpAssociationDatagramRequest, UdpAssociationHandler, UdpAssociationLoopRequest,
+};
 use crate::logging::{
     log_udp_upstream_association_dropped, log_udp_upstream_association_idle_timeout,
 };
-use crate::protocol_registry::UdpRuntimeServices;
 use crate::runtime::udp_delivery::{
     log_completed_udp_flow, record_chain_udp_response_parts, record_upstream_udp_response_received,
     wait_for_upstream_idle,
@@ -29,7 +30,7 @@ where
     H: UdpAssociationHandler,
 {
     let UdpAssociationLoopRequest {
-        proxy,
+        runtime,
         client,
         inbound_tag,
         relay,
@@ -37,8 +38,7 @@ where
         mut handler,
     } = request;
 
-    let mut dispatch = UdpDispatch::new(inbound_tag, &proxy.protocols).await?;
-    let services = UdpRuntimeServices::from_proxy(proxy);
+    let mut dispatch = runtime.new_dispatch(inbound_tag).await?;
     let mut control_probe = [0_u8; 1];
     let mut packet = vec![0_u8; 64 * 1024];
     let mut direct_buf = vec![0_u8; 64 * 1024];
@@ -57,21 +57,21 @@ where
             }
             recv = relay.recv_from_addr(&mut packet) => {
                 let (read, sender) = recv?;
-                handler.handle_client_datagram(
-                    proxy,
-                    &services,
-                    &mut dispatch,
-                    &relay,
-                    &mut pending_control_traffic,
-                    sender,
-                    &packet[..read],
-                )
-                .await?;
+                handler
+                    .handle_client_datagram(UdpAssociationDatagramRequest {
+                        runtime: &runtime,
+                        dispatch: &mut dispatch,
+                        relay: &relay,
+                        pending_control_traffic: &mut pending_control_traffic,
+                        sender,
+                        payload: &packet[..read],
+                    })
+                    .await?;
             }
             recv = direct_sock.recv_from_addr(&mut direct_buf) => {
                 let (read, sender) = recv?;
                 if let Err(error) = handler
-                    .write_direct_response(&services, &dispatch, &relay, sender, &direct_buf[..read])
+                    .write_direct_response(&runtime, &dispatch, &relay, sender, &direct_buf[..read])
                     .await
                 {
                     tracing::warn!(
@@ -82,13 +82,13 @@ where
                 }
             }
             upstream = upstream_udp.recv_response(&mut upstream_buf) => {
-                handle_upstream_response(&services, &mut dispatch, &mut handler, &relay, inbound_tag, upstream).await?;
+                handle_upstream_response(&runtime, &mut dispatch, &mut handler, &relay, inbound_tag, upstream).await?;
             }
             Some(chain_result) = chain_tasks.join_next() => {
-                handle_chain_result(&services, &mut handler, &relay, inbound_tag, chain_result).await;
+                handle_chain_result(&runtime, &mut handler, &relay, inbound_tag, chain_result).await;
             }
             _ = wait_for_upstream_idle(idle_deadline) => {
-                handle_idle_timeout(&services, &mut dispatch, inbound_tag);
+                handle_idle_timeout(&runtime, &mut dispatch, inbound_tag);
             }
         }
     }
@@ -105,7 +105,7 @@ fn finish_dispatch(dispatch: UdpDispatch) {
 }
 
 fn handle_idle_timeout(
-    services: &UdpRuntimeServices,
+    runtime: &crate::runtime::udp_ingress::UdpIngressRuntime,
     dispatch: &mut UdpDispatch,
     inbound_tag: &str,
 ) {
@@ -115,13 +115,13 @@ fn handle_idle_timeout(
             &closed.outbound_tag,
             &closed.server,
             closed.port,
-            services.udp_upstream_idle_timeout(),
+            runtime.services().udp_upstream_idle_timeout(),
         );
     }
 }
 
 async fn handle_upstream_response<H>(
-    services: &UdpRuntimeServices,
+    runtime: &crate::runtime::udp_ingress::UdpIngressRuntime,
     dispatch: &mut UdpDispatch,
     handler: &mut H,
     relay: &TokioDatagramSocket,
@@ -134,9 +134,9 @@ where
     match upstream {
         Ok(response) => {
             let response = record_upstream_udp_response_received(
-                services,
+                runtime.services(),
                 dispatch,
-                services.udp_upstream_idle_timeout(),
+                runtime.services().udp_upstream_idle_timeout(),
                 response,
             );
             write_upstream_udp_response(&response, || async {
@@ -146,7 +146,7 @@ where
         }
         Err(error) => {
             if let Some(closed) = dispatch.drop_upstream_association() {
-                services.record_udp_upstream_recv_failure();
+                runtime.services().record_udp_upstream_recv_failure();
                 log_udp_upstream_association_dropped(
                     inbound_tag,
                     &closed.outbound_tag,
@@ -162,7 +162,7 @@ where
 }
 
 async fn handle_chain_result<H>(
-    services: &UdpRuntimeServices,
+    runtime: &crate::runtime::udp_ingress::UdpIngressRuntime,
     handler: &mut H,
     relay: &TokioDatagramSocket,
     inbound_tag: &str,
@@ -172,8 +172,13 @@ async fn handle_chain_result<H>(
 {
     match chain_result {
         Ok(Ok((target, port, payload, session_id))) => {
-            let response =
-                record_chain_udp_response_parts(services, target, port, payload, session_id);
+            let response = record_chain_udp_response_parts(
+                runtime.services(),
+                target,
+                port,
+                payload,
+                session_id,
+            );
             if let Err(error) = write_chain_udp_response(&response, || async {
                 handler.write_chain_response(relay, &response).await
             })
