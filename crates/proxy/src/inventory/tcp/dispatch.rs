@@ -53,7 +53,19 @@ impl ProtocolInventory {
     ) -> Result<PreparedTcpOutbound<'a>, TcpOutboundFailure> {
         match resolved {
             ResolvedOutbound::Relay { chain } => {
-                let claimed = self.claim_tcp_relay_chain(chain.iter().cloned())?;
+                let claimed = self.claim_relay_chain(
+                    chain.iter().cloned(),
+                    |error| TcpOutboundFailure {
+                        stage: "outbound_leaf_runtime",
+                        error,
+                        upstream_endpoint: None,
+                    },
+                    |error| TcpOutboundFailure {
+                        stage: "relay_prepare",
+                        error,
+                        upstream_endpoint: None,
+                    },
+                )?;
                 Ok(PreparedTcpOutbound::Relay(
                     self.prepare_claimed_tcp_relay_chain(ctx, &claimed)?,
                 ))

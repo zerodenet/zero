@@ -104,7 +104,19 @@ impl ProtocolInventory {
                 }
             }
             ResolvedOutbound::Relay { chain } => {
-                let claimed = self.claim_udp_relay_chain(chain.iter().cloned())?;
+                let claimed = self.claim_relay_chain(
+                    chain.iter().cloned(),
+                    |error| FlowFailure {
+                        stage: "outbound_leaf_runtime",
+                        error,
+                        upstream: None,
+                    },
+                    |error| FlowFailure {
+                        stage: "outbound_leaf_runtime",
+                        error,
+                        upstream: None,
+                    },
+                )?;
                 Ok(PreparedUdpOutbound::Relay(Box::new(
                     self.prepare_claimed_udp_relay_chain(ctx, session, &claimed, payload)
                         .await?,

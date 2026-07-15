@@ -1,20 +1,10 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use zero_engine::{EngineError, ResolvedLeafOutbound};
 
 use super::{ProtocolRegistry, RegisteredProtocolEntry};
-use crate::protocol_registry::{OutboundLeafRuntime, TcpOutboundCapability};
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
-))]
-use crate::protocol_registry::{UdpFlowCapability, UdpPacketPathCapability};
+use crate::protocol_registry::OutboundLeafRuntime;
 use crate::runtime::path::TcpPathCategory;
 use crate::runtime::tcp_dispatch::operation::{
     PreparedTcpConnectOperation, PreparedTcpRelayOperation,
@@ -39,11 +29,126 @@ use crate::runtime::udp_dispatch::operation::PreparedUdpFlowOperation;
     feature = "mieru"
 ))]
 use crate::transport::RelayCarrier;
+
+type TcpConnectPrepareHook<'a> = dyn Fn(
+        Option<PathBuf>,
+    )
+        -> Result<Box<dyn PreparedTcpConnectOperation + 'a>, crate::transport::TcpOutboundFailure>
+    + Send
+    + Sync
+    + 'a;
+type TcpRelayPrepareHook<'a> = dyn Fn(Option<PathBuf>) -> Result<Box<dyn PreparedTcpRelayOperation + 'a>, EngineError>
+    + Send
+    + Sync
+    + 'a;
+
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
+type UdpFlowPrepareHook<'a> = dyn Fn(
+        Option<PathBuf>,
+    )
+        -> Result<Box<dyn PreparedUdpFlowOperation + 'a>, crate::runtime::udp_dispatch::FlowFailure>
+    + Send
+    + Sync
+    + 'a;
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
+type UdpRelayNeedsTwoStreamsHook<'a> = dyn Fn(Option<PathBuf>) -> bool + Send + Sync + 'a;
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
+type UdpRelayFinalHopPrepareHook<'a> = dyn Fn(
+        RelayCarrier,
+        Option<PathBuf>,
+    )
+        -> Result<Box<dyn PreparedUdpFlowOperation + 'a>, crate::runtime::udp_dispatch::FlowFailure>
+    + Send
+    + Sync
+    + 'a;
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
+type UdpRelayTwoStreamPrepareHook<'a> = dyn Fn(
+        RelayCarrier,
+        RelayCarrier,
+        Option<PathBuf>,
+    )
+        -> Result<Box<dyn PreparedUdpFlowOperation + 'a>, crate::runtime::udp_dispatch::FlowFailure>
+    + Send
+    + Sync
+    + 'a;
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
+type UdpPacketPathPrepareHook<'a> = dyn Fn() -> Option<
+        Box<
+            dyn crate::runtime::udp_dispatch::packet_path_operation::PreparedUdpPacketPathOperation
+                + 'a,
+        >,
+    > + Send
+    + Sync
+    + 'a;
+
+#[derive(Clone, Default)]
+struct ClaimedTcpHooks<'a> {
+    connect: Option<Arc<TcpConnectPrepareHook<'a>>>,
+    relay_hop: Option<Arc<TcpRelayPrepareHook<'a>>>,
+}
+
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
+#[derive(Clone, Default)]
+struct ClaimedUdpHooks<'a> {
+    flow: Option<Arc<UdpFlowPrepareHook<'a>>>,
+    relay_needs_two_streams: Option<Arc<UdpRelayNeedsTwoStreamsHook<'a>>>,
+    relay_final_hop: Option<Arc<UdpRelayFinalHopPrepareHook<'a>>>,
+    relay_two_stream: Option<Arc<UdpRelayTwoStreamPrepareHook<'a>>>,
+    packet_path: Option<Arc<UdpPacketPathPrepareHook<'a>>>,
+}
+
 #[derive(Clone)]
 pub(crate) struct ClaimedOutboundLeaf<'a> {
-    leaf: ResolvedLeafOutbound<'a>,
     pub(crate) runtime: OutboundLeafRuntime,
-    pub(crate) tcp: Option<Arc<dyn TcpOutboundCapability>>,
+    tcp: ClaimedTcpHooks<'a>,
     #[cfg(any(
         feature = "socks5",
         feature = "vless",
@@ -53,17 +158,7 @@ pub(crate) struct ClaimedOutboundLeaf<'a> {
         feature = "vmess",
         feature = "mieru"
     ))]
-    pub(crate) udp: Option<Arc<dyn UdpFlowCapability>>,
-    #[cfg(any(
-        feature = "socks5",
-        feature = "vless",
-        feature = "hysteria2",
-        feature = "shadowsocks",
-        feature = "trojan",
-        feature = "vmess",
-        feature = "mieru"
-    ))]
-    pub(crate) packet_path: Option<Arc<dyn UdpPacketPathCapability>>,
+    udp: ClaimedUdpHooks<'a>,
 }
 
 impl<'a> ClaimedOutboundLeaf<'a> {
@@ -73,9 +168,8 @@ impl<'a> ClaimedOutboundLeaf<'a> {
         entry: Option<&RegisteredProtocolEntry>,
     ) -> Self {
         Self {
-            leaf,
             runtime,
-            tcp: entry.map(|entry| entry.tcp.clone()),
+            tcp: build_tcp_hooks(entry, leaf.clone()),
             #[cfg(any(
                 feature = "socks5",
                 feature = "vless",
@@ -85,18 +179,41 @@ impl<'a> ClaimedOutboundLeaf<'a> {
                 feature = "vmess",
                 feature = "mieru"
             ))]
-            udp: entry.and_then(|entry| entry.udp.clone()),
-            #[cfg(any(
-                feature = "socks5",
-                feature = "vless",
-                feature = "hysteria2",
-                feature = "shadowsocks",
-                feature = "trojan",
-                feature = "vmess",
-                feature = "mieru"
-            ))]
-            packet_path: entry.and_then(|entry| entry.packet_path.clone()),
+            udp: build_udp_hooks(entry, leaf),
         }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn has_tcp_capability(&self) -> bool {
+        self.tcp.connect.is_some()
+    }
+
+    #[cfg(any(
+        feature = "socks5",
+        feature = "vless",
+        feature = "hysteria2",
+        feature = "shadowsocks",
+        feature = "trojan",
+        feature = "vmess",
+        feature = "mieru"
+    ))]
+    #[cfg(test)]
+    pub(crate) fn has_udp_flow_capability(&self) -> bool {
+        self.udp.flow.is_some()
+    }
+
+    #[cfg(any(
+        feature = "socks5",
+        feature = "vless",
+        feature = "hysteria2",
+        feature = "shadowsocks",
+        feature = "trojan",
+        feature = "vmess",
+        feature = "mieru"
+    ))]
+    #[cfg(test)]
+    pub(crate) fn has_udp_packet_path_capability(&self) -> bool {
+        self.udp.packet_path.is_some()
     }
 
     pub(crate) fn prepare_tcp_connect(
@@ -104,10 +221,12 @@ impl<'a> ClaimedOutboundLeaf<'a> {
         source_dir: Option<&Path>,
     ) -> Result<Box<dyn PreparedTcpConnectOperation + 'a>, crate::transport::TcpOutboundFailure>
     {
-        self.tcp
+        let prepare = self
+            .tcp
+            .connect
             .as_ref()
-            .expect("non-block tcp leaf must expose a tcp capability")
-            .prepare_tcp_connect(self.leaf.clone(), source_dir)
+            .expect("non-block tcp leaf must expose a tcp capability");
+        prepare(source_dir.map(Path::to_path_buf))
     }
 
     pub(crate) fn prepare_tcp_relay_hop(
@@ -120,11 +239,12 @@ impl<'a> ClaimedOutboundLeaf<'a> {
                 "relay hop resolved without upstream endpoint",
             ))
         })?;
-        let operation = self
+        let prepare = self
             .tcp
+            .relay_hop
             .as_ref()
-            .expect("tcp relay hop must expose a tcp capability")
-            .prepare_tcp_relay_hop(self.leaf.clone(), source_dir)?;
+            .expect("tcp relay hop must expose a tcp capability");
+        let operation = prepare(source_dir.map(Path::to_path_buf))?;
         Ok((endpoint.server, endpoint.port, operation))
     }
 
@@ -142,10 +262,12 @@ impl<'a> ClaimedOutboundLeaf<'a> {
         source_dir: Option<&Path>,
     ) -> Result<Box<dyn PreparedUdpFlowOperation + 'a>, crate::runtime::udp_dispatch::FlowFailure>
     {
-        self.udp
+        let prepare = self
+            .udp
+            .flow
             .as_ref()
-            .expect("non-block udp leaf must expose a udp-flow capability")
-            .prepare_udp_flow(self.leaf.clone(), source_dir)
+            .expect("non-block udp leaf must expose a udp-flow capability");
+        prepare(source_dir.map(Path::to_path_buf))
     }
 
     #[cfg(any(
@@ -159,9 +281,11 @@ impl<'a> ClaimedOutboundLeaf<'a> {
     ))]
     pub(crate) fn udp_relay_needs_two_streams(&self, source_dir: Option<&Path>) -> bool {
         self.udp
+            .relay_needs_two_streams
             .as_ref()
-            .expect("udp relay leaf must expose a udp-flow capability")
-            .udp_relay_needs_two_streams(&self.leaf, source_dir)
+            .expect("udp relay leaf must expose a udp-flow capability")(
+            source_dir.map(Path::to_path_buf),
+        )
     }
 
     #[cfg(any(
@@ -179,10 +303,12 @@ impl<'a> ClaimedOutboundLeaf<'a> {
         source_dir: Option<&Path>,
     ) -> Result<Box<dyn PreparedUdpFlowOperation + 'a>, crate::runtime::udp_dispatch::FlowFailure>
     {
-        self.udp
+        let prepare = self
+            .udp
+            .relay_final_hop
             .as_ref()
-            .ok_or_else(missing_udp_relay_capability)?
-            .prepare_owned_udp_relay_final_hop(carrier, self.leaf.clone(), source_dir)
+            .ok_or_else(missing_udp_relay_capability)?;
+        prepare(carrier, source_dir.map(Path::to_path_buf))
     }
 
     #[cfg(any(
@@ -201,15 +327,12 @@ impl<'a> ClaimedOutboundLeaf<'a> {
         source_dir: Option<&Path>,
     ) -> Result<Box<dyn PreparedUdpFlowOperation + 'a>, crate::runtime::udp_dispatch::FlowFailure>
     {
-        self.udp
+        let prepare = self
+            .udp
+            .relay_two_stream
             .as_ref()
-            .ok_or_else(missing_udp_relay_capability)?
-            .prepare_owned_udp_relay_two_stream(
-                post_carrier,
-                get_carrier,
-                self.leaf.clone(),
-                source_dir,
-            )
+            .ok_or_else(missing_udp_relay_capability)?;
+        prepare(post_carrier, get_carrier, source_dir.map(Path::to_path_buf))
     }
 
     #[cfg(any(
@@ -229,9 +352,114 @@ impl<'a> ClaimedOutboundLeaf<'a> {
                 + 'a,
         >,
     > {
-        self.packet_path
-            .as_ref()?
-            .prepare_udp_packet_path(self.leaf.clone())
+        let prepare = self.udp.packet_path.as_ref()?;
+        prepare()
+    }
+}
+
+fn build_tcp_hooks<'a>(
+    entry: Option<&RegisteredProtocolEntry>,
+    leaf: ResolvedLeafOutbound<'a>,
+) -> ClaimedTcpHooks<'a> {
+    let Some(entry) = entry else {
+        return ClaimedTcpHooks::default();
+    };
+    let tcp_connect = {
+        let tcp = entry.tcp.clone();
+        let leaf = leaf.clone();
+        Arc::new(move |source_dir: Option<PathBuf>| {
+            tcp.prepare_tcp_connect(leaf.clone(), source_dir.as_deref())
+        }) as Arc<TcpConnectPrepareHook<'a>>
+    };
+    let tcp_relay_hop = {
+        let tcp = entry.tcp.clone();
+        let leaf = leaf.clone();
+        Arc::new(move |source_dir: Option<PathBuf>| {
+            tcp.prepare_tcp_relay_hop(leaf.clone(), source_dir.as_deref())
+        }) as Arc<TcpRelayPrepareHook<'a>>
+    };
+    ClaimedTcpHooks {
+        connect: Some(tcp_connect),
+        relay_hop: Some(tcp_relay_hop),
+    }
+}
+
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
+fn build_udp_hooks<'a>(
+    entry: Option<&RegisteredProtocolEntry>,
+    leaf: ResolvedLeafOutbound<'a>,
+) -> ClaimedUdpHooks<'a> {
+    let Some(entry) = entry else {
+        return ClaimedUdpHooks::default();
+    };
+    let Some(udp) = entry.udp.clone() else {
+        return ClaimedUdpHooks {
+            packet_path: entry.packet_path.as_ref().map(|packet_path| {
+                let packet_path = packet_path.clone();
+                let leaf = leaf.clone();
+                Arc::new(move || packet_path.prepare_udp_packet_path(leaf.clone()))
+                    as Arc<UdpPacketPathPrepareHook<'a>>
+            }),
+            ..ClaimedUdpHooks::default()
+        };
+    };
+
+    let flow = {
+        let udp = udp.clone();
+        let leaf = leaf.clone();
+        Arc::new(move |source_dir: Option<PathBuf>| {
+            udp.prepare_udp_flow(leaf.clone(), source_dir.as_deref())
+        }) as Arc<UdpFlowPrepareHook<'a>>
+    };
+    let relay_needs_two_streams = {
+        let udp = udp.clone();
+        let leaf = leaf.clone();
+        Arc::new(move |source_dir: Option<PathBuf>| {
+            udp.udp_relay_needs_two_streams(&leaf, source_dir.as_deref())
+        }) as Arc<UdpRelayNeedsTwoStreamsHook<'a>>
+    };
+    let relay_final_hop = {
+        let udp = udp.clone();
+        let leaf = leaf.clone();
+        Arc::new(move |carrier, source_dir: Option<PathBuf>| {
+            udp.prepare_owned_udp_relay_final_hop(carrier, leaf.clone(), source_dir.as_deref())
+        }) as Arc<UdpRelayFinalHopPrepareHook<'a>>
+    };
+    let relay_two_stream = {
+        let udp = udp.clone();
+        let leaf = leaf.clone();
+        Arc::new(
+            move |post_carrier, get_carrier, source_dir: Option<PathBuf>| {
+                udp.prepare_owned_udp_relay_two_stream(
+                    post_carrier,
+                    get_carrier,
+                    leaf.clone(),
+                    source_dir.as_deref(),
+                )
+            },
+        ) as Arc<UdpRelayTwoStreamPrepareHook<'a>>
+    };
+    let packet_path = entry.packet_path.as_ref().map(|packet_path| {
+        let packet_path = packet_path.clone();
+        let leaf = leaf.clone();
+        Arc::new(move || packet_path.prepare_udp_packet_path(leaf.clone()))
+            as Arc<UdpPacketPathPrepareHook<'a>>
+    });
+
+    ClaimedUdpHooks {
+        flow: Some(flow),
+        relay_needs_two_streams: Some(relay_needs_two_streams),
+        relay_final_hop: Some(relay_final_hop),
+        relay_two_stream: Some(relay_two_stream),
+        packet_path,
     }
 }
 

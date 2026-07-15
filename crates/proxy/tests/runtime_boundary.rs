@@ -468,6 +468,21 @@ fn inventory_udp_relay_executes_final_hop_without_start_helper_roundtrip() {
 }
 
 #[test]
+fn inventory_relay_modules_only_prepare_claimed_chains() {
+    for relative in ["inventory/tcp/relay.rs", "inventory/udp/relay.rs"] {
+        let relay = read(&proxy_src().join(relative));
+        assert!(
+            !relay.contains("ResolvedLeafOutbound"),
+            "{relative} should not carry raw engine leaf types after the inventory claim boundary"
+        );
+        assert!(
+            !relay.contains("claim_outbound_leaf("),
+            "{relative} should prepare already claimed leaves instead of reclaiming raw outbounds"
+        );
+    }
+}
+
+#[test]
 fn udp_two_stream_transport_bridge_uses_carrier_only_relay_prefix() {
     let relay = read(&proxy_src().join("inventory/udp/relay.rs"));
     let udp = read(&proxy_src().join("protocol_registry/transport_leaf/udp.rs"));
@@ -626,9 +641,12 @@ fn inventory_runtime_delegates_leaf_claim_logic_to_registry() {
     let runtime = read(&proxy_src().join("inventory/runtime.rs"));
     assert!(runtime.contains("struct ClaimedInventoryLeaf"));
     assert!(runtime.contains("struct ClaimedRelayChain"));
+    assert!(runtime.contains("fn claim_relay_chain<'a, E, F, G>("));
     assert!(!runtime.contains("enum ClaimedResolvedOutbound"));
     assert!(!runtime.contains("fn claim_tcp_outbound"));
     assert!(!runtime.contains("fn claim_udp_outbound"));
+    assert!(!runtime.contains("fn claim_tcp_relay_chain"));
+    assert!(!runtime.contains("fn claim_udp_relay_chain"));
     assert!(runtime.contains("self.registry.claim_outbound_leaf(leaf)"));
     assert!(!runtime.contains("claimed_tcp_outbound_leaf"));
     assert!(!runtime.contains("claimed_udp_flow_leaf"));
@@ -669,6 +687,11 @@ fn claimed_outbound_leaf_owns_capability_preparation() {
             "claimed outbound leaves should expose `{method}` so inventory stays generic after claim"
         );
     }
+    assert!(!outbound.contains("pub(crate) struct ClaimedOutboundLeaf<'a> {\r\n    leaf:"));
+    assert!(!outbound.contains("pub(crate) struct ClaimedOutboundLeaf<'a> {\n    leaf:"));
+    assert!(outbound.contains("struct ClaimedTcpHooks"));
+    assert!(outbound.contains("struct ClaimedUdpHooks"));
+    assert!(!outbound.contains("self.leaf"));
 }
 
 #[test]

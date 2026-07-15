@@ -180,33 +180,6 @@ impl ProtocolInventory {
     ) -> Result<Box<dyn PreparedUdpFlowOperation + 'a>, FlowFailure> {
         claimed.prepare_owned_udp_relay_final_hop(carrier, ctx.source_dir())
     }
-
-    pub(in crate::inventory) fn claim_udp_relay_chain<'a>(
-        &self,
-        chain: impl IntoIterator<Item = zero_engine::ResolvedLeafOutbound<'a>>,
-    ) -> Result<ClaimedRelayChain<'a>, FlowFailure> {
-        let mut chain = chain.into_iter();
-        let first = chain.next().expect("relay chain has at least 2 hops");
-        let second = chain.next().expect("relay chain must have at least 2 hops");
-        let first = self
-            .claim_outbound_leaf(first)
-            .map_err(|error| FlowFailure {
-                stage: "outbound_leaf_runtime",
-                error,
-                upstream: None,
-            })?;
-        let relay_hops = std::iter::once(second)
-            .chain(chain)
-            .map(|leaf| {
-                self.claim_outbound_leaf(leaf).map_err(|error| FlowFailure {
-                    stage: "outbound_leaf_runtime",
-                    error,
-                    upstream: None,
-                })
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-        Ok(ClaimedRelayChain::new(first, relay_hops))
-    }
 }
 
 fn flow_failure_from_tcp_outbound(failure: crate::transport::TcpOutboundFailure) -> FlowFailure {

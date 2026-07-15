@@ -122,35 +122,6 @@ impl PreparedTcpRelayChain<'_> {
 }
 
 impl ProtocolInventory {
-    pub(in crate::inventory) fn claim_tcp_relay_chain<'a>(
-        &self,
-        chain: impl IntoIterator<Item = zero_engine::ResolvedLeafOutbound<'a>>,
-    ) -> Result<ClaimedRelayChain<'a>, TcpOutboundFailure> {
-        let mut chain = chain.into_iter();
-        let first = chain.next().expect("relay chain must have at least 2 hops");
-        let second = chain.next().expect("relay chain must have at least 2 hops");
-
-        let first = self
-            .claim_outbound_leaf(first)
-            .map_err(|error| TcpOutboundFailure {
-                stage: "outbound_leaf_runtime",
-                error,
-                upstream_endpoint: None,
-            })?;
-        let relay_hops = std::iter::once(second)
-            .chain(chain)
-            .map(|next_hop| {
-                self.claim_outbound_leaf(next_hop)
-                    .map_err(|error| TcpOutboundFailure {
-                        stage: "relay_prepare",
-                        error,
-                        upstream_endpoint: None,
-                    })
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-        Ok(ClaimedRelayChain::new(first, relay_hops))
-    }
-
     pub(crate) fn prepare_claimed_tcp_relay_chain<'a>(
         &self,
         ctx: OutboundAdapterContext,

@@ -197,4 +197,27 @@ impl ProtocolInventory {
         let claimed = self.registry.claim_outbound_leaf(leaf)?;
         Ok(ClaimedInventoryLeaf::new(claimed))
     }
+
+    pub(in crate::inventory) fn claim_relay_chain<'a, E, F, G>(
+        &self,
+        chain: impl IntoIterator<Item = ResolvedLeafOutbound<'a>>,
+        map_first_error: F,
+        map_relay_error: G,
+    ) -> Result<ClaimedRelayChain<'a>, E>
+    where
+        F: FnOnce(EngineError) -> E,
+        G: Fn(EngineError) -> E,
+    {
+        let mut chain = chain.into_iter();
+        let first = chain.next().expect("relay chain must have at least 2 hops");
+        let second = chain.next().expect("relay chain must have at least 2 hops");
+
+        let first = self.claim_outbound_leaf(first).map_err(map_first_error)?;
+        let map_relay_error = &map_relay_error;
+        let relay_hops = std::iter::once(second)
+            .chain(chain)
+            .map(|leaf| self.claim_outbound_leaf(leaf).map_err(map_relay_error))
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(ClaimedRelayChain::new(first, relay_hops))
+    }
 }
