@@ -8,11 +8,15 @@ use zero_traits::{
     WebSocketTransportProfile,
 };
 
+#[cfg(feature = "grpc")]
+use crate::grpc;
 #[cfg(feature = "h2")]
 use crate::h2;
 #[cfg(feature = "http_upgrade")]
 use crate::http_upgrade;
-use crate::{grpc, tls, ws};
+use crate::tls;
+#[cfg(feature = "ws")]
+use crate::ws;
 
 #[derive(Clone, Copy)]
 pub struct StreamTransportStack<'a, TTls, TWs, TGrpc, TH2, THttp>
@@ -119,8 +123,8 @@ async fn connect_layered_transport_stack<TWs, TGrpc, TH2, THttp>(
     grpc_config: Option<&TGrpc>,
     h2_config: Option<&TH2>,
     http_upgrade_config: Option<&THttp>,
-    server: &str,
-    port: u16,
+    _server: &str,
+    _port: u16,
     invalid_message: &'static str,
 ) -> Result<TcpRelayStream, RuntimeError>
 where
@@ -139,6 +143,16 @@ where
         return invalid_transport_stack(invalid_message);
     }
 
+    #[cfg(not(feature = "ws"))]
+    if ws_config.is_some() {
+        return invalid_transport_stack(invalid_message);
+    }
+
+    #[cfg(not(feature = "grpc"))]
+    if grpc_config.is_some() {
+        return invalid_transport_stack(invalid_message);
+    }
+
     #[cfg(feature = "http_upgrade")]
     if let Some(config) = http_upgrade_config {
         if ws_config.is_some() || grpc_config.is_some() || h2_config.is_some() {
@@ -150,15 +164,17 @@ where
     }
 
     match (ws_config, grpc_config, h2_config) {
+        #[cfg(feature = "ws")]
         (Some(ws), None, None) => Ok(TcpRelayStream::new(
-            ws::connect_ws(carrier, ws, server, port).await?,
+            ws::connect_ws(carrier, ws, _server, _port).await?,
         )),
+        #[cfg(feature = "grpc")]
         (None, Some(grpc), None) => Ok(TcpRelayStream::new(
             grpc::connect_grpc(carrier, grpc.service_names()).await?,
         )),
         #[cfg(feature = "h2")]
         (None, None, Some(h2_config)) => Ok(TcpRelayStream::new(
-            h2::connect_h2(carrier, h2_config, server, port).await?,
+            h2::connect_h2(carrier, h2_config, _server, _port).await?,
         )),
         (None, None, None) => Ok(carrier),
         _ => invalid_transport_stack(invalid_message),
