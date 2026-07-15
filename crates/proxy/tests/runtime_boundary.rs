@@ -243,8 +243,8 @@ fn transport_leaf_resolution_helpers_stay_leaf_scoped() {
 fn tcp_prepared_operations_do_not_borrow_inventory_or_runtime_services() {
     let tcp_leaf = read(&proxy_src().join("inventory/tcp/leaf.rs"));
     let context = read(&proxy_src().join("protocol_registry/context.rs"));
-    assert!(tcp_leaf.contains("pub(crate) fn prepare_tcp_candidate<'a>(\n        &self,"));
-    assert!(tcp_leaf.contains("pub(crate) fn prepare_tcp_relay_hop<'a>(\n        &self,"));
+    assert!(tcp_leaf.contains("fn prepare_claimed_tcp_candidate<'a>(\n        &self,"));
+    assert!(tcp_leaf.contains("fn prepare_claimed_tcp_relay_hop<'a>(\n        &self,"));
     assert!(context.contains("pub(crate) fn prepare_tcp_outbound<'a>(\n        &self,"));
     assert!(!context.contains("pub(crate) fn prepare_tcp_candidate<'a>(\n        &self,"));
     assert!(!context.contains("pub(crate) fn prepare_tcp_relay_chain<'a>(\n        &self,"));
@@ -408,9 +408,15 @@ fn inventory_udp_leaf_and_relay_use_adapter_context_instead_of_proxy() {
     }
     let udp_leaf = read(&proxy_src().join("inventory/udp/leaf.rs"));
     let udp_relay = read(&proxy_src().join("inventory/udp/relay.rs"));
+    assert!(!udp_leaf.contains("pub(crate) fn prepare_udp_leaf_candidate<'a>("));
+    assert!(!udp_leaf.contains("pub(crate) async fn start_udp_leaf_flow("));
     assert!(!udp_leaf.contains("find_udp_flow_leaf("));
     assert!(!udp_relay.contains("find_udp_flow_leaf("));
     assert!(!udp_relay.contains("find_udp_packet_path_leaf("));
+    assert!(!udp_relay.contains("pub(crate) fn prepare_udp_packet_path_pair<'a>("));
+    assert!(!udp_relay.contains("pub(crate) fn udp_relay_needs_two_streams("));
+    assert!(!udp_relay.contains("pub(crate) async fn start_udp_relay_two_stream("));
+    assert!(!udp_relay.contains("pub(crate) async fn start_udp_relay_final_hop("));
     assert!(!udp_leaf.contains("UdpFlowCapability"));
     assert!(!udp_relay.contains("UdpFlowCapability"));
     assert!(!udp_relay.contains("UdpPacketPathCapability"));
@@ -579,6 +585,8 @@ fn inventory_tcp_leaf_stays_adapter_facing() {
     assert!(!leaf.contains("impl Proxy"));
     assert!(!leaf.contains("use crate::runtime::Proxy"));
     assert!(!leaf.contains("&Proxy"));
+    assert!(!leaf.contains("pub(crate) fn prepare_tcp_candidate<'a>("));
+    assert!(!leaf.contains("pub(crate) fn prepare_tcp_relay_hop<'a>("));
     assert!(!leaf.contains("find_outbound_leaf("));
     assert!(!leaf.contains("TcpOutboundCapability"));
 }

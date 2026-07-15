@@ -44,7 +44,7 @@ impl PreparedUdpRelayChain<'_> {
 }
 
 impl ProtocolInventory {
-    pub(super) fn prepare_claimed_udp_packet_path_pair<'a>(
+    pub(in crate::inventory) fn prepare_claimed_udp_packet_path_pair<'a>(
         &self,
         session_id: u64,
         carrier_leaf: &ClaimedInventoryLeaf<'a>,
@@ -60,86 +60,6 @@ impl ProtocolInventory {
             datagram_operation,
             packet,
         )
-    }
-
-    /// Prepare the packet-path carrier/datagram pair and lazy carrier builder
-    /// for a two-hop UDP relay chain.
-    #[cfg(test)]
-    pub(crate) fn prepare_udp_packet_path_pair<'a>(
-        &self,
-        session_id: u64,
-        carrier_leaf: &'a zero_engine::ResolvedLeafOutbound<'a>,
-        datagram_leaf: &'a zero_engine::ResolvedLeafOutbound<'a>,
-        packet: UdpPacketRef<'a>,
-    ) -> Option<(PacketPathFlowBinding, PacketPathStartRequest<'a>)> {
-        let carrier_leaf = self.claim_outbound_leaf(carrier_leaf).ok()?;
-        let datagram_leaf = self.claim_outbound_leaf(datagram_leaf).ok()?;
-        self.prepare_claimed_udp_packet_path_pair(session_id, &carrier_leaf, &datagram_leaf, packet)
-    }
-
-    /// Whether the UDP relay final hop needs the VLESS two-stream path.
-    #[cfg(test)]
-    pub(crate) fn udp_relay_needs_two_streams(
-        &self,
-        ctx: UdpAdapterContext<'_>,
-        leaf: &zero_engine::ResolvedLeafOutbound<'_>,
-    ) -> Result<bool, EngineError> {
-        let claimed = self.claim_outbound_leaf(leaf)?;
-        Ok(claimed.udp_relay_needs_two_streams(ctx.source_dir()))
-    }
-
-    /// Start a two-stream UDP relay path through the final hop adapter.
-    #[cfg(test)]
-    pub(crate) async fn start_udp_relay_two_stream(
-        &self,
-        dispatch: &mut crate::runtime::udp_dispatch::UdpDispatch,
-        ctx: UdpAdapterContext<'_>,
-        session: &zero_core::Session,
-        chain: Vec<zero_engine::ResolvedLeafOutbound<'_>>,
-        payload: &[u8],
-    ) -> Result<
-        crate::runtime::udp_dispatch::FlowStartResult,
-        crate::runtime::udp_dispatch::FlowFailure,
-    > {
-        let final_hop = chain.last().expect("relay chain has at least 2 hops");
-        let claimed = self.claim_udp_relay_final_hop(final_hop)?;
-        let (post_stream, _post_peer) = tokio::io::duplex(64);
-        let (get_stream, _get_peer) = tokio::io::duplex(64);
-        let operation = self.prepare_udp_relay_two_stream_operation(
-            claimed.into_claimed(),
-            ctx.clone(),
-            RelayCarrier {
-                stream: crate::transport::TcpRelayStream::new(post_stream),
-                server: "fake-relay-post.test".to_owned(),
-                port: 9443,
-            },
-            RelayCarrier {
-                stream: crate::transport::TcpRelayStream::new(get_stream),
-                server: "fake-relay-get.test".to_owned(),
-                port: 9444,
-            },
-        )?;
-        operation.execute(dispatch, ctx, session, payload).await
-    }
-
-    /// Start a single-stream UDP relay final hop through the final hop adapter.
-    #[cfg(test)]
-    pub(crate) async fn start_udp_relay_final_hop(
-        &self,
-        dispatch: &mut UdpDispatch,
-        ctx: UdpAdapterContext<'_>,
-        session: &zero_core::Session,
-        carrier: crate::transport::RelayCarrier,
-        leaf: &zero_engine::ResolvedLeafOutbound<'_>,
-        payload: &[u8],
-    ) -> Result<FlowStartResult, FlowFailure> {
-        let claimed = self.claim_udp_relay_final_hop(leaf)?;
-        let operation = self.prepare_udp_relay_final_hop_operation(
-            claimed.into_claimed(),
-            ctx.clone(),
-            carrier,
-        )?;
-        operation.execute(dispatch, ctx, session, payload).await
     }
     pub(super) async fn prepare_claimed_udp_relay_chain<'a>(
         &self,
@@ -290,18 +210,6 @@ impl ProtocolInventory {
             })
             .collect::<Result<Vec<_>, _>>()?;
         Ok(ClaimedRelayChain::new(first, relay_hops))
-    }
-
-    #[cfg(test)]
-    fn claim_udp_relay_final_hop<'a>(
-        &self,
-        leaf: &'a zero_engine::ResolvedLeafOutbound<'a>,
-    ) -> Result<ClaimedInventoryLeaf<'a>, FlowFailure> {
-        self.claim_outbound_leaf(leaf).map_err(|error| FlowFailure {
-            stage: "find_outbound_leaf",
-            error,
-            upstream: None,
-        })
     }
 }
 

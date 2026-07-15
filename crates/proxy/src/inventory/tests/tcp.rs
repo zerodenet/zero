@@ -58,8 +58,15 @@ async fn inventory_invokes_fake_tcp_leaf_and_relay_capabilities() {
     let proxy = proxy_with_fake_tcp(calls.clone());
     let leaf = fake_direct_leaf();
     let ctx = OutboundAdapterContext::new(proxy.config.source_dir());
+    let claimed = proxy
+        .protocols
+        .claim_outbound_leaf(&leaf)
+        .expect("fake leaf claim");
 
-    let prepared = match proxy.protocols.prepare_tcp_candidate(ctx.clone(), &leaf) {
+    let prepared = match proxy
+        .protocols
+        .prepare_claimed_tcp_candidate(ctx.clone(), &claimed)
+    {
         Ok(prepared) => prepared,
         Err(_) => panic!("fake leaf prepare failed"),
     };
@@ -75,7 +82,7 @@ async fn inventory_invokes_fake_tcp_leaf_and_relay_capabilities() {
     let (stream, _peer) = tokio::io::duplex(64);
     proxy
         .protocols
-        .prepare_tcp_relay_hop(ctx, &leaf)
+        .prepare_claimed_tcp_relay_hop(ctx, &claimed)
         .expect("fake relay prepare")
         .execute(
             TcpRuntimeServices::from_proxy(&proxy),
@@ -96,8 +103,15 @@ async fn inventory_preserves_tcp_and_relay_capability_failures() {
     let proxy = proxy_with_fake_tcp(calls.clone());
     let leaf = fake_direct_leaf();
     let ctx = OutboundAdapterContext::new(proxy.config.source_dir());
+    let claimed = proxy
+        .protocols
+        .claim_outbound_leaf(&leaf)
+        .expect("fake leaf claim");
 
-    let prepared = match proxy.protocols.prepare_tcp_candidate(ctx.clone(), &leaf) {
+    let prepared = match proxy
+        .protocols
+        .prepare_claimed_tcp_candidate(ctx.clone(), &claimed)
+    {
         Ok(prepared) => prepared,
         Err(_) => panic!("fake leaf prepare failed"),
     };
@@ -120,7 +134,7 @@ async fn inventory_preserves_tcp_and_relay_capability_failures() {
     let (stream, _peer) = tokio::io::duplex(64);
     let error = match proxy
         .protocols
-        .prepare_tcp_relay_hop(ctx, &leaf)
+        .prepare_claimed_tcp_relay_hop(ctx, &claimed)
         .expect("fake relay prepare")
         .execute(
             TcpRuntimeServices::from_proxy(&proxy),

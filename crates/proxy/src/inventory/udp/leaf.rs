@@ -28,7 +28,7 @@ impl PreparedUdpLeafCandidate<'_> {
 }
 
 impl ProtocolInventory {
-    pub(super) fn prepare_claimed_udp_leaf_candidate<'a>(
+    pub(in crate::inventory) fn prepare_claimed_udp_leaf_candidate<'a>(
         &self,
         ctx: UdpAdapterContext<'a>,
         claimed: &ClaimedInventoryLeaf<'a>,
@@ -53,35 +53,5 @@ impl ProtocolInventory {
 
         let operation = claimed.prepare_udp_flow(ctx.source_dir())?;
         Ok(PreparedUdpLeafCandidate::Flow(operation))
-    }
-
-    #[cfg(test)]
-    pub(crate) fn prepare_udp_leaf_candidate<'a>(
-        &self,
-        ctx: UdpAdapterContext<'a>,
-        leaf: &'a zero_engine::ResolvedLeafOutbound<'a>,
-    ) -> Result<PreparedUdpLeafCandidate<'a>, FlowFailure> {
-        let claimed = self
-            .claim_outbound_leaf(leaf)
-            .map_err(|error| FlowFailure {
-                stage: "outbound_leaf_runtime",
-                error,
-                upstream: None,
-            })?;
-        self.prepare_claimed_udp_leaf_candidate(ctx, &claimed)
-    }
-
-    /// Start a single-hop UDP flow through the adapter that owns `leaf`.
-    #[cfg(test)]
-    pub(crate) async fn start_udp_leaf_flow(
-        &self,
-        dispatch: &mut UdpDispatch,
-        ctx: UdpAdapterContext<'_>,
-        session: &zero_core::Session,
-        leaf: &zero_engine::ResolvedLeafOutbound<'_>,
-        payload: &[u8],
-    ) -> Result<FlowStartResult, FlowFailure> {
-        let prepared = self.prepare_udp_leaf_candidate(ctx.clone(), leaf)?;
-        prepared.execute(dispatch, ctx, session, payload).await
     }
 }

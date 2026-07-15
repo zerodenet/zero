@@ -79,7 +79,7 @@ impl PreparedTcpRelayHop<'_> {
 }
 
 impl ProtocolInventory {
-    pub(super) fn prepare_claimed_tcp_candidate<'a>(
+    pub(in crate::inventory) fn prepare_claimed_tcp_candidate<'a>(
         &self,
         ctx: OutboundAdapterContext,
         claimed: &ClaimedInventoryLeaf<'a>,
@@ -100,23 +100,7 @@ impl ProtocolInventory {
         })
     }
 
-    #[cfg(test)]
-    pub(crate) fn prepare_tcp_candidate<'a>(
-        &self,
-        ctx: OutboundAdapterContext,
-        leaf: &'a zero_engine::ResolvedLeafOutbound<'a>,
-    ) -> Result<PreparedTcpCandidate<'a>, TcpOutboundFailure> {
-        let claimed = self
-            .claim_outbound_leaf(leaf)
-            .map_err(|error| TcpOutboundFailure {
-                stage: "outbound_leaf_runtime",
-                error,
-                upstream_endpoint: None,
-            })?;
-        self.prepare_claimed_tcp_candidate(ctx, &claimed)
-    }
-
-    pub(super) fn prepare_claimed_tcp_relay_hop<'a>(
+    pub(in crate::inventory) fn prepare_claimed_tcp_relay_hop<'a>(
         &self,
         ctx: OutboundAdapterContext,
         claimed: &ClaimedInventoryLeaf<'a>,
@@ -127,17 +111,6 @@ impl ProtocolInventory {
             port,
             operation,
         })
-    }
-
-    #[cfg(test)]
-    #[cfg(test)]
-    pub(crate) fn prepare_tcp_relay_hop<'a>(
-        &self,
-        ctx: OutboundAdapterContext,
-        leaf: &'a zero_engine::ResolvedLeafOutbound<'a>,
-    ) -> Result<PreparedTcpRelayHop<'a>, EngineError> {
-        let claimed = self.claim_outbound_leaf(leaf)?;
-        self.prepare_claimed_tcp_relay_hop(ctx, &claimed)
     }
 }
 

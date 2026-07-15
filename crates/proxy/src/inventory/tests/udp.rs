@@ -22,10 +22,22 @@ async fn inventory_invokes_fake_udp_leaf_capability() {
         UdpRuntimeServices::from_proxy(&proxy),
     );
     let payload = b"capability payload";
-
-    let result = match proxy
+    let leaf = fake_direct_leaf();
+    let claimed = proxy
         .protocols
-        .start_udp_leaf_flow(&mut dispatch, ctx, &session(), &fake_direct_leaf(), payload)
+        .claim_outbound_leaf(&leaf)
+        .expect("fake UDP claim");
+
+    let prepared = match proxy
+        .protocols
+        .prepare_claimed_udp_leaf_candidate(ctx.clone(), &claimed)
+    {
+        Ok(prepared) => prepared,
+        Err(_) => panic!("fake UDP prepare failed"),
+    };
+
+    let result = match prepared
+        .execute(&mut dispatch, ctx, &session(), payload)
         .await
     {
         Ok(result) => result,
@@ -52,16 +64,22 @@ async fn inventory_preserves_fake_udp_failure_metadata() {
         proxy.config.source_dir(),
         UdpRuntimeServices::from_proxy(&proxy),
     );
-
-    let failure = match proxy
+    let leaf = fake_direct_leaf();
+    let claimed = proxy
         .protocols
-        .start_udp_leaf_flow(
-            &mut dispatch,
-            ctx,
-            &session(),
-            &fake_direct_leaf(),
-            b"failure",
-        )
+        .claim_outbound_leaf(&leaf)
+        .expect("fake UDP claim");
+
+    let prepared = match proxy
+        .protocols
+        .prepare_claimed_udp_leaf_candidate(ctx.clone(), &claimed)
+    {
+        Ok(prepared) => prepared,
+        Err(_) => panic!("fake UDP prepare failed"),
+    };
+
+    let failure = match prepared
+        .execute(&mut dispatch, ctx, &session(), b"failure")
         .await
     {
         Ok(_) => panic!("fake UDP start unexpectedly succeeded"),
@@ -88,22 +106,38 @@ async fn inventory_invokes_fake_udp_relay_capabilities() {
         UdpRuntimeServices::from_proxy(&proxy),
     );
     let leaf = fake_direct_leaf();
-
-    assert!(proxy
+    let claimed = proxy
         .protocols
-        .udp_relay_needs_two_streams(ctx.clone(), &leaf)
-        .expect("two-stream predicate"));
+        .claim_outbound_leaf(&leaf)
+        .expect("fake UDP claim");
+
+    assert!(claimed.udp_relay_needs_two_streams(ctx.source_dir()));
 
     let two_stream_payload = b"two-stream capability";
-    let two_stream = match proxy
-        .protocols
-        .start_udp_relay_two_stream(
-            &mut dispatch,
-            ctx.clone(),
-            &session(),
-            vec![fake_direct_leaf(), fake_direct_leaf()],
-            two_stream_payload,
-        )
+    let (post_stream, _post_peer) = tokio::io::duplex(64);
+    let (get_stream, _get_peer) = tokio::io::duplex(64);
+    let two_stream_operation = match claimed
+        .clone()
+        .into_claimed()
+        .prepare_owned_udp_relay_two_stream(
+            RelayCarrier {
+                stream: TcpRelayStream::new(post_stream),
+                server: "fake-relay-post.test".to_owned(),
+                port: 9443,
+            },
+            RelayCarrier {
+                stream: TcpRelayStream::new(get_stream),
+                server: "fake-relay-get.test".to_owned(),
+                port: 9444,
+            },
+            ctx.source_dir(),
+        ) {
+        Ok(operation) => operation,
+        Err(_) => panic!("two-stream relay prepare failed"),
+    };
+
+    let two_stream = match two_stream_operation
+        .execute(&mut dispatch, ctx.clone(), &session(), two_stream_payload)
         .await
     {
         Ok(result) => result,
@@ -116,20 +150,20 @@ async fn inventory_invokes_fake_udp_relay_capabilities() {
 
     let (stream, _peer) = tokio::io::duplex(64);
     let final_payload = b"final-hop capability";
-    let final_hop = match proxy
-        .protocols
-        .start_udp_relay_final_hop(
-            &mut dispatch,
-            ctx,
-            &session(),
-            RelayCarrier {
-                stream: TcpRelayStream::new(stream),
-                server: "relay-carrier.test".to_owned(),
-                port: 9443,
-            },
-            &leaf,
-            final_payload,
-        )
+    let final_hop_operation = match claimed.into_claimed().prepare_owned_udp_relay_final_hop(
+        RelayCarrier {
+            stream: TcpRelayStream::new(stream),
+            server: "relay-carrier.test".to_owned(),
+            port: 9443,
+        },
+        ctx.source_dir(),
+    ) {
+        Ok(operation) => operation,
+        Err(_) => panic!("final-hop relay prepare failed"),
+    };
+
+    let final_hop = match final_hop_operation
+        .execute(&mut dispatch, ctx, &session(), final_payload)
         .await
     {
         Ok(result) => result,
@@ -330,13 +364,17 @@ async fn inventory_composes_packet_path_roles_and_builds_carrier() {
     let mut dispatch = UdpDispatch::new("fake-inbound", &proxy.protocols)
         .await
         .expect("UDP dispatch");
+    let claimed = proxy
+        .protocols
+        .claim_outbound_leaf(&leaf)
+        .expect("fake packet-path claim");
 
     let (binding, request) = proxy
         .protocols
-        .prepare_udp_packet_path_pair(
+        .prepare_claimed_udp_packet_path_pair(
             41,
-            &leaf,
-            &leaf,
+            &claimed,
+            &claimed,
             crate::runtime::udp_flow::packet_path::UdpPacketRef {
                 target: &target,
                 port: 53,
