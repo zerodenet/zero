@@ -1,6 +1,15 @@
 const VLESS_QUIC_ALPN: &[u8] = b"h3";
 
 #[derive(Debug, Clone, Copy)]
+pub struct VlessOutboundOptionsRef<'a> {
+    pub id: &'a str,
+    pub flow: Option<&'a str>,
+    pub mux_concurrency: Option<u32>,
+    pub reality: Option<VlessRealityClientOptionsRef<'a>>,
+    pub quic: Option<VlessQuicClientOptionsRef<'a>>,
+}
+
+#[derive(Debug, Clone, Copy)]
 pub struct VlessRealityClientOptionsRef<'a> {
     pub public_key: &'a str,
     pub short_id: &'a str,

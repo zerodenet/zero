@@ -8,9 +8,8 @@ use zero_traits::{
 use super::inbound::{VlessInboundBindPlan, VlessInboundListenerRequest};
 use super::leaf::VlessOutboundLeaf;
 use super::profile::{
-    VlessQuicBindOptionsRef, VlessQuicBindProfile, VlessQuicClientOptionsRef,
-    VlessQuicClientProfile, VlessRealityClientOptionsRef, VlessRealityClientProfile,
-    VlessRealityServerOptionsRef,
+    VlessOutboundOptionsRef, VlessQuicBindOptionsRef, VlessQuicBindProfile, VlessQuicClientProfile,
+    VlessRealityClientProfile, VlessRealityServerOptionsRef,
 };
 use crate::inbound::BorrowedVlessInboundUserConfigParts;
 
@@ -80,17 +79,13 @@ impl VlessTransportRuntime {
         tag: &str,
         server: &str,
         port: u16,
-        id: &str,
-        flow: Option<&str>,
-        mux_concurrency: Option<u32>,
+        options: VlessOutboundOptionsRef<'_>,
         tls: Option<&TTls>,
-        reality: Option<VlessRealityClientOptionsRef<'_>>,
         ws: Option<&TWs>,
         grpc: Option<&TGrpc>,
         h2: Option<&TH2>,
         http_upgrade: Option<&THttp>,
         split_http: Option<&TSplit>,
-        quic: Option<VlessQuicClientOptionsRef<'_>>,
     ) -> Result<VlessOutboundLeaf, zero_core::Error>
     where
         TTls: ClientTlsProfile + ?Sized,
@@ -100,16 +95,16 @@ impl VlessTransportRuntime {
         THttp: HttpUpgradeTransportProfile + ?Sized,
         TSplit: SplitHttpTransportProfile + ?Sized,
     {
-        let reality = reality.map(VlessRealityClientProfile::from);
-        let quic = quic.map(VlessQuicClientProfile::from);
+        let reality = options.reality.map(VlessRealityClientProfile::from);
+        let quic = options.quic.map(VlessQuicClientProfile::from);
         VlessOutboundLeaf::from_profile_refs(
             source_dir,
             tag,
             server,
             port,
-            id,
-            flow,
-            mux_concurrency,
+            options.id,
+            options.flow,
+            options.mux_concurrency,
             tls,
             reality.as_ref(),
             ws,

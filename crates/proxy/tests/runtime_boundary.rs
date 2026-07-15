@@ -692,6 +692,7 @@ fn vless_adapter_uses_protocol_option_refs_instead_of_private_profile_constructo
         );
     }
     for required in [
+        "VlessOutboundOptionsRef",
         "VlessQuicBindOptionsRef",
         "VlessQuicClientOptionsRef",
         "VlessRealityClientOptionsRef",
@@ -741,6 +742,21 @@ fn vless_listener_adapter_uses_protocol_runtime_input_refs() {
         assert!(
             listener.contains(required),
             "adapters/vless/listener.rs should project through protocol-owned VLESS inbound runtime surface `{required}`"
+        );
+    }
+}
+
+#[test]
+fn vmess_adapter_uses_protocol_outbound_option_refs() {
+    let adapter = read(&proxy_src().join("adapters/vmess.rs"));
+    for required in [
+        "VmessOutboundOptionsRef",
+        "VmessTransportRuntime",
+        "build_outbound_leaf(",
+    ] {
+        assert!(
+            adapter.contains(required),
+            "adapters/vmess.rs should project through protocol-owned VMess outbound option surface `{required}`"
         );
     }
 }

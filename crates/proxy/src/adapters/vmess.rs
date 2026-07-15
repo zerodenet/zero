@@ -1,6 +1,6 @@
 #[cfg(feature = "vmess")]
 mod listener;
-use ::vmess::transport::{VmessOutboundLeaf, VmessTransportRuntime};
+use ::vmess::transport::{VmessOutboundLeaf, VmessOutboundOptionsRef, VmessTransportRuntime};
 #[cfg(feature = "vmess")]
 use zero_config::InboundConfig;
 use zero_config::{InboundProtocolConfig, OutboundProtocolConfig};
@@ -116,9 +116,11 @@ impl TcpOutboundCapability for VmessAdapter {
                     tag,
                     server,
                     port,
-                    id,
-                    cipher,
-                    mux_concurrency,
+                    VmessOutboundOptionsRef {
+                        id,
+                        cipher,
+                        mux_concurrency,
+                    },
                     tls,
                     ws,
                     grpc,
@@ -157,9 +159,11 @@ impl UdpFlowCapability for VmessAdapter {
                     tag,
                     server,
                     port,
-                    id,
-                    cipher,
-                    mux_concurrency,
+                    VmessOutboundOptionsRef {
+                        id,
+                        cipher,
+                        mux_concurrency,
+                    },
                     tls,
                     ws,
                     grpc,

@@ -1,6 +1,6 @@
 #[cfg(feature = "vless")]
 use ::vless::transport::{
-    VlessOutboundLeaf, VlessQuicBindOptionsRef, VlessQuicClientOptionsRef,
+    VlessOutboundLeaf, VlessOutboundOptionsRef, VlessQuicBindOptionsRef, VlessQuicClientOptionsRef,
     VlessRealityClientOptionsRef, VlessTransportRuntime,
 };
 #[cfg(feature = "vless")]
@@ -150,26 +150,28 @@ impl TcpOutboundCapability for VlessAdapter {
                     tag,
                     server,
                     port,
-                    id,
-                    flow,
-                    mux_concurrency,
+                    VlessOutboundOptionsRef {
+                        id,
+                        flow,
+                        mux_concurrency,
+                        reality: reality.map(|reality| VlessRealityClientOptionsRef {
+                            public_key: reality.public_key.as_str(),
+                            short_id: reality.short_id.as_str(),
+                            server_name: reality.server_name.as_deref(),
+                            cipher_suites: reality.cipher_suites.as_slice(),
+                        }),
+                        quic: quic.map(|quic| VlessQuicClientOptionsRef {
+                            server_name: quic.server_name.as_deref(),
+                            insecure: quic.insecure,
+                            ca_cert_path: quic.ca_cert_path.as_deref(),
+                        }),
+                    },
                     tls,
-                    reality.map(|reality| VlessRealityClientOptionsRef {
-                        public_key: reality.public_key.as_str(),
-                        short_id: reality.short_id.as_str(),
-                        server_name: reality.server_name.as_deref(),
-                        cipher_suites: reality.cipher_suites.as_slice(),
-                    }),
                     ws,
                     grpc,
                     h2,
                     http_upgrade,
                     split_http,
-                    quic.map(|quic| VlessQuicClientOptionsRef {
-                        server_name: quic.server_name.as_deref(),
-                        insecure: quic.insecure,
-                        ca_cert_path: quic.ca_cert_path.as_deref(),
-                    }),
                 )
             }
         }))
@@ -212,26 +214,28 @@ impl UdpFlowCapability for VlessAdapter {
                         tag,
                         server,
                         port,
-                        id,
-                        flow,
-                        mux_concurrency,
+                        VlessOutboundOptionsRef {
+                            id,
+                            flow,
+                            mux_concurrency,
+                            reality: reality.map(|reality| VlessRealityClientOptionsRef {
+                                public_key: reality.public_key.as_str(),
+                                short_id: reality.short_id.as_str(),
+                                server_name: reality.server_name.as_deref(),
+                                cipher_suites: reality.cipher_suites.as_slice(),
+                            }),
+                            quic: quic.map(|quic| VlessQuicClientOptionsRef {
+                                server_name: quic.server_name.as_deref(),
+                                insecure: quic.insecure,
+                                ca_cert_path: quic.ca_cert_path.as_deref(),
+                            }),
+                        },
                         tls,
-                        reality.map(|reality| VlessRealityClientOptionsRef {
-                            public_key: reality.public_key.as_str(),
-                            short_id: reality.short_id.as_str(),
-                            server_name: reality.server_name.as_deref(),
-                            cipher_suites: reality.cipher_suites.as_slice(),
-                        }),
                         ws,
                         grpc,
                         h2,
                         http_upgrade,
                         split_http,
-                        quic.map(|quic| VlessQuicClientOptionsRef {
-                            server_name: quic.server_name.as_deref(),
-                            insecure: quic.insecure,
-                            ca_cert_path: quic.ca_cert_path.as_deref(),
-                        }),
                     )
                 }
             },

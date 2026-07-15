@@ -6,6 +6,7 @@ use zero_traits::{
 
 use super::inbound::VmessInboundListenerRequest;
 use super::leaf::VmessOutboundLeaf;
+use super::options::VmessOutboundOptionsRef;
 use crate::inbound::BorrowedVmessInboundUserConfigParts;
 
 #[derive(Debug, Clone, Default)]
@@ -43,9 +44,7 @@ impl VmessTransportRuntime {
         tag: &str,
         server: &str,
         port: u16,
-        id: &str,
-        cipher: &str,
-        mux_concurrency: Option<u32>,
+        options: VmessOutboundOptionsRef<'_>,
         tls: Option<&TTls>,
         ws: Option<&TWs>,
         grpc: Option<&TGrpc>,
@@ -60,9 +59,9 @@ impl VmessTransportRuntime {
             tag,
             server,
             port,
-            id,
-            cipher,
-            mux_concurrency,
+            options.id,
+            options.cipher,
+            options.mux_concurrency,
             tls,
             ws,
             grpc,

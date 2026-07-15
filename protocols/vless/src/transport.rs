@@ -15,7 +15,7 @@ pub use crate::inbound::BorrowedVlessInboundUserConfigParts;
 pub use inbound::VlessInboundListenerRequest;
 pub use leaf::VlessOutboundLeaf;
 pub use profile::{
-    VlessQuicBindOptionsRef, VlessQuicClientOptionsRef, VlessRealityClientOptionsRef,
-    VlessRealityServerOptionsRef,
+    VlessOutboundOptionsRef, VlessQuicBindOptionsRef, VlessQuicClientOptionsRef,
+    VlessRealityClientOptionsRef, VlessRealityServerOptionsRef,
 };
 pub use runtime::VlessTransportRuntime;
