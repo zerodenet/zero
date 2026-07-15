@@ -9,6 +9,7 @@ use super::dispatch::{
 use super::model::{RecordedProtocolMuxDispatch, RecordedProtocolMuxRouteDefaults};
 use crate::runtime::mux_tcp::run_protocol_mux_tcp_task;
 use crate::runtime::mux_udp::run_protocol_mux_udp_task_with_accept_log;
+use crate::runtime::route_runtime::{InboundRouteRuntime, MuxSubstreamRuntime};
 use crate::runtime::tcp_ingress::InboundProtocol;
 use crate::runtime::Proxy;
 use crate::transport::{ClientStream, MeteredStream, RecordingStream, TcpRelayStream};
@@ -42,17 +43,15 @@ where
     P: InboundProtocol<ClientStream = TcpRelayStream> + 'static,
     FR: FallbackReplayToUpstream + 'static,
     FTcp: FnMut(
-            Proxy,
+            MuxSubstreamRuntime,
             zero_core::Session,
             <R::MuxServer as InboundMuxServer<MeteredStream<S>>>::TcpRelay,
-            String,
         ) -> FTcpFut
         + Send,
     FTcpFut: core::future::Future<Output = ()> + Send + 'static,
     FUdp: FnMut(
-            Proxy,
+            MuxSubstreamRuntime,
             <R::MuxServer as InboundMuxServer<MeteredStream<S>>>::UdpRelay,
-            String,
         ) -> FUdpFut
         + Send,
     FUdpFut: core::future::Future<Output = ()> + Send + 'static,
@@ -95,17 +94,15 @@ where
     P: InboundProtocol<ClientStream = TcpRelayStream> + 'static,
     FR: FallbackReplayToUpstream + 'static,
     FTcp: FnMut(
-            Proxy,
+            MuxSubstreamRuntime,
             zero_core::Session,
             <R::MuxServer as InboundMuxServer<MeteredStream<S>>>::TcpRelay,
-            String,
         ) -> FTcpFut
         + Send,
     FTcpFut: core::future::Future<Output = ()> + Send + 'static,
     FUdp: FnMut(
-            Proxy,
+            MuxSubstreamRuntime,
             <R::MuxServer as InboundMuxServer<MeteredStream<S>>>::UdpRelay,
-            String,
         ) -> FUdpFut
         + Send,
     FUdpFut: core::future::Future<Output = ()> + Send + 'static,
@@ -146,20 +143,17 @@ where
     dispatch_recorded_protocol_mux_tcp_request_result(
         accept_result,
         RecordedProtocolMuxDispatch {
-            proxy,
-            inbound_tag,
-            source_addr,
+            runtime: InboundRouteRuntime::new(proxy, inbound_tag, source_addr),
             protocol,
             defaults,
         },
-        move |proxy, session, relay, inbound_tag| {
-            run_protocol_mux_tcp_task(proxy, session, relay, inbound_tag, defaults.mux_protocol)
+        move |runtime, session, relay| {
+            run_protocol_mux_tcp_task(runtime, session, relay, defaults.mux_protocol)
         },
-        move |proxy, relay, inbound_tag| {
+        move |runtime, relay| {
             run_protocol_mux_udp_task_with_accept_log(
-                proxy,
+                runtime,
                 relay,
-                inbound_tag,
                 defaults.udp_protocol,
                 defaults.udp_accept_log_message,
             )
@@ -195,20 +189,17 @@ where
     dispatch_recorded_protocol_mux_stream_request_result(
         accept_result,
         RecordedProtocolMuxDispatch {
-            proxy,
-            inbound_tag,
-            source_addr,
+            runtime: InboundRouteRuntime::new(proxy, inbound_tag, source_addr),
             protocol,
             defaults,
         },
-        move |proxy, session, relay, inbound_tag| {
-            run_protocol_mux_tcp_task(proxy, session, relay, inbound_tag, defaults.mux_protocol)
+        move |runtime, session, relay| {
+            run_protocol_mux_tcp_task(runtime, session, relay, defaults.mux_protocol)
         },
-        move |proxy, relay, inbound_tag| {
+        move |runtime, relay| {
             run_protocol_mux_udp_task_with_accept_log(
-                proxy,
+                runtime,
                 relay,
-                inbound_tag,
                 defaults.udp_protocol,
                 defaults.udp_accept_log_message,
             )

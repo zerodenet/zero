@@ -9,8 +9,8 @@ use super::helpers::{
     run_recorded_protocol_stream_udp_relay,
 };
 use super::model::RecordedProtocolMuxDispatch;
+use crate::runtime::route_runtime::{InboundRouteRuntime, MuxSubstreamRuntime};
 use crate::runtime::tcp_ingress::InboundProtocol;
-use crate::runtime::Proxy;
 use crate::transport::{ClientStream, MeteredStream, RecordingStream, TcpRelayStream};
 
 use super::super::mux::{dispatch_protocol_mux_route, MuxRouteBridge};
@@ -34,60 +34,43 @@ where
     R::MuxReader: Send,
     P: InboundProtocol<ClientStream = TcpRelayStream> + 'static,
     FTcp: FnMut(
-            Proxy,
+            MuxSubstreamRuntime,
             Session,
             <R::MuxServer as InboundMuxServer<MeteredStream<S>>>::TcpRelay,
-            String,
         ) -> FTcpFut
         + Send,
     FTcpFut: Future<Output = ()> + Send + 'static,
     FUdp: FnMut(
-            Proxy,
+            MuxSubstreamRuntime,
             <R::MuxServer as InboundMuxServer<MeteredStream<S>>>::UdpRelay,
-            String,
         ) -> FUdpFut
         + Send,
     FUdpFut: Future<Output = ()> + Send + 'static,
 {
     let RecordedProtocolMuxDispatch {
-        proxy,
-        inbound_tag,
-        source_addr,
+        runtime,
         protocol,
         defaults,
     } = request;
     dispatch_protocol_mux_route(
         route,
         MuxRouteBridge {
-            proxy,
-            inbound_tag,
-            source_addr,
+            runtime,
             protocol,
             map_tcp_stream: into_recorded_tcp_relay_stream::<S>,
-            run_udp: move |proxy: Proxy,
-                           session: Session,
-                           relay: R::UdpRelay,
-                           inbound_tag: String| {
+            run_udp: move |runtime: InboundRouteRuntime, session: Session, relay: R::UdpRelay| {
                 run_recorded_protocol_stream_udp_relay::<S, _>(
-                    proxy,
+                    runtime,
                     session,
                     relay,
-                    inbound_tag,
                     defaults.udp_protocol,
                 )
             },
-            run_mux: move |proxy: Proxy,
+            run_mux: move |runtime: MuxSubstreamRuntime,
                            reader: R::MuxReader,
-                           mux_server: R::MuxServer,
-                           inbound_tag: String| {
+                           mux_server: R::MuxServer| {
                 run_recorded_protocol_mux_session(
-                    proxy,
-                    reader,
-                    mux_server,
-                    inbound_tag,
-                    defaults,
-                    spawn_tcp,
-                    spawn_udp,
+                    runtime, reader, mux_server, defaults, spawn_tcp, spawn_udp,
                 )
             },
         },
@@ -122,17 +105,15 @@ where
     R::MuxReader: Send,
     P: InboundProtocol<ClientStream = TcpRelayStream> + 'static,
     FTcp: FnMut(
-            Proxy,
+            MuxSubstreamRuntime,
             Session,
             <R::MuxServer as InboundMuxServer<MeteredStream<S>>>::TcpRelay,
-            String,
         ) -> FTcpFut
         + Send,
     FTcpFut: Future<Output = ()> + Send + 'static,
     FUdp: FnMut(
-            Proxy,
+            MuxSubstreamRuntime,
             <R::MuxServer as InboundMuxServer<MeteredStream<S>>>::UdpRelay,
-            String,
         ) -> FUdpFut
         + Send,
     FUdpFut: Future<Output = ()> + Send + 'static,
@@ -169,17 +150,15 @@ where
     P: InboundProtocol<ClientStream = TcpRelayStream> + 'static,
     FR: FallbackReplayToUpstream + 'static,
     FTcp: FnMut(
-            Proxy,
+            MuxSubstreamRuntime,
             Session,
             <R::MuxServer as InboundMuxServer<MeteredStream<S>>>::TcpRelay,
-            String,
         ) -> FTcpFut
         + Send,
     FTcpFut: Future<Output = ()> + Send + 'static,
     FUdp: FnMut(
-            Proxy,
+            MuxSubstreamRuntime,
             <R::MuxServer as InboundMuxServer<MeteredStream<S>>>::UdpRelay,
-            String,
         ) -> FUdpFut
         + Send,
     FUdpFut: Future<Output = ()> + Send + 'static,
@@ -193,7 +172,7 @@ where
         }
         RouteAcceptResult::Fallback(fallback) => {
             crate::runtime::inbound_fallback::relay_recorded_fallback_replay(
-                request.proxy,
+                request.runtime.fallback_proxy(),
                 fallback.config,
                 fallback.replay,
             )
@@ -231,17 +210,15 @@ where
     P: InboundProtocol<ClientStream = TcpRelayStream> + 'static,
     FR: FallbackReplayToUpstream + 'static,
     FTcp: FnMut(
-            Proxy,
+            MuxSubstreamRuntime,
             Session,
             <R::MuxServer as InboundMuxServer<MeteredStream<S>>>::TcpRelay,
-            String,
         ) -> FTcpFut
         + Send,
     FTcpFut: Future<Output = ()> + Send + 'static,
     FUdp: FnMut(
-            Proxy,
+            MuxSubstreamRuntime,
             <R::MuxServer as InboundMuxServer<MeteredStream<S>>>::UdpRelay,
-            String,
         ) -> FUdpFut
         + Send,
     FUdpFut: Future<Output = ()> + Send + 'static,

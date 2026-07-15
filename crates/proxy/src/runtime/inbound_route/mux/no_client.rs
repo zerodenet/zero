@@ -13,6 +13,7 @@ use super::model::{MuxRouteBridge, NoClientMuxRouteDefaults};
 use crate::runtime::mux_session::{run_protocol_mux_session, MuxSessionLoop};
 use crate::runtime::mux_tcp::run_protocol_mux_tcp_task;
 use crate::runtime::mux_udp::run_protocol_mux_udp_task;
+use crate::runtime::route_runtime::{InboundRouteRuntime, MuxSubstreamRuntime};
 use crate::runtime::stream_udp::run_mapped_protocol_stream_udp_relay;
 use crate::runtime::tcp_ingress::NoClientResponseInboundProtocol;
 use crate::runtime::Proxy;
@@ -38,46 +39,45 @@ where
     R::MuxServer: InboundMuxServer<R::MuxReader>,
     R::MuxReader: Send,
     FTcp: FnMut(
-            Proxy,
+            MuxSubstreamRuntime,
             Session,
             <R::MuxServer as InboundMuxServer<R::MuxReader>>::TcpRelay,
-            String,
         ) -> FTcpFut
         + Send,
     FTcpFut: Future<Output = ()> + Send + 'static,
-    FUdp: FnMut(Proxy, <R::MuxServer as InboundMuxServer<R::MuxReader>>::UdpRelay, String) -> FUdpFut
+    FUdp: FnMut(
+            MuxSubstreamRuntime,
+            <R::MuxServer as InboundMuxServer<R::MuxReader>>::UdpRelay,
+        ) -> FUdpFut
         + Send,
     FUdpFut: Future<Output = ()> + Send + 'static,
 {
     dispatch_protocol_mux_route(
         route,
         MuxRouteBridge {
-            proxy,
-            inbound_tag,
-            source_addr,
+            runtime: InboundRouteRuntime::new(proxy, inbound_tag, source_addr),
             protocol: NoClientResponseInboundProtocol,
             map_tcp_stream: TcpRelayStream::new,
-            run_udp: move |proxy: Proxy,
+            run_udp: move |runtime: InboundRouteRuntime,
                            session: Session,
-                           relay: R::UdpRelay,
-                           inbound_tag: String| async move {
+                           relay: R::UdpRelay| async move {
                 run_mapped_protocol_stream_udp_relay(
-                    crate::runtime::udp_ingress::UdpIngressRuntime::from_proxy(&proxy),
+                    runtime.udp_runtime(),
                     &session,
                     relay,
-                    &inbound_tag,
+                    runtime.inbound_tag(),
                     defaults.udp_protocol,
                     TcpRelayStream::new,
                     None,
                 )
                 .await
             },
-            run_mux: move |proxy: Proxy,
+            run_mux: move |runtime: MuxSubstreamRuntime,
                            reader: R::MuxReader,
-                           mux_server: R::MuxServer,
-                           inbound_tag: String| async move {
+                           mux_server: R::MuxServer| async move {
+                let inbound_tag = runtime.inbound_tag().to_owned();
                 match run_protocol_mux_session(
-                    &proxy,
+                    runtime,
                     reader,
                     mux_server,
                     MuxSessionLoop {
@@ -123,14 +123,16 @@ where
     R::MuxServer: InboundMuxServer<R::MuxReader>,
     R::MuxReader: Send,
     FTcp: FnMut(
-            Proxy,
+            MuxSubstreamRuntime,
             Session,
             <R::MuxServer as InboundMuxServer<R::MuxReader>>::TcpRelay,
-            String,
         ) -> FTcpFut
         + Send,
     FTcpFut: Future<Output = ()> + Send + 'static,
-    FUdp: FnMut(Proxy, <R::MuxServer as InboundMuxServer<R::MuxReader>>::UdpRelay, String) -> FUdpFut
+    FUdp: FnMut(
+            MuxSubstreamRuntime,
+            <R::MuxServer as InboundMuxServer<R::MuxReader>>::UdpRelay,
+        ) -> FUdpFut
         + Send,
     FUdpFut: Future<Output = ()> + Send + 'static,
 {
@@ -172,12 +174,10 @@ where
         inbound_tag,
         source_addr,
         defaults,
-        move |proxy, session, relay, inbound_tag| {
-            run_protocol_mux_tcp_task(proxy, session, relay, inbound_tag, defaults.mux_protocol)
+        move |runtime, session, relay| {
+            run_protocol_mux_tcp_task(runtime, session, relay, defaults.mux_protocol)
         },
-        move |proxy, relay, inbound_tag| {
-            run_protocol_mux_udp_task(proxy, relay, inbound_tag, defaults.udp_protocol)
-        },
+        move |runtime, relay| run_protocol_mux_udp_task(runtime, relay, defaults.udp_protocol),
     )
     .await
 }

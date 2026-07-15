@@ -4,8 +4,8 @@ use zero_core::{InboundStreamRoute, Session};
 use zero_engine::EngineError;
 
 use super::model::StreamRouteBridge;
-use crate::runtime::tcp_ingress::{serve_inbound, InboundProtocol};
-use crate::runtime::Proxy;
+use crate::runtime::route_runtime::InboundRouteRuntime;
+use crate::runtime::tcp_ingress::InboundProtocol;
 
 pub(crate) async fn dispatch_protocol_stream_route<R, P, FMapTcp, FRunUdp, FUdp>(
     route: R,
@@ -16,36 +16,27 @@ where
     R::TcpStream: Send,
     P: InboundProtocol + 'static,
     FMapTcp: FnOnce(R::TcpStream) -> P::ClientStream + Send,
-    FRunUdp: FnOnce(Proxy, Session, R::UdpRelay, String) -> FUdp + Send,
+    FRunUdp: FnOnce(InboundRouteRuntime, Session, R::UdpRelay) -> FUdp + Send,
     FUdp: Future<Output = Result<(), EngineError>> + Send,
 {
     let StreamRouteBridge {
-        proxy,
-        inbound_tag,
-        source_addr,
+        runtime,
         protocol,
         map_tcp_stream,
         run_udp,
     } = request;
 
-    let tcp_proxy = proxy.clone();
-    let udp_proxy = proxy.clone();
-    let tcp_inbound_tag = inbound_tag.clone();
+    let tcp_runtime = runtime.clone();
+    let udp_runtime = runtime;
 
     route
         .dispatch_inbound_route(
             move |session, stream| async move {
-                serve_inbound(
-                    &tcp_proxy,
-                    session,
-                    map_tcp_stream(stream),
-                    &protocol,
-                    &tcp_inbound_tag,
-                    source_addr,
-                )
-                .await
+                tcp_runtime
+                    .serve(session, map_tcp_stream(stream), &protocol)
+                    .await
             },
-            move |session, relay| run_udp(udp_proxy, session, relay, inbound_tag),
+            move |session, relay| run_udp(udp_runtime, session, relay),
         )
         .await
 }

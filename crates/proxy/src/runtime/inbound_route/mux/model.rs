@@ -1,9 +1,7 @@
-use crate::runtime::Proxy;
+use crate::runtime::route_runtime::InboundRouteRuntime;
 
 pub(crate) struct MuxRouteBridge<P, FMapTcp, FRunUdp, FRunMux> {
-    pub(crate) proxy: Proxy,
-    pub(crate) inbound_tag: String,
-    pub(crate) source_addr: Option<std::net::SocketAddr>,
+    pub(crate) runtime: InboundRouteRuntime,
     pub(crate) protocol: P,
     pub(crate) map_tcp_stream: FMapTcp,
     pub(crate) run_udp: FRunUdp,

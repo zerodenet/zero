@@ -7,6 +7,7 @@ use zero_core::{
 };
 
 use super::{dispatch_protocol_mux_route, MuxRouteBridge};
+use crate::runtime::route_runtime::{InboundRouteRuntime, MuxSubstreamRuntime};
 use crate::runtime::tcp_ingress::NoClientResponseInboundProtocol;
 use crate::runtime::Proxy;
 use crate::transport::TcpRelayStream;
@@ -105,24 +106,21 @@ async fn mux_route_preserves_udp_session_and_inbound_tag() {
     dispatch_protocol_mux_route(
         DummyMuxRoute::Udp(session),
         MuxRouteBridge {
-            proxy: proxy(),
-            inbound_tag: "vless-mux-in".to_owned(),
-            source_addr: None,
+            runtime: InboundRouteRuntime::new(proxy(), "vless-mux-in".to_owned(), None),
             protocol: NoClientResponseInboundProtocol,
             map_tcp_stream: TcpRelayStream::new,
-            run_udp: move |_: Proxy,
+            run_udp: move |runtime: InboundRouteRuntime,
                             actual: Session,
-                            _: DummyUdpRelay,
-                            inbound_tag: String| async move {
+                            _: DummyUdpRelay| async move {
                 assert_eq!(actual.id, expected.id);
                 assert_eq!(actual.target, expected.target);
                 assert_eq!(actual.port, expected.port);
                 assert_eq!(actual.network, Network::Udp);
                 assert_eq!(actual.protocol, ProtocolType::Vless);
-                assert_eq!(inbound_tag, "vless-mux-in");
+                assert_eq!(runtime.inbound_tag(), "vless-mux-in");
                 Ok(())
             },
-            run_mux: |_: Proxy, _: u64, _: &'static str, _: String| async {
+            run_mux: |_: MuxSubstreamRuntime, _: u64, _: &'static str| async {
                 panic!("unexpected mux branch")
             },
         },
@@ -139,18 +137,16 @@ async fn mux_route_preserves_mux_objects_and_inbound_tag() {
             server: "mux-server",
         },
         MuxRouteBridge {
-            proxy: proxy(),
-            inbound_tag: "vmess-mux-in".to_owned(),
-            source_addr: None,
+            runtime: InboundRouteRuntime::new(proxy(), "vmess-mux-in".to_owned(), None),
             protocol: NoClientResponseInboundProtocol,
             map_tcp_stream: TcpRelayStream::new,
-            run_udp: |_: Proxy, _: Session, _: DummyUdpRelay, _: String| async {
+            run_udp: |_: InboundRouteRuntime, _: Session, _: DummyUdpRelay| async {
                 panic!("unexpected UDP branch")
             },
-            run_mux: |_: Proxy, reader: u64, server: &'static str, inbound_tag: String| async move {
+            run_mux: |runtime: MuxSubstreamRuntime, reader: u64, server: &'static str| async move {
                 assert_eq!(reader, 91);
                 assert_eq!(server, "mux-server");
-                assert_eq!(inbound_tag, "vmess-mux-in");
+                assert_eq!(runtime.inbound_tag(), "vmess-mux-in");
                 Ok(())
             },
         },

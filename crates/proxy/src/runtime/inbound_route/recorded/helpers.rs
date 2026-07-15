@@ -5,9 +5,9 @@ use zero_engine::EngineError;
 
 use super::model::RecordedProtocolMuxRouteDefaults;
 use crate::runtime::mux_session::{run_protocol_mux_session, MuxSessionLoop};
+use crate::runtime::route_runtime::{InboundRouteRuntime, MuxSubstreamRuntime};
 use crate::runtime::stream_udp::run_mapped_protocol_stream_udp_relay;
 use crate::runtime::udp_ingress::UdpIngressRuntime;
-use crate::runtime::Proxy;
 use crate::transport::{ClientStream, MeteredStream, RecordingStream, TcpRelayStream};
 
 pub(crate) fn into_recorded_tcp_relay_stream<S>(
@@ -29,11 +29,22 @@ pub(crate) fn record_metered_inbound_traffic<S>(
     runtime.record_session_inbound_traffic(session_id, client.drain_traffic());
 }
 
+pub(crate) fn record_metered_mux_inbound_traffic<S>(
+    runtime: &MuxSubstreamRuntime,
+    session_id: u64,
+    client: &mut MeteredStream<S>,
+) where
+    S: ClientStream,
+{
+    runtime
+        .udp_runtime()
+        .record_session_inbound_traffic(session_id, client.drain_traffic());
+}
+
 pub(crate) async fn run_recorded_protocol_stream_udp_relay<S, R>(
-    proxy: Proxy,
+    runtime: InboundRouteRuntime,
     session: Session,
     relay: R,
-    inbound_tag: String,
     protocol: &'static str,
 ) -> Result<(), EngineError>
 where
@@ -42,13 +53,13 @@ where
     R::Responder: StreamUdpResponder<MeteredStream<S>>,
 {
     let session_id = session.id;
-    let runtime = UdpIngressRuntime::from_proxy(&proxy);
-    let record_runtime = runtime.clone();
+    let ingress = runtime.udp_runtime();
+    let record_runtime = ingress.clone();
     run_mapped_protocol_stream_udp_relay(
-        runtime,
+        ingress,
         &session,
         relay,
-        &inbound_tag,
+        runtime.inbound_tag(),
         protocol,
         move |mut client| {
             record_runtime.record_session_inbound_traffic(session_id, client.drain_traffic());
@@ -60,10 +71,9 @@ where
 }
 
 pub(crate) async fn run_recorded_protocol_mux_session<S, M, FTcp, FTcpFut, FUdp, FUdpFut>(
-    proxy: Proxy,
+    runtime: MuxSubstreamRuntime,
     mut reader: MeteredStream<RecordingStream<S>>,
     mux_server: M,
-    inbound_tag: String,
     defaults: RecordedProtocolMuxRouteDefaults,
     spawn_tcp: FTcp,
     spawn_udp: FUdp,
@@ -71,15 +81,16 @@ pub(crate) async fn run_recorded_protocol_mux_session<S, M, FTcp, FTcpFut, FUdp,
 where
     S: ClientStream + 'static,
     M: InboundMuxServer<MeteredStream<S>>,
-    FTcp: FnMut(Proxy, Session, M::TcpRelay, String) -> FTcpFut + Send,
+    FTcp: FnMut(MuxSubstreamRuntime, Session, M::TcpRelay) -> FTcpFut + Send,
     FTcpFut: Future<Output = ()> + Send + 'static,
-    FUdp: FnMut(Proxy, M::UdpRelay, String) -> FUdpFut + Send,
+    FUdp: FnMut(MuxSubstreamRuntime, M::UdpRelay) -> FUdpFut + Send,
     FUdpFut: Future<Output = ()> + Send + 'static,
 {
-    record_metered_inbound_traffic(&UdpIngressRuntime::from_proxy(&proxy), 0, &mut reader);
+    record_metered_mux_inbound_traffic(&runtime, 0, &mut reader);
     let client = MeteredStream::new(reader.into_unrecorded_inner());
+    let inbound_tag = runtime.inbound_tag().to_owned();
     run_protocol_mux_session(
-        &proxy,
+        runtime,
         client,
         mux_server,
         MuxSessionLoop {

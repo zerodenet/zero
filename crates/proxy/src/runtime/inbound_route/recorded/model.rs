@@ -1,9 +1,7 @@
-use crate::runtime::Proxy;
+use crate::runtime::route_runtime::InboundRouteRuntime;
 
 pub(super) struct RecordedProtocolMuxDispatch<P> {
-    pub(super) proxy: Proxy,
-    pub(super) inbound_tag: String,
-    pub(super) source_addr: Option<std::net::SocketAddr>,
+    pub(super) runtime: InboundRouteRuntime,
     pub(super) protocol: P,
     pub(super) defaults: RecordedProtocolMuxRouteDefaults,
 }

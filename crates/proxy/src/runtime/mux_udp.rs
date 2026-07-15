@@ -6,8 +6,8 @@ use crate::runtime::packet_session_udp::{
     PacketSessionUdpReadFailure, PacketSessionUdpReadFailureAction, PacketSessionUdpReadResult,
     PacketSessionUdpRelayRequest,
 };
+use crate::runtime::route_runtime::MuxSubstreamRuntime;
 use crate::runtime::udp_ingress::UdpIngressRuntime;
-use crate::runtime::Proxy;
 
 struct MuxPacketSessionUdpHandler<R> {
     relay: R,
@@ -86,17 +86,16 @@ pub(crate) async fn run_protocol_mux_udp_relay<R>(
 
 #[cfg(feature = "vmess")]
 pub(crate) async fn run_protocol_mux_udp_task<R>(
-    proxy: Proxy,
+    runtime: MuxSubstreamRuntime,
     relay: R,
-    inbound_tag: String,
     protocol: &'static str,
 ) where
     R: InboundMuxUdpRelay,
 {
     run_protocol_mux_udp_relay(
-        UdpIngressRuntime::from_proxy(&proxy),
+        runtime.udp_runtime(),
         relay,
-        &inbound_tag,
+        runtime.inbound_tag(),
         protocol,
     )
     .await;
@@ -104,9 +103,8 @@ pub(crate) async fn run_protocol_mux_udp_task<R>(
 
 #[cfg(feature = "vless")]
 pub(crate) async fn run_protocol_mux_udp_task_with_accept_log<R>(
-    proxy: Proxy,
+    runtime: MuxSubstreamRuntime,
     relay: R,
-    inbound_tag: String,
     protocol: &'static str,
     accept_log_message: Option<&'static str>,
 ) where
@@ -114,15 +112,15 @@ pub(crate) async fn run_protocol_mux_udp_task_with_accept_log<R>(
 {
     if let Some(message) = accept_log_message {
         info!(
-            inbound_tag = %inbound_tag,
+            inbound_tag = runtime.inbound_tag(),
             network = "udp",
             "{message}"
         );
     }
     run_protocol_mux_udp_relay(
-        UdpIngressRuntime::from_proxy(&proxy),
+        runtime.udp_runtime(),
         relay,
-        &inbound_tag,
+        runtime.inbound_tag(),
         protocol,
     )
     .await;

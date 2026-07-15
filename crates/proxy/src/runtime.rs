@@ -50,6 +50,8 @@ pub(crate) mod packet_session_udp;
 pub(crate) mod path;
 pub(crate) mod pipe;
 mod reload;
+#[cfg(any(feature = "vless", feature = "vmess", feature = "trojan"))]
+pub(crate) mod route_runtime;
 mod running;
 #[cfg(any(
     feature = "vless",

@@ -4,6 +4,7 @@ use zero_engine::EngineError;
 
 use super::dispatch::dispatch_protocol_stream_route;
 use super::model::StreamRouteBridge;
+use crate::runtime::route_runtime::InboundRouteRuntime;
 use crate::runtime::stream_udp::run_mapped_protocol_stream_udp_relay;
 use crate::runtime::tcp_ingress::NoClientResponseInboundProtocol;
 use crate::runtime::Proxy;
@@ -28,20 +29,17 @@ where
     dispatch_protocol_stream_route(
         route,
         StreamRouteBridge {
-            proxy,
-            inbound_tag,
-            source_addr,
+            runtime: InboundRouteRuntime::new(proxy, inbound_tag, source_addr),
             protocol: NoClientResponseInboundProtocol,
             map_tcp_stream: TcpRelayStream::new,
-            run_udp: move |proxy: Proxy,
+            run_udp: move |runtime: InboundRouteRuntime,
                            session: Session,
-                           relay: R::UdpRelay,
-                           inbound_tag: String| async move {
+                           relay: R::UdpRelay| async move {
                 run_mapped_protocol_stream_udp_relay(
-                    crate::runtime::udp_ingress::UdpIngressRuntime::from_proxy(&proxy),
+                    runtime.udp_runtime(),
                     &session,
                     relay,
-                    &inbound_tag,
+                    runtime.inbound_tag(),
                     udp_protocol,
                     TcpRelayStream::new,
                     None,

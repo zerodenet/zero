@@ -320,6 +320,10 @@ fn runtime_owns_post_accept_route_execution() {
     assert!(combined.contains("dispatch_protocol_stream_route"));
     assert!(combined.contains("dispatch_protocol_mux_route"));
     assert!(combined.contains("recorded"));
+    assert!(combined.contains("InboundRouteRuntime"));
+    assert!(combined.contains("MuxSubstreamRuntime"));
+    assert!(!combined.contains("run_udp: move |proxy: Proxy"));
+    assert!(!combined.contains("run_mux: move |proxy: Proxy"));
 }
 
 #[test]
@@ -838,16 +842,50 @@ fn udp_ingress_runtime_collapses_proxy_and_services_for_session_loops() {
         );
     }
 
+    for relative in ["runtime/mux_session.rs", "runtime/mux_tcp.rs"] {
+        let source = read(&proxy_src().join(relative));
+        assert!(
+            source.contains("MuxSubstreamRuntime"),
+            "{relative} must route mux sub-stream tasks through the shared mux runtime context"
+        );
+        assert!(
+            !source.contains("use crate::runtime::Proxy"),
+            "{relative} must not import Proxy directly for mux sub-stream orchestration"
+        );
+    }
+
     for relative in [
         "runtime/datagram_udp/lifecycle.rs",
         "runtime/packet_session_udp/lifecycle.rs",
         "runtime/stream_udp.rs",
         "runtime/mux_udp.rs",
+        "runtime/mux_session.rs",
+        "runtime/mux_tcp.rs",
     ] {
         let source = read(&proxy_src().join(relative));
         assert!(
             !source.contains("&Proxy"),
             "{relative} must not borrow raw Proxy references for outer UDP session loops"
+        );
+    }
+
+    let route_runtime = read(&proxy_src().join("runtime/route_runtime.rs"));
+    assert!(route_runtime.contains("struct InboundRouteRuntime"));
+    assert!(route_runtime.contains("struct MuxSubstreamRuntime"));
+
+    for relative in [
+        "runtime/inbound_route/stream/dispatch.rs",
+        "runtime/inbound_route/mux/dispatch.rs",
+        "runtime/mux_session.rs",
+    ] {
+        let source = read(&proxy_src().join(relative));
+        assert!(
+            !source.contains("FnOnce(Proxy"),
+            "{relative} must not expose raw Proxy in generic route or mux closure contracts"
+        );
+        assert!(
+            !source.contains("FnMut(Proxy"),
+            "{relative} must not expose raw Proxy in generic route or mux closure contracts"
         );
     }
 
