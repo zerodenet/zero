@@ -887,6 +887,13 @@ fn udp_ingress_runtime_collapses_proxy_and_services_for_session_loops() {
     assert!(!inventory_inbound.contains("use crate::runtime::Proxy"));
     assert!(!inventory_inbound.contains("execute(proxy.clone()"));
 
+    let listener_inbound = read(&proxy_src().join("runtime/listeners/inbound.rs"));
+    assert!(listener_inbound.contains("ProtocolInventory"));
+    assert!(listener_inbound.contains("InboundListenerRuntimeFactory"));
+    assert!(!listener_inbound.contains("use super::super::Proxy"));
+    assert!(!listener_inbound.contains("proxy: &Proxy"));
+    assert!(!listener_inbound.contains("proxy.config.source_dir()"));
+
     let tcp_ingress_runtime = read(&proxy_src().join("runtime/tcp_ingress/runtime.rs"));
     assert!(tcp_ingress_runtime.contains("struct TcpIngressRuntime"));
     assert!(tcp_ingress_runtime.contains("serve_inbound("));

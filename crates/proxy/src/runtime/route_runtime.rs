@@ -204,6 +204,23 @@ impl InboundListenerRuntime {
     }
 }
 
+#[derive(Clone)]
+pub(crate) struct InboundListenerRuntimeFactory {
+    proxy: Proxy,
+}
+
+impl InboundListenerRuntimeFactory {
+    pub(crate) fn new(proxy: &Proxy) -> Self {
+        Self {
+            proxy: proxy.clone(),
+        }
+    }
+
+    pub(crate) fn for_inbound(&self, inbound_tag: String) -> InboundListenerRuntime {
+        InboundListenerRuntime::new(&self.proxy, inbound_tag)
+    }
+}
+
 #[cfg(any(feature = "vless", feature = "vmess"))]
 #[derive(Clone)]
 pub(crate) struct MuxSubstreamRuntime {

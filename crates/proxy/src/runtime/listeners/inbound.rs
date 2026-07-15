@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::path::Path;
 
 use tokio::sync::watch;
 use tokio::task::JoinSet;
@@ -6,38 +7,35 @@ use tracing::{info, warn};
 use zero_config::{InboundConfig, RuntimeConfig};
 use zero_engine::EngineError;
 
-use super::super::Proxy;
-use crate::runtime::route_runtime::InboundListenerRuntime;
+use crate::inventory::ProtocolInventory;
+use crate::runtime::route_runtime::InboundListenerRuntimeFactory;
 
 pub(in crate::runtime) async fn bind_inbound_listener(
-    proxy: &Proxy,
+    protocols: &ProtocolInventory,
+    source_dir: Option<&Path>,
     inbound: &InboundConfig,
 ) -> Result<crate::protocol_registry::BoundInbound, EngineError> {
-    proxy
-        .protocols
-        .bind_inbound(inbound, proxy.config.source_dir())
-        .await
+    protocols.bind_inbound(inbound, source_dir).await
 }
 
 pub(in crate::runtime) fn spawn_inbound_listener(
-    proxy: &Proxy,
+    protocols: &ProtocolInventory,
+    source_dir: Option<&Path>,
+    runtime_factory: &InboundListenerRuntimeFactory,
     inbound: &InboundConfig,
     bound: crate::protocol_registry::BoundInbound,
     shutdown_rx: watch::Receiver<bool>,
     listeners: &mut JoinSet<Result<(), EngineError>>,
 ) {
-    if let Err(error) = proxy
-        .protocols
-        .check_inbound_enabled(&inbound.protocol, &inbound.tag)
-    {
+    if let Err(error) = protocols.check_inbound_enabled(&inbound.protocol, &inbound.tag) {
         warn!(tag = %inbound.tag, error = %error, "skipping inbound listener: feature check failed");
         return;
     }
 
-    if let Err(error) = proxy.protocols.spawn_inbound(
+    if let Err(error) = protocols.spawn_inbound(
         inbound.clone(),
-        proxy.config.source_dir(),
-        InboundListenerRuntime::new(proxy, inbound.tag.clone()),
+        source_dir,
+        runtime_factory.for_inbound(inbound.tag.clone()),
         bound,
         shutdown_rx,
         listeners,
@@ -47,7 +45,9 @@ pub(in crate::runtime) fn spawn_inbound_listener(
 }
 
 pub(in crate::runtime) async fn reconcile_inbounds(
-    proxy: &Proxy,
+    protocols: &ProtocolInventory,
+    source_dir: Option<&Path>,
+    runtime_factory: &InboundListenerRuntimeFactory,
     new_config: &RuntimeConfig,
     listener_stops: &mut HashMap<String, watch::Sender<bool>>,
     listeners: &mut JoinSet<Result<(), EngineError>>,
@@ -75,9 +75,17 @@ pub(in crate::runtime) async fn reconcile_inbounds(
 
         let (shutdown_tx, shutdown_rx) = watch::channel(false);
         listener_stops.insert(inbound.tag.clone(), shutdown_tx);
-        match bind_inbound_listener(proxy, inbound).await {
+        match bind_inbound_listener(protocols, source_dir, inbound).await {
             Ok(bound) => {
-                spawn_inbound_listener(proxy, inbound, bound, shutdown_rx, listeners);
+                spawn_inbound_listener(
+                    protocols,
+                    source_dir,
+                    runtime_factory,
+                    inbound,
+                    bound,
+                    shutdown_rx,
+                    listeners,
+                );
                 info!(tag = %inbound.tag, "started new inbound listener");
             }
             Err(error) => {

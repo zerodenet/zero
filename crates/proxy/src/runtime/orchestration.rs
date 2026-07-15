@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::future::Future;
 use std::io;
+use std::path::PathBuf;
 
 use tokio::sync::watch;
 use tokio::task::JoinSet;
@@ -8,6 +9,7 @@ use tracing::{info, warn};
 use zero_engine::EngineError;
 
 use super::{listeners, reload, Proxy};
+use crate::runtime::route_runtime::InboundListenerRuntimeFactory;
 
 pub(super) async fn run_until<F>(proxy: &Proxy, shutdown: F) -> Result<(), EngineError>
 where
@@ -22,12 +24,24 @@ where
     let mut listener_stops: HashMap<String, watch::Sender<bool>> = HashMap::new();
     let mut urltests: JoinSet<Result<(), EngineError>> = JoinSet::new();
     let mut reload_async_rx = reload::subscribe_reload_bridge(proxy.engine.subscribe_reload());
+    let source_dir: Option<PathBuf> = proxy.config.source_dir().map(|path| path.to_path_buf());
+    let inbound_runtime_factory = InboundListenerRuntimeFactory::new(proxy);
 
     for inbound in &proxy.config.inbounds {
         let (tx, rx) = watch::channel(false);
         listener_stops.insert(inbound.tag.clone(), tx);
-        let bound = listeners::bind_inbound_listener(proxy, inbound).await?;
-        listeners::spawn_inbound_listener(proxy, inbound, bound, rx, &mut listeners);
+        let bound =
+            listeners::bind_inbound_listener(&proxy.protocols, source_dir.as_deref(), inbound)
+                .await?;
+        listeners::spawn_inbound_listener(
+            &proxy.protocols,
+            source_dir.as_deref(),
+            &inbound_runtime_factory,
+            inbound,
+            bound,
+            rx,
+            &mut listeners,
+        );
     }
     for &group_id in proxy.engine.plan().urltest_groups() {
         let proxy = proxy.clone();
@@ -74,7 +88,9 @@ where
                     warn!(%error, "failed to reload dns config");
                 }
                 listeners::reconcile_inbounds(
-                    proxy,
+                    &proxy.protocols,
+                    source_dir.as_deref(),
+                    &inbound_runtime_factory,
                     &new_config,
                     &mut listener_stops,
                     &mut listeners,
