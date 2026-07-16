@@ -2836,6 +2836,35 @@ fn mux_udp_root_stays_facade_only() {
 }
 
 #[test]
+fn no_client_mux_root_stays_facade_only() {
+    let no_client_root = read(&proxy_src().join("runtime/inbound_route/mux/no_client.rs"));
+    let no_client = read_module(&proxy_src().join("runtime/inbound_route/mux/no_client.rs"));
+    for module_name in ["mod request;", "mod route;"] {
+        assert!(no_client_root.contains(module_name));
+    }
+    for forbidden in [
+        "pub(crate) async fn dispatch_no_client_mux_route<",
+        "pub(crate) async fn dispatch_no_client_mux_route_with_defaults<",
+        "pub(crate) async fn dispatch_no_client_mux_route_request_with_defaults<",
+    ] {
+        assert!(
+            !no_client_root.contains(forbidden),
+            "no_client mux facade root must not keep `{forbidden}` inline"
+        );
+    }
+    for expected in [
+        "pub(crate) async fn dispatch_no_client_mux_route<",
+        "pub(crate) async fn dispatch_no_client_mux_route_with_defaults<",
+        "pub(crate) async fn dispatch_no_client_mux_route_request_with_defaults<",
+    ] {
+        assert!(
+            no_client.contains(expected),
+            "no_client mux module tree must still provide `{expected}`"
+        );
+    }
+}
+
+#[test]
 fn recorded_dispatch_root_stays_facade_only() {
     let dispatch_root = read(&proxy_src().join("runtime/inbound_route/recorded/dispatch.rs"));
     let dispatch = read_module(&proxy_src().join("runtime/inbound_route/recorded/dispatch.rs"));
