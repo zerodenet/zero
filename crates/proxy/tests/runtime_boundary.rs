@@ -1927,7 +1927,7 @@ fn udp_ingress_runtime_collapses_proxy_and_services_for_session_loops() {
     }
 
     for relative in ["runtime/mux_session.rs", "runtime/mux_tcp.rs"] {
-        let source = read(&proxy_src().join(relative));
+        let source = read_module(&proxy_src().join(relative));
         assert!(
             source.contains("MuxSubstreamRuntime"),
             "{relative} must route mux sub-stream tasks through the shared mux runtime context"
@@ -2375,6 +2375,70 @@ fn udp_dispatch_managed_start_root_stays_facade_only() {
         assert!(
             start.contains(expected),
             "udp_dispatch managed start module tree must still provide `{expected}`"
+        );
+    }
+}
+
+#[test]
+fn mux_session_root_stays_facade_only() {
+    let mux_session_root = read(&proxy_src().join("runtime/mux_session.rs"));
+    let mux_session = read_module(&proxy_src().join("runtime/mux_session.rs"));
+    for module_name in ["mod lifecycle;", "mod model;", "mod protocol;"] {
+        assert!(mux_session_root.contains(module_name));
+    }
+    for forbidden in [
+        "pub(crate) struct MuxSessionLoop",
+        "pub(crate) trait MuxOpenedDispatcher",
+        "pub(crate) async fn run_mux_session_loop",
+        "pub(crate) fn drain_completed_mux_tasks",
+        "pub(crate) async fn run_protocol_mux_session",
+    ] {
+        assert!(
+            !mux_session_root.contains(forbidden),
+            "mux_session facade root must not keep `{forbidden}` inline"
+        );
+    }
+    for expected in [
+        "pub(crate) struct MuxSessionLoop",
+        "pub(crate) trait MuxOpenedDispatcher",
+        "pub(crate) async fn run_mux_session_loop",
+        "pub(crate) fn drain_completed_mux_tasks",
+        "pub(crate) async fn run_protocol_mux_session",
+    ] {
+        assert!(
+            mux_session.contains(expected),
+            "mux_session module tree must still provide `{expected}`"
+        );
+    }
+}
+
+#[test]
+fn mux_udp_root_stays_facade_only() {
+    let mux_udp_root = read(&proxy_src().join("runtime/mux_udp.rs"));
+    let mux_udp = read_module(&proxy_src().join("runtime/mux_udp.rs"));
+    for module_name in ["mod handler;", "mod relay;", "mod task;"] {
+        assert!(mux_udp_root.contains(module_name));
+    }
+    for forbidden in [
+        "struct MuxPacketSessionUdpHandler",
+        "pub(crate) async fn run_protocol_mux_udp_relay",
+        "pub(crate) async fn run_protocol_mux_udp_task",
+        "pub(crate) async fn run_protocol_mux_udp_task_with_accept_log",
+    ] {
+        assert!(
+            !mux_udp_root.contains(forbidden),
+            "mux_udp facade root must not keep `{forbidden}` inline"
+        );
+    }
+    for expected in [
+        "pub(super) struct MuxPacketSessionUdpHandler",
+        "pub(crate) async fn run_protocol_mux_udp_relay",
+        "pub(crate) async fn run_protocol_mux_udp_task",
+        "pub(crate) async fn run_protocol_mux_udp_task_with_accept_log",
+    ] {
+        assert!(
+            mux_udp.contains(expected),
+            "mux_udp module tree must still provide `{expected}`"
         );
     }
 }
