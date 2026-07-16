@@ -2062,7 +2062,7 @@ fn udp_ingress_runtime_collapses_proxy_and_services_for_session_loops() {
     assert!(!listener_inbound.contains("proxy: &Proxy"));
     assert!(!listener_inbound.contains("proxy.config.source_dir()"));
 
-    let tcp_ingress_runtime = read(&proxy_src().join("runtime/tcp_ingress/runtime.rs"));
+    let tcp_ingress_runtime = read_module(&proxy_src().join("runtime/tcp_ingress/runtime.rs"));
     assert!(tcp_ingress_runtime.contains("struct TcpIngressRuntime"));
     assert!(tcp_ingress_runtime.contains("serve_inbound("));
     assert!(!tcp_ingress_runtime.contains("use crate::runtime::Proxy"));
@@ -2206,6 +2206,39 @@ fn udp_ingress_root_stays_facade_only() {
         assert!(
             ingress.contains(expected),
             "udp_ingress module tree must still provide `{expected}`"
+        );
+    }
+}
+
+#[test]
+fn tcp_ingress_runtime_root_stays_facade_only() {
+    let runtime_root = read(&proxy_src().join("runtime/tcp_ingress/runtime.rs"));
+    let runtime = read_module(&proxy_src().join("runtime/tcp_ingress/runtime.rs"));
+    for module_name in ["mod model;", "mod route;", "mod serve;", "mod session;"] {
+        assert!(runtime_root.contains(module_name));
+    }
+    for forbidden in [
+        "pub(crate) struct TcpIngressRuntime",
+        "pub(crate) async fn serve<P>(",
+        "pub(crate) fn route_decision",
+        "pub(crate) fn prepare_session",
+        "pub(crate) async fn open_tcp_upstream",
+    ] {
+        assert!(
+            !runtime_root.contains(forbidden),
+            "tcp_ingress runtime facade root must not keep `{forbidden}` inline"
+        );
+    }
+    for expected in [
+        "pub(crate) struct TcpIngressRuntime",
+        "pub(crate) async fn serve<P>(",
+        "pub(crate) fn route_decision",
+        "pub(crate) fn prepare_session",
+        "pub(crate) async fn open_tcp_upstream",
+    ] {
+        assert!(
+            runtime.contains(expected),
+            "tcp_ingress runtime module tree must still provide `{expected}`"
         );
     }
 }
