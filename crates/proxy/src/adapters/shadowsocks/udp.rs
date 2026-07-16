@@ -1,4 +1,4 @@
-use zero_engine::{EngineError, ResolvedLeafOutbound};
+use zero_engine::EngineError;
 
 use crate::adapters::shadowsocks::ShadowsocksAdapter;
 use crate::protocol_registry::{ClaimedUdpFlowLeaf, ClaimedUdpPacketPathLeaf};
@@ -141,18 +141,15 @@ pub(crate) fn managed_datagram_handler() -> Box<dyn ManagedDatagramFlowHandler> 
 impl ShadowsocksAdapter {
     pub(super) fn claim_udp_flow_leaf_impl<'a>(
         &self,
-        leaf: ResolvedLeafOutbound<'a>,
-    ) -> Option<Box<dyn ClaimedUdpFlowLeaf<'a> + 'a>> {
-        Some(Box::new(ClaimedShadowsocksUdpLeaf {
-            leaf: super::transport_leaf(&leaf)?,
-        }))
+        leaf: ::shadowsocks::transport::ShadowsocksTransportLeaf,
+    ) -> Box<dyn ClaimedUdpFlowLeaf<'a> + 'a> {
+        Box::new(ClaimedShadowsocksUdpLeaf { leaf })
     }
 
     pub(super) fn claim_udp_packet_path_leaf_impl<'a>(
         &self,
-        leaf: ResolvedLeafOutbound<'a>,
+        leaf: ::shadowsocks::transport::ShadowsocksTransportLeaf,
     ) -> Option<Box<dyn ClaimedUdpPacketPathLeaf<'a> + 'a>> {
-        let leaf = super::transport_leaf(&leaf)?;
         Some(Box::new(ClaimedShadowsocksPacketPathLeaf {
             plan: leaf.udp_packet_path_plan().ok()?,
         }))

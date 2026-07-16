@@ -1,4 +1,4 @@
-use zero_engine::{EngineError, ResolvedLeafOutbound};
+use zero_engine::EngineError;
 
 use crate::adapters::hysteria2::Hysteria2Adapter;
 use crate::protocol_registry::{ClaimedUdpFlowLeaf, ClaimedUdpPacketPathLeaf};
@@ -107,18 +107,15 @@ pub(crate) fn managed_datagram_handler() -> Box<dyn ManagedDatagramFlowHandler> 
 impl Hysteria2Adapter {
     pub(super) fn claim_udp_flow_leaf_impl<'a>(
         &self,
-        leaf: ResolvedLeafOutbound<'a>,
-    ) -> Option<Box<dyn ClaimedUdpFlowLeaf<'a> + 'a>> {
-        Some(Box::new(ClaimedHysteria2UdpLeaf {
-            leaf: super::transport_leaf(&leaf)?,
-        }))
+        leaf: ::hysteria2::transport::Hysteria2TransportLeaf,
+    ) -> Box<dyn ClaimedUdpFlowLeaf<'a> + 'a> {
+        Box::new(ClaimedHysteria2UdpLeaf { leaf })
     }
 
     pub(super) fn claim_udp_packet_path_leaf_impl<'a>(
         &self,
-        leaf: ResolvedLeafOutbound<'a>,
+        leaf: ::hysteria2::transport::Hysteria2TransportLeaf,
     ) -> Option<Box<dyn ClaimedUdpPacketPathLeaf<'a> + 'a>> {
-        let leaf = super::transport_leaf(&leaf)?;
         Some(Box::new(ClaimedHysteria2PacketPathLeaf {
             plan: leaf.udp_packet_path_plan(),
         }))

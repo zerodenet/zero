@@ -41,17 +41,7 @@ mod runtime;
 mod support;
 mod validation;
 
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
-))]
-pub(crate) use outbound::proxy_leaf_runtime;
-pub(crate) use outbound::{direct_leaf_runtime, ClaimedOutboundLeaf};
+pub(crate) use outbound::ClaimedOutboundLeaf;
 
 /// Registry of all compiled-in protocol adapters.
 ///

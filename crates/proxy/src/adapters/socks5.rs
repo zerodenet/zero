@@ -9,9 +9,10 @@ use crate::adapters::identity::{
     named_protocol_supports_inbound, named_protocol_supports_outbound, NamedProtocolAdapter,
 };
 use crate::protocol_registry::{
-    InboundListenerCapability, OutboundLeafClaim, ProtocolSupportCapability, TcpOutboundCapability,
-    UdpFlowCapability, UdpPacketPathCapability, UpstreamUdpHandlerProvider,
+    InboundListenerCapability, OutboundLeafClaim, OutboundLeafRuntime, ProtocolSupportCapability,
+    TcpOutboundCapability, UdpFlowCapability, UdpPacketPathCapability, UpstreamUdpHandlerProvider,
 };
+use crate::runtime::path::TcpPathCategory;
 use crate::runtime::udp_flow::registered::UpstreamAssociationHandler;
 
 #[cfg(feature = "socks5")]
@@ -59,11 +60,18 @@ impl Socks5Adapter {
         &self,
         leaf: ResolvedLeafOutbound<'a>,
     ) -> Option<OutboundLeafClaim<'a>> {
-        let tcp = self.claim_tcp_outbound_leaf_impl(leaf.clone())?;
+        let leaf = transport_leaf(&leaf)?;
+        let runtime = OutboundLeafRuntime::proxy(
+            leaf.tag(),
+            leaf.server(),
+            leaf.port(),
+            TcpPathCategory::Tunnel,
+        );
+        let tcp = self.claim_tcp_outbound_leaf_impl(leaf.clone());
         Some(OutboundLeafClaim {
-            runtime: tcp.runtime(),
+            runtime,
             tcp,
-            udp: self.claim_udp_flow_leaf_impl(leaf.clone()),
+            udp: Some(self.claim_udp_flow_leaf_impl(leaf.clone())),
             packet_path: self.claim_udp_packet_path_leaf_impl(leaf),
         })
     }

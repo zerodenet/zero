@@ -6,7 +6,7 @@ use zero_transport::outbound_leaf::{
     ProtocolTcpTransportOpenResult, ProtocolTransportLeaf,
 };
 
-use super::super::{ClaimedTcpOutboundLeaf, OutboundLeafRuntime};
+use super::super::ClaimedTcpOutboundLeaf;
 use crate::runtime::tcp_dispatch::operation::{
     PreparedTcpConnectOperation, PreparedTcpRelayOperation,
 };
@@ -14,7 +14,6 @@ use crate::transport::TcpOutboundFailure;
 
 pub(crate) fn claim_transport_tcp_leaf<'a, TLeaf, F, E>(
     upstream: Option<(&'a str, u16)>,
-    runtime: OutboundLeafRuntime,
     prepare_leaf: F,
 ) -> Box<dyn ClaimedTcpOutboundLeaf<'a> + 'a>
 where
@@ -30,14 +29,12 @@ where
 {
     Box::new(ClaimedTransportTcpLeaf {
         upstream,
-        runtime,
         prepare_leaf,
     })
 }
 
 struct ClaimedTransportTcpLeaf<'a, F> {
     upstream: Option<(&'a str, u16)>,
-    runtime: OutboundLeafRuntime,
     prepare_leaf: F,
 }
 
@@ -53,10 +50,6 @@ where
     F: Fn(Option<&Path>) -> Result<TLeaf, E> + Send + Sync + 'a,
     E: std::fmt::Display,
 {
-    fn runtime(&self) -> OutboundLeafRuntime {
-        self.runtime.clone()
-    }
-
     fn prepare_tcp_connect(
         &self,
         source_dir: Option<&Path>,

@@ -48,9 +48,14 @@ impl DirectAdapter {
         &self,
         leaf: ResolvedLeafOutbound<'a>,
     ) -> Option<OutboundLeafClaim<'a>> {
-        let tcp = self.claim_tcp_outbound_leaf_impl(leaf.clone())?;
+        let ResolvedLeafOutbound::Direct { tag } = leaf else {
+            return None;
+        };
+        let runtime = crate::protocol_registry::OutboundLeafRuntime::direct(tag);
+        let tag = tag.unwrap_or("direct").to_owned();
+        let tcp = self.claim_tcp_outbound_leaf_impl(tag.clone());
         Some(OutboundLeafClaim {
-            runtime: tcp.runtime(),
+            runtime,
             tcp,
             #[cfg(any(
                 feature = "socks5",
@@ -61,7 +66,7 @@ impl DirectAdapter {
                 feature = "vmess",
                 feature = "mieru"
             ))]
-            udp: self.claim_udp_flow_leaf_impl(leaf.clone()),
+            udp: Some(self.claim_udp_flow_leaf_impl(tag)),
             #[cfg(any(
                 feature = "socks5",
                 feature = "vless",

@@ -1,5 +1,3 @@
-use zero_engine::ResolvedLeafOutbound;
-
 use crate::adapters::mieru::MieruAdapter;
 use crate::protocol_registry::ClaimedUdpFlowLeaf;
 use crate::runtime::udp_dispatch::operation::{
@@ -69,10 +67,8 @@ impl<'a> PreparedUdpRelayOperation<'a> for PreparedMieruUdpRelay {
 impl MieruAdapter {
     pub(super) fn claim_udp_flow_leaf_impl<'a>(
         &self,
-        leaf: ResolvedLeafOutbound<'a>,
-    ) -> Option<Box<dyn ClaimedUdpFlowLeaf<'a> + 'a>> {
-        Some(Box::new(ClaimedMieruUdpLeaf {
-            leaf: super::transport_leaf(&leaf)?,
-        }))
+        leaf: ::mieru::transport::MieruTransportLeaf,
+    ) -> Box<dyn ClaimedUdpFlowLeaf<'a> + 'a> {
+        Box::new(ClaimedMieruUdpLeaf { leaf })
     }
 }

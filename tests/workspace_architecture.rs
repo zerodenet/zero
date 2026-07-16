@@ -161,6 +161,51 @@ fn protocol_projection_is_confined_to_proxy_adapters() {
 }
 
 #[test]
+fn simple_proxy_adapters_project_each_outbound_leaf_once() {
+    let adapters = workspace_root().join("crates/proxy/src/adapters");
+    for protocol in ["direct", "socks5", "hysteria2", "shadowsocks", "mieru"] {
+        let root = adapters.join(format!("{protocol}.rs"));
+        let variant = format!(
+            "ResolvedLeafOutbound::{}",
+            match protocol {
+                "direct" => "Direct",
+                "socks5" => "Socks5",
+                "hysteria2" => "Hysteria2",
+                "shadowsocks" => "Shadowsocks",
+                "mieru" => "Mieru",
+                _ => unreachable!(),
+            }
+        );
+        assert_eq!(
+            read(&root).matches(&variant).count(),
+            1,
+            "{} must project its engine leaf exactly once",
+            root.display()
+        );
+
+        for path in rust_sources(&adapters.join(protocol)) {
+            assert!(
+                !read(&path).contains("ResolvedLeafOutbound"),
+                "{} must consume the protocol-owned projected leaf",
+                path.display()
+            );
+        }
+    }
+}
+
+#[test]
+fn protocol_registry_does_not_project_proxy_leaf_runtime_facts() {
+    let registry =
+        read(&workspace_root().join("crates/proxy/src/protocol_registry/registry/outbound.rs"));
+    for forbidden in ["fn proxy_leaf_runtime", ".proxy_endpoint()", "leaf.tag()"] {
+        assert!(
+            !registry.contains(forbidden),
+            "protocol registry must not derive adapter-owned runtime facts through `{forbidden}`"
+        );
+    }
+}
+
+#[test]
 fn config_delegates_protocol_private_value_validation() {
     let validator = read(&workspace_root().join("crates/config/src/validate/protocol.rs"));
     for delegated in [

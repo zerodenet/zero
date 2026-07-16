@@ -137,9 +137,9 @@ fn registry_executes_adapter_claimed_tcp_leaf_operations() {
     use crate::protocol_catalog::protocol_descriptor;
     use crate::protocol_registry::TcpRuntimeServices;
     use crate::protocol_registry::{
-        proxy_leaf_runtime, ClaimedTcpOutboundLeaf, ClaimedUdpFlowLeaf, InboundListenerCapability,
-        OutboundLeafClaim, OutboundLeafRuntime, ProtocolSupportCapability, TcpOutboundCapability,
-        UdpFlowCapability, UdpPacketPathCapability,
+        ClaimedTcpOutboundLeaf, ClaimedUdpFlowLeaf, InboundListenerCapability, OutboundLeafClaim,
+        OutboundLeafRuntime, ProtocolSupportCapability, TcpOutboundCapability, UdpFlowCapability,
+        UdpPacketPathCapability,
     };
     use crate::runtime::tcp_dispatch::operation::{
         PreparedTcpConnectOperation, PreparedTcpRelayOperation,
@@ -150,15 +150,9 @@ fn registry_executes_adapter_claimed_tcp_leaf_operations() {
     use crate::runtime::udp_dispatch::FlowFailure;
     use crate::transport::{TcpOutboundFailure, TcpRelayStream};
 
-    struct FakeClaimedLeaf {
-        runtime: OutboundLeafRuntime,
-    }
+    struct FakeClaimedLeaf;
 
     impl<'a> ClaimedTcpOutboundLeaf<'a> for FakeClaimedLeaf {
-        fn runtime(&self) -> OutboundLeafRuntime {
-            self.runtime.clone()
-        }
-
         fn prepare_tcp_connect(
             &self,
             _source_dir: Option<&std::path::Path>,
@@ -248,13 +242,15 @@ fn registry_executes_adapter_claimed_tcp_leaf_operations() {
             &self,
             leaf: ResolvedLeafOutbound<'a>,
         ) -> Option<OutboundLeafClaim<'a>> {
-            let runtime = proxy_leaf_runtime(&leaf, TcpPathCategory::Tunnel)?;
             match leaf {
-                ResolvedLeafOutbound::Socks5 { .. } => {
-                    let tcp: Box<dyn ClaimedTcpOutboundLeaf<'a> + 'a> =
-                        Box::new(FakeClaimedLeaf { runtime });
+                ResolvedLeafOutbound::Socks5 {
+                    tag, server, port, ..
+                } => {
+                    let runtime =
+                        OutboundLeafRuntime::proxy(tag, server, port, TcpPathCategory::Tunnel);
+                    let tcp: Box<dyn ClaimedTcpOutboundLeaf<'a> + 'a> = Box::new(FakeClaimedLeaf);
                     Some(OutboundLeafClaim {
-                        runtime: tcp.runtime(),
+                        runtime,
                         tcp,
                         udp: Some(Box::new(FakeClaimedUdpLeaf)),
                         packet_path: None,
@@ -309,9 +305,9 @@ fn registry_executes_adapter_claimed_udp_leaf_operations() {
 
     use crate::protocol_catalog::protocol_descriptor;
     use crate::protocol_registry::{
-        proxy_leaf_runtime, ClaimedTcpOutboundLeaf, ClaimedUdpFlowLeaf, InboundListenerCapability,
-        OutboundLeafClaim, OutboundLeafRuntime, ProtocolSupportCapability, TcpOutboundCapability,
-        UdpFlowCapability, UdpPacketPathCapability,
+        ClaimedTcpOutboundLeaf, ClaimedUdpFlowLeaf, InboundListenerCapability, OutboundLeafClaim,
+        OutboundLeafRuntime, ProtocolSupportCapability, TcpOutboundCapability, UdpFlowCapability,
+        UdpPacketPathCapability,
     };
     use crate::runtime::tcp_dispatch::operation::{
         DirectTcpConnectOperation, PreparedTcpConnectOperation,
@@ -349,15 +345,9 @@ fn registry_executes_adapter_claimed_udp_leaf_operations() {
         }
     }
 
-    struct FakeClaimedTcpLeaf {
-        runtime: OutboundLeafRuntime,
-    }
+    struct FakeClaimedTcpLeaf;
 
     impl<'a> ClaimedTcpOutboundLeaf<'a> for FakeClaimedTcpLeaf {
-        fn runtime(&self) -> OutboundLeafRuntime {
-            self.runtime.clone()
-        }
-
         fn prepare_tcp_connect(
             &self,
             _source_dir: Option<&std::path::Path>,
@@ -430,13 +420,16 @@ fn registry_executes_adapter_claimed_udp_leaf_operations() {
             &self,
             leaf: ResolvedLeafOutbound<'a>,
         ) -> Option<OutboundLeafClaim<'a>> {
-            let runtime = proxy_leaf_runtime(&leaf, TcpPathCategory::Tunnel)?;
             match leaf {
-                ResolvedLeafOutbound::Socks5 { .. } => {
+                ResolvedLeafOutbound::Socks5 {
+                    tag, server, port, ..
+                } => {
+                    let runtime =
+                        OutboundLeafRuntime::proxy(tag, server, port, TcpPathCategory::Tunnel);
                     let tcp: Box<dyn ClaimedTcpOutboundLeaf<'a> + 'a> =
-                        Box::new(FakeClaimedTcpLeaf { runtime });
+                        Box::new(FakeClaimedTcpLeaf);
                     Some(OutboundLeafClaim {
-                        runtime: tcp.runtime(),
+                        runtime,
                         tcp,
                         udp: Some(Box::new(FakeClaimedUdpLeaf)),
                         packet_path: None,
@@ -499,7 +492,7 @@ fn registry_executes_adapter_claimed_udp_packet_path_operations() {
 
     use crate::protocol_catalog::protocol_descriptor;
     use crate::protocol_registry::{
-        proxy_leaf_runtime, ClaimedTcpOutboundLeaf, ClaimedUdpFlowLeaf, ClaimedUdpPacketPathLeaf,
+        ClaimedTcpOutboundLeaf, ClaimedUdpFlowLeaf, ClaimedUdpPacketPathLeaf,
         InboundListenerCapability, OutboundLeafClaim, OutboundLeafRuntime,
         ProtocolSupportCapability, TcpOutboundCapability, UdpFlowCapability,
         UdpPacketPathCapability,
@@ -515,15 +508,9 @@ fn registry_executes_adapter_claimed_udp_packet_path_operations() {
 
     struct FakeClaimedUdpPacketPathLeaf;
 
-    struct FakeClaimedTcpLeaf {
-        runtime: OutboundLeafRuntime,
-    }
+    struct FakeClaimedTcpLeaf;
 
     impl<'a> ClaimedTcpOutboundLeaf<'a> for FakeClaimedTcpLeaf {
-        fn runtime(&self) -> OutboundLeafRuntime {
-            self.runtime.clone()
-        }
-
         fn prepare_tcp_connect(
             &self,
             _source_dir: Option<&std::path::Path>,
@@ -641,13 +628,16 @@ fn registry_executes_adapter_claimed_udp_packet_path_operations() {
             &self,
             leaf: ResolvedLeafOutbound<'a>,
         ) -> Option<OutboundLeafClaim<'a>> {
-            let runtime = proxy_leaf_runtime(&leaf, TcpPathCategory::Tunnel)?;
             match leaf {
-                ResolvedLeafOutbound::Socks5 { .. } => {
+                ResolvedLeafOutbound::Socks5 {
+                    tag, server, port, ..
+                } => {
+                    let runtime =
+                        OutboundLeafRuntime::proxy(tag, server, port, TcpPathCategory::Tunnel);
                     let tcp: Box<dyn ClaimedTcpOutboundLeaf<'a> + 'a> =
-                        Box::new(FakeClaimedTcpLeaf { runtime });
+                        Box::new(FakeClaimedTcpLeaf);
                     Some(OutboundLeafClaim {
-                        runtime: tcp.runtime(),
+                        runtime,
                         tcp,
                         udp: Some(Box::new(FakeClaimedUdpLeaf)),
                         packet_path: Some(Box::new(FakeClaimedUdpPacketPathLeaf)),

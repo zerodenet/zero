@@ -15,7 +15,6 @@ use crate::protocol_registry::{ClaimedTcpOutboundLeaf, OutboundLeafClaim, Outbou
     feature = "mieru"
 ))]
 use crate::protocol_registry::{ClaimedUdpFlowLeaf, ClaimedUdpPacketPathLeaf};
-use crate::runtime::path::TcpPathCategory;
 use crate::runtime::tcp_dispatch::operation::{
     PreparedTcpConnectOperation, PreparedTcpRelayOperation,
 };
@@ -29,15 +28,6 @@ use crate::runtime::tcp_dispatch::operation::{
     feature = "mieru"
 ))]
 use crate::runtime::udp_dispatch::operation::PreparedUdpFlowOperation;
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
-))]
 #[derive(Clone, Default)]
 struct ClaimedTcpHooks<'a> {
     capability: Option<Arc<dyn ClaimedTcpOutboundLeaf<'a> + 'a>>,
@@ -302,111 +292,6 @@ fn claim_outbound_hooks<'a>(
     ))
 }
 
-pub(crate) fn direct_leaf_runtime(leaf: &ResolvedLeafOutbound<'_>) -> Option<OutboundLeafRuntime> {
-    match leaf {
-        ResolvedLeafOutbound::Direct { tag } => Some(OutboundLeafRuntime {
-            tcp_path: TcpPathCategory::Direct,
-            #[cfg(any(
-                feature = "socks5",
-                feature = "vless",
-                feature = "hysteria2",
-                feature = "shadowsocks",
-                feature = "trojan",
-                feature = "vmess",
-                feature = "mieru"
-            ))]
-            health_tag: None,
-            endpoint: None,
-            kernel_tag: (*tag).map(str::to_owned),
-            #[cfg(any(
-                feature = "socks5",
-                feature = "vless",
-                feature = "hysteria2",
-                feature = "shadowsocks",
-                feature = "trojan",
-                feature = "vmess",
-                feature = "mieru"
-            ))]
-            udp_policy_tag: (*tag).map(str::to_owned),
-        }),
-        _ => None,
-    }
-}
-
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
-))]
-pub(crate) fn proxy_leaf_runtime(
-    leaf: &ResolvedLeafOutbound<'_>,
-    tcp_path: TcpPathCategory,
-) -> Option<OutboundLeafRuntime> {
-    let tag = leaf.tag()?;
-    let (server, port) = leaf.proxy_endpoint()?;
-
-    Some(OutboundLeafRuntime {
-        tcp_path,
-        #[cfg(any(
-            feature = "socks5",
-            feature = "vless",
-            feature = "hysteria2",
-            feature = "shadowsocks",
-            feature = "trojan",
-            feature = "vmess",
-            feature = "mieru"
-        ))]
-        health_tag: Some(tag.to_owned()),
-        endpoint: Some(crate::runtime::path::OutboundEndpoint {
-            server: server.to_owned(),
-            port,
-        }),
-        kernel_tag: None,
-        #[cfg(any(
-            feature = "socks5",
-            feature = "vless",
-            feature = "hysteria2",
-            feature = "shadowsocks",
-            feature = "trojan",
-            feature = "vmess",
-            feature = "mieru"
-        ))]
-        udp_policy_tag: Some(tag.to_owned()),
-    })
-}
-
-pub(crate) fn block_leaf_runtime(tag: Option<&str>) -> OutboundLeafRuntime {
-    OutboundLeafRuntime {
-        tcp_path: TcpPathCategory::Block,
-        #[cfg(any(
-            feature = "socks5",
-            feature = "vless",
-            feature = "hysteria2",
-            feature = "shadowsocks",
-            feature = "trojan",
-            feature = "vmess",
-            feature = "mieru"
-        ))]
-        health_tag: None,
-        endpoint: None,
-        kernel_tag: tag.map(str::to_owned),
-        #[cfg(any(
-            feature = "socks5",
-            feature = "vless",
-            feature = "hysteria2",
-            feature = "shadowsocks",
-            feature = "trojan",
-            feature = "vmess",
-            feature = "mieru"
-        ))]
-        udp_policy_tag: tag.map(str::to_owned),
-    }
-}
-
 impl ProtocolRegistry {
     fn outbound_protocol_entry(&self, protocol: &str) -> Option<&RegisteredProtocolEntry> {
         self.entries
@@ -433,7 +318,7 @@ impl ProtocolRegistry {
             ))]
             let udp = ClaimedUdpHooks::default();
             return Ok(ClaimedOutboundLeaf::new(
-                block_leaf_runtime(tag),
+                OutboundLeafRuntime::block(tag),
                 ClaimedTcpHooks::default(),
                 #[cfg(any(
                     feature = "socks5",

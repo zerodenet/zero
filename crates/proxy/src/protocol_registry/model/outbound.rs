@@ -31,3 +31,85 @@ pub(crate) struct OutboundLeafRuntime {
     ))]
     pub(crate) udp_policy_tag: Option<String>,
 }
+
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
+impl OutboundLeafRuntime {
+    pub(crate) fn proxy(tag: &str, server: &str, port: u16, tcp_path: TcpPathCategory) -> Self {
+        Self {
+            tcp_path,
+            health_tag: Some(tag.to_owned()),
+            endpoint: Some(OutboundEndpoint {
+                server: server.to_owned(),
+                port,
+            }),
+            kernel_tag: None,
+            udp_policy_tag: Some(tag.to_owned()),
+        }
+    }
+}
+
+impl OutboundLeafRuntime {
+    pub(crate) fn direct(tag: Option<&str>) -> Self {
+        Self {
+            tcp_path: TcpPathCategory::Direct,
+            #[cfg(any(
+                feature = "socks5",
+                feature = "vless",
+                feature = "hysteria2",
+                feature = "shadowsocks",
+                feature = "trojan",
+                feature = "vmess",
+                feature = "mieru"
+            ))]
+            health_tag: None,
+            endpoint: None,
+            kernel_tag: tag.map(str::to_owned),
+            #[cfg(any(
+                feature = "socks5",
+                feature = "vless",
+                feature = "hysteria2",
+                feature = "shadowsocks",
+                feature = "trojan",
+                feature = "vmess",
+                feature = "mieru"
+            ))]
+            udp_policy_tag: tag.map(str::to_owned),
+        }
+    }
+
+    pub(crate) fn block(tag: Option<&str>) -> Self {
+        Self {
+            tcp_path: TcpPathCategory::Block,
+            #[cfg(any(
+                feature = "socks5",
+                feature = "vless",
+                feature = "hysteria2",
+                feature = "shadowsocks",
+                feature = "trojan",
+                feature = "vmess",
+                feature = "mieru"
+            ))]
+            health_tag: None,
+            endpoint: None,
+            kernel_tag: tag.map(str::to_owned),
+            #[cfg(any(
+                feature = "socks5",
+                feature = "vless",
+                feature = "hysteria2",
+                feature = "shadowsocks",
+                feature = "trojan",
+                feature = "vmess",
+                feature = "mieru"
+            ))]
+            udp_policy_tag: tag.map(str::to_owned),
+        }
+    }
+}

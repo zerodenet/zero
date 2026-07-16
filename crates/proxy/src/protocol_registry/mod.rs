@@ -53,19 +53,8 @@ pub(crate) use context::{UdpAdapterContext, UdpAssociationCloseKind, UdpRuntimeS
 #[cfg(feature = "transport_quic")]
 pub(crate) use defaults::bind_transport_inbound;
 pub(crate) use model::{BoundInbound, OutboundLeafRuntime};
-pub(crate) use registry::direct_leaf_runtime;
 #[cfg(test)]
 pub(crate) use registry::fake_direct_leaf;
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
-))]
-pub(crate) use registry::proxy_leaf_runtime;
 pub(crate) use registry::ClaimedOutboundLeaf;
 pub(crate) use registry::ProtocolRegistry;
 #[cfg(feature = "vless")]

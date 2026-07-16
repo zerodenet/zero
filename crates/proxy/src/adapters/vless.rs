@@ -23,8 +23,8 @@ use crate::adapters::identity::{
 };
 use crate::protocol_registry::{
     bind_transport_inbound, claim_relay_two_stream_transport_udp_leaf, claim_transport_tcp_leaf,
-    proxy_leaf_runtime, BoundInbound, InboundListenerCapability, ManagedUdpHandlerProvider,
-    OutboundLeafClaim, ProtocolSupportCapability, TcpOutboundCapability, UdpFlowCapability,
+    BoundInbound, InboundListenerCapability, ManagedUdpHandlerProvider, OutboundLeafClaim,
+    OutboundLeafRuntime, ProtocolSupportCapability, TcpOutboundCapability, UdpFlowCapability,
     UdpPacketPathCapability,
 };
 use crate::runtime::path::TcpPathCategory;
@@ -153,14 +153,19 @@ impl VlessAdapter {
         &self,
         leaf: ResolvedLeafOutbound<'a>,
     ) -> Option<OutboundLeafClaim<'a>> {
-        let runtime = proxy_leaf_runtime(&leaf, TCP_PATH)?;
         let projection = VlessOutboundProjection::from_leaf(leaf)?;
+        let runtime = OutboundLeafRuntime::proxy(
+            projection.tag,
+            projection.server,
+            projection.port,
+            TCP_PATH,
+        );
         let endpoint = Some(projection.endpoint());
         let tcp_runtime = self.runtime.clone();
         let udp_runtime = self.runtime.clone();
         Some(OutboundLeafClaim {
             runtime: runtime.clone(),
-            tcp: claim_transport_tcp_leaf(endpoint, runtime, move |source_dir| {
+            tcp: claim_transport_tcp_leaf(endpoint, move |source_dir| {
                 VlessOutboundLeaf::from_options_refs(
                     source_dir,
                     projection.build_options(),

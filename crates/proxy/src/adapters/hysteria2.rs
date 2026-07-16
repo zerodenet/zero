@@ -13,9 +13,10 @@ use crate::adapters::identity::{
 };
 use crate::protocol_registry::{
     bind_transport_inbound, BoundInbound, InboundListenerCapability, ManagedUdpHandlerProvider,
-    OutboundLeafClaim, ProtocolSupportCapability, TcpOutboundCapability, UdpFlowCapability,
-    UdpPacketPathCapability,
+    OutboundLeafClaim, OutboundLeafRuntime, ProtocolSupportCapability, TcpOutboundCapability,
+    UdpFlowCapability, UdpPacketPathCapability,
 };
+use crate::runtime::path::TcpPathCategory;
 use crate::runtime::udp_flow::managed::ManagedDatagramFlowHandler;
 
 #[cfg(feature = "hysteria2")]
@@ -64,11 +65,18 @@ impl Hysteria2Adapter {
         &self,
         leaf: ResolvedLeafOutbound<'a>,
     ) -> Option<OutboundLeafClaim<'a>> {
-        let tcp = self.claim_tcp_outbound_leaf_impl(leaf.clone())?;
+        let leaf = transport_leaf(&leaf)?;
+        let runtime = OutboundLeafRuntime::proxy(
+            leaf.tag(),
+            leaf.server(),
+            leaf.port(),
+            TcpPathCategory::TransportSession,
+        );
+        let tcp = self.claim_tcp_outbound_leaf_impl(leaf.clone());
         Some(OutboundLeafClaim {
-            runtime: tcp.runtime(),
+            runtime,
             tcp,
-            udp: self.claim_udp_flow_leaf_impl(leaf.clone()),
+            udp: Some(self.claim_udp_flow_leaf_impl(leaf.clone())),
             packet_path: self.claim_udp_packet_path_leaf_impl(leaf),
         })
     }

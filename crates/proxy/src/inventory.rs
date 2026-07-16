@@ -19,15 +19,6 @@ mod tests;
 mod udp;
 
 pub(crate) use runtime::{ClaimedInventoryLeaf, ClaimedRelayChain};
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
-))]
 pub(crate) use tcp::PreparedTcpRelayChain;
 pub(crate) use tcp::{
     PreparedTcpCandidate, PreparedTcpCandidateExecution, PreparedTcpOutbound, PreparedTcpRelayHop,

@@ -633,14 +633,9 @@ struct FakeTcpRelayOperation {
 
 struct FakeClaimedTcpLeaf {
     calls: Arc<TcpCapabilityCalls>,
-    runtime: OutboundLeafRuntime,
 }
 
 impl<'a> ClaimedTcpOutboundLeaf<'a> for FakeClaimedTcpLeaf {
-    fn runtime(&self) -> OutboundLeafRuntime {
-        self.runtime.clone()
-    }
-
     fn prepare_tcp_connect(
         &self,
         _source_dir: Option<&std::path::Path>,
@@ -690,39 +685,39 @@ impl FakeTcpCapability {
         let ResolvedLeafOutbound::Direct { tag } = leaf else {
             return None;
         };
+        let runtime = OutboundLeafRuntime {
+            tcp_path: TcpPathCategory::Direct,
+            #[cfg(any(
+                feature = "socks5",
+                feature = "vless",
+                feature = "hysteria2",
+                feature = "shadowsocks",
+                feature = "trojan",
+                feature = "vmess",
+                feature = "mieru"
+            ))]
+            health_tag: None,
+            endpoint: Some(OutboundEndpoint {
+                server: "fake-tcp.test".to_owned(),
+                port: 8443,
+            }),
+            kernel_tag: tag.map(str::to_owned),
+            #[cfg(any(
+                feature = "socks5",
+                feature = "vless",
+                feature = "hysteria2",
+                feature = "shadowsocks",
+                feature = "trojan",
+                feature = "vmess",
+                feature = "mieru"
+            ))]
+            udp_policy_tag: tag.map(str::to_owned),
+        };
         let tcp: Box<dyn ClaimedTcpOutboundLeaf<'a> + 'a> = Box::new(FakeClaimedTcpLeaf {
             calls: self.calls.clone(),
-            runtime: OutboundLeafRuntime {
-                tcp_path: TcpPathCategory::Direct,
-                #[cfg(any(
-                    feature = "socks5",
-                    feature = "vless",
-                    feature = "hysteria2",
-                    feature = "shadowsocks",
-                    feature = "trojan",
-                    feature = "vmess",
-                    feature = "mieru"
-                ))]
-                health_tag: None,
-                endpoint: Some(OutboundEndpoint {
-                    server: "fake-tcp.test".to_owned(),
-                    port: 8443,
-                }),
-                kernel_tag: tag.map(str::to_owned),
-                #[cfg(any(
-                    feature = "socks5",
-                    feature = "vless",
-                    feature = "hysteria2",
-                    feature = "shadowsocks",
-                    feature = "trojan",
-                    feature = "vmess",
-                    feature = "mieru"
-                ))]
-                udp_policy_tag: tag.map(str::to_owned),
-            },
         });
         Some(OutboundLeafClaim {
-            runtime: tcp.runtime(),
+            runtime,
             tcp,
             #[cfg(any(
                 feature = "socks5",

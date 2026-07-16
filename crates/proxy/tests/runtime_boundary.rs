@@ -253,7 +253,8 @@ fn capability_surface_is_split_and_context_is_narrow() {
     assert!(!capability.contains("fn claim_udp_flow_leaf"));
     assert!(!capability.contains("fn claim_udp_packet_path_leaf"));
     assert!(capability.contains("BoundInbound"));
-    assert!(capability.contains("fn runtime(&self) -> OutboundLeafRuntime;"));
+    assert!(!capability.contains("fn runtime(&self) -> OutboundLeafRuntime;"));
+    assert!(capability.contains("pub(crate) runtime: OutboundLeafRuntime,"));
     assert!(!capability.contains("fn claims_outbound_leaf("));
     assert!(!capability.contains("fn outbound_leaf_runtime("));
     assert!(context.contains(

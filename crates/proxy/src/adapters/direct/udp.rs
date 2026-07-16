@@ -1,5 +1,3 @@
-use zero_engine::ResolvedLeafOutbound;
-
 use crate::adapters::direct::DirectAdapter;
 use crate::protocol_registry::ClaimedUdpFlowLeaf;
 use crate::runtime::udp_dispatch::operation::{DirectUdpFlowOperation, PreparedUdpFlowOperation};
@@ -23,13 +21,8 @@ impl<'a> ClaimedUdpFlowLeaf<'a> for ClaimedDirectUdpLeaf {
 impl DirectAdapter {
     pub(super) fn claim_udp_flow_leaf_impl<'a>(
         &self,
-        leaf: ResolvedLeafOutbound<'a>,
-    ) -> Option<Box<dyn ClaimedUdpFlowLeaf<'a> + 'a>> {
-        let ResolvedLeafOutbound::Direct { tag } = &leaf else {
-            return None;
-        };
-        Some(Box::new(ClaimedDirectUdpLeaf {
-            tag: (*tag).unwrap_or("direct").to_owned(),
-        }))
+        tag: String,
+    ) -> Box<dyn ClaimedUdpFlowLeaf<'a> + 'a> {
+        Box::new(ClaimedDirectUdpLeaf { tag })
     }
 }

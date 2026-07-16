@@ -17,9 +17,9 @@ use crate::adapters::identity::{
     named_protocol_supports_inbound, named_protocol_supports_outbound, NamedProtocolAdapter,
 };
 use crate::protocol_registry::{
-    claim_transport_tcp_leaf, claim_transport_udp_leaf, proxy_leaf_runtime,
-    InboundListenerCapability, ManagedUdpHandlerProvider, OutboundLeafClaim,
-    ProtocolSupportCapability, TcpOutboundCapability, UdpFlowCapability, UdpPacketPathCapability,
+    claim_transport_tcp_leaf, claim_transport_udp_leaf, InboundListenerCapability,
+    ManagedUdpHandlerProvider, OutboundLeafClaim, OutboundLeafRuntime, ProtocolSupportCapability,
+    TcpOutboundCapability, UdpFlowCapability, UdpPacketPathCapability,
 };
 use crate::runtime::path::TcpPathCategory;
 #[cfg(feature = "trojan")]
@@ -97,12 +97,17 @@ impl TrojanAdapter {
         &self,
         leaf: ResolvedLeafOutbound<'a>,
     ) -> Option<OutboundLeafClaim<'a>> {
-        let runtime = proxy_leaf_runtime(&leaf, TCP_PATH)?;
         let projection = TrojanOutboundProjection::from_leaf(leaf)?;
+        let runtime = OutboundLeafRuntime::proxy(
+            projection.tag,
+            projection.server,
+            projection.port,
+            TCP_PATH,
+        );
         let endpoint = Some(projection.endpoint());
         Some(OutboundLeafClaim {
             runtime: runtime.clone(),
-            tcp: claim_transport_tcp_leaf(endpoint, runtime, move |source_dir| {
+            tcp: claim_transport_tcp_leaf(endpoint, move |source_dir| {
                 Ok::<TrojanOutboundLeaf, zero_core::Error>(TrojanOutboundLeaf::from_options_refs(
                     source_dir,
                     projection.build_options(),

@@ -10,9 +10,10 @@ use crate::adapters::identity::{
     named_protocol_supports_inbound, named_protocol_supports_outbound, NamedProtocolAdapter,
 };
 use crate::protocol_registry::{
-    InboundListenerCapability, ManagedUdpHandlerProvider, OutboundLeafClaim,
+    InboundListenerCapability, ManagedUdpHandlerProvider, OutboundLeafClaim, OutboundLeafRuntime,
     ProtocolSupportCapability, TcpOutboundCapability, UdpFlowCapability, UdpPacketPathCapability,
 };
+use crate::runtime::path::TcpPathCategory;
 use crate::runtime::udp_flow::managed::ManagedDatagramFlowHandler;
 
 #[cfg(feature = "shadowsocks")]
@@ -57,11 +58,18 @@ impl ShadowsocksAdapter {
         &self,
         leaf: ResolvedLeafOutbound<'a>,
     ) -> Option<OutboundLeafClaim<'a>> {
-        let tcp = self.claim_tcp_outbound_leaf_impl(leaf.clone())?;
+        let leaf = transport_leaf(&leaf)?;
+        let runtime = OutboundLeafRuntime::proxy(
+            leaf.tag(),
+            leaf.server(),
+            leaf.port(),
+            TcpPathCategory::Session,
+        );
+        let tcp = self.claim_tcp_outbound_leaf_impl(leaf.clone());
         Some(OutboundLeafClaim {
-            runtime: tcp.runtime(),
+            runtime,
             tcp,
-            udp: self.claim_udp_flow_leaf_impl(leaf.clone()),
+            udp: Some(self.claim_udp_flow_leaf_impl(leaf.clone())),
             packet_path: self.claim_udp_packet_path_leaf_impl(leaf),
         })
     }
