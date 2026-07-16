@@ -2138,12 +2138,43 @@ fn udp_ingress_runtime_collapses_proxy_and_services_for_session_loops() {
         );
     }
 
-    let pipe = read(&proxy_src().join("runtime/pipe.rs"));
+    let pipe = read_module(&proxy_src().join("runtime/pipe.rs"));
     assert!(pipe.contains("pub(crate) struct UdpPipe<'a> {\n    dispatch: &'a mut UdpDispatch,"));
     assert!(pipe.contains("pub(crate) fn new(dispatch: &'a mut UdpDispatch)"));
     assert!(pipe.contains("Self { dispatch }"));
     assert!(!pipe.contains("UdpDispatch::dispatch(self.dispatch, self.proxy, input)"));
     assert!(pipe.contains("UdpDispatch::dispatch(self.dispatch, input)"));
+}
+
+#[test]
+fn pipe_root_stays_facade_only() {
+    let pipe_root = read(&proxy_src().join("runtime/pipe.rs"));
+    let pipe = read_module(&proxy_src().join("runtime/pipe.rs"));
+    for module_name in ["mod contract;", "mod tcp;", "mod udp;"] {
+        assert!(pipe_root.contains(module_name));
+    }
+    for forbidden in [
+        "pub(crate) trait KernelPipe",
+        "pub(crate) struct TcpPipe<'a>",
+        "pub(crate) struct UdpPipe<'a>",
+        "pub(crate) struct UdpPipeInput<'a>",
+    ] {
+        assert!(
+            !pipe_root.contains(forbidden),
+            "pipe facade root must not keep `{forbidden}` inline"
+        );
+    }
+    for expected in [
+        "pub(crate) trait KernelPipe",
+        "pub(crate) struct TcpPipe<'a>",
+        "pub(crate) struct UdpPipe<'a>",
+        "pub(crate) struct UdpPipeInput<'a>",
+    ] {
+        assert!(
+            pipe.contains(expected),
+            "pipe module tree must still provide `{expected}`"
+        );
+    }
 }
 
 #[test]
