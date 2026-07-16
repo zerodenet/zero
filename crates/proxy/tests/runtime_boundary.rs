@@ -2091,6 +2091,18 @@ fn inventory_tcp_dispatch_root_is_not_a_proxy_impl_bucket() {
 }
 
 #[test]
+fn udp_flow_outbound_root_stays_facade_only() {
+    let outbound_root = read(&proxy_src().join("runtime/udp_flow/outbound.rs"));
+    let outbound = read_module(&proxy_src().join("runtime/udp_flow/outbound.rs"));
+    assert!(outbound_root.contains("mod model;"));
+    assert!(outbound_root.contains("mod projection;"));
+    assert!(!outbound_root.contains("pub(crate) fn tag(&self)"));
+    assert!(!outbound_root.contains("fn upstream_endpoint(&self)"));
+    assert!(outbound.contains("pub(crate) enum UdpFlowOutbound"));
+    assert!(outbound.contains("pub(in crate::runtime::udp_flow) fn completion(&self)"));
+}
+
+#[test]
 fn inventory_tcp_candidate_and_dispatch_use_runtime_services_instead_of_proxy() {
     for relative in ["inventory/tcp/candidate.rs", "inventory/tcp/dispatch.rs"] {
         let source = read(&proxy_src().join(relative));
