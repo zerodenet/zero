@@ -1882,10 +1882,48 @@ fn udp_socket_helpers_use_runtime_services_instead_of_proxy() {
 
 #[test]
 fn udp_delivery_helpers_use_runtime_services_instead_of_proxy() {
-    let helpers = read(&proxy_src().join("runtime/udp_delivery/helpers.rs"));
+    let helpers = read_module(&proxy_src().join("runtime/udp_delivery/helpers.rs"));
     assert!(helpers.contains("UdpRuntimeServices"));
     assert!(!helpers.contains("use crate::runtime::Proxy"));
     assert!(!helpers.contains("&Proxy"));
+}
+
+#[test]
+fn udp_delivery_helpers_root_stays_facade_only() {
+    let helpers_root = read(&proxy_src().join("runtime/udp_delivery/helpers.rs"));
+    let helpers = read_module(&proxy_src().join("runtime/udp_delivery/helpers.rs"));
+    for module_name in [
+        "mod accounting;",
+        "mod lifecycle;",
+        "mod parts;",
+        "mod response;",
+    ] {
+        assert!(helpers_root.contains(module_name));
+    }
+    for forbidden in [
+        "pub(crate) struct UdpInboundResponseAccounting",
+        "pub(crate) fn log_completed_udp_flow",
+        "pub(crate) fn record_direct_udp_response_parts",
+        "pub(crate) fn record_chain_udp_response_parts",
+        "pub(crate) fn record_upstream_udp_response_received",
+    ] {
+        assert!(
+            !helpers_root.contains(forbidden),
+            "udp_delivery helpers facade root must not keep `{forbidden}` inline"
+        );
+    }
+    for expected in [
+        "pub(crate) struct UdpInboundResponseAccounting",
+        "pub(crate) fn log_completed_udp_flow",
+        "pub(crate) fn record_direct_udp_response_parts",
+        "pub(crate) fn record_chain_udp_response_parts",
+        "pub(crate) fn record_upstream_udp_response_received",
+    ] {
+        assert!(
+            helpers.contains(expected),
+            "udp_delivery helpers module tree must still provide `{expected}`"
+        );
+    }
 }
 
 #[test]
