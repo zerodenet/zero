@@ -3620,6 +3620,45 @@ fn udp_flow_registered_upstream_root_stays_facade_only() {
 }
 
 #[test]
+fn udp_flow_registered_upstream_runtime_association_lifecycle_root_stays_facade_only() {
+    let lifecycle_root = read(
+        &proxy_src().join("runtime/udp_flow/registered/upstream/runtime/association/lifecycle.rs"),
+    );
+    let lifecycle = read_module(
+        &proxy_src().join("runtime/udp_flow/registered/upstream/runtime/association/lifecycle.rs"),
+    );
+    for module_name in ["mod close;", "mod send;"] {
+        assert!(lifecycle_root.contains(module_name));
+    }
+    for forbidden in [
+        "pub(crate) async fn send_packet(",
+        "async fn ensure_association(",
+        "pub(crate) fn drop_after_send_error(",
+        "pub(crate) fn close_idle(",
+        "pub(crate) fn close_dropped(",
+        "pub(crate) fn close_all_upstreams(",
+    ] {
+        assert!(
+            !lifecycle_root.contains(forbidden),
+            "udp_flow registered upstream runtime association lifecycle facade root must not keep `{forbidden}` inline"
+        );
+    }
+    for expected in [
+        "pub(crate) async fn send_packet(",
+        "async fn ensure_association(",
+        "pub(crate) fn drop_after_send_error(",
+        "pub(crate) fn close_idle(",
+        "pub(crate) fn close_dropped(",
+        "pub(crate) fn close_all_upstreams(",
+    ] {
+        assert!(
+            lifecycle.contains(expected),
+            "udp_flow registered upstream runtime association lifecycle module tree must still provide `{expected}`"
+        );
+    }
+}
+
+#[test]
 fn udp_flow_registered_state_start_root_stays_facade_only() {
     let start_root = read(&proxy_src().join("runtime/udp_flow/registered/state/start.rs"));
     let start = read_module(&proxy_src().join("runtime/udp_flow/registered/state/start.rs"));
