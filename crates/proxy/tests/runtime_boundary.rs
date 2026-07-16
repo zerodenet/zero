@@ -3288,10 +3288,8 @@ fn udp_flow_managed_root_stays_facade_only() {
 
 #[test]
 fn udp_flow_managed_cache_stream_insert_root_stays_facade_only() {
-    let insert_root =
-        read(&proxy_src().join("runtime/udp_flow/managed/cache/stream/insert.rs"));
-    let insert =
-        read_module(&proxy_src().join("runtime/udp_flow/managed/cache/stream/insert.rs"));
+    let insert_root = read(&proxy_src().join("runtime/udp_flow/managed/cache/stream/insert.rs"));
+    let insert = read_module(&proxy_src().join("runtime/udp_flow/managed/cache/stream/insert.rs"));
     for module_name in ["mod establish;", "mod pre_sent;", "mod relay;"] {
         assert!(insert_root.contains(module_name));
     }
@@ -3615,6 +3613,41 @@ fn udp_flow_managed_datagram_manager_root_stays_facade_only() {
         assert!(
             manager.contains(expected),
             "udp_flow managed datagram_manager module tree must still provide `{expected}`"
+        );
+    }
+}
+
+#[test]
+fn udp_flow_managed_connection_tuple_root_stays_facade_only() {
+    let tuple_root = read(&proxy_src().join("runtime/udp_flow/managed/connection/tuple.rs"));
+    let tuple = read_module(&proxy_src().join("runtime/udp_flow/managed/connection/tuple.rs"));
+    for module_name in ["mod build;", "mod connection;", "mod flow;", "mod sender;"] {
+        assert!(tuple_root.contains(module_name));
+    }
+    for forbidden in [
+        "pub(crate) trait ManagedTupleUdpSender",
+        "struct ManagedTupleUdpConnection",
+        "pub(crate) fn managed_tuple_udp_connection(",
+        "pub(crate) trait ManagedTupleUdpFlowConnection",
+        "pub(crate) fn managed_tuple_udp_connection_from_flow<",
+        "pub(crate) fn managed_tuple_udp_connection_from_ops<",
+    ] {
+        assert!(
+            !tuple_root.contains(forbidden),
+            "udp_flow managed connection tuple facade root must not keep `{forbidden}` inline"
+        );
+    }
+    for expected in [
+        "pub(crate) trait ManagedTupleUdpSender",
+        "struct ManagedTupleUdpConnection",
+        "fn managed_tuple_udp_connection(",
+        "pub(crate) trait ManagedTupleUdpFlowConnection",
+        "pub(crate) fn managed_tuple_udp_connection_from_flow<",
+        "pub(crate) fn managed_tuple_udp_connection_from_ops<",
+    ] {
+        assert!(
+            tuple.contains(expected),
+            "udp_flow managed connection tuple module tree must still provide `{expected}`"
         );
     }
 }
