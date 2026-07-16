@@ -1,12 +1,9 @@
 use zero_config::InboundProtocolConfig;
 use zero_engine::EngineError;
 
-use tokio::sync::watch;
-use tokio::task::JoinSet;
-
 use super::ProtocolInventory;
 use crate::protocol_registry::{BoundInbound, InboundListenerCapability};
-use crate::runtime::route_runtime::InboundListenerRuntime;
+use crate::runtime::inbound_operation::PreparedInboundListenerOperation;
 
 impl ProtocolInventory {
     pub(crate) fn check_inbound_enabled(
@@ -35,26 +32,13 @@ impl ProtocolInventory {
         self.registry.bind_inbound(inbound, source_dir).await
     }
 
-    /// Spawn an inbound listener through its registered adapter.
-    ///
-    /// The runtime asks inventory to start the listener instead of resolving
-    /// and holding adapter trait objects itself.
-    pub(crate) fn spawn_inbound(
+    /// Resolve the registered adapter and prepare its listener operation.
+    pub(crate) fn prepare_inbound_listener(
         &self,
         inbound: zero_config::InboundConfig,
         source_dir: Option<&std::path::Path>,
-        runtime: InboundListenerRuntime,
-        bound: BoundInbound,
-        shutdown_rx: watch::Receiver<bool>,
-        listeners: &mut JoinSet<Result<(), EngineError>>,
-    ) -> Result<(), EngineError> {
+    ) -> Result<Box<dyn PreparedInboundListenerOperation>, EngineError> {
         let adapter = self.registry.find_inbound(&inbound.protocol)?;
-        let operation = InboundListenerCapability::prepare_inbound_listener(
-            adapter.as_ref(),
-            inbound,
-            source_dir,
-        )?;
-        listeners.spawn(operation.execute(runtime, bound, shutdown_rx));
-        Ok(())
+        InboundListenerCapability::prepare_inbound_listener(adapter.as_ref(), inbound, source_dir)
     }
 }

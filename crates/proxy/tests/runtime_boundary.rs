@@ -216,6 +216,8 @@ fn generic_runtime_does_not_dispatch_protocol_config_variants() {
 fn listener_and_task_lifecycle_are_runtime_owned() {
     let inbound_operation = read_module(&proxy_src().join("runtime/inbound_operation.rs"));
     let listener_loop = read(&proxy_src().join("runtime/listener_loop.rs"));
+    let inventory_inbound = read(&proxy_src().join("inventory/inbound.rs"));
+    let runtime_listeners = read(&proxy_src().join("runtime/listeners/inbound.rs"));
     assert!(inbound_operation.contains("PreparedInboundListenerOperation"));
     assert!(inbound_operation.contains("InboundConnectionContext"));
     assert!(inbound_operation.contains("JoinSet") || listener_loop.contains("JoinSet"));
@@ -223,6 +225,11 @@ fn listener_and_task_lifecycle_are_runtime_owned() {
         inbound_operation.contains("tokio::spawn") || listener_loop.contains("tokio::spawn"),
         "runtime must own connection task fan-out"
     );
+    assert!(inventory_inbound.contains("prepare_inbound_listener("));
+    assert!(!inventory_inbound.contains("JoinSet"));
+    assert!(!inventory_inbound.contains("listeners.spawn("));
+    assert!(!inventory_inbound.contains("operation.execute("));
+    assert!(runtime_listeners.contains("listeners.spawn(operation.execute("));
 }
 
 #[test]
@@ -2083,13 +2090,17 @@ fn udp_ingress_runtime_collapses_proxy_and_services_for_session_loops() {
     }
 
     let inventory_inbound = read(&proxy_src().join("inventory/inbound.rs"));
-    assert!(inventory_inbound.contains("InboundListenerRuntime"));
+    assert!(inventory_inbound.contains("PreparedInboundListenerOperation"));
+    assert!(!inventory_inbound.contains("InboundListenerRuntime"));
+    assert!(!inventory_inbound.contains("JoinSet"));
+    assert!(!inventory_inbound.contains("operation.execute("));
     assert!(!inventory_inbound.contains("use crate::runtime::Proxy"));
     assert!(!inventory_inbound.contains("execute(proxy.clone()"));
 
     let listener_inbound = read(&proxy_src().join("runtime/listeners/inbound.rs"));
     assert!(listener_inbound.contains("ProtocolInventory"));
     assert!(listener_inbound.contains("InboundListenerRuntimeFactory"));
+    assert!(listener_inbound.contains("listeners.spawn(operation.execute("));
     assert!(!listener_inbound.contains("use super::super::Proxy"));
     assert!(!listener_inbound.contains("proxy: &Proxy"));
     assert!(!listener_inbound.contains("proxy.config.source_dir()"));

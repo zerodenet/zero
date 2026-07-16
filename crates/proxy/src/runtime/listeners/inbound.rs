@@ -32,16 +32,18 @@ pub(in crate::runtime) fn spawn_inbound_listener(
         return;
     }
 
-    if let Err(error) = protocols.spawn_inbound(
-        inbound.clone(),
-        source_dir,
+    let operation = match protocols.prepare_inbound_listener(inbound.clone(), source_dir) {
+        Ok(operation) => operation,
+        Err(error) => {
+            warn!(tag = %inbound.tag, error = %error, "skipping inbound listener: adapter preparation failed");
+            return;
+        }
+    };
+    listeners.spawn(operation.execute(
         runtime_factory.for_inbound(inbound.tag.clone()),
         bound,
         shutdown_rx,
-        listeners,
-    ) {
-        warn!(tag = %inbound.tag, error = %error, "skipping inbound listener: adapter dispatch failed");
-    }
+    ));
 }
 
 pub(in crate::runtime) async fn reconcile_inbounds(

@@ -24,7 +24,7 @@ fn fake_inbound() -> InboundConfig {
 }
 
 #[tokio::test]
-async fn inventory_binds_before_spawning_the_same_inbound_capability() {
+async fn inventory_binds_before_preparing_the_same_inbound_capability() {
     let calls = Arc::new(TcpCapabilityCalls::default());
     let proxy = proxy_with_fake_tcp(calls.clone());
     let inbound = fake_inbound();
@@ -44,24 +44,11 @@ async fn inventory_binds_before_spawning_the_same_inbound_capability() {
         .bind_inbound(&inbound, None)
         .await
         .expect("fake inbound bind");
-    let (_shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
-    let mut listeners = tokio::task::JoinSet::new();
-    proxy
+    let _operation = proxy
         .protocols
-        .spawn_inbound(
-            inbound.clone(),
-            proxy.config.source_dir(),
-            crate::runtime::route_runtime::InboundListenerRuntime::new(
-                crate::runtime::route_runtime::SharedIngressRuntimeServices::new(
-                    proxy.tcp_runtime_services(),
-                ),
-                inbound.tag,
-            ),
-            bound,
-            shutdown_rx,
-            &mut listeners,
-        )
-        .expect("fake inbound spawn delegation");
+        .prepare_inbound_listener(inbound, proxy.config.source_dir())
+        .expect("fake inbound preparation");
+    drop(bound);
 
     assert_eq!(calls.inbound_binds(), 2);
     assert_eq!(calls.inbound_spawns(), 1);
