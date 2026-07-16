@@ -2611,6 +2611,35 @@ fn udp_flow_packet_path_datagram_root_stays_facade_only() {
 }
 
 #[test]
+fn udp_dispatch_forward_root_stays_facade_only() {
+    let forward_root = read(&proxy_src().join("runtime/udp_dispatch/forward.rs"));
+    let forward = read_module(&proxy_src().join("runtime/udp_dispatch/forward.rs"));
+    for module_name in ["mod path;", "mod result;"] {
+        assert!(forward_root.contains(module_name));
+    }
+    for forbidden in [
+        "pub(in crate::runtime::udp_dispatch) async fn forward_existing(",
+        "fn fail_flow_with_msg(",
+        "fn record_or_fail(",
+    ] {
+        assert!(
+            !forward_root.contains(forbidden),
+            "udp_dispatch forward facade root must not keep `{forbidden}` inline"
+        );
+    }
+    for expected in [
+        "pub(in crate::runtime::udp_dispatch) async fn forward_existing(",
+        "pub(super) fn fail_flow_with_msg(",
+        "pub(super) fn record_or_fail(",
+    ] {
+        assert!(
+            forward.contains(expected),
+            "udp_dispatch forward module tree must still provide `{expected}`"
+        );
+    }
+}
+
+#[test]
 fn udp_dispatch_root_stays_facade_only() {
     let dispatch_root = read(&proxy_src().join("runtime/udp_dispatch/mod.rs"));
     let dispatch = read_module(&proxy_src().join("runtime/udp_dispatch"));
