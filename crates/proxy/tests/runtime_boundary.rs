@@ -3618,6 +3618,73 @@ fn udp_flow_managed_datagram_manager_root_stays_facade_only() {
 }
 
 #[test]
+fn udp_flow_managed_datagram_manager_flow_root_stays_facade_only() {
+    let flow_root =
+        read(&proxy_src().join("runtime/udp_flow/managed/datagram_manager/manager/flow.rs"));
+    let flow =
+        read_module(&proxy_src().join("runtime/udp_flow/managed/datagram_manager/manager/flow.rs"));
+    for module_name in ["mod dispatch;", "mod handler;"] {
+        assert!(flow_root.contains(module_name));
+    }
+    for forbidden in [
+        "fn supports_managed_existing(&self, resume: &ManagedUdpFlowResume) -> bool",
+        "async fn send(",
+        "async fn send_managed_existing(",
+        "impl<T, C> ManagedDatagramFlowHandler for ManagedDatagramFlowManager<T, C>",
+    ] {
+        assert!(
+            !flow_root.contains(forbidden),
+            "udp_flow managed datagram manager flow facade root must not keep `{forbidden}` inline"
+        );
+    }
+    for expected in [
+        "fn supports_managed_existing(&self, resume: &ManagedUdpFlowResume) -> bool",
+        "async fn send(",
+        "async fn send_managed_existing(",
+        "impl<T, C> ManagedDatagramFlowHandler for ManagedDatagramFlowManager<T, C>",
+    ] {
+        assert!(
+            flow.contains(expected),
+            "udp_flow managed datagram manager flow module tree must still provide `{expected}`"
+        );
+    }
+}
+
+#[test]
+fn udp_flow_managed_datagram_manager_socket_root_stays_facade_only() {
+    let socket_root =
+        read(&proxy_src().join("runtime/udp_flow/managed/datagram_manager/manager/socket.rs"));
+    let socket = read_module(
+        &proxy_src().join("runtime/udp_flow/managed/datagram_manager/manager/socket.rs"),
+    );
+    for module_name in ["mod dispatch;", "mod handler;"] {
+        assert!(socket_root.contains(module_name));
+    }
+    for forbidden in [
+        "fn supports_managed_existing(&self, resume: &ManagedUdpFlowResume) -> bool",
+        "async fn send(",
+        "async fn send_managed_existing(",
+        "impl<T, C> ManagedDatagramFlowHandler for ManagedDatagramSocketFlowManager<T, C>",
+    ] {
+        assert!(
+            !socket_root.contains(forbidden),
+            "udp_flow managed datagram manager socket facade root must not keep `{forbidden}` inline"
+        );
+    }
+    for expected in [
+        "fn supports_managed_existing(&self, resume: &ManagedUdpFlowResume) -> bool",
+        "async fn send(",
+        "async fn send_managed_existing(",
+        "impl<T, C> ManagedDatagramFlowHandler for ManagedDatagramSocketFlowManager<T, C>",
+    ] {
+        assert!(
+            socket.contains(expected),
+            "udp_flow managed datagram manager socket module tree must still provide `{expected}`"
+        );
+    }
+}
+
+#[test]
 fn udp_flow_managed_connection_tuple_root_stays_facade_only() {
     let tuple_root = read(&proxy_src().join("runtime/udp_flow/managed/connection/tuple.rs"));
     let tuple = read_module(&proxy_src().join("runtime/udp_flow/managed/connection/tuple.rs"));
