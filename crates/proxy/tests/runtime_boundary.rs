@@ -2179,6 +2179,40 @@ fn tcp_ingress_contract_root_stays_facade_only() {
 }
 
 #[test]
+fn orchestration_root_stays_facade_only() {
+    let orchestration_root = read(&proxy_src().join("runtime/orchestration.rs"));
+    let orchestration = read_module(&proxy_src().join("runtime/orchestration.rs"));
+    for module_name in ["mod lifecycle;", "mod logging;", "mod state;"] {
+        assert!(orchestration_root.contains(module_name));
+    }
+    for forbidden in [
+        "pub(super) async fn run_until<",
+        "pub(in crate::runtime) async fn run_until<",
+        "struct OrchestrationState",
+        "fn log_started(",
+        "fn log_stopped(",
+        "tokio::select!",
+    ] {
+        assert!(
+            !orchestration_root.contains(forbidden),
+            "orchestration facade root must not keep `{forbidden}` inline"
+        );
+    }
+    for expected in [
+        "pub(in crate::runtime) async fn run_until<",
+        "pub(super) struct OrchestrationState",
+        "pub(super) fn log_started(",
+        "pub(super) fn log_stopped(",
+        "tokio::select! {",
+    ] {
+        assert!(
+            orchestration.contains(expected),
+            "orchestration module tree must still provide `{expected}`"
+        );
+    }
+}
+
+#[test]
 fn inventory_tcp_relay_root_is_not_a_proxy_impl_bucket() {
     let relay = read(&proxy_src().join("inventory/tcp/relay.rs"));
     assert!(!relay.contains("impl Proxy"));
