@@ -2113,6 +2113,39 @@ fn udp_flow_outbound_root_stays_facade_only() {
 }
 
 #[test]
+fn udp_flow_outbound_projection_root_stays_facade_only() {
+    let projection_root = read(&proxy_src().join("runtime/udp_flow/outbound/projection.rs"));
+    let projection = read_module(&proxy_src().join("runtime/udp_flow/outbound/projection.rs"));
+    for module_name in ["mod access;", "mod completion;", "mod index;"] {
+        assert!(projection_root.contains(module_name));
+    }
+    for forbidden in [
+        "pub(crate) fn tag(&self)",
+        "pub(crate) fn upstream(&self)",
+        "pub(in crate::runtime::udp_flow) fn index_keys(&self)",
+        "fn success_outcome(&self)",
+        "pub(in crate::runtime::udp_flow) fn completion(&self)",
+    ] {
+        assert!(
+            !projection_root.contains(forbidden),
+            "udp_flow outbound projection facade root must not keep `{forbidden}` inline"
+        );
+    }
+    for expected in [
+        "pub(crate) fn tag(&self)",
+        "pub(crate) fn upstream(&self)",
+        "pub(in crate::runtime::udp_flow) fn index_keys(&self)",
+        "fn success_outcome(&self)",
+        "pub(in crate::runtime::udp_flow) fn completion(&self)",
+    ] {
+        assert!(
+            projection.contains(expected),
+            "udp_flow outbound projection module tree must still provide `{expected}`"
+        );
+    }
+}
+
+#[test]
 fn udp_flow_packet_path_root_stays_facade_only() {
     let packet_path_root = read(&proxy_src().join("runtime/udp_flow/packet_path.rs"));
     let packet_path = read_module(&proxy_src().join("runtime/udp_flow/packet_path.rs"));
