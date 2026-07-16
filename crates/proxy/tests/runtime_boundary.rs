@@ -2580,6 +2580,37 @@ fn udp_flow_packet_path_root_stays_facade_only() {
 }
 
 #[test]
+fn udp_flow_packet_path_datagram_root_stays_facade_only() {
+    let datagram_root = read(&proxy_src().join("runtime/udp_flow/packet_path/datagram.rs"));
+    let datagram = read_module(&proxy_src().join("runtime/udp_flow/packet_path/datagram.rs"));
+    for module_name in ["mod access;", "mod build;", "mod model;"] {
+        assert!(datagram_root.contains(module_name));
+    }
+    for forbidden in [
+        "pub(crate) struct UdpDatagramDescriptor",
+        "pub(crate) struct UdpDatagramSource",
+        "pub(crate) fn udp_datagram_source(",
+        "pub(crate) fn target(&self) -> Address",
+    ] {
+        assert!(
+            !datagram_root.contains(forbidden),
+            "udp_flow packet_path datagram facade root must not keep `{forbidden}` inline"
+        );
+    }
+    for expected in [
+        "pub(crate) struct UdpDatagramDescriptor",
+        "pub(crate) struct UdpDatagramSource",
+        "pub(crate) fn udp_datagram_source(",
+        "pub(crate) fn target(&self) -> Address",
+    ] {
+        assert!(
+            datagram.contains(expected),
+            "udp_flow packet_path datagram module tree must still provide `{expected}`"
+        );
+    }
+}
+
+#[test]
 fn udp_dispatch_root_stays_facade_only() {
     let dispatch_root = read(&proxy_src().join("runtime/udp_dispatch/mod.rs"));
     let dispatch = read_module(&proxy_src().join("runtime/udp_dispatch"));
