@@ -3166,6 +3166,74 @@ fn udp_flow_state_root_stays_facade_only() {
 }
 
 #[test]
+fn udp_flow_managed_flow_request_root_stays_facade_only() {
+    let request_root = read(&proxy_src().join("runtime/udp_flow/managed/flow/request.rs"));
+    let request = read_module(&proxy_src().join("runtime/udp_flow/managed/flow/request.rs"));
+    for module_name in ["mod datagram;", "mod envelope;", "mod stream;"] {
+        assert!(request_root.contains(module_name));
+    }
+    for forbidden in [
+        "pub(crate) struct ManagedDatagramFlow",
+        "pub(crate) struct ManagedStreamPacketFlow",
+        "pub(crate) struct ManagedRelayStreamFlow",
+        "pub(crate) struct ManagedUdpFlowRequest",
+        "pub(crate) enum ManagedUdpFlowKind",
+    ] {
+        assert!(
+            !request_root.contains(forbidden),
+            "udp_flow managed flow request facade root must not keep `{forbidden}` inline"
+        );
+    }
+    for expected in [
+        "pub(crate) struct ManagedDatagramFlow",
+        "pub(crate) struct ManagedStreamPacketFlow",
+        "pub(crate) struct ManagedRelayStreamFlow",
+        "pub(crate) struct ManagedUdpFlowRequest",
+        "pub(crate) enum ManagedUdpFlowKind",
+    ] {
+        assert!(
+            request.contains(expected),
+            "udp_flow managed flow request module tree must still provide `{expected}`"
+        );
+    }
+}
+
+#[test]
+fn udp_flow_managed_model_send_root_stays_facade_only() {
+    let send_root = read(&proxy_src().join("runtime/udp_flow/managed/model/send.rs"));
+    let send = read_module(&proxy_src().join("runtime/udp_flow/managed/model/send.rs"));
+    for module_name in ["mod datagram;", "mod relay;", "mod stream;"] {
+        assert!(send_root.contains(module_name));
+    }
+    for forbidden in [
+        "pub(crate) struct ManagedDatagramExistingSend",
+        "pub(crate) struct ManagedStreamExistingSend",
+        "pub(crate) struct ManagedRelayExistingSend",
+        "fn datagram(",
+        "fn stream_packet(",
+        "fn relay_stream(",
+    ] {
+        assert!(
+            !send_root.contains(forbidden),
+            "udp_flow managed model send facade root must not keep `{forbidden}` inline"
+        );
+    }
+    for expected in [
+        "pub(crate) struct ManagedDatagramExistingSend",
+        "pub(crate) struct ManagedStreamExistingSend",
+        "pub(crate) struct ManagedRelayExistingSend",
+        "fn datagram(",
+        "fn stream_packet(",
+        "fn relay_stream(",
+    ] {
+        assert!(
+            send.contains(expected),
+            "udp_flow managed model send module tree must still provide `{expected}`"
+        );
+    }
+}
+
+#[test]
 fn inventory_tcp_candidate_and_dispatch_use_runtime_services_instead_of_proxy() {
     for relative in ["inventory/tcp/candidate.rs", "inventory/tcp/dispatch.rs"] {
         let source = read(&proxy_src().join(relative));
