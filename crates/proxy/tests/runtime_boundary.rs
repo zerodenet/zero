@@ -2676,6 +2676,66 @@ fn mux_udp_root_stays_facade_only() {
 }
 
 #[test]
+fn recorded_dispatch_root_stays_facade_only() {
+    let dispatch_root = read(&proxy_src().join("runtime/inbound_route/recorded/dispatch.rs"));
+    let dispatch = read_module(&proxy_src().join("runtime/inbound_route/recorded/dispatch.rs"));
+    for module_name in ["mod accept;", "mod route;"] {
+        assert!(dispatch_root.contains(module_name));
+    }
+    for forbidden in [
+        "pub(crate) async fn dispatch_recorded_protocol_mux_route<",
+        "pub(crate) async fn dispatch_recorded_protocol_mux_route_accept_result<",
+        "pub(crate) async fn dispatch_optional_recorded_protocol_mux_route_accept_result<",
+    ] {
+        assert!(
+            !dispatch_root.contains(forbidden),
+            "recorded dispatch facade root must not keep `{forbidden}` inline"
+        );
+    }
+    for expected in [
+        "pub(crate) async fn dispatch_recorded_protocol_mux_route<",
+        "pub(crate) async fn dispatch_recorded_protocol_mux_route_accept_result<",
+        "pub(crate) async fn dispatch_optional_recorded_protocol_mux_route_accept_result<",
+    ] {
+        assert!(
+            dispatch.contains(expected),
+            "recorded dispatch module tree must still provide `{expected}`"
+        );
+    }
+}
+
+#[test]
+fn recorded_request_root_stays_facade_only() {
+    let request_root = read(&proxy_src().join("runtime/inbound_route/recorded/request.rs"));
+    let request = read_module(&proxy_src().join("runtime/inbound_route/recorded/request.rs"));
+    for module_name in ["mod defaults;", "mod result;"] {
+        assert!(request_root.contains(module_name));
+    }
+    for forbidden in [
+        "pub(crate) async fn dispatch_recorded_protocol_mux_tcp_request_result<",
+        "pub(crate) async fn dispatch_recorded_protocol_mux_stream_request_result<",
+        "pub(crate) async fn dispatch_recorded_protocol_mux_tcp_request_with_defaults<",
+        "pub(crate) async fn dispatch_recorded_protocol_mux_stream_request_with_defaults<",
+    ] {
+        assert!(
+            !request_root.contains(forbidden),
+            "recorded request facade root must not keep `{forbidden}` inline"
+        );
+    }
+    for expected in [
+        "pub(crate) async fn dispatch_recorded_protocol_mux_tcp_request_result<",
+        "pub(crate) async fn dispatch_recorded_protocol_mux_stream_request_result<",
+        "pub(crate) async fn dispatch_recorded_protocol_mux_tcp_request_with_defaults<",
+        "pub(crate) async fn dispatch_recorded_protocol_mux_stream_request_with_defaults<",
+    ] {
+        assert!(
+            request.contains(expected),
+            "recorded request module tree must still provide `{expected}`"
+        );
+    }
+}
+
+#[test]
 fn stream_udp_root_stays_facade_only() {
     let stream_udp_root = read(&proxy_src().join("runtime/stream_udp.rs"));
     let stream_udp = read_module(&proxy_src().join("runtime/stream_udp.rs"));
