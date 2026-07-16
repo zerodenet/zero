@@ -3515,6 +3515,39 @@ fn udp_flow_managed_stream_manager_root_stays_facade_only() {
 }
 
 #[test]
+fn udp_flow_managed_stream_manager_relay_root_stays_facade_only() {
+    let relay_root =
+        read(&proxy_src().join("runtime/udp_flow/managed/stream_manager/manager/relay.rs"));
+    let relay =
+        read_module(&proxy_src().join("runtime/udp_flow/managed/stream_manager/manager/relay.rs"));
+    for module_name in ["mod dispatch;", "mod handler;"] {
+        assert!(relay_root.contains(module_name));
+    }
+    for forbidden in [
+        "async fn send_relay(",
+        "async fn send_managed_relay_existing(",
+        "fn supports_managed_existing(",
+        "fn supports_managed_relay_existing(",
+    ] {
+        assert!(
+            !relay_root.contains(forbidden),
+            "udp_flow managed stream_manager relay facade root must not keep `{forbidden}` inline"
+        );
+    }
+    for expected in [
+        "async fn send_relay(",
+        "async fn send_managed_relay_existing(",
+        "fn supports_managed_existing(",
+        "fn supports_managed_relay_existing(",
+    ] {
+        assert!(
+            relay.contains(expected),
+            "udp_flow managed stream_manager relay module tree must still provide `{expected}`"
+        );
+    }
+}
+
+#[test]
 fn udp_flow_managed_datagram_manager_root_stays_facade_only() {
     let manager_root =
         read(&proxy_src().join("runtime/udp_flow/managed/datagram_manager/manager.rs"));
