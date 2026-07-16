@@ -6,7 +6,7 @@ use tracing::{debug, warn};
 use zero_core::Address;
 use zero_engine::EngineError;
 
-use super::Entry;
+use super::model::Entry;
 use crate::runtime::udp_flow::packet_path::{
     DatagramCodec, PacketPathCarrier, UdpFlowContext, UdpPacketRef,
 };

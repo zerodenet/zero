@@ -2649,6 +2649,50 @@ fn udp_flow_packet_path_datagram_root_stays_facade_only() {
 }
 
 #[test]
+fn udp_flow_packet_path_chain_root_stays_facade_only() {
+    let chain_root = read(&proxy_src().join("runtime/udp_flow/packet_path_chain.rs"));
+    let chain = read_module(&proxy_src().join("runtime/udp_flow/packet_path_chain.rs"));
+    for module_name in [
+        "mod bridge;",
+        "pub(crate) mod carriers;",
+        "mod entry;",
+        "mod key;",
+        "mod model;",
+        "mod snapshot;",
+        "mod start;",
+        "mod state;",
+    ] {
+        assert!(chain_root.contains(module_name));
+    }
+    for forbidden in [
+        "pub(crate) struct PacketPathManager",
+        "pub(crate) fn new(",
+        "pub(crate) async fn send(",
+        "pub(crate) async fn send_with_snapshot(",
+        "async fn ensure_entry(",
+        "pub(crate) struct SendWithSnapshotRequest",
+    ] {
+        assert!(
+            !chain_root.contains(forbidden),
+            "udp_flow packet_path_chain facade root must not keep `{forbidden}` inline"
+        );
+    }
+    for expected in [
+        "pub(crate) struct PacketPathManager",
+        "pub(crate) fn new(",
+        "pub(crate) async fn send(",
+        "pub(crate) async fn send_with_snapshot(",
+        "async fn ensure_entry(",
+        "pub(crate) struct SendWithSnapshotRequest",
+    ] {
+        assert!(
+            chain.contains(expected),
+            "udp_flow packet_path_chain module tree must still provide `{expected}`"
+        );
+    }
+}
+
+#[test]
 fn udp_dispatch_forward_root_stays_facade_only() {
     let forward_root = read(&proxy_src().join("runtime/udp_dispatch/forward.rs"));
     let forward = read_module(&proxy_src().join("runtime/udp_dispatch/forward.rs"));
