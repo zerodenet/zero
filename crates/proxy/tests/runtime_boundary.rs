@@ -275,15 +275,16 @@ fn capability_surface_is_split_and_context_is_narrow() {
 #[test]
 fn transport_leaf_operations_are_generic() {
     let tcp = read_module(&proxy_src().join("runtime/tcp_dispatch/operation.rs"));
-    let udp = rust_sources(&proxy_src().join("protocol_registry/transport_leaf"))
-        .into_iter()
-        .map(|path| read(&path))
-        .collect::<String>();
+    let udp = read_module(&proxy_src().join("runtime/udp_dispatch/operation.rs"));
+    let udp_claim = read(&proxy_src().join("protocol_registry/transport_leaf/udp.rs"));
     assert!(tcp.contains("TransportLeafTcpConnectOperation"));
     assert!(tcp.contains("TransportLeafTcpRelayOperation"));
     assert!(tcp.contains("PreparedTransportLeaf"));
     assert!(udp.contains("prepare_transport_udp_direct"));
-    assert!(udp.contains("prepare_owned_transport_udp_relay_two_stream"));
+    assert!(udp.contains("prepare_transport_udp_relay_two_stream"));
+    assert!(!udp_claim.contains("impl<TLeaf> PreparedUdpFlowOperation"));
+    assert!(!udp_claim.contains("async fn execute_"));
+    assert!(!udp_claim.contains(".await"));
 }
 
 #[test]
@@ -320,7 +321,7 @@ fn tcp_prepared_operations_do_not_borrow_inventory_or_runtime_services() {
 #[test]
 fn udp_prepared_operations_do_not_borrow_adapters_or_bridges() {
     let capability = read(&proxy_src().join("protocol_registry/capability.rs"));
-    let udp = read(&proxy_src().join("protocol_registry/transport_leaf/udp.rs"));
+    let udp = read(&proxy_src().join("runtime/udp_dispatch/operation/transport.rs"));
     assert!(capability.contains("trait ClaimedUdpFlowLeaf<'a>"));
     assert!(capability.contains("fn prepare_udp_flow("));
     assert!(capability.contains("fn prepare_udp_relay("));
@@ -1877,7 +1878,10 @@ fn udp_dispatch_operations_use_runtime_services_for_direct_flows() {
 
 #[test]
 fn transport_leaf_udp_execution_uses_runtime_services_instead_of_proxy() {
-    let udp = read(&proxy_src().join("protocol_registry/transport_leaf/udp.rs"));
+    let claim = read(&proxy_src().join("protocol_registry/transport_leaf/udp.rs"));
+    let udp = read(&proxy_src().join("runtime/udp_dispatch/operation/transport.rs"));
+    assert!(!claim.contains(".await"));
+    assert!(!claim.contains("impl<TLeaf> PreparedUdpFlowOperation"));
     assert!(!udp.contains("use crate::runtime::Proxy"));
     assert!(!udp.contains("ctx.proxy()"));
     assert!(!udp.contains("&Proxy"));

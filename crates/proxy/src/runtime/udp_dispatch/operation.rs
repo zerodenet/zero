@@ -11,6 +11,8 @@ mod managed_datagram;
 mod registered;
 #[cfg(feature = "mieru")]
 mod stream_packet;
+#[cfg(any(feature = "vless", feature = "vmess", feature = "trojan"))]
+pub(crate) mod transport;
 
 pub(crate) use contract::PreparedUdpFlowOperation;
 pub(crate) use direct::DirectUdpFlowOperation;
