@@ -109,27 +109,31 @@ async fn inventory_invokes_fake_udp_relay_capabilities() {
         .claim_outbound_leaf(leaf.clone())
         .expect("fake UDP claim");
 
-    assert!(claimed.udp_relay_needs_two_streams(ctx.source_dir()));
+    let prepared_relay = match claimed
+        .clone()
+        .into_claimed()
+        .prepare_udp_relay(ctx.source_dir())
+    {
+        Ok(prepared) => prepared,
+        Err(_) => panic!("prepare UDP relay"),
+    };
+    assert!(prepared_relay.needs_two_streams());
 
     let two_stream_payload = b"two-stream capability";
     let (post_stream, _post_peer) = tokio::io::duplex(64);
     let (get_stream, _get_peer) = tokio::io::duplex(64);
-    let two_stream_operation = match claimed
-        .clone()
-        .into_claimed()
-        .prepare_owned_udp_relay_two_stream(
-            RelayCarrier {
-                stream: TcpRelayStream::new(post_stream),
-                server: "fake-relay-post.test".to_owned(),
-                port: 9443,
-            },
-            RelayCarrier {
-                stream: TcpRelayStream::new(get_stream),
-                server: "fake-relay-get.test".to_owned(),
-                port: 9444,
-            },
-            ctx.source_dir(),
-        ) {
+    let two_stream_operation = match prepared_relay.bind_two_stream(
+        RelayCarrier {
+            stream: TcpRelayStream::new(post_stream),
+            server: "fake-relay-post.test".to_owned(),
+            port: 9443,
+        },
+        RelayCarrier {
+            stream: TcpRelayStream::new(get_stream),
+            server: "fake-relay-get.test".to_owned(),
+            port: 9444,
+        },
+    ) {
         Ok(operation) => operation,
         Err(_) => panic!("two-stream relay prepare failed"),
     };
@@ -148,14 +152,15 @@ async fn inventory_invokes_fake_udp_relay_capabilities() {
 
     let (stream, _peer) = tokio::io::duplex(64);
     let final_payload = b"final-hop capability";
-    let final_hop_operation = match claimed.into_claimed().prepare_owned_udp_relay_final_hop(
-        RelayCarrier {
-            stream: TcpRelayStream::new(stream),
-            server: "relay-carrier.test".to_owned(),
-            port: 9443,
-        },
-        ctx.source_dir(),
-    ) {
+    let final_prepared = match claimed.into_claimed().prepare_udp_relay(ctx.source_dir()) {
+        Ok(prepared) => prepared,
+        Err(_) => panic!("prepare final-hop UDP relay"),
+    };
+    let final_hop_operation = match final_prepared.bind_final_hop(RelayCarrier {
+        stream: TcpRelayStream::new(stream),
+        server: "relay-carrier.test".to_owned(),
+        port: 9443,
+    }) {
         Ok(operation) => operation,
         Err(_) => panic!("final-hop relay prepare failed"),
     };

@@ -118,8 +118,7 @@ impl ProtocolInventory {
                     },
                 )?;
                 Ok(PreparedUdpOutbound::Relay(Box::new(
-                    self.prepare_claimed_udp_relay_chain(ctx, session, &claimed, payload)
-                        .await?,
+                    self.prepare_claimed_udp_relay_chain(ctx, session, &claimed, payload)?,
                 )))
             }
         }

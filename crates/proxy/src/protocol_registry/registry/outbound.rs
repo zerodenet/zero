@@ -38,8 +38,6 @@ use crate::runtime::udp_dispatch::operation::PreparedUdpFlowOperation;
     feature = "vmess",
     feature = "mieru"
 ))]
-use crate::transport::RelayCarrier;
-
 #[derive(Clone, Default)]
 struct ClaimedTcpHooks<'a> {
     capability: Option<Arc<dyn ClaimedTcpOutboundLeaf<'a> + 'a>>,
@@ -203,59 +201,19 @@ impl<'a> ClaimedOutboundLeaf<'a> {
         feature = "vmess",
         feature = "mieru"
     ))]
-    pub(crate) fn udp_relay_needs_two_streams(&self, source_dir: Option<&Path>) -> bool {
-        self.udp
-            .capability
-            .as_ref()
-            .expect("udp relay leaf must expose a udp-flow capability")
-            .udp_relay_needs_two_streams(source_dir)
-    }
-
-    #[cfg(any(
-        feature = "socks5",
-        feature = "vless",
-        feature = "hysteria2",
-        feature = "shadowsocks",
-        feature = "trojan",
-        feature = "vmess",
-        feature = "mieru"
-    ))]
-    pub(crate) fn prepare_owned_udp_relay_final_hop(
+    pub(crate) fn prepare_udp_relay(
         &self,
-        carrier: RelayCarrier,
         source_dir: Option<&Path>,
-    ) -> Result<Box<dyn PreparedUdpFlowOperation + 'a>, crate::runtime::udp_dispatch::FlowFailure>
-    {
+    ) -> Result<
+        Box<dyn crate::runtime::udp_dispatch::relay::PreparedUdpRelayOperation<'a> + 'a>,
+        crate::runtime::udp_dispatch::FlowFailure,
+    > {
         let capability = self
             .udp
             .capability
             .as_ref()
             .ok_or_else(missing_udp_relay_capability)?;
-        capability.prepare_owned_udp_relay_final_hop(carrier, source_dir)
-    }
-
-    #[cfg(any(
-        feature = "socks5",
-        feature = "vless",
-        feature = "hysteria2",
-        feature = "shadowsocks",
-        feature = "trojan",
-        feature = "vmess",
-        feature = "mieru"
-    ))]
-    pub(crate) fn prepare_owned_udp_relay_two_stream(
-        &self,
-        post_carrier: RelayCarrier,
-        get_carrier: RelayCarrier,
-        source_dir: Option<&Path>,
-    ) -> Result<Box<dyn PreparedUdpFlowOperation + 'a>, crate::runtime::udp_dispatch::FlowFailure>
-    {
-        let capability = self
-            .udp
-            .capability
-            .as_ref()
-            .ok_or_else(missing_udp_relay_capability)?;
-        capability.prepare_owned_udp_relay_two_stream(post_carrier, get_carrier, source_dir)
+        capability.prepare_udp_relay(source_dir)
     }
 
     #[cfg(any(

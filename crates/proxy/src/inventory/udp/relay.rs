@@ -2,13 +2,11 @@ use zero_engine::EngineError;
 
 use super::super::ClaimedInventoryLeaf;
 use super::super::{ClaimedRelayChain, ProtocolInventory};
-use crate::protocol_registry::{ClaimedOutboundLeaf, OutboundAdapterContext, UdpAdapterContext};
-use crate::runtime::udp_dispatch::operation::PreparedUdpFlowOperation;
+use crate::protocol_registry::{OutboundAdapterContext, UdpAdapterContext};
 use crate::runtime::udp_dispatch::relay::PreparedUdpRelayChain;
 use crate::runtime::udp_dispatch::FlowFailure;
 use crate::runtime::udp_flow::packet_path::{PacketPathFlowBinding, UdpPacketRef};
 use crate::runtime::udp_flow::packet_path_chain::PacketPathStartRequest;
-use crate::transport::RelayCarrier;
 
 impl ProtocolInventory {
     pub(in crate::inventory) fn prepare_claimed_udp_packet_path_pair<'a>(
@@ -28,7 +26,7 @@ impl ProtocolInventory {
             packet,
         )
     }
-    pub(super) async fn prepare_claimed_udp_relay_chain<'a>(
+    pub(super) fn prepare_claimed_udp_relay_chain<'a>(
         &self,
         ctx: UdpAdapterContext<'a>,
         session: &'a zero_core::Session,
@@ -54,59 +52,31 @@ impl ProtocolInventory {
             }
         }
 
-        let needs_two_streams = claimed_chain
-            .final_hop()
-            .udp_relay_needs_two_streams(ctx.source_dir());
         let final_hop = claimed_chain.final_hop().clone().into_claimed();
+        let operation = final_hop.prepare_udp_relay(ctx.source_dir())?;
+        let outbound_ctx = OutboundAdapterContext::new(ctx.source_dir());
 
-        if needs_two_streams {
-            let services = ctx.runtime_services();
-            let outbound_ctx = OutboundAdapterContext::new(ctx.source_dir());
+        if operation.needs_two_streams() {
             let post_prepared = self
                 .prepare_claimed_tcp_relay_chain(outbound_ctx.clone(), claimed_chain)
-                .map_err(flow_failure_from_tcp_outbound)?;
-            let post_carrier = services
-                .dispatch_prepared_tcp_relay_carrier(post_prepared)
-                .await
                 .map_err(flow_failure_from_tcp_outbound)?;
             let get_prepared = self
                 .prepare_claimed_tcp_relay_chain(outbound_ctx, claimed_chain)
                 .map_err(flow_failure_from_tcp_outbound)?;
-            let get_carrier = services
-                .dispatch_prepared_tcp_relay_carrier(get_prepared)
-                .await
-                .map_err(flow_failure_from_tcp_outbound)?;
-            let operation = self.prepare_udp_relay_two_stream_operation(
-                final_hop,
-                ctx.clone(),
-                post_carrier,
-                get_carrier,
-            )?;
-            return Ok(PreparedUdpRelayChain::Operation(operation));
+            return Ok(PreparedUdpRelayChain::TwoStream {
+                post_prefix: post_prepared,
+                get_prefix: get_prepared,
+                operation,
+            });
         }
 
-        let services = ctx.runtime_services();
         let prepared_prefix = self
-            .prepare_claimed_tcp_relay_chain(
-                OutboundAdapterContext::new(ctx.source_dir()),
-                claimed_chain,
-            )
-            .map_err(|failure| FlowFailure {
-                stage: failure.stage,
-                error: failure.error,
-                upstream: failure.upstream_endpoint,
-            })?;
-        let carrier = services
-            .dispatch_prepared_tcp_relay_carrier(prepared_prefix)
-            .await
-            .map_err(|failure| FlowFailure {
-                stage: failure.stage,
-                error: failure.error,
-                upstream: failure.upstream_endpoint,
-            })?;
-        let operation =
-            self.prepare_udp_relay_final_hop_operation(final_hop, ctx.clone(), carrier)?;
-        Ok(PreparedUdpRelayChain::Operation(operation))
+            .prepare_claimed_tcp_relay_chain(outbound_ctx, claimed_chain)
+            .map_err(flow_failure_from_tcp_outbound)?;
+        Ok(PreparedUdpRelayChain::FinalHop {
+            prefix: prepared_prefix,
+            operation,
+        })
     }
 
     fn validate_udp_relay_chain(
@@ -127,25 +97,6 @@ impl ProtocolInventory {
             }
         }
         Ok(())
-    }
-
-    fn prepare_udp_relay_two_stream_operation<'a>(
-        &self,
-        claimed: ClaimedOutboundLeaf<'a>,
-        ctx: UdpAdapterContext<'a>,
-        post_carrier: RelayCarrier,
-        get_carrier: RelayCarrier,
-    ) -> Result<Box<dyn PreparedUdpFlowOperation + 'a>, FlowFailure> {
-        claimed.prepare_owned_udp_relay_two_stream(post_carrier, get_carrier, ctx.source_dir())
-    }
-
-    fn prepare_udp_relay_final_hop_operation<'a>(
-        &self,
-        claimed: ClaimedOutboundLeaf<'a>,
-        ctx: UdpAdapterContext<'a>,
-        carrier: RelayCarrier,
-    ) -> Result<Box<dyn PreparedUdpFlowOperation + 'a>, FlowFailure> {
-        claimed.prepare_owned_udp_relay_final_hop(carrier, ctx.source_dir())
     }
 }
 

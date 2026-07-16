@@ -372,6 +372,10 @@ struct FakeClaimedUdpLeaf {
     calls: Arc<TcpCapabilityCalls>,
 }
 
+struct FakePreparedUdpRelay {
+    calls: Arc<TcpCapabilityCalls>,
+}
+
 impl<'a> ClaimedUdpFlowLeaf<'a> for FakeClaimedUdpLeaf {
     fn prepare_udp_flow(
         &self,
@@ -383,15 +387,30 @@ impl<'a> ClaimedUdpFlowLeaf<'a> for FakeClaimedUdpLeaf {
         }))
     }
 
-    fn udp_relay_needs_two_streams(&self, _source_dir: Option<&std::path::Path>) -> bool {
+    fn prepare_udp_relay(
+        &self,
+        _source_dir: Option<&std::path::Path>,
+    ) -> Result<
+        Box<dyn crate::runtime::udp_dispatch::relay::PreparedUdpRelayOperation<'a> + 'a>,
+        FlowFailure,
+    > {
+        Ok(Box::new(FakePreparedUdpRelay {
+            calls: self.calls.clone(),
+        }))
+    }
+}
+
+impl<'a> crate::runtime::udp_dispatch::relay::PreparedUdpRelayOperation<'a>
+    for FakePreparedUdpRelay
+{
+    fn needs_two_streams(&self) -> bool {
         true
     }
 
-    fn prepare_owned_udp_relay_two_stream(
-        &self,
+    fn bind_two_stream(
+        self: Box<Self>,
         post_carrier: crate::transport::RelayCarrier,
         get_carrier: crate::transport::RelayCarrier,
-        _source_dir: Option<&std::path::Path>,
     ) -> Result<Box<dyn PreparedUdpFlowOperation + 'a>, FlowFailure> {
         assert_eq!(post_carrier.port, 9443);
         assert_eq!(get_carrier.port, 9444);
@@ -401,13 +420,12 @@ impl<'a> ClaimedUdpFlowLeaf<'a> for FakeClaimedUdpLeaf {
         }))
     }
 
-    fn prepare_owned_udp_relay_final_hop(
-        &self,
+    fn bind_final_hop(
+        self: Box<Self>,
         carrier: crate::transport::RelayCarrier,
-        _source_dir: Option<&std::path::Path>,
     ) -> Result<Box<dyn PreparedUdpFlowOperation + 'a>, FlowFailure> {
         Ok(Box::new(FakeUdpOperation {
-            calls: self.calls.clone(),
+            calls: self.calls,
             kind: FakeUdpOperationKind::FinalHop(carrier.port),
         }))
     }

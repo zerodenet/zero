@@ -23,6 +23,7 @@ use zero_transport::outbound_leaf::{
 
 use super::super::{ClaimedUdpFlowLeaf, UdpAdapterContext};
 use crate::runtime::udp_dispatch::operation::PreparedUdpFlowOperation;
+use crate::runtime::udp_dispatch::relay::PreparedUdpRelayOperation;
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
 use crate::runtime::udp_flow::managed::bridge::{
     start_direct_managed_stream_packet, start_relay_managed_stream_packet,
@@ -89,6 +90,16 @@ struct RelayTwoStreamUdpOperation<TLeaf> {
     post_carrier: RelayCarrier,
     get_carrier: RelayCarrier,
     prepared: PreparedTransportLeaf<TLeaf>,
+}
+
+struct PreparedTransportUdpRelay<TLeaf> {
+    prepared: PreparedTransportLeaf<TLeaf>,
+}
+
+#[cfg(feature = "vless")]
+struct PreparedTwoStreamTransportUdpRelay<TLeaf> {
+    prepared: PreparedTransportLeaf<TLeaf>,
+    two_stream: bool,
 }
 
 struct ClaimedTransportUdpLeaf<'a, F> {
@@ -191,19 +202,16 @@ where
         Ok(prepare_transport_udp_direct(prepared))
     }
 
-    fn prepare_owned_udp_relay_final_hop(
+    fn prepare_udp_relay(
         &self,
-        carrier: RelayCarrier,
         source_dir: Option<&Path>,
-    ) -> Result<Box<dyn PreparedUdpFlowOperation + 'a>, FlowFailure> {
+    ) -> Result<Box<dyn PreparedUdpRelayOperation<'a> + 'a>, FlowFailure> {
         let prepared = (self.prepare_leaf)(source_dir)
             .map(PreparedTransportLeaf::new)
             .map_err(|error| {
                 transport_udp_relay_final_claim_prepare_failure::<TLeaf, _>(self.upstream, error)
             })?;
-        Ok(prepare_owned_transport_udp_relay_final_hop(
-            carrier, prepared,
-        ))
+        Ok(Box::new(PreparedTransportUdpRelay { prepared }))
     }
 }
 
@@ -232,42 +240,77 @@ where
         Ok(prepare_transport_udp_direct(prepared))
     }
 
-    fn udp_relay_needs_two_streams(&self, source_dir: Option<&Path>) -> bool {
-        (self.prepare_leaf)(source_dir)
-            .map(PreparedTransportLeaf::new)
-            .is_ok_and(|prepared| transport_udp_relay_needs_two_streams(&prepared))
-    }
-
-    fn prepare_owned_udp_relay_final_hop(
+    fn prepare_udp_relay(
         &self,
-        carrier: RelayCarrier,
         source_dir: Option<&Path>,
-    ) -> Result<Box<dyn PreparedUdpFlowOperation + 'a>, FlowFailure> {
+    ) -> Result<Box<dyn PreparedUdpRelayOperation<'a> + 'a>, FlowFailure> {
         let prepared = (self.prepare_leaf)(source_dir)
             .map(PreparedTransportLeaf::new)
             .map_err(|error| {
                 transport_udp_relay_final_claim_prepare_failure::<TLeaf, _>(self.upstream, error)
             })?;
+        let two_stream = transport_udp_relay_needs_two_streams(&prepared);
+        Ok(Box::new(PreparedTwoStreamTransportUdpRelay {
+            prepared,
+            two_stream,
+        }))
+    }
+}
+
+#[cfg(any(feature = "vless", feature = "vmess", feature = "trojan"))]
+impl<'a, TLeaf> PreparedUdpRelayOperation<'a> for PreparedTransportUdpRelay<TLeaf>
+where
+    TLeaf: ProtocolTransportLeaf
+        + ProtocolUdpTransportLeafMetadata
+        + ProtocolManagedStreamUdpLeafOps
+        + Send
+        + 'a,
+{
+    fn bind_final_hop(
+        self: Box<Self>,
+        carrier: RelayCarrier,
+    ) -> Result<Box<dyn PreparedUdpFlowOperation + 'a>, FlowFailure> {
         Ok(prepare_owned_transport_udp_relay_final_hop(
-            carrier, prepared,
+            carrier,
+            self.prepared,
+        ))
+    }
+}
+
+#[cfg(feature = "vless")]
+impl<'a, TLeaf> PreparedUdpRelayOperation<'a> for PreparedTwoStreamTransportUdpRelay<TLeaf>
+where
+    TLeaf: ProtocolRelayTwoStreamTransportLeaf
+        + ProtocolRelayTwoStreamUdpTransportLeafMetadata
+        + ProtocolManagedStreamUdpLeafOps
+        + ProtocolRelayTwoStreamManagedUdpLeafOps
+        + Send
+        + Sync
+        + 'a,
+{
+    fn needs_two_streams(&self) -> bool {
+        self.two_stream
+    }
+
+    fn bind_final_hop(
+        self: Box<Self>,
+        carrier: RelayCarrier,
+    ) -> Result<Box<dyn PreparedUdpFlowOperation + 'a>, FlowFailure> {
+        Ok(prepare_owned_transport_udp_relay_final_hop(
+            carrier,
+            self.prepared,
         ))
     }
 
-    fn prepare_owned_udp_relay_two_stream(
-        &self,
+    fn bind_two_stream(
+        self: Box<Self>,
         post_carrier: RelayCarrier,
         get_carrier: RelayCarrier,
-        source_dir: Option<&Path>,
     ) -> Result<Box<dyn PreparedUdpFlowOperation + 'a>, FlowFailure> {
-        let prepared = (self.prepare_leaf)(source_dir)
-            .map(PreparedTransportLeaf::new)
-            .map_err(|error| {
-                transport_udp_two_stream_claim_prepare_failure::<TLeaf, _>(self.upstream, error)
-            })?;
         Ok(prepare_owned_transport_udp_relay_two_stream(
             post_carrier,
             get_carrier,
-            prepared,
+            self.prepared,
         ))
     }
 }
@@ -370,22 +413,6 @@ where
     E: std::fmt::Display,
 {
     transport_udp_claim_prepare_failure::<TLeaf, E>(upstream, error, TLeaf::UDP_RELAY_FINAL_STAGE)
-}
-
-#[cfg(feature = "vless")]
-fn transport_udp_two_stream_claim_prepare_failure<TLeaf, E>(
-    upstream: Option<(&str, u16)>,
-    error: E,
-) -> FlowFailure
-where
-    TLeaf: ProtocolRelayTwoStreamUdpTransportLeafMetadata,
-    E: std::fmt::Display,
-{
-    transport_udp_claim_prepare_failure::<TLeaf, E>(
-        upstream,
-        error,
-        TLeaf::UDP_RELAY_CAPABILITY_STAGE,
-    )
 }
 
 fn transport_udp_claim_prepare_failure<TLeaf, E>(

@@ -96,10 +96,6 @@ impl<'a> ClaimedInventoryLeaf<'a> {
         feature = "vmess",
         feature = "mieru"
     ))]
-    pub(crate) fn udp_relay_needs_two_streams(&self, source_dir: Option<&Path>) -> bool {
-        self.claimed.udp_relay_needs_two_streams(source_dir)
-    }
-
     #[cfg(any(
         feature = "socks5",
         feature = "vless",

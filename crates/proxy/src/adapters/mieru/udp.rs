@@ -5,6 +5,7 @@ use crate::protocol_registry::ClaimedUdpFlowLeaf;
 use crate::runtime::udp_dispatch::operation::{
     ManagedStreamPacketUdpOperation, PreparedManagedStreamPacketOperation, PreparedUdpFlowOperation,
 };
+use crate::runtime::udp_dispatch::relay::PreparedUdpRelayOperation;
 use crate::runtime::udp_dispatch::FlowFailure;
 use crate::runtime::udp_flow::managed::{
     bridge::{managed_stream_handler_box, ManagedStreamStages},
@@ -21,6 +22,12 @@ struct ClaimedMieruUdpLeaf {
     leaf: ::mieru::transport::MieruTransportLeaf,
 }
 
+struct PreparedMieruUdpRelay {
+    plan: zero_transport::managed_udp::ManagedStreamPacketBridgePlan<
+        ::mieru::transport::MieruManagedStreamUdpResume,
+    >,
+}
+
 impl<'a> ClaimedUdpFlowLeaf<'a> for ClaimedMieruUdpLeaf {
     fn prepare_udp_flow(
         &self,
@@ -34,14 +41,24 @@ impl<'a> ClaimedUdpFlowLeaf<'a> for ClaimedMieruUdpLeaf {
         }))
     }
 
-    fn prepare_owned_udp_relay_final_hop(
+    fn prepare_udp_relay(
         &self,
-        carrier: crate::transport::RelayCarrier,
         _source_dir: Option<&std::path::Path>,
+    ) -> Result<Box<dyn PreparedUdpRelayOperation<'a> + 'a>, FlowFailure> {
+        Ok(Box::new(PreparedMieruUdpRelay {
+            plan: self.leaf.clone().udp_flow_plan(true).into_bridge_plan(),
+        }))
+    }
+}
+
+impl<'a> PreparedUdpRelayOperation<'a> for PreparedMieruUdpRelay {
+    fn bind_final_hop(
+        self: Box<Self>,
+        carrier: crate::transport::RelayCarrier,
     ) -> Result<Box<dyn PreparedUdpFlowOperation + 'a>, FlowFailure> {
         Ok(Box::new(ManagedStreamPacketUdpOperation {
             operation: PreparedManagedStreamPacketOperation::RelayFinalHop {
-                plan: self.leaf.clone().udp_flow_plan(true).into_bridge_plan(),
+                plan: self.plan,
                 carrier,
             },
             needs_proxy: false,

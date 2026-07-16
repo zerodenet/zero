@@ -18,6 +18,16 @@ use crate::runtime::tcp_dispatch::operation::{
     feature = "mieru"
 ))]
 use crate::runtime::udp_dispatch::operation::PreparedUdpFlowOperation;
+#[cfg(any(
+    feature = "socks5",
+    feature = "vless",
+    feature = "hysteria2",
+    feature = "shadowsocks",
+    feature = "trojan",
+    feature = "vmess",
+    feature = "mieru"
+))]
+use crate::runtime::udp_dispatch::relay::PreparedUdpRelayOperation;
 #[cfg(any(feature = "hysteria2", feature = "shadowsocks"))]
 use crate::runtime::udp_flow::managed::model::ManagedDatagramFlowHandler;
 #[cfg(any(
@@ -62,29 +72,14 @@ pub(crate) trait ClaimedUdpFlowLeaf<'a>: Send + Sync {
         source_dir: Option<&std::path::Path>,
     ) -> Result<Box<dyn PreparedUdpFlowOperation + 'a>, crate::runtime::udp_dispatch::FlowFailure>;
 
-    fn udp_relay_needs_two_streams(&self, _source_dir: Option<&std::path::Path>) -> bool {
-        false
-    }
-
-    fn prepare_owned_udp_relay_final_hop(
+    fn prepare_udp_relay(
         &self,
-        carrier: crate::transport::RelayCarrier,
         _source_dir: Option<&std::path::Path>,
-    ) -> Result<Box<dyn PreparedUdpFlowOperation + 'a>, crate::runtime::udp_dispatch::FlowFailure>
-    {
-        let _ = carrier;
+    ) -> Result<
+        Box<dyn PreparedUdpRelayOperation<'a> + 'a>,
+        crate::runtime::udp_dispatch::FlowFailure,
+    > {
         Err(super::defaults::udp_relay_final_hop_unsupported())
-    }
-
-    fn prepare_owned_udp_relay_two_stream(
-        &self,
-        post_carrier: crate::transport::RelayCarrier,
-        get_carrier: crate::transport::RelayCarrier,
-        _source_dir: Option<&std::path::Path>,
-    ) -> Result<Box<dyn PreparedUdpFlowOperation + 'a>, crate::runtime::udp_dispatch::FlowFailure>
-    {
-        let _ = (post_carrier, get_carrier);
-        Err(super::defaults::udp_two_stream_relay_unsupported())
     }
 }
 

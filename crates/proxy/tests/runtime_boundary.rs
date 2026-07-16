@@ -314,9 +314,10 @@ fn udp_prepared_operations_do_not_borrow_adapters_or_bridges() {
     let udp = read(&proxy_src().join("protocol_registry/transport_leaf/udp.rs"));
     assert!(capability.contains("trait ClaimedUdpFlowLeaf<'a>"));
     assert!(capability.contains("fn prepare_udp_flow("));
-    assert!(capability.contains("fn prepare_owned_udp_relay_final_hop("));
-    assert!(capability.contains("fn prepare_owned_udp_relay_two_stream("));
-    assert!(!capability.contains("fn prepare_udp_relay_final_hop<'a>(\n        &self,"));
+    assert!(capability.contains("fn prepare_udp_relay("));
+    assert!(!capability.contains("RelayCarrier"));
+    assert!(!capability.contains("fn prepare_owned_udp_relay_final_hop("));
+    assert!(!capability.contains("fn prepare_owned_udp_relay_two_stream("));
     assert!(
         !udp.contains("bridge: &'a TBridge"),
         "prepared UDP transport operations must own bridge state instead of borrowing it"
@@ -1720,23 +1721,15 @@ fn runtime_tcp_relay_executes_prepared_chain_without_engine_leaf_roundtrip() {
 }
 
 #[test]
-fn inventory_udp_relay_executes_final_hop_without_start_helper_roundtrip() {
+fn inventory_udp_relay_prepares_continuation_without_opening_carriers() {
     let relay = read(&proxy_src().join("inventory/udp/relay.rs"));
-    assert!(
-        !relay.contains("self.start_udp_relay_final_hop("),
-        "udp relay chain should prepare and execute the final hop locally instead of bouncing through a second start helper"
-    );
-    assert!(
-        !relay.contains("claim_owned_outbound_leaf("),
-        "udp relay chain should reuse the already claimed final hop instead of reclaiming a raw leaf"
-    );
-    assert!(
-        !relay.contains("PreparedUdpRelayChain::FinalHop"),
-        "udp relay chain should collapse the relay prefix into an opaque prepared operation before execution"
-    );
-    assert!(relay.contains("PreparedUdpRelayChain"));
+    assert!(relay.contains("PreparedUdpRelayChain::FinalHop"));
+    assert!(relay.contains("PreparedUdpRelayChain::TwoStream"));
     assert!(relay.contains("prepare_claimed_udp_relay_chain<'a>("));
-    assert!(relay.contains("prepare_udp_relay_final_hop_operation"));
+    assert!(relay.contains("prepare_udp_relay(ctx.source_dir())"));
+    assert!(!relay.contains("dispatch_prepared_tcp_relay_carrier("));
+    assert!(!relay.contains(".await"));
+    assert!(!relay.contains("RelayCarrier"));
 }
 
 #[test]
@@ -1775,7 +1768,9 @@ fn runtime_udp_relay_executes_prepared_chain() {
     assert!(!inventory_relay.contains("operation.execute("));
     assert!(runtime_relay.contains("impl PreparedUdpRelayChain"));
     assert!(runtime_relay.contains("send_packet_path_chain("));
-    assert!(runtime_relay.contains("operation.execute("));
+    assert!(runtime_relay.contains("bind_final_hop(carrier)"));
+    assert!(runtime_relay.contains("bind_two_stream(post_carrier, get_carrier)"));
+    assert!(runtime_relay.contains("dispatch_prepared_tcp_relay_carrier("));
     assert!(!runtime_relay.contains("ResolvedLeafOutbound"));
     assert!(!runtime_relay.contains("ClaimedOutboundLeaf"));
 }
@@ -1783,11 +1778,13 @@ fn runtime_udp_relay_executes_prepared_chain() {
 #[test]
 fn udp_two_stream_transport_bridge_uses_carrier_only_relay_prefix() {
     let relay = read(&proxy_src().join("inventory/udp/relay.rs"));
+    let runtime = read(&proxy_src().join("runtime/udp_dispatch/relay.rs"));
     let udp = read(&proxy_src().join("protocol_registry/transport_leaf/udp.rs"));
     assert!(relay.contains("prepare_claimed_tcp_relay_chain("));
-    assert!(relay.contains("dispatch_prepared_tcp_relay_carrier(post_prepared)"));
-    assert!(relay.contains("dispatch_prepared_tcp_relay_carrier(get_prepared)"));
-    assert!(relay.contains("prepare_owned_udp_relay_two_stream"));
+    assert!(!relay.contains("dispatch_prepared_tcp_relay_carrier("));
+    assert!(runtime.contains("dispatch_prepared_tcp_relay_carrier(post_prefix)"));
+    assert!(runtime.contains("dispatch_prepared_tcp_relay_carrier(get_prefix)"));
+    assert!(udp.contains("fn bind_two_stream("));
     assert!(!relay.contains("prepare_tcp_relay_chain(&chain)"));
     assert!(!udp.contains("prepare_claimed_tcp_relay_chain("));
     assert!(!udp.contains("dispatch_prepared_tcp_relay_carrier(post_prepared)"));
@@ -4161,9 +4158,7 @@ fn claimed_outbound_leaf_owns_capability_preparation() {
         "fn prepare_tcp_connect(",
         "fn prepare_tcp_relay_hop(",
         "fn prepare_udp_flow(",
-        "fn udp_relay_needs_two_streams(",
-        "fn prepare_owned_udp_relay_final_hop(",
-        "fn prepare_owned_udp_relay_two_stream(",
+        "fn prepare_udp_relay(",
         "fn prepare_udp_packet_path(",
     ] {
         assert!(

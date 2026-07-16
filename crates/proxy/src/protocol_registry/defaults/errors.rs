@@ -31,22 +31,6 @@ pub(in crate::protocol_registry) fn relay_hop_unsupported() -> EngineError {
     feature = "vmess",
     feature = "mieru"
 ))]
-pub(in crate::protocol_registry) fn udp_two_stream_relay_unsupported() -> FlowFailure {
-    udp_flow_unsupported(
-        "no_two_stream_relay",
-        "this adapter does not support two-stream UDP relay",
-    )
-}
-
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
-))]
 pub(in crate::protocol_registry) fn udp_relay_final_hop_unsupported() -> FlowFailure {
     udp_flow_unsupported(
         "no_udp_relay_final_hop",

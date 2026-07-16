@@ -317,10 +317,21 @@ fn registry_executes_adapter_claimed_udp_leaf_operations() {
         DirectTcpConnectOperation, PreparedTcpConnectOperation,
     };
     use crate::runtime::udp_dispatch::operation::PreparedUdpFlowOperation;
+    use crate::runtime::udp_dispatch::relay::PreparedUdpRelayOperation;
     use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
     use crate::transport::{RelayCarrier, TcpOutboundFailure, TcpRelayStream};
 
     struct FakeClaimedUdpLeaf;
+    struct FakePreparedUdpRelay;
+
+    impl<'a> PreparedUdpRelayOperation<'a> for FakePreparedUdpRelay {
+        fn bind_final_hop(
+            self: Box<Self>,
+            _carrier: RelayCarrier,
+        ) -> Result<Box<dyn PreparedUdpFlowOperation + 'a>, FlowFailure> {
+            Ok(Box::new(FakeUdpFlowOperation))
+        }
+    }
 
     impl<'a> ClaimedUdpFlowLeaf<'a> for FakeClaimedUdpLeaf {
         fn prepare_udp_flow(
@@ -330,12 +341,11 @@ fn registry_executes_adapter_claimed_udp_leaf_operations() {
             Ok(Box::new(FakeUdpFlowOperation))
         }
 
-        fn prepare_owned_udp_relay_final_hop(
+        fn prepare_udp_relay(
             &self,
-            _carrier: RelayCarrier,
             _source_dir: Option<&std::path::Path>,
-        ) -> Result<Box<dyn PreparedUdpFlowOperation + 'a>, FlowFailure> {
-            Ok(Box::new(FakeUdpFlowOperation))
+        ) -> Result<Box<dyn PreparedUdpRelayOperation<'a> + 'a>, FlowFailure> {
+            Ok(Box::new(FakePreparedUdpRelay))
         }
     }
 
@@ -465,14 +475,15 @@ fn registry_executes_adapter_claimed_udp_leaf_operations() {
     }
 
     let (stream, _peer) = tokio::io::duplex(64);
-    match claimed.prepare_owned_udp_relay_final_hop(
-        RelayCarrier {
-            stream: TcpRelayStream::new(stream),
-            server: "claimed-udp.test".to_owned(),
-            port: 8443,
-        },
-        None,
-    ) {
+    let prepared_relay = match claimed.prepare_udp_relay(None) {
+        Ok(prepared) => prepared,
+        Err(_) => panic!("prepare claimed UDP relay"),
+    };
+    match prepared_relay.bind_final_hop(RelayCarrier {
+        stream: TcpRelayStream::new(stream),
+        server: "claimed-udp.test".to_owned(),
+        port: 8443,
+    }) {
         Ok(_) => {}
         Err(_) => panic!("claimed udp relay-final operation"),
     }
@@ -524,6 +535,18 @@ fn registry_executes_adapter_claimed_udp_packet_path_operations() {
     }
 
     struct FakeClaimedUdpLeaf;
+    struct FakePreparedUdpRelay;
+
+    impl<'a> crate::runtime::udp_dispatch::relay::PreparedUdpRelayOperation<'a>
+        for FakePreparedUdpRelay
+    {
+        fn bind_final_hop(
+            self: Box<Self>,
+            _carrier: RelayCarrier,
+        ) -> Result<Box<dyn PreparedUdpFlowOperation + 'a>, FlowFailure> {
+            Ok(Box::new(FakeClaimedUdpFlowOperation))
+        }
+    }
 
     impl<'a> ClaimedUdpFlowLeaf<'a> for FakeClaimedUdpLeaf {
         fn prepare_udp_flow(
@@ -533,12 +556,14 @@ fn registry_executes_adapter_claimed_udp_packet_path_operations() {
             Ok(Box::new(FakeClaimedUdpFlowOperation))
         }
 
-        fn prepare_owned_udp_relay_final_hop(
+        fn prepare_udp_relay(
             &self,
-            _carrier: RelayCarrier,
             _source_dir: Option<&std::path::Path>,
-        ) -> Result<Box<dyn PreparedUdpFlowOperation + 'a>, FlowFailure> {
-            Ok(Box::new(FakeClaimedUdpFlowOperation))
+        ) -> Result<
+            Box<dyn crate::runtime::udp_dispatch::relay::PreparedUdpRelayOperation<'a> + 'a>,
+            FlowFailure,
+        > {
+            Ok(Box::new(FakePreparedUdpRelay))
         }
     }
 

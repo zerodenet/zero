@@ -14,4 +14,4 @@ pub(super) use errors::relay_hop_unsupported;
     feature = "vmess",
     feature = "mieru"
 ))]
-pub(super) use errors::{udp_relay_final_hop_unsupported, udp_two_stream_relay_unsupported};
+pub(super) use errors::udp_relay_final_hop_unsupported;
