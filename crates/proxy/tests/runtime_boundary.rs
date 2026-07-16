@@ -39,7 +39,9 @@ fn collect_rust_sources(root: &Path, sources: &mut Vec<PathBuf>) {
 }
 
 fn read(path: &Path) -> String {
-    fs::read_to_string(path).unwrap_or_else(|error| panic!("read {}: {error}", path.display()))
+    fs::read_to_string(path)
+        .unwrap_or_else(|error| panic!("read {}: {error}", path.display()))
+        .replace("\r\n", "\n")
 }
 
 fn read_module(path: &Path) -> String {
@@ -1895,7 +1897,7 @@ fn udp_ingress_runtime_collapses_proxy_and_services_for_session_loops() {
     assert!(!ingress.contains("proxy: Proxy"));
     assert!(!ingress.contains("from_proxy("));
 
-    let association = read(&proxy_src().join("runtime/udp_association/contract.rs"));
+    let association = read_module(&proxy_src().join("runtime/udp_association/contract.rs"));
     assert!(association.contains("struct UdpAssociationDatagramRequest"));
     assert!(association.contains("runtime: &'a UdpIngressRuntime"));
     assert!(!association.contains("use crate::runtime::Proxy"));
@@ -2231,6 +2233,44 @@ fn datagram_udp_lifecycle_root_stays_facade_only() {
         assert!(
             lifecycle.contains(expected),
             "datagram_udp lifecycle module tree must still provide `{expected}`"
+        );
+    }
+}
+
+#[test]
+fn udp_association_contract_root_stays_facade_only() {
+    let contract_root = read(&proxy_src().join("runtime/udp_association/contract.rs"));
+    let contract = read_module(&proxy_src().join("runtime/udp_association/contract.rs"));
+    for module_name in [
+        "mod dispatch;",
+        "mod handler;",
+        "mod model;",
+        "mod response;",
+    ] {
+        assert!(contract_root.contains(module_name));
+    }
+    for forbidden in [
+        "enum UdpAssociationDispatchOutcome",
+        "struct UdpAssociationDispatchBridge",
+        "trait UdpAssociationHandler",
+        "async fn write_target_response",
+        "async fn send_association_response",
+    ] {
+        assert!(
+            !contract_root.contains(forbidden),
+            "udp_association contract facade root must not keep `{forbidden}` inline"
+        );
+    }
+    for expected in [
+        "enum UdpAssociationDispatchOutcome",
+        "struct UdpAssociationDispatchBridge",
+        "trait UdpAssociationHandler",
+        "async fn write_target_response",
+        "async fn send_association_response",
+    ] {
+        assert!(
+            contract.contains(expected),
+            "udp_association contract module tree must still provide `{expected}`"
         );
     }
 }
