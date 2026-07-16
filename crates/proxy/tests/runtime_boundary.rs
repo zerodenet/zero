@@ -3234,6 +3234,169 @@ fn udp_flow_managed_model_send_root_stays_facade_only() {
 }
 
 #[test]
+fn udp_flow_managed_flow_root_stays_facade_only() {
+    let flow_root = read(&proxy_src().join("runtime/udp_flow/managed/flow.rs"));
+    let flow = read_module(&proxy_src().join("runtime/udp_flow/managed/flow.rs"));
+    for module_name in ["mod request;", "mod resume;"] {
+        assert!(flow_root.contains(module_name));
+    }
+    for forbidden in [
+        "pub(crate) struct ManagedUdpFlowRequest",
+        "pub(crate) enum ManagedUdpFlowKind",
+        "pub(crate) struct ManagedUdpFlowResume",
+    ] {
+        assert!(
+            !flow_root.contains(forbidden),
+            "udp_flow managed flow facade root must not keep `{forbidden}` inline"
+        );
+    }
+    for expected in [
+        "pub(crate) struct ManagedUdpFlowRequest",
+        "pub(crate) enum ManagedUdpFlowKind",
+        "pub(crate) struct ManagedUdpFlowResume",
+    ] {
+        assert!(
+            flow.contains(expected),
+            "udp_flow managed flow module tree must still provide `{expected}`"
+        );
+    }
+}
+
+#[test]
+fn udp_flow_managed_model_root_stays_facade_only() {
+    let model_root = read(&proxy_src().join("runtime/udp_flow/managed/model.rs"));
+    let model = read_module(&proxy_src().join("runtime/udp_flow/managed/model.rs"));
+    for module_name in ["mod handler;", "mod send;"] {
+        assert!(model_root.contains(module_name));
+    }
+    for forbidden in [
+        "trait ManagedDatagramFlowHandler",
+        "trait ManagedStreamPacketFlowHandler",
+        "trait ManagedRelayFlowHandler",
+        "pub(crate) struct ManagedStreamHandlerPair",
+        "pub(crate) struct ManagedDatagramExistingSend",
+    ] {
+        assert!(
+            !model_root.contains(forbidden),
+            "udp_flow managed model facade root must not keep `{forbidden}` inline"
+        );
+    }
+    for expected in [
+        "trait ManagedDatagramFlowHandler",
+        "trait ManagedStreamPacketFlowHandler",
+        "trait ManagedRelayFlowHandler",
+        "pub(crate) struct ManagedStreamHandlerPair",
+        "pub(crate) struct ManagedDatagramExistingSend",
+    ] {
+        assert!(
+            model.contains(expected),
+            "udp_flow managed model module tree must still provide `{expected}`"
+        );
+    }
+}
+
+#[test]
+fn udp_flow_managed_state_start_root_stays_facade_only() {
+    let start_root = read(&proxy_src().join("runtime/udp_flow/managed/state/start.rs"));
+    let start = read_module(&proxy_src().join("runtime/udp_flow/managed/state/start.rs"));
+    for module_name in ["mod datagram;", "mod dispatch;", "mod stream;"] {
+        assert!(start_root.contains(module_name));
+    }
+    for forbidden in [
+        "pub(crate) async fn start_flow(",
+        "pub(crate) async fn start_datagram_flow(",
+        "pub(crate) async fn start_stream_packet_flow(",
+        "pub(crate) async fn start_relay_stream_flow(",
+    ] {
+        assert!(
+            !start_root.contains(forbidden),
+            "udp_flow managed state start facade root must not keep `{forbidden}` inline"
+        );
+    }
+    for expected in [
+        "pub(crate) async fn start_flow(",
+        "pub(crate) async fn start_datagram_flow(",
+        "pub(crate) async fn start_stream_packet_flow(",
+        "pub(crate) async fn start_relay_stream_flow(",
+    ] {
+        assert!(
+            start.contains(expected),
+            "udp_flow managed state start module tree must still provide `{expected}`"
+        );
+    }
+}
+
+#[test]
+fn udp_flow_managed_stream_manager_root_stays_facade_only() {
+    let manager_root =
+        read(&proxy_src().join("runtime/udp_flow/managed/stream_manager/manager.rs"));
+    let manager =
+        read_module(&proxy_src().join("runtime/udp_flow/managed/stream_manager/manager.rs"));
+    for module_name in ["mod mismatch;", "mod model;", "mod relay;", "mod send;"] {
+        assert!(manager_root.contains(module_name));
+    }
+    for forbidden in [
+        "pub(crate) struct ManagedStreamFlowManager",
+        "pub(crate) struct SharedManagedStreamFlowManager",
+        "pub(super) struct ManagedStreamRelayRequest",
+        "pub(super) async fn send(",
+        "async fn send_relay(",
+    ] {
+        assert!(
+            !manager_root.contains(forbidden),
+            "udp_flow managed stream_manager facade root must not keep `{forbidden}` inline"
+        );
+    }
+    for expected in [
+        "pub(crate) struct ManagedStreamFlowManager",
+        "pub(crate) struct SharedManagedStreamFlowManager",
+        "pub(super) struct ManagedStreamRelayRequest",
+        "pub(super) async fn send(",
+        "async fn send_relay(",
+    ] {
+        assert!(
+            manager.contains(expected),
+            "udp_flow managed stream_manager module tree must still provide `{expected}`"
+        );
+    }
+}
+
+#[test]
+fn udp_flow_managed_datagram_manager_root_stays_facade_only() {
+    let manager_root =
+        read(&proxy_src().join("runtime/udp_flow/managed/datagram_manager/manager.rs"));
+    let manager =
+        read_module(&proxy_src().join("runtime/udp_flow/managed/datagram_manager/manager.rs"));
+    for module_name in ["mod flow;", "mod mismatch;", "mod model;", "mod socket;"] {
+        assert!(manager_root.contains(module_name));
+    }
+    for forbidden in [
+        "pub(crate) struct ManagedDatagramFlowManager",
+        "pub(crate) struct ManagedDatagramSocketFlowManager",
+        "async fn send(",
+        "async fn send_managed_existing(",
+        "fn supports_managed_existing(",
+    ] {
+        assert!(
+            !manager_root.contains(forbidden),
+            "udp_flow managed datagram_manager facade root must not keep `{forbidden}` inline"
+        );
+    }
+    for expected in [
+        "pub(crate) struct ManagedDatagramFlowManager",
+        "pub(crate) struct ManagedDatagramSocketFlowManager",
+        "async fn send(",
+        "async fn send_managed_existing(",
+        "fn supports_managed_existing(",
+    ] {
+        assert!(
+            manager.contains(expected),
+            "udp_flow managed datagram_manager module tree must still provide `{expected}`"
+        );
+    }
+}
+
+#[test]
 fn inventory_tcp_candidate_and_dispatch_use_runtime_services_instead_of_proxy() {
     for relative in ["inventory/tcp/candidate.rs", "inventory/tcp/dispatch.rs"] {
         let source = read(&proxy_src().join(relative));
