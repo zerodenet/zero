@@ -3756,6 +3756,41 @@ fn udp_flow_registered_upstream_root_stays_facade_only() {
 }
 
 #[test]
+fn udp_flow_registered_upstream_runtime_handler_root_stays_facade_only() {
+    let handler_root =
+        read(&proxy_src().join("runtime/udp_flow/registered/upstream/runtime/handler.rs"));
+    let handler =
+        read_module(&proxy_src().join("runtime/udp_flow/registered/upstream/runtime/handler.rs"));
+    for module_name in ["mod build;", "mod dispatch;", "mod model;"] {
+        assert!(handler_root.contains(module_name));
+    }
+    for forbidden in [
+        "pub(crate) struct RegisteredUpstreamAssociationHandler",
+        "pub(crate) fn new(stages: UpstreamAssociationStages) -> Self",
+        "async fn send_upstream(",
+        "fn close_all_upstreams(&mut self)",
+        "fn boxed_registered_upstream_handler<",
+    ] {
+        assert!(
+            !handler_root.contains(forbidden),
+            "udp_flow registered upstream runtime handler facade root must not keep `{forbidden}` inline"
+        );
+    }
+    for expected in [
+        "pub(crate) struct RegisteredUpstreamAssociationHandler",
+        "pub(crate) fn new(stages: UpstreamAssociationStages) -> Self",
+        "async fn send_upstream(",
+        "fn close_all_upstreams(&mut self)",
+        "fn boxed_registered_upstream_handler<",
+    ] {
+        assert!(
+            handler.contains(expected),
+            "udp_flow registered upstream runtime handler module tree must still provide `{expected}`"
+        );
+    }
+}
+
+#[test]
 fn udp_flow_registered_upstream_runtime_association_lifecycle_root_stays_facade_only() {
     let lifecycle_root = read(
         &proxy_src().join("runtime/udp_flow/registered/upstream/runtime/association/lifecycle.rs"),
