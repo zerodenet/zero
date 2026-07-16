@@ -2138,6 +2138,31 @@ fn udp_flow_packet_path_root_stays_facade_only() {
 }
 
 #[test]
+fn udp_dispatch_root_stays_facade_only() {
+    let dispatch_root = read(&proxy_src().join("runtime/udp_dispatch/mod.rs"));
+    let dispatch = read_module(&proxy_src().join("runtime/udp_dispatch"));
+    for module_name in ["mod failure;", "mod model;"] {
+        assert!(dispatch_root.contains(module_name));
+    }
+    for forbidden in [
+        "pub(crate) struct UdpDispatch",
+        "fn fail_flow(",
+        "log_session_failed",
+    ] {
+        assert!(
+            !dispatch_root.contains(forbidden),
+            "udp_dispatch facade root must not keep `{forbidden}` inline"
+        );
+    }
+    for expected in ["pub(crate) struct UdpDispatch", "pub(super) fn fail_flow("] {
+        assert!(
+            dispatch.contains(expected),
+            "udp_dispatch module tree must still provide `{expected}`"
+        );
+    }
+}
+
+#[test]
 fn inventory_tcp_candidate_and_dispatch_use_runtime_services_instead_of_proxy() {
     for relative in ["inventory/tcp/candidate.rs", "inventory/tcp/dispatch.rs"] {
         let source = read(&proxy_src().join(relative));
