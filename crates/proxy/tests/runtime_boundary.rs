@@ -2035,7 +2035,7 @@ fn udp_ingress_runtime_collapses_proxy_and_services_for_session_loops() {
     assert!(!tcp_ingress_lifecycle.contains("use crate::runtime::Proxy"));
     assert!(!tcp_ingress_lifecycle.contains("proxy: &Proxy"));
 
-    let tcp_ingress_contract = read(&proxy_src().join("runtime/tcp_ingress/contract.rs"));
+    let tcp_ingress_contract = read_module(&proxy_src().join("runtime/tcp_ingress/contract.rs"));
     assert!(tcp_ingress_contract.contains("TcpRuntimeServices"));
     assert!(!tcp_ingress_contract.contains("use crate::runtime::Proxy"));
     assert!(!tcp_ingress_contract.contains("proxy: &Proxy"));
@@ -2137,6 +2137,43 @@ fn tcp_ingress_lifecycle_root_stays_facade_only() {
         assert!(
             lifecycle.contains(expected),
             "tcp_ingress lifecycle module tree must still provide `{expected}`"
+        );
+    }
+}
+
+#[test]
+fn tcp_ingress_contract_root_stays_facade_only() {
+    let contract_root = read(&proxy_src().join("runtime/tcp_ingress/contract.rs"));
+    let contract = read_module(&proxy_src().join("runtime/tcp_ingress/contract.rs"));
+    for module_name in [
+        "mod accounting;",
+        "mod client_response;",
+        "mod no_response;",
+        "mod protocol;",
+    ] {
+        assert!(contract_root.contains(module_name));
+    }
+    for forbidden in [
+        "pub(crate) fn record_tcp_upload",
+        "pub(crate) trait InboundProtocol",
+        "pub(crate) struct ClientResponseInboundProtocol",
+        "pub(crate) struct NoClientResponseStreamProtocol",
+    ] {
+        assert!(
+            !contract_root.contains(forbidden),
+            "tcp_ingress contract facade root must not keep `{forbidden}` inline"
+        );
+    }
+    for expected in [
+        "fn record_tcp_upload(",
+        "pub(crate) trait InboundProtocol",
+        "pub(crate) struct ClientResponseInboundProtocol",
+        "pub(crate) struct NoClientResponseStreamProtocol",
+        "TcpRuntimeServices",
+    ] {
+        assert!(
+            contract.contains(expected),
+            "tcp_ingress contract module tree must still provide `{expected}`"
         );
     }
 }
