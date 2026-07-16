@@ -226,6 +226,8 @@ fn listener_and_task_lifecycle_are_runtime_owned() {
         "runtime must own connection task fan-out"
     );
     assert!(inventory_inbound.contains("prepare_inbound_listener("));
+    assert!(!inventory_inbound.contains("check_inbound_enabled("));
+    assert!(!runtime_listeners.contains("check_inbound_enabled("));
     assert!(!inventory_inbound.contains("JoinSet"));
     assert!(!inventory_inbound.contains("listeners.spawn("));
     assert!(!inventory_inbound.contains("operation.execute("));

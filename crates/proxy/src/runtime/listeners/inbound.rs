@@ -27,11 +27,6 @@ pub(in crate::runtime) fn spawn_inbound_listener(
     shutdown_rx: watch::Receiver<bool>,
     listeners: &mut JoinSet<Result<(), EngineError>>,
 ) {
-    if let Err(error) = protocols.check_inbound_enabled(&inbound.protocol, &inbound.tag) {
-        warn!(tag = %inbound.tag, error = %error, "skipping inbound listener: feature check failed");
-        return;
-    }
-
     let operation = match protocols.prepare_inbound_listener(inbound.clone(), source_dir) {
         Ok(operation) => operation,
         Err(error) => {

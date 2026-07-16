@@ -1,4 +1,3 @@
-use zero_config::InboundProtocolConfig;
 use zero_engine::EngineError;
 
 use super::ProtocolInventory;
@@ -6,24 +5,6 @@ use crate::protocol_registry::{BoundInbound, InboundListenerCapability};
 use crate::runtime::inbound_operation::PreparedInboundListenerOperation;
 
 impl ProtocolInventory {
-    pub(crate) fn check_inbound_enabled(
-        &self,
-        protocol: &InboundProtocolConfig,
-        tag: &str,
-    ) -> Result<(), EngineError> {
-        if self.registry.supports_inbound(protocol) {
-            return Ok(());
-        }
-        let label = self.registry.inbound_protocol_label(protocol);
-        let feature = self.registry.inbound_protocol_feature_name(protocol);
-        Err(EngineError::CompiledFeatureDisabled {
-            kind: "inbound",
-            tag: tag.to_owned(),
-            protocol: label,
-            feature,
-        })
-    }
-
     pub(crate) async fn bind_inbound(
         &self,
         inbound: &zero_config::InboundConfig,
