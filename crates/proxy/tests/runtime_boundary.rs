@@ -1951,17 +1951,25 @@ fn udp_ingress_runtime_collapses_proxy_and_services_for_session_loops() {
         );
     }
 
-    let route_runtime = read(&proxy_src().join("runtime/route_runtime.rs"));
+    let route_runtime_root = read(&proxy_src().join("runtime/route_runtime.rs"));
+    let route_runtime = read_module(&proxy_src().join("runtime/route_runtime.rs"));
+    assert!(route_runtime_root.contains("mod listener;"));
+    assert!(route_runtime_root.contains("mod route;"));
+    assert!(route_runtime_root.contains("mod shared;"));
+    assert!(!route_runtime_root.contains("struct InboundRouteRuntime"));
+    assert!(!route_runtime_root.contains("struct InboundListenerRuntime"));
+    assert!(!route_runtime_root.contains("struct SharedIngressRuntimeServices"));
     assert!(route_runtime.contains("struct InboundRouteRuntime"));
     assert!(route_runtime.contains("struct InboundListenerRuntime"));
     assert!(route_runtime.contains("struct SharedIngressRuntimeServices"));
-    assert!(route_runtime.contains("struct MuxSubstreamRuntime"));
     assert!(route_runtime.contains("TcpIngressRuntime"));
     assert!(route_runtime.contains("tcp_runtime: TcpIngressRuntime"));
     assert!(!route_runtime.contains("use crate::runtime::Proxy"));
     assert!(!route_runtime.contains("from_proxy("));
     assert!(!route_runtime.contains("fallback_proxy"));
     assert!(!route_runtime.contains("proxy: Proxy"));
+    #[cfg(any(feature = "vless", feature = "vmess"))]
+    assert!(route_runtime.contains("struct MuxSubstreamRuntime"));
 
     let inbound_operation = read_module(&proxy_src().join("runtime/inbound_operation.rs"));
     assert!(inbound_operation.contains("InboundListenerRuntime"));
