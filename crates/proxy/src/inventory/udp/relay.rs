@@ -4,44 +4,11 @@ use super::super::ClaimedInventoryLeaf;
 use super::super::{ClaimedRelayChain, ProtocolInventory};
 use crate::protocol_registry::{ClaimedOutboundLeaf, OutboundAdapterContext, UdpAdapterContext};
 use crate::runtime::udp_dispatch::operation::PreparedUdpFlowOperation;
-use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
+use crate::runtime::udp_dispatch::relay::PreparedUdpRelayChain;
+use crate::runtime::udp_dispatch::FlowFailure;
 use crate::runtime::udp_flow::packet_path::{PacketPathFlowBinding, UdpPacketRef};
 use crate::runtime::udp_flow::packet_path_chain::PacketPathStartRequest;
 use crate::transport::RelayCarrier;
-
-pub(super) enum PreparedUdpRelayChain<'a> {
-    PacketPath {
-        flow_binding: PacketPathFlowBinding,
-        request: Box<PacketPathStartRequest<'a>>,
-    },
-    Operation(Box<dyn PreparedUdpFlowOperation + 'a>),
-}
-
-impl PreparedUdpRelayChain<'_> {
-    pub(super) async fn execute(
-        self,
-        dispatch: &mut UdpDispatch,
-        ctx: UdpAdapterContext<'_>,
-        session: &zero_core::Session,
-        payload: &[u8],
-    ) -> Result<FlowStartResult, FlowFailure> {
-        match self {
-            PreparedUdpRelayChain::PacketPath {
-                flow_binding,
-                request,
-            } => {
-                let sent = dispatch.send_packet_path_chain(ctx, *request).await?;
-                Ok(FlowStartResult::Flow {
-                    outbound: Box::new(UdpDispatch::datagram_chain_flow_outbound(flow_binding)),
-                    tx_bytes: sent as u64,
-                })
-            }
-            PreparedUdpRelayChain::Operation(operation) => {
-                operation.execute(dispatch, ctx, session, payload).await
-            }
-        }
-    }
-}
 
 impl ProtocolInventory {
     pub(in crate::inventory) fn prepare_claimed_udp_packet_path_pair<'a>(

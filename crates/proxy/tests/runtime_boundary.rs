@@ -1767,6 +1767,20 @@ fn inventory_relay_modules_only_prepare_claimed_chains() {
 }
 
 #[test]
+fn runtime_udp_relay_executes_prepared_chain() {
+    let inventory_relay = read(&proxy_src().join("inventory/udp/relay.rs"));
+    let runtime_relay = read(&proxy_src().join("runtime/udp_dispatch/relay.rs"));
+    assert!(!inventory_relay.contains("impl PreparedUdpRelayChain"));
+    assert!(!inventory_relay.contains("send_packet_path_chain("));
+    assert!(!inventory_relay.contains("operation.execute("));
+    assert!(runtime_relay.contains("impl PreparedUdpRelayChain"));
+    assert!(runtime_relay.contains("send_packet_path_chain("));
+    assert!(runtime_relay.contains("operation.execute("));
+    assert!(!runtime_relay.contains("ResolvedLeafOutbound"));
+    assert!(!runtime_relay.contains("ClaimedOutboundLeaf"));
+}
+
+#[test]
 fn udp_two_stream_transport_bridge_uses_carrier_only_relay_prefix() {
     let relay = read(&proxy_src().join("inventory/udp/relay.rs"));
     let udp = read(&proxy_src().join("protocol_registry/transport_leaf/udp.rs"));

@@ -6,7 +6,7 @@ use crate::protocol_registry::UdpAdapterContext;
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
 
 enum PreparedUdpOutbound<'a> {
-    Relay(Box<super::relay::PreparedUdpRelayChain<'a>>),
+    Relay(Box<crate::runtime::udp_dispatch::relay::PreparedUdpRelayChain<'a>>),
     Single(super::leaf::PreparedUdpLeafCandidate<'a>),
     Fallback(Vec<super::leaf::PreparedUdpLeafCandidate<'a>>),
 }
