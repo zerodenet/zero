@@ -3327,6 +3327,38 @@ fn udp_flow_managed_state_start_root_stays_facade_only() {
 }
 
 #[test]
+fn udp_flow_managed_state_start_dispatch_root_stays_facade_only() {
+    let dispatch_root = read(&proxy_src().join("runtime/udp_flow/managed/state/start/dispatch.rs"));
+    let dispatch =
+        read_module(&proxy_src().join("runtime/udp_flow/managed/state/start/dispatch.rs"));
+    for module_name in ["mod datagram;", "mod request;", "mod relay;", "mod stream;"] {
+        assert!(dispatch_root.contains(module_name));
+    }
+    for forbidden in [
+        "pub(crate) async fn start_flow(",
+        "pub(crate) async fn start_datagram_request(",
+        "pub(crate) async fn start_stream_packet_request(",
+        "pub(crate) async fn start_relay_stream_request(",
+    ] {
+        assert!(
+            !dispatch_root.contains(forbidden),
+            "udp_flow managed state start dispatch facade root must not keep `{forbidden}` inline"
+        );
+    }
+    for expected in [
+        "pub(crate) async fn start_flow(",
+        "pub(crate) async fn start_datagram_request(",
+        "pub(crate) async fn start_stream_packet_request(",
+        "pub(crate) async fn start_relay_stream_request(",
+    ] {
+        assert!(
+            dispatch.contains(expected),
+            "udp_flow managed state start dispatch module tree must still provide `{expected}`"
+        );
+    }
+}
+
+#[test]
 fn udp_flow_managed_stream_manager_root_stays_facade_only() {
     let manager_root =
         read(&proxy_src().join("runtime/udp_flow/managed/stream_manager/manager.rs"));
