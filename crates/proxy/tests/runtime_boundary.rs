@@ -2469,6 +2469,44 @@ fn route_runtime_route_root_stays_facade_only() {
 }
 
 #[test]
+fn handle_command_root_stays_facade_only() {
+    let command_root = read(&proxy_src().join("runtime/handle/command.rs"));
+    let command = read_module(&proxy_src().join("runtime/handle/command.rs"));
+    for module_name in [
+        "mod diagnostics;",
+        "mod dispatch;",
+        "mod runtime;",
+        "mod tun;",
+    ] {
+        assert!(command_root.contains(module_name));
+    }
+    for forbidden in [
+        "impl zero_api::CommandService for ProxyHandle",
+        "CommandRequest::TunStart",
+        "CommandRequest::DiagnosticsProbeOutbound",
+        "CommandRequest::DiagnosticsDnsCache",
+        "CommandRequest::DiagnosticsFakeipLookup",
+    ] {
+        assert!(
+            !command_root.contains(forbidden),
+            "handle command facade root must not keep `{forbidden}` inline"
+        );
+    }
+    for expected in [
+        "impl zero_api::CommandService for ProxyHandle",
+        "CommandRequest::TunStart",
+        "CommandRequest::DiagnosticsProbeOutbound",
+        "CommandRequest::DiagnosticsDnsCache",
+        "CommandRequest::DiagnosticsFakeipLookup",
+    ] {
+        assert!(
+            command.contains(expected),
+            "handle command module tree must still provide `{expected}`"
+        );
+    }
+}
+
+#[test]
 fn udp_flow_outbound_root_stays_facade_only() {
     let outbound_root = read(&proxy_src().join("runtime/udp_flow/outbound.rs"));
     let outbound = read_module(&proxy_src().join("runtime/udp_flow/outbound.rs"));
