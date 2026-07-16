@@ -1909,7 +1909,7 @@ fn udp_ingress_runtime_collapses_proxy_and_services_for_session_loops() {
         "runtime/stream_udp.rs",
         "runtime/mux_udp.rs",
     ] {
-        let source = read(&proxy_src().join(relative));
+        let source = read_module(&proxy_src().join(relative));
         assert!(
             source.contains("UdpIngressRuntime"),
             "{relative} must route inbound UDP through the shared ingress runtime context"
@@ -1944,7 +1944,7 @@ fn udp_ingress_runtime_collapses_proxy_and_services_for_session_loops() {
         "runtime/mux_session.rs",
         "runtime/mux_tcp.rs",
     ] {
-        let source = read(&proxy_src().join(relative));
+        let source = read_module(&proxy_src().join(relative));
         assert!(
             !source.contains("&Proxy"),
             "{relative} must not borrow raw Proxy references for outer UDP session loops"
@@ -2166,6 +2166,35 @@ fn udp_dispatch_root_stays_facade_only() {
         assert!(
             dispatch.contains(expected),
             "udp_dispatch module tree must still provide `{expected}`"
+        );
+    }
+}
+
+#[test]
+fn packet_session_udp_lifecycle_root_stays_facade_only() {
+    let lifecycle_root = read(&proxy_src().join("runtime/packet_session_udp/lifecycle.rs"));
+    let lifecycle = read_module(&proxy_src().join("runtime/packet_session_udp/lifecycle.rs"));
+    for module_name in ["mod failure;", "mod relay;"] {
+        assert!(lifecycle_root.contains(module_name));
+    }
+    for forbidden in [
+        "pub(crate) async fn run_packet_session_udp_relay",
+        "async fn handle_runtime_failure",
+        "tokio::select!",
+    ] {
+        assert!(
+            !lifecycle_root.contains(forbidden),
+            "packet_session_udp lifecycle facade root must not keep `{forbidden}` inline"
+        );
+    }
+    for expected in [
+        "pub(crate) async fn run_packet_session_udp_relay",
+        "async fn handle_runtime_failure",
+        "select! {",
+    ] {
+        assert!(
+            lifecycle.contains(expected),
+            "packet_session_udp lifecycle module tree must still provide `{expected}`"
         );
     }
 }
