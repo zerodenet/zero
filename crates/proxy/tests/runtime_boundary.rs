@@ -1890,7 +1890,7 @@ fn udp_delivery_helpers_use_runtime_services_instead_of_proxy() {
 
 #[test]
 fn udp_ingress_runtime_collapses_proxy_and_services_for_session_loops() {
-    let ingress = read(&proxy_src().join("runtime/udp_ingress.rs"));
+    let ingress = read_module(&proxy_src().join("runtime/udp_ingress.rs"));
     assert!(ingress.contains("struct UdpIngressRuntime"));
     assert!(ingress.contains("services: UdpRuntimeServices"));
     assert!(!ingress.contains("use crate::runtime::Proxy"));
@@ -2106,6 +2106,39 @@ fn udp_ingress_runtime_collapses_proxy_and_services_for_session_loops() {
     assert!(pipe.contains("Self { dispatch }"));
     assert!(!pipe.contains("UdpDispatch::dispatch(self.dispatch, self.proxy, input)"));
     assert!(pipe.contains("UdpDispatch::dispatch(self.dispatch, input)"));
+}
+
+#[test]
+fn udp_ingress_root_stays_facade_only() {
+    let ingress_root = read(&proxy_src().join("runtime/udp_ingress.rs"));
+    let ingress = read_module(&proxy_src().join("runtime/udp_ingress.rs"));
+    for module_name in ["mod dispatch;", "mod model;", "mod route;", "mod session;"] {
+        assert!(ingress_root.contains(module_name));
+    }
+    for forbidden in [
+        "struct UdpIngressRuntime",
+        "pub(crate) async fn new_dispatch",
+        "pub(crate) fn route_decision",
+        "pub(crate) fn prepare_udp_session",
+        "pub(crate) async fn dispatch_inbound_packet",
+    ] {
+        assert!(
+            !ingress_root.contains(forbidden),
+            "udp_ingress facade root must not keep `{forbidden}` inline"
+        );
+    }
+    for expected in [
+        "pub(crate) struct UdpIngressRuntime",
+        "pub(crate) async fn new_dispatch",
+        "pub(crate) fn route_decision",
+        "pub(crate) fn prepare_udp_session",
+        "pub(crate) async fn dispatch_inbound_packet",
+    ] {
+        assert!(
+            ingress.contains(expected),
+            "udp_ingress module tree must still provide `{expected}`"
+        );
+    }
 }
 
 #[test]
