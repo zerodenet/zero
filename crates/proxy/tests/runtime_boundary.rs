@@ -2030,7 +2030,7 @@ fn udp_ingress_runtime_collapses_proxy_and_services_for_session_loops() {
     assert!(!tcp_ingress_runtime.contains("use crate::runtime::Proxy"));
     assert!(!tcp_ingress_runtime.contains("proxy: Proxy"));
 
-    let tcp_ingress_lifecycle = read(&proxy_src().join("runtime/tcp_ingress/lifecycle.rs"));
+    let tcp_ingress_lifecycle = read_module(&proxy_src().join("runtime/tcp_ingress/lifecycle.rs"));
     assert!(tcp_ingress_lifecycle.contains("TcpIngressRuntime"));
     assert!(!tcp_ingress_lifecycle.contains("use crate::runtime::Proxy"));
     assert!(!tcp_ingress_lifecycle.contains("proxy: &Proxy"));
@@ -2106,6 +2106,39 @@ fn udp_ingress_runtime_collapses_proxy_and_services_for_session_loops() {
     assert!(pipe.contains("Self { dispatch }"));
     assert!(!pipe.contains("UdpDispatch::dispatch(self.dispatch, self.proxy, input)"));
     assert!(pipe.contains("UdpDispatch::dispatch(self.dispatch, input)"));
+}
+
+#[test]
+fn tcp_ingress_lifecycle_root_stays_facade_only() {
+    let lifecycle_root = read(&proxy_src().join("runtime/tcp_ingress/lifecycle.rs"));
+    let lifecycle = read_module(&proxy_src().join("runtime/tcp_ingress/lifecycle.rs"));
+    for module_name in ["mod rate_limit;", "mod result;", "mod serve;"] {
+        assert!(lifecycle_root.contains(module_name));
+    }
+    for forbidden in [
+        "pub(crate) async fn serve_inbound<",
+        "pub(crate) async fn serve_inbound_with_client_response",
+        "pub(crate) fn apply_kernel_rate_limits_from_config",
+        "tokio::time::timeout(",
+        "fn finish_relay_success(",
+    ] {
+        assert!(
+            !lifecycle_root.contains(forbidden),
+            "tcp_ingress lifecycle facade root must not keep `{forbidden}` inline"
+        );
+    }
+    for expected in [
+        "pub(crate) async fn serve_inbound<",
+        "pub(crate) fn apply_kernel_rate_limits_from_config",
+        "tokio::time::timeout(",
+        "fn finish_relay_success(",
+        "fn finish_route_or_establish_failure(",
+    ] {
+        assert!(
+            lifecycle.contains(expected),
+            "tcp_ingress lifecycle module tree must still provide `{expected}`"
+        );
+    }
 }
 
 #[test]
