@@ -2206,6 +2206,42 @@ fn udp_dispatch_root_stays_facade_only() {
 }
 
 #[test]
+fn udp_dispatch_managed_start_root_stays_facade_only() {
+    let start_root = read(&proxy_src().join("runtime/udp_dispatch/managed/start.rs"));
+    let start = read_module(&proxy_src().join("runtime/udp_dispatch/managed/start.rs"));
+    for module_name in [
+        "mod context;",
+        "mod datagram;",
+        "mod send;",
+        "mod upstream;",
+    ] {
+        assert!(start_root.contains(module_name));
+    }
+    for forbidden in [
+        "pub(crate) fn flow_start_context(&mut self)",
+        "pub(in crate::runtime::udp_dispatch::managed) async fn send_managed_udp(",
+        "pub(crate) async fn start_tracked_managed_datagram",
+        "pub(crate) async fn start_tracked_upstream",
+    ] {
+        assert!(
+            !start_root.contains(forbidden),
+            "udp_dispatch managed start facade root must not keep `{forbidden}` inline"
+        );
+    }
+    for expected in [
+        "pub(crate) fn flow_start_context(&mut self)",
+        "pub(in crate::runtime::udp_dispatch::managed) async fn send_managed_udp(",
+        "pub(crate) async fn start_tracked_managed_datagram",
+        "pub(crate) async fn start_tracked_upstream",
+    ] {
+        assert!(
+            start.contains(expected),
+            "udp_dispatch managed start module tree must still provide `{expected}`"
+        );
+    }
+}
+
+#[test]
 fn packet_session_udp_lifecycle_root_stays_facade_only() {
     let lifecycle_root = read(&proxy_src().join("runtime/packet_session_udp/lifecycle.rs"));
     let lifecycle = read_module(&proxy_src().join("runtime/packet_session_udp/lifecycle.rs"));
