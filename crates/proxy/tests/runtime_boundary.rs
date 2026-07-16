@@ -2512,6 +2512,39 @@ fn udp_dispatch_root_stays_facade_only() {
 }
 
 #[test]
+fn udp_dispatch_lifecycle_root_stays_facade_only() {
+    let lifecycle_root = read(&proxy_src().join("runtime/udp_dispatch/lifecycle.rs"));
+    let lifecycle = read_module(&proxy_src().join("runtime/udp_dispatch/lifecycle.rs"));
+    for module_name in ["mod lookup;", "mod poll;", "mod setup;"] {
+        assert!(lifecycle_root.contains(module_name));
+    }
+    for forbidden in [
+        "pub(crate) struct UpstreamAssociationView<'a>",
+        "pub(crate) struct ClosedUpstreamAssociation",
+        "pub(crate) async fn new(",
+        "pub(crate) fn poll_refs(",
+        "pub(crate) fn finish_all(mut self)",
+    ] {
+        assert!(
+            !lifecycle_root.contains(forbidden),
+            "udp_dispatch lifecycle facade root must not keep `{forbidden}` inline"
+        );
+    }
+    for expected in [
+        "pub(crate) struct UpstreamAssociationView<'a>",
+        "pub(crate) struct ClosedUpstreamAssociation",
+        "pub(crate) async fn new(",
+        "pub(crate) fn poll_refs(",
+        "pub(crate) fn finish_all(mut self)",
+    ] {
+        assert!(
+            lifecycle.contains(expected),
+            "udp_dispatch lifecycle module tree must still provide `{expected}`"
+        );
+    }
+}
+
+#[test]
 fn udp_dispatch_managed_start_root_stays_facade_only() {
     let start_root = read(&proxy_src().join("runtime/udp_dispatch/managed/start.rs"));
     let start = read_module(&proxy_src().join("runtime/udp_dispatch/managed/start.rs"));
