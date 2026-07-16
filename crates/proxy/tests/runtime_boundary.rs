@@ -2103,6 +2103,41 @@ fn udp_flow_outbound_root_stays_facade_only() {
 }
 
 #[test]
+fn udp_flow_packet_path_root_stays_facade_only() {
+    let packet_path_root = read(&proxy_src().join("runtime/udp_flow/packet_path.rs"));
+    let packet_path = read_module(&proxy_src().join("runtime/udp_flow/packet_path.rs"));
+    for module_name in [
+        "mod carrier;",
+        "mod context;",
+        "mod datagram;",
+        "mod snapshot;",
+    ] {
+        assert!(packet_path_root.contains(module_name));
+    }
+    for forbidden in [
+        "pub(crate) type ChainTask",
+        "pub(crate) trait PacketPathCarrier",
+        "pub(crate) struct UdpDatagramSource",
+        "pub(crate) struct PacketPathFlowBinding",
+    ] {
+        assert!(
+            !packet_path_root.contains(forbidden),
+            "packet_path facade root must not keep `{forbidden}` inline"
+        );
+    }
+    for expected in [
+        "pub(crate) trait PacketPathCarrier",
+        "pub(crate) struct UdpDatagramSource",
+        "pub(crate) struct PacketPathFlowBinding",
+    ] {
+        assert!(
+            packet_path.contains(expected),
+            "packet_path module tree must still provide `{expected}`"
+        );
+    }
+}
+
+#[test]
 fn inventory_tcp_candidate_and_dispatch_use_runtime_services_instead_of_proxy() {
     for relative in ["inventory/tcp/candidate.rs", "inventory/tcp/dispatch.rs"] {
         let source = read(&proxy_src().join(relative));
