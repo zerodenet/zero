@@ -2163,6 +2163,43 @@ fn udp_dispatch_root_stays_facade_only() {
 }
 
 #[test]
+fn udp_flow_state_root_stays_facade_only() {
+    let state_root = read(&proxy_src().join("runtime/udp_flow/state.rs"));
+    let state = read_module(&proxy_src().join("runtime/udp_flow/state.rs"));
+    for module_name in [
+        "mod context;",
+        "mod lifecycle;",
+        "mod managed;",
+        "mod model;",
+        "mod packet_path;",
+    ] {
+        assert!(state_root.contains(module_name));
+    }
+    for forbidden in [
+        "pub(crate) struct UdpFlowState",
+        "pub(crate) struct UdpFlowStartContext",
+        "pub(crate) async fn start_managed_flow(",
+        "pub(crate) async fn send_packet_path_chain(",
+    ] {
+        assert!(
+            !state_root.contains(forbidden),
+            "udp_flow state facade root must not keep `{forbidden}` inline"
+        );
+    }
+    for expected in [
+        "pub(crate) struct UdpFlowState",
+        "pub(crate) struct UdpFlowStartContext",
+        "pub(crate) async fn start_managed_flow(",
+        "pub(crate) async fn send_packet_path_chain(",
+    ] {
+        assert!(
+            state.contains(expected),
+            "udp_flow state module tree must still provide `{expected}`"
+        );
+    }
+}
+
+#[test]
 fn inventory_tcp_candidate_and_dispatch_use_runtime_services_instead_of_proxy() {
     for relative in ["inventory/tcp/candidate.rs", "inventory/tcp/dispatch.rs"] {
         let source = read(&proxy_src().join(relative));
