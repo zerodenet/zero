@@ -3430,6 +3430,42 @@ fn udp_flow_registered_state_start_root_stays_facade_only() {
 }
 
 #[test]
+fn udp_flow_registered_state_lifecycle_root_stays_facade_only() {
+    let lifecycle_root = read(&proxy_src().join("runtime/udp_flow/registered/state/lifecycle.rs"));
+    let lifecycle =
+        read_module(&proxy_src().join("runtime/udp_flow/registered/state/lifecycle.rs"));
+    for module_name in ["mod build;", "mod managed;", "mod upstream;"] {
+        assert!(lifecycle_root.contains(module_name));
+    }
+    for forbidden in [
+        "pub(crate) fn new(",
+        "pub(crate) fn register_managed_flow(",
+        "pub(crate) fn managed_flow_resume(",
+        "pub(crate) async fn recv_upstream_response(",
+        "pub(crate) fn close_idle_upstream(",
+        "fn closed_registered_upstream_association(",
+    ] {
+        assert!(
+            !lifecycle_root.contains(forbidden),
+            "udp_flow registered state lifecycle facade root must not keep `{forbidden}` inline"
+        );
+    }
+    for expected in [
+        "pub(crate) fn new(",
+        "pub(crate) fn register_managed_flow(",
+        "pub(crate) fn managed_flow_resume(",
+        "pub(crate) async fn recv_upstream_response(",
+        "pub(crate) fn close_idle_upstream(",
+        "fn closed_registered_upstream_association(",
+    ] {
+        assert!(
+            lifecycle.contains(expected),
+            "udp_flow registered state lifecycle module tree must still provide `{expected}`"
+        );
+    }
+}
+
+#[test]
 fn inventory_tcp_candidate_and_dispatch_use_runtime_services_instead_of_proxy() {
     for relative in ["inventory/tcp/candidate.rs", "inventory/tcp/dispatch.rs"] {
         let source = read(&proxy_src().join(relative));
