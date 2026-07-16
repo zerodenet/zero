@@ -1,5 +1,8 @@
 # HTTP API 端点
 
+> [!IMPORTANT]
+> 本文是历史设计稿。当前 HTTP 端点以[HTTP JSON API](../control-plane-api/http-api.md)为准。
+
 本文档是当前本地 HTTP 控制面的索引。详细的线路契约见 [http-api.md](../control-plane-api/http-api.md)。
 
 ## 基础路径

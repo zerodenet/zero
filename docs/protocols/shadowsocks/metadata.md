@@ -39,7 +39,7 @@ impl ProtocolMetadata for ShadowsocksProtocol {
 | `transports` | `["tcp", "udp"]` | Shadowsocks 不使用 transport 层抽象 |
 | `mux` | `supported = false` | Shadowsocks 未实现 MUX |
 
-## Limitations
+## 限制
 
 | Limitation 码 | 含义 |
 |---------------|------|

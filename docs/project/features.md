@@ -26,7 +26,7 @@ cargo build --release --features full,status_api
 | `socks5` | SOCKS5 入站 | -- |
 | `http` | HTTP CONNECT 入站 | -- |
 | `mixed` | Mixed 入站（同端口 SOCKS5 TCP/UDP + HTTP CONNECT TCP） | 隐含 `socks5` + `http` |
-| `vless` | VLESS 入站 | TLS / Reality / WebSocket / gRPC / H2 / QUIC 传输 |
+| `vless` | VLESS 入站 | TLS / Reality / WebSocket / gRPC / H2 / HTTP Upgrade / XHTTP 等传输 |
 | `hysteria2` | Hysteria2 入站 | QUIC (quinn) |
 | `shadowsocks` | Shadowsocks 入站 | AEAD 加密 + 2022-blake3 |
 | `trojan` | Trojan 入站 | TLS |
@@ -51,7 +51,7 @@ cargo build --release --no-default-features \
 | `shadowsocks` | Shadowsocks 出站 | 与入站相同的加密 |
 | `trojan` | Trojan 出站 | TLS |
 | `vmess` | VMess 出站 | 实验性 AEAD 实现；`cipher: auto` 被规范化为当前 AEAD 基线 |
-| `mieru` | Mieru 出站 | 单跳 TCP 路由；TCP relay chain 可作为中间跳 |
+| `mieru` | Mieru 出站 | TCP 和 UDP socks5-in-tunnel 路径 |
 
 `direct` 和 `block` 出站始终可用，无需 feature gate——它们不需要协议实现。
 
@@ -69,7 +69,7 @@ cargo build --release --no-default-features \
 
 | Feature | 描述 | 隐含 |
 |---------|------|------|
-| `status_api` | HTTP 状态 API (`/api/v1/*`) | -- |
+| `status_api` | 运行时控制端点和 selector 切换，包括 HTTP 状态 API | -- |
 | `grpc_api` | gRPC 管控面端点 | `dep:zero-grpc` |
 | `event_dispatcher` | 事件分发器：将 zero 事件投递到外部 sink 并暴露 sink 投递状态 | `dep:zero-connector` |
 | `sink_jsonl` | JSON Lines 文件 sink（事件持久化） | `event_dispatcher` |
@@ -108,17 +108,14 @@ cargo build --release --features full,status_api,panel_connector
 | 协议 | Feature | 备注 |
 |------|---------|------|
 | VMess | `vmess` | 实验性 AEAD 实现。来自 Xray/Clash 导出的 `cipher: auto` 被规范化为当前 AEAD 基线 |
-| Mieru | `mieru` | 已注册适配器，支持单跳 TCP 出站。中继链跳跃支持未实现 |
+| Mieru | `mieru` | TCP/UDP 入站和出站基线可用；能力状态以运行时矩阵为准 |
 | HTTP CONNECT 出站 | -- | 出站方向未实现 |
 
 入站/出站 features 不对等是正常的——某些协议不需要相反方向。
 
-## 二进制大小参考
+## 二进制大小
 
-| Features | 二进制大小（release，strip 后） |
-|----------|-------------------------------|
-| `default` (`full` + `status_api`) | ~15 MB |
-| `--no-default-features` + SOCKS5 入站/出站 + direct | ~5 MB |
+二进制大小取决于目标平台、Rust 版本、链接器、调试信息、LTO 和 strip 设置。本文档不维护容易失真的固定数值；需要比较 feature 裁剪效果时，应在相同工具链和构建参数下生成基准。
 
 ---
 

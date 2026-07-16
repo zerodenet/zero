@@ -1,4 +1,4 @@
-# Panel and Node Connector
+# 面板与节点连接器
 
 本文档描述面板和 Zero 节点的对接方式。这里的“面板”是外部系统概念，不进入 `zero-engine`；节点只暴露通用 API 能力、事件和可选 connector。
 

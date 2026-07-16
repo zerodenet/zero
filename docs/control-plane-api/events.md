@@ -234,9 +234,7 @@ url_test 探测完成后发射，包含每个成员的探测结果。
 }
 ```
 
-`trigger` is one of `startup`, `scheduled`, or `manual`. The event envelope
-timestamp records publication time; the payload timestamps record the complete
-probe cycle and `duration_ms` records its elapsed time.
+`trigger` 的取值为 `startup`、`scheduled` 或 `manual`。事件 envelope 的时间戳表示发布时间；payload 中的时间戳表示完整探测周期，`duration_ms` 表示探测耗时。
 
 ### stats.sampled
 

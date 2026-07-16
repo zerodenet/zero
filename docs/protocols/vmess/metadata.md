@@ -48,7 +48,7 @@ impl ProtocolMetadata for VmessProtocol {
 | `cipher_zero_mainstream_compatibility_is_incomplete` | `cipher: zero` 仅 Zero-to-Zero 可用；Xray inbound 拒绝 `zero` 安全类型。GUI 不应将 `zero` 作为主流默认选项暴露。这是 VMess 从 `partial` 提升到 `supported` 的唯一缺口。 |
 | `external_interop_coverage_is_incomplete` | 针对基线上游实现的端到端测试尚不够完整，无法宣称所有高级路径生产可用。已验证路径（Xray raw TLS/WS/gRPC、sing-box、Mihomo）的证据不应推广到未测试的传输组合（H2、HTTPUpgrade）。 |
 
-## Relay-chain Boundary
+## 中继链边界
 
 当前 VMess chain 仅同协议：`vmess → vmess`。SOCKS5/Mixed 入口作为客户端 ingress，不构成跨协议 relay chain。
 

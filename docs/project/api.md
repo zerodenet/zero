@@ -30,7 +30,7 @@ HTTP/HTTPS 适合调试和跨语言接入，但不应该成为唯一形态。Zer
 
 这里不是完整 Event Sourcing。Zero 内核的真实状态仍来自 `RuntimeConfig`、`EnginePlan`、`EngineState`、运行中的 flow registry 和 runtime task。事件不是内核状态的唯一来源，也不要求通过事件回放恢复正在运行的 socket、UDP association 或 Tokio task。
 
-### Core Types
+### 核心类型
 
 核心类型只描述方法、输入、输出、事件、错误和权限，不关心 HTTP path、socket 帧格式或 FFI ABI。
 
@@ -43,7 +43,7 @@ HTTP/HTTPS 适合调试和跨语言接入，但不应该成为唯一形态。Zer
 - SDK
 - 兼容适配层
 
-### Capability Traits
+### 能力特征
 
 能力 trait 描述可被调用或订阅的内核能力。
 
@@ -64,7 +64,7 @@ HTTP/HTTPS 适合调试和跨语言接入，但不应该成为唯一形态。Zer
 
 HTTP、file、local、gRPC、FFI 或自定义二进制连接都应实现这些 trait，而不是复制一套 API 概念。
 
-### Adapter Implementations
+### 适配器实现
 
 适配实现负责把核心能力接到具体环境。
 
@@ -83,7 +83,7 @@ HTTP、file、local、gRPC、FFI 或自定义二进制连接都应实现这些 t
 
 这些实现应按 Cargo feature 开关接入。依赖重、场景窄的实现可以不进入默认构建，面向 ESP 等嵌入式集成时应能只保留 core types、trait 和必要的 in-process callback。
 
-### Compatibility Adapter
+### 兼容适配器
 
 兼容适配层负责第三方 API 映射。
 
@@ -322,7 +322,7 @@ sink 的共同要求：
 
 首批能力应该覆盖当前已经实现并能长期复用的模型。
 
-### Query
+### 查询
 
 - `capabilities.get`
   - 返回协议标识、支持的 adapter、sink、feature、只读/可写权限
@@ -347,7 +347,7 @@ sink 的共同要求：
 
 HTTP adapter 将这些能力暴露在 `/api/v1/*` 命名空间下，IPC 和 CLI 共享同一组 query 语义。
 
-### Command
+### 命令
 
 - `config.validate`
   - 已实现。校验一份配置输入，不改变运行中状态；虽然不产生状态变更，但它表达的是提交前的写入意图，放在 command 侧更清晰
@@ -378,7 +378,7 @@ HTTP adapter 将这些能力暴露在 `/api/v1/*` 命名空间下，IPC 和 CLI 
 }
 ```
 
-### Event
+### 事件
 
 - `events.subscribe`
   - 订阅运行时事件
@@ -389,7 +389,7 @@ HTTP adapter 将这些能力暴露在 `/api/v1/*` 命名空间下，IPC 和 CLI 
 
 事件订阅和导出应该支持过滤条件，例如只订阅 flow、只订阅某个 inbound、只订阅 policy 变化。
 
-### Diagnostics
+### 诊断
 
 - `diagnostics.probe_target`
   - 已实现。对指定出站做 TCP 可达性探测

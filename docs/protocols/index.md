@@ -1,21 +1,21 @@
-# Protocol Overview
+# 协议概览
 
-This section tracks the protocol implementation surface in the current codebase. It is factual documentation for GUI authors, panel adapters, and kernel integrators. Runtime consumers should still treat `capabilities.protocols` as the machine-readable source of truth.
+本节记录当前代码中的协议能力，面向 GUI、面板适配器和内核集成者。运行时消费者应以 `capabilities.protocols` 响应作为机器可读的权威来源。
 
 ## 状态术语
 
 | 状态 | 含义 |
 |------|------|
 | `supported` | 正常内核能力，无已知协议级缺口 |
-| `partial` | 基线路径存在，但互操作、MUX、特殊传输或服务端/客户端方向缺口仍然存在 |
-| `experimental` | 已实现，但不适合生产兼容假设 |
+| `partial` | 基线路径存在，但互操作、MUX、特殊传输或某个方向仍有缺口 |
+| `experimental` | 已实现，但不适合做生产兼容性假设 |
 | `unsupported` | 未实现 |
 | `not_applicable` | 协议不定义此方向 |
 
-## Matrix
+## 能力矩阵
 
-| Protocol | Config type | Status | TCP inbound | TCP outbound | UDP inbound | UDP outbound | Tracking |
-|------|------|------|-------------|--------------|-------------|--------------|----------|
+| 协议 | 配置类型 | 总体状态 | TCP 入站 | TCP 出站 | UDP 入站 | UDP 出站 | 详情 |
+|------|----------|----------|----------|----------|----------|----------|------|
 | SOCKS5 | `socks5` | `supported` | `supported` | `supported` | `supported` | `supported` | [SOCKS5](./socks5/index.md) |
 | HTTP CONNECT | `http` | `supported` | `supported` | `unsupported` | `not_applicable` | `not_applicable` | [HTTP CONNECT](./http/index.md) |
 | Mixed | `mixed` | `supported` | `supported` | `unsupported` | `supported` | `unsupported` | [Mixed](./mixed/index.md) |
@@ -26,33 +26,35 @@ This section tracks the protocol implementation surface in the current codebase.
 | Mieru | `mieru` | `supported` | `supported` | `supported` | `supported` | `supported` | [Mieru](./mieru/index.md) |
 | VMess | `vmess` | `partial` | `partial` | `partial` | `partial` | `partial` | [VMess](./vmess/index.md) |
 
+总体状态不能代替方向状态。例如一个协议可能具有稳定 TCP 基线，但 UDP、MUX 或外部互操作覆盖仍为 `partial`。完整限制码见[协议能力](../project/protocol-capabilities.md)。
+
 ## 内核动作
 
 | 名称 | 状态 | 说明 |
 |------|------|------|
-| `direct` | `supported` | 内核直连动作；TCP 和 UDP 出站可用 |
-| `block` | `supported` | 内核拒绝动作；TCP 和 UDP 路由决策可使用 |
-| `tun` | `supported` | 三层虚拟接口，通过 CLI/控制面控制，非静态 JSON `inbounds` |
+| `direct` | `supported` | 内核直连动作，TCP 和 UDP 出站可用 |
+| `block` | `supported` | 内核拒绝动作，可用于 TCP 和 UDP 路由决策 |
+| `tun` | `supported` | 三层虚拟接口，通过 CLI 或控制面管理 |
 
-## Documentation Layout
+## 文档结构
 
-Each protocol has its own subdirectory under `docs/protocols/`. The subdirectory mirrors the protocol crate module structure:
+每个协议在 `docs/protocols/` 下拥有独立目录。页面按实际需要拆分，不要求所有协议使用完全相同的文件集合：
 
-```
+```text
 docs/protocols/{protocol}/
-  index.md     ← 对应 lib.rs（概览、能力矩阵、子页面链接）
-  inbound.md   ← 对应 inbound.rs
-  outbound.md  ← 对应 outbound.rs
-  shared.md    ← 对应 shared.rs
-  metadata.md  ← 对应 metadata.rs
-  stream.md    ← 对应 stream.rs（如果存在）
-  crypto.md    ← 对应 crypto.rs（如果存在）
-  mux.md       ← 对应 mux.rs（如果存在）
-  udp.md       ← 对应 udp.rs（如果存在）
+  index.md
+  inbound.md
+  outbound.md
+  shared.md
+  metadata.md
+  stream.md
+  crypto.md
+  mux.md
+  udp.md
 ```
 
-Shared pages keep only cross-protocol summaries:
+公共页面：
 
-- [Configuration](./configuration.md): common config examples.
-- [Incomplete](./incomplete.md): cross-protocol gap index.
-- [Protocol Capabilities](../project/protocol-capabilities.md): descriptor and runtime capability model.
+- [配置速查](./configuration.md)：常用协议配置示例。
+- [未完成项](./incomplete.md)：跨协议缺口索引。
+- [协议能力](../project/protocol-capabilities.md)：描述符、状态和运行时能力模型。

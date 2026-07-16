@@ -42,7 +42,7 @@ if sha224(password) != expected_password_hash {
 
 - `password`: 必需
 - `tls`: 必需，Trojan 必须使用 TLS
-## Boundary note
+## 边界说明
 
 Raw Trojan accept state is module-private.
 Downstream glue should use `accept_session()`, `accept_client()`, or the route helpers

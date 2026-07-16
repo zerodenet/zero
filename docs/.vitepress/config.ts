@@ -40,7 +40,7 @@ export default defineConfig({
           text: '协议详情',
           items: [
             { text: 'SOCKS5', link: '/protocols/socks5/' },
-            { text: 'HTTP CONNECT', link: '/protocols/http-connect/' },
+            { text: 'HTTP CONNECT', link: '/protocols/http/' },
             { text: 'Mixed', link: '/protocols/mixed/' },
             { text: 'VLESS', link: '/protocols/vless/' },
             { text: 'Shadowsocks', link: '/protocols/shadowsocks/' },

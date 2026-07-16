@@ -84,8 +84,8 @@ cargo run -- run config.json
 - `idle_timeout_seconds`
 - `error`
 
-## File log sinks
+## 文件日志 sink
 
-Runtime config can define file log sinks under `runtime.log.files`. File sinks use non-blocking tracing appenders and keep their worker guards alive for the process lifetime, so configured log files are written after startup instead of staying empty.
+运行时配置可以在 `runtime.log.files` 下定义文件日志 sink。文件 sink 使用非阻塞 tracing appender，并在整个进程生命周期内保留 worker guard，保证启动后日志能够持续写入。
 
-When `max_bytes` and `max_files` are configured, rotation is checked before writing a new oversized entry. This keeps the active file within the configured size boundary except for a single log entry that is itself larger than `max_bytes`.
+配置 `max_bytes` 和 `max_files` 后，写入可能导致文件超限的新日志前会检查轮转。除非单条日志本身大于 `max_bytes`，活动文件会保持在配置的大小边界内。

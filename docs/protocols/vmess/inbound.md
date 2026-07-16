@@ -66,7 +66,7 @@ pub struct VmessUser {
 - `tls`: **必需**，VMess inbound 必须使用 TLS
 - `users[].cipher`: 可选，默认 `aes-128-gcm`
 - `ws` 和 `grpc`: 互斥，不能同时启用
-## Boundary note
+## 边界说明
 
 `VmessAccept` and the inbound stream wrapper handoff stay crate-private.
 Downstream glue should use `accept_tcp_stream()`, `accept_client()`, or the route helpers

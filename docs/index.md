@@ -1,12 +1,12 @@
 ---
 layout: home
 title: Zero
-titleTemplate: A modular network proxy kernel
+titleTemplate: 模块化网络代理内核
 
 hero:
   name: Zero
   text: 模块化网络代理内核
-  tagline: Rust 编写 · 协议完备 · JSON 配置 · 多通道控制面
+  tagline: Rust 编写 · 模块化协议 · JSON 配置 · 多通道控制面
   actions:
     - theme: brand
       text: 快速上手
@@ -18,7 +18,7 @@ hero:
 features:
   - icon: 🔌
     title: 多协议支持
-    details: SOCKS5、HTTP CONNECT、VLESS、Hysteria2、Shadowsocks、Trojan、VMess、Mieru — 全部原生实现，无外部依赖。
+    details: 支持 SOCKS5、HTTP CONNECT、VLESS、Hysteria2、Shadowsocks、Trojan、VMess 和 Mieru；具体完成度以协议能力矩阵为准。
   - icon: 🧭
     title: 智能路由
     details: 域名、关键词、正则、IP CIDR、GEOIP、SNI、规则集、AND/OR 组合规则，支持远程规则集热加载。
@@ -27,19 +27,19 @@ features:
     details: Selector 手动切换、Fallback 自动降级、UrlTest 延迟选优、Relay 链式代理、LoadBalance 负载均衡，组间嵌套。
   - icon: 🔐
     title: 传输安全
-    details: TLS、REALITY、AEAD cipher、2022-blake3 — 所有主流混淆与加密方案。
+    details: 提供 TLS、REALITY、WebSocket、HTTP/2、gRPC、XHTTP、QUIC 和多种协议加密能力。
   - icon: 🖥
     title: 多通道控制面
-    details: HTTP JSON API、gRPC、IPC (Unix Socket / Named Pipe)、SSE 事件流、Webhook 投递、CLI 一键操作。
+    details: 提供 HTTP JSON API、本地 IPC、SSE 事件流、Webhook、CLI，以及可选的 gRPC 适配器。
   - icon: 🪶
     title: 轻量高效
-    details: Rust 零成本抽象，单二进制，无 GC 停顿，内存占用极低。Feature gate 按需裁剪。
+    details: 单二进制交付，无 GC 停顿；通过 Cargo feature 按需裁剪协议和控制面能力。
   - icon: 🌐
     title: DNS 子系统
     details: 内置 DNS 解析：System / UDP / DoH / DoT，域名路由，TTL 缓存，Fake IP 透明代理。
   - icon: 📡
     title: TUN 虚拟网卡
-    details: 用户态 TCP 状态机，IPv4/IPv6 双栈，跨平台支持（Linux / macOS / Windows Wintun）。
+    details: 提供用户态网络栈和跨平台 TUN 抽象；平台能力与验证范围见 TUN 文档。
 ---
 
 ## 一分钟跑起来

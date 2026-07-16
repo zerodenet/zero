@@ -1,20 +1,18 @@
 # 工程规则
 
-This document describes the current workspace layout, build entry points, and
-feature policy. It records current facts, not release history.
+本文档记录当前 workspace 布局、构建入口、feature 策略和文档维护规则。这里只描述当前事实，不记录版本演进历史。
 
-## Naming
+## 命名
 
-- Package names use `zero-*`.
-- External field names, protocol names, status values, error codes, event names,
-  and capability codes use `snake_case`.
-- Directory names stay short, for example `crates/engine`, `crates/proxy`, and
-  `protocols/socks5`.
-- The root binary entry point is `src/main.rs`.
+- package 名称使用 `zero-*`。
+- 外部字段名、协议名、状态值、错误码、事件名和能力码使用 `snake_case`。
+- 目录名保持简短，例如 `crates/engine`、`crates/proxy` 和 `protocols/socks5`。
+- 根二进制入口固定为 `src/main.rs`。
+- Rust 模块和函数使用 `snake_case`，类型使用 `CamelCase`。
 
-## Workspace Commands
+## Workspace 命令
 
-Use workspace-wide commands by default:
+默认运行 workspace 级命令：
 
 ```powershell
 cargo fmt --all
@@ -25,76 +23,77 @@ cargo clippy --workspace --all-targets
 cargo build --release
 ```
 
-Run the proxy:
+启动代理和查询状态：
 
 ```powershell
 cargo run -- run <config>
 cargo run -- status --json <config>
 ```
 
-Run one test:
+运行单个测试：
 
 ```powershell
 cargo test <test_name>
 ```
 
-Run the full test suite when changing protocol behavior, config parsing,
-routing, runtime wiring, or logging.
+修改协议行为、配置解析、路由、运行时接线或日志后，应运行完整测试集。
 
-## Root Features
+文档站检查：
 
-The root `zero` package is the external build entry point. It forwards protocol
-and control-plane features to internal crates.
+```powershell
+cd docs
+npm run check
+```
 
-| Feature | Description |
-| --- | --- |
-| `default` | Same as `full,status_api` |
-| `full` | Enables all protocol capabilities and `dns` |
-| `dns` | DNS subsystem |
-| `socks5` | SOCKS5 inbound/outbound, including TCP CONNECT and UDP ASSOCIATE |
-| `http` | HTTP CONNECT inbound |
-| `mixed` | Same-port inbound auto-detection for SOCKS5 TCP/UDP and HTTP CONNECT TCP; depends on `socks5` and `http` |
-| `vless` | VLESS inbound/outbound and related transports |
-| `hysteria2` | Hysteria2 inbound/outbound |
-| `shadowsocks` | Shadowsocks inbound/outbound |
-| `trojan` | Trojan inbound/outbound |
-| `vmess` | VMess inbound/outbound |
-| `mieru` | Mieru inbound/outbound |
-| `status_api` | Local HTTP control plane |
-| `event_dispatcher` | Event dispatch infrastructure and sink delivery status |
-| `sink_jsonl` | JSON Lines event sink; depends on `event_dispatcher` |
-| `panel_connector` | Panel/remote connector; depends on `status_api` and `event_dispatcher` |
-| `grpc_api` | gRPC control-plane adapter |
+## 根 package 的 feature
 
-`zero-proxy` also has internal transport-oriented feature wiring. For example,
-VLESS enables TLS, WebSocket, gRPC, H2, HTTPUpgrade, and XHTTP (formerly
-SplitHTTP, config field `split_http`) related transport capabilities. The
-standalone VLESS QUIC transport is deprecated by XTLS (replaced by XHTTP
-`stream-one` over H3); the `quic` config field is retained for backward
-compatibility. External build users should prefer root features rather
-than depending on internal crate feature shapes.
+根 package `zero` 是对外构建入口，它把协议和控制面 feature 转发到内部 crate。
 
-If a config references an uncompiled protocol, the kernel fails early with a
-clear error.
+| Feature | 说明 |
+|---------|------|
+| `default` | 等同于 `full,status_api` |
+| `full` | 启用全部协议能力和 `dns` |
+| `dns` | DNS 子系统 |
+| `socks5` | SOCKS5 入站和出站，包括 TCP CONNECT 与 UDP ASSOCIATE |
+| `http` | HTTP CONNECT 入站 |
+| `mixed` | 同端口识别 SOCKS5 TCP/UDP 与 HTTP CONNECT TCP；依赖 `socks5` 和 `http` |
+| `vless` | VLESS 入站、出站及相关传输 |
+| `hysteria2` | Hysteria2 入站和出站 |
+| `shadowsocks` | Shadowsocks 入站和出站 |
+| `trojan` | Trojan 入站和出站 |
+| `vmess` | VMess 入站和出站 |
+| `mieru` | Mieru 入站和出站 |
+| `status_api` | 运行时控制端点和 selector 切换 |
+| `event_dispatcher` | 事件分发基础设施和 sink 投递状态 |
+| `sink_jsonl` | JSON Lines 事件 sink；依赖 `event_dispatcher` |
+| `panel_connector` | 面板连接器；依赖 `status_api` 和 `event_dispatcher` |
+| `grpc_api` | gRPC 控制面适配器 |
 
-## Code Boundaries
+`zero-proxy` 还有面向内部接线的 transport feature。外部构建者应使用根 package feature，不应依赖内部 crate 当前的 feature 组合。
 
-- `zero-traits` and `zero-core` do not bind to Tokio.
-- Protocol implementations live in `protocols/*`.
-- `zero-config` owns config ADTs and validation.
-- `zero-router` owns rule matching.
-- `zero-engine` owns decisions, plan/state, groups, sessions, stats, and events.
-- `direct` and `block` target semantics stay in `zero-engine`; socket-level
-  execution stays in `zero-proxy`.
-- Listener lifecycle, transports, Tokio wiring, and protocol runtime adapters
-  stay in `zero-proxy`.
-- The root `zero` binary does not implement protocol details.
+配置引用未编译的协议时，程序必须在启动早期返回清晰错误。
 
-## Documentation Boundaries
+## 代码边界
 
-- Config shape changes require matching config docs and examples.
-- Protocol scope changes require matching project docs, capability matrix, and
-  examples.
-- Runtime layering changes require matching `docs/project/` updates.
-- Documentation describes current facts only. It must not use version-history
-  wording such as "since" or "as of".
+- `zero-traits` 和 `zero-core` 不绑定 Tokio。
+- 具体协议实现位于 `protocols/*`。
+- `zero-config` 拥有配置类型和验证。
+- `zero-router` 拥有规则匹配。
+- `zero-engine` 拥有决策、计划、状态、分组、会话、统计和事件。
+- `direct` 和 `block` 的目标语义位于 `zero-engine`，socket 执行位于 `zero-proxy`。
+- 监听生命周期、运行时编排和协议能力接线位于 `zero-proxy`。
+- 通用载体位于 `zero-transport`，协议如何使用载体由协议 crate 和适配器决定。
+- 根二进制不得实现协议细节。
+
+更完整的所有权和依赖规则见[架构](./architecture.md)。
+
+## 文档边界
+
+- 配置结构变化时，同步更新配置文档、协议配置速查和示例。
+- 协议能力变化时，同步更新协议详情、能力矩阵和限制说明。
+- 控制面请求、响应或事件变化时，同步更新 `control-plane-api/` 和 GUI 指南。
+- 运行时分层变化时，同步更新 `docs/project/`。
+- `control-plane-api/` 描述当前外部契约；`control-plane/` 仅保存历史设计背景，不作为实现依据。
+- 文档只描述当前事实，避免使用“从某版本开始”“截至目前”等版本历史措辞。
+- Rust 标识符、配置字段、协议名称和标准术语可以保留英文；普通叙述和章节标题统一使用中文。
+- 新增或修改文档后必须运行 `npm run check`。

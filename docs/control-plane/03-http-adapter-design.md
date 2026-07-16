@@ -1,4 +1,7 @@
-# HTTP Adapter 设计
+# HTTP 适配器设计
+
+> [!IMPORTANT]
+> 本文用于保存实现设计背景，不是当前接口契约。对接时请使用[控制面 API](../control-plane-api/index.md)。
 
 本文档详细规划 HTTP JSON Adapter 的实现架构和模块划分。
 
