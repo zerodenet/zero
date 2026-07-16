@@ -1,0 +1,29 @@
+[package]
+name = "zero-rule"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+
+[dependencies]
+idna.workspace = true
+ipnet.workspace = true
+crc32fast = "1"
+fst = "0.4"
+memmap2 = "0.9"
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+sha2 = "0.10"
+
+[[bench]]
+name = "domain_index"
+harness = false
+
+[[bench]]
+name = "zrs_pipeline"
+harness = false
