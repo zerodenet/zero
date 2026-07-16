@@ -212,7 +212,7 @@ fn generic_runtime_does_not_dispatch_protocol_config_variants() {
 
 #[test]
 fn listener_and_task_lifecycle_are_runtime_owned() {
-    let inbound_operation = read(&proxy_src().join("runtime/inbound_operation.rs"));
+    let inbound_operation = read_module(&proxy_src().join("runtime/inbound_operation.rs"));
     let listener_loop = read(&proxy_src().join("runtime/listener_loop.rs"));
     assert!(inbound_operation.contains("PreparedInboundListenerOperation"));
     assert!(inbound_operation.contains("InboundConnectionContext"));
@@ -1963,7 +1963,7 @@ fn udp_ingress_runtime_collapses_proxy_and_services_for_session_loops() {
     assert!(!route_runtime.contains("fallback_proxy"));
     assert!(!route_runtime.contains("proxy: Proxy"));
 
-    let inbound_operation = read(&proxy_src().join("runtime/inbound_operation.rs"));
+    let inbound_operation = read_module(&proxy_src().join("runtime/inbound_operation.rs"));
     assert!(inbound_operation.contains("InboundListenerRuntime"));
     assert!(!inbound_operation.contains("proxy: Proxy"));
     assert!(!inbound_operation.contains("execute(proxy"));
