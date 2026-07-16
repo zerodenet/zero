@@ -1,6 +1,7 @@
-mod dispatch;
 mod leaf;
+mod outbound;
 mod packet_path;
 mod relay;
 
-pub(crate) use dispatch::start_udp_resolved_outbound;
+pub(crate) use leaf::PreparedUdpLeafCandidate;
+pub(crate) use outbound::PreparedUdpOutbound;

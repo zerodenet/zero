@@ -15,10 +15,9 @@ pub(crate) async fn dispatch_tcp(
     runtime.resolve_fake_ip_target(session).await;
     let action = runtime.route_decision(session);
     let resolved = runtime.resolve_outbound(&action)?;
-    let outbound =
-        crate::inventory::dispatch_tcp_outbound(runtime.runtime_services(), session, resolved)
-            .await
-            .map_err(|failure| EngineError::Io(io::Error::other(failure.error)))?;
+    let outbound = super::dispatch_tcp_outbound(runtime.runtime_services(), session, resolved)
+        .await
+        .map_err(|failure| EngineError::Io(io::Error::other(failure.error)))?;
     let mut result = extract_tcp_stream(outbound)?;
     result.route_action = action;
     Ok(result)

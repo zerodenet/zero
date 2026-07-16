@@ -38,9 +38,14 @@ async fn inventory_invokes_fake_udp_leaf_capability() {
         Err(_) => panic!("fake UDP prepare failed"),
     };
 
-    let result = match prepared
-        .execute(&mut dispatch, ctx, &session(), payload)
-        .await
+    let result = match crate::runtime::udp_dispatch::execute_prepared_udp_candidate(
+        &mut dispatch,
+        ctx,
+        &session(),
+        payload,
+        prepared,
+    )
+    .await
     {
         Ok(result) => result,
         Err(_) => panic!("fake UDP start failed"),
@@ -78,9 +83,14 @@ async fn inventory_preserves_fake_udp_failure_metadata() {
         Err(_) => panic!("fake UDP prepare failed"),
     };
 
-    let failure = match prepared
-        .execute(&mut dispatch, ctx, &session(), b"failure")
-        .await
+    let failure = match crate::runtime::udp_dispatch::execute_prepared_udp_candidate(
+        &mut dispatch,
+        ctx,
+        &session(),
+        b"failure",
+        prepared,
+    )
+    .await
     {
         Ok(_) => panic!("fake UDP start unexpectedly succeeded"),
         Err(failure) => failure,

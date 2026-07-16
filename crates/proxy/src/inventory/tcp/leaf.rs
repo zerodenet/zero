@@ -2,46 +2,27 @@ use zero_engine::EngineError;
 
 use super::super::ProtocolInventory;
 use crate::inventory::ClaimedInventoryLeaf;
-use crate::protocol_registry::{OutboundAdapterContext, TcpRuntimeServices};
+use crate::protocol_registry::OutboundAdapterContext;
 use crate::runtime::path::TcpPathCategory;
 use crate::runtime::tcp_dispatch::operation::{
     PreparedTcpConnectOperation, PreparedTcpRelayOperation,
 };
-use crate::transport::{EstablishedTcpOutbound, TcpOutboundFailure, TcpRelayStream};
+use crate::transport::TcpOutboundFailure;
 
 pub(crate) struct PreparedTcpCandidate<'a> {
-    health_tag: Option<String>,
-    execution: PreparedTcpCandidateExecution<'a>,
+    pub(crate) health_tag: Option<String>,
+    pub(crate) execution: PreparedTcpCandidateExecution<'a>,
 }
 
-enum PreparedTcpCandidateExecution<'a> {
+pub(crate) enum PreparedTcpCandidateExecution<'a> {
     Block { tag: String },
     Connect(Box<dyn PreparedTcpConnectOperation + 'a>),
 }
 
-impl PreparedTcpCandidate<'_> {
-    pub(crate) fn health_tag(&self) -> Option<&str> {
-        self.health_tag.as_deref()
-    }
-
-    pub(crate) async fn execute(
-        self,
-        services: TcpRuntimeServices,
-        session: &zero_core::Session,
-    ) -> Result<EstablishedTcpOutbound, TcpOutboundFailure> {
-        match self.execution {
-            PreparedTcpCandidateExecution::Block { tag } => Ok(EstablishedTcpOutbound::block(tag)),
-            PreparedTcpCandidateExecution::Connect(operation) => {
-                operation.execute(services, session).await
-            }
-        }
-    }
-}
-
 pub(crate) struct PreparedTcpRelayHop<'a> {
-    server: String,
-    port: u16,
-    operation: Box<dyn PreparedTcpRelayOperation + 'a>,
+    pub(crate) server: String,
+    pub(crate) port: u16,
+    pub(crate) operation: Box<dyn PreparedTcpRelayOperation + 'a>,
 }
 
 impl PreparedTcpRelayHop<'_> {
@@ -66,15 +47,6 @@ impl PreparedTcpRelayHop<'_> {
     ))]
     pub(crate) fn upstream(&self) -> (String, u16) {
         (self.server.clone(), self.port)
-    }
-
-    pub(crate) async fn execute(
-        self,
-        services: TcpRuntimeServices,
-        stream: TcpRelayStream,
-        session: &zero_core::Session,
-    ) -> Result<TcpRelayStream, EngineError> {
-        self.operation.execute(services, stream, session).await
     }
 }
 

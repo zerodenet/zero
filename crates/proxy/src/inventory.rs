@@ -30,8 +30,7 @@ pub(crate) use runtime::{ClaimedInventoryLeaf, ClaimedRelayChain};
 ))]
 pub(crate) use tcp::PreparedTcpRelayChain;
 pub(crate) use tcp::{
-    dispatch_prepared_tcp_candidate, dispatch_tcp_outbound, PreparedTcpOutbound,
-    PreparedTcpRelayHop,
+    PreparedTcpCandidate, PreparedTcpCandidateExecution, PreparedTcpOutbound, PreparedTcpRelayHop,
 };
 #[cfg(any(
     feature = "socks5",
@@ -42,7 +41,7 @@ pub(crate) use tcp::{
     feature = "vmess",
     feature = "mieru"
 ))]
-pub(crate) use udp::start_udp_resolved_outbound;
+pub(crate) use udp::{PreparedUdpLeafCandidate, PreparedUdpOutbound};
 
 #[derive(Debug, Clone)]
 pub struct ProtocolInventory {

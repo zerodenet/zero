@@ -1,51 +1,13 @@
-use zero_core::Session;
 use zero_engine::ResolvedOutbound;
 
 use super::super::ProtocolInventory;
-use super::dispatch_prepared_tcp_candidate;
 use crate::protocol_registry::OutboundAdapterContext;
-use crate::protocol_registry::TcpRuntimeServices;
-use crate::transport::{EstablishedTcpOutbound, TcpOutboundFailure};
+use crate::transport::TcpOutboundFailure;
 
 pub(crate) enum PreparedTcpOutbound<'a> {
     Relay(super::PreparedTcpRelayChain<'a>),
     Single(super::PreparedTcpCandidate<'a>),
     Fallback(Vec<super::PreparedTcpCandidate<'a>>),
-}
-
-impl PreparedTcpOutbound<'_> {
-    pub(crate) async fn execute(
-        self,
-        services: TcpRuntimeServices,
-        session: &Session,
-    ) -> Result<EstablishedTcpOutbound, TcpOutboundFailure> {
-        match self {
-            PreparedTcpOutbound::Relay(prepared) => {
-                crate::runtime::tcp_dispatch::relay::dispatch_prepared_tcp_relay_chain(
-                    services, session, prepared,
-                )
-                .await
-            }
-            PreparedTcpOutbound::Single(prepared) => {
-                dispatch_prepared_tcp_candidate(services, session, prepared).await
-            }
-            PreparedTcpOutbound::Fallback(candidates) => {
-                let mut last_failure = None;
-
-                for prepared in candidates {
-                    match dispatch_prepared_tcp_candidate(services.clone(), session, prepared).await
-                    {
-                        Ok(outbound) => return Ok(outbound),
-                        Err(failure) => last_failure = Some(failure),
-                    }
-                }
-
-                Err(last_failure.expect(
-                    "validated fallback groups always have at least one prepared candidate",
-                ))
-            }
-        }
-    }
 }
 
 impl ProtocolInventory {
@@ -115,13 +77,4 @@ impl ProtocolInventory {
             }
         }
     }
-}
-
-pub(crate) async fn dispatch_tcp_outbound(
-    services: TcpRuntimeServices,
-    session: &Session,
-    resolved: ResolvedOutbound<'static>,
-) -> Result<EstablishedTcpOutbound, TcpOutboundFailure> {
-    let prepared = services.prepare_tcp_outbound(&resolved)?;
-    prepared.execute(services, session).await
 }

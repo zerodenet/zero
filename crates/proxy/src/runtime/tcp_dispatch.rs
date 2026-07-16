@@ -3,8 +3,13 @@
 //! The root stays as a facade so TCP leaf dispatch and relay-chain glue can be
 //! split without turning this file back into a catch-all implementation bucket.
 
+mod candidate;
 mod leaf;
 pub(crate) mod operation;
+mod outbound;
 pub(crate) mod relay;
 
+#[cfg(test)]
+pub(crate) use candidate::dispatch_prepared_tcp_candidate;
 pub(crate) use leaf::dispatch_tcp;
+pub(crate) use outbound::dispatch_tcp_outbound;

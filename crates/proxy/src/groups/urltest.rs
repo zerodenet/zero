@@ -337,7 +337,7 @@ impl UrlTestRuntime {
                 ProtocolType::Unknown,
             );
 
-            let outbound = crate::inventory::dispatch_tcp_outbound(
+            let outbound = crate::runtime::tcp_dispatch::dispatch_tcp_outbound(
                 self.services.clone(),
                 &probe_session,
                 resolved,

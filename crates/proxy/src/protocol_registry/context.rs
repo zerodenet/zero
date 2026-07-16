@@ -212,6 +212,10 @@ impl UdpRuntimeServices {
         Self { tcp }
     }
 
+    pub(crate) fn protocols(&self) -> &ProtocolInventory {
+        self.tcp.protocols()
+    }
+
     pub(crate) async fn connect_upstream(
         &self,
         server: &str,

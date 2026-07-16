@@ -103,6 +103,7 @@ mod managed;
     feature = "mieru"
 ))]
 mod model;
+mod outbound;
 #[cfg(any(
     feature = "socks5",
     feature = "vless",
@@ -126,6 +127,9 @@ pub(crate) use managed::UpstreamTrackedStart;
     feature = "mieru"
 ))]
 pub(crate) use model::UdpDispatch;
+#[cfg(test)]
+pub(crate) use outbound::execute_prepared_udp_candidate;
+pub(crate) use outbound::start_udp_resolved_outbound;
 pub(crate) mod operation;
 pub(crate) mod packet_path_operation;
 pub(crate) mod relay;

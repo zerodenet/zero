@@ -1628,11 +1628,14 @@ fn heavy_transport_bridge_adapters_centralize_outbound_projection() {
 
 #[test]
 fn inventory_udp_dispatch_keeps_relay_choreography_outside_candidate_root() {
-    let dispatch = read(&proxy_src().join("inventory/udp/dispatch.rs"));
+    let dispatch = read(&proxy_src().join("inventory/udp/outbound.rs"));
     assert!(!dispatch.contains("ClaimedResolvedOutbound"));
     assert!(!dispatch.contains("claim_udp_outbound(resolved)?"));
     assert!(dispatch.contains("match resolved"));
-    assert!(dispatch.contains("prepare_udp_outbound("));
+    assert!(dispatch.contains("prepare_udp_outbound<'a>("));
+    assert!(!dispatch.contains("async fn"));
+    assert!(!dispatch.contains(".await"));
+    assert!(!dispatch.contains(".execute("));
     assert!(!dispatch.contains("dispatch_tcp_relay_prefix"));
     assert!(!dispatch.contains("prepare_udp_packet_path_pair"));
     assert!(!dispatch.contains("prepare_udp_leaf_candidate("));
@@ -1647,11 +1650,14 @@ fn inventory_udp_dispatch_keeps_relay_choreography_outside_candidate_root() {
 
 #[test]
 fn inventory_tcp_dispatch_claims_resolved_outbound_before_prepare() {
-    let dispatch = read(&proxy_src().join("inventory/tcp/dispatch.rs"));
+    let dispatch = read(&proxy_src().join("inventory/tcp/outbound.rs"));
     assert!(!dispatch.contains("ClaimedResolvedOutbound"));
     assert!(!dispatch.contains("claim_tcp_outbound(resolved)?"));
     assert!(dispatch.contains("match resolved"));
-    assert!(dispatch.contains("prepare_tcp_outbound("));
+    assert!(dispatch.contains("prepare_tcp_outbound<'a>("));
+    assert!(!dispatch.contains("async fn"));
+    assert!(!dispatch.contains(".await"));
+    assert!(!dispatch.contains(".execute("));
     assert!(!dispatch.contains("prepare_tcp_candidate("));
     assert!(!dispatch.contains("prepare_tcp_relay_chain("));
     assert!(!dispatch.contains("ResolvedLeafOutbound"));
@@ -1660,7 +1666,7 @@ fn inventory_tcp_dispatch_claims_resolved_outbound_before_prepare() {
 
 #[test]
 fn inventory_udp_dispatch_uses_adapter_context_instead_of_proxy() {
-    let dispatch = read(&proxy_src().join("inventory/udp/dispatch.rs"));
+    let dispatch = read(&proxy_src().join("inventory/udp/outbound.rs"));
     assert!(!dispatch.contains("use crate::runtime::Proxy"));
     assert!(!dispatch.contains("&Proxy"));
 }
@@ -2459,7 +2465,7 @@ fn inventory_tcp_leaf_stays_adapter_facing() {
 
 #[test]
 fn inventory_tcp_dispatch_root_is_not_a_proxy_impl_bucket() {
-    let dispatch = read(&proxy_src().join("inventory/tcp/dispatch.rs"));
+    let dispatch = read(&proxy_src().join("inventory/tcp/outbound.rs"));
     assert!(!dispatch.contains("impl Proxy"));
 }
 
@@ -4090,8 +4096,13 @@ fn udp_flow_registered_state_lifecycle_root_stays_facade_only() {
 }
 
 #[test]
-fn inventory_tcp_candidate_and_dispatch_use_runtime_services_instead_of_proxy() {
-    for relative in ["inventory/tcp/candidate.rs", "inventory/tcp/dispatch.rs"] {
+fn outbound_execution_state_machines_live_in_runtime_dispatch() {
+    for relative in [
+        "inventory/tcp/outbound.rs",
+        "inventory/tcp/leaf.rs",
+        "inventory/udp/outbound.rs",
+        "inventory/udp/leaf.rs",
+    ] {
         let source = read(&proxy_src().join(relative));
         assert!(
             !source.contains("use crate::runtime::Proxy"),
@@ -4102,13 +4113,30 @@ fn inventory_tcp_candidate_and_dispatch_use_runtime_services_instead_of_proxy() 
             "{relative} must not carry raw Proxy references"
         );
         assert!(
-            source.contains("TcpRuntimeServices"),
-            "{relative} must use TcpRuntimeServices"
+            !source.contains(".await"),
+            "{relative} must prepare operations without executing them"
+        );
+        assert!(
+            !source.contains(".execute("),
+            "{relative} must not execute prepared operations"
         );
     }
-    let candidate = read(&proxy_src().join("inventory/tcp/candidate.rs"));
-    assert!(!candidate.contains("ResolvedLeafOutbound"));
-    assert!(candidate.contains("PreparedTcpCandidate"));
+
+    let tcp_candidate = read(&proxy_src().join("runtime/tcp_dispatch/candidate.rs"));
+    let tcp_outbound = read(&proxy_src().join("runtime/tcp_dispatch/outbound.rs"));
+    let udp_outbound = read(&proxy_src().join("runtime/udp_dispatch/outbound.rs"));
+    assert!(tcp_candidate.contains("dispatch_prepared_tcp_candidate("));
+    assert!(tcp_candidate.contains("operation.execute("));
+    assert!(tcp_outbound.contains("execute_prepared_tcp_outbound("));
+    assert!(tcp_outbound.contains("PreparedTcpOutbound::Fallback"));
+    assert!(udp_outbound.contains("execute_prepared_udp_outbound("));
+    assert!(udp_outbound.contains("PreparedUdpOutbound::Fallback"));
+    assert!(udp_outbound.contains("operation.execute("));
+    for source in [tcp_candidate, tcp_outbound, udp_outbound] {
+        assert!(!source.contains("ResolvedLeafOutbound"));
+        assert!(!source.contains("use crate::runtime::Proxy"));
+        assert!(!source.contains("&Proxy"));
+    }
 }
 
 #[test]

@@ -74,9 +74,12 @@ async fn inventory_invokes_fake_tcp_leaf_and_relay_capabilities() {
         Ok(prepared) => prepared,
         Err(_) => panic!("fake leaf prepare failed"),
     };
-    let established = match prepared
-        .execute(proxy.tcp_runtime_services(), &session())
-        .await
+    let established = match crate::runtime::tcp_dispatch::dispatch_prepared_tcp_candidate(
+        proxy.tcp_runtime_services(),
+        &session(),
+        prepared,
+    )
+    .await
     {
         Ok(established) => established,
         Err(_) => panic!("fake leaf connect failed"),
@@ -84,17 +87,18 @@ async fn inventory_invokes_fake_tcp_leaf_and_relay_capabilities() {
     assert!(established.into_relay_stream().is_err());
 
     let (stream, _peer) = tokio::io::duplex(64);
-    proxy
+    let prepared = proxy
         .protocols
         .prepare_claimed_tcp_relay_hop(ctx, &claimed)
-        .expect("fake relay prepare")
-        .execute(
-            proxy.tcp_runtime_services(),
-            TcpRelayStream::new(stream),
-            &session(),
-        )
-        .await
-        .expect("fake relay hop");
+        .expect("fake relay prepare");
+    crate::runtime::tcp_dispatch::relay::dispatch_prepared_tcp_relay_hop(
+        proxy.tcp_runtime_services(),
+        TcpRelayStream::new(stream),
+        &session(),
+        prepared,
+    )
+    .await
+    .expect("fake relay hop");
 
     assert_eq!(calls.connects(), 1);
     assert_eq!(calls.relay_hops(), 1);
@@ -119,9 +123,12 @@ async fn inventory_preserves_tcp_and_relay_capability_failures() {
         Ok(prepared) => prepared,
         Err(_) => panic!("fake leaf prepare failed"),
     };
-    let failure = match prepared
-        .execute(proxy.tcp_runtime_services(), &session())
-        .await
+    let failure = match crate::runtime::tcp_dispatch::dispatch_prepared_tcp_candidate(
+        proxy.tcp_runtime_services(),
+        &session(),
+        prepared,
+    )
+    .await
     {
         Ok(_) => panic!("fake TCP connect unexpectedly succeeded"),
         Err(failure) => failure,
@@ -136,16 +143,17 @@ async fn inventory_preserves_tcp_and_relay_capability_failures() {
     calls.set_fail_tcp(false);
     calls.set_fail_relay(true);
     let (stream, _peer) = tokio::io::duplex(64);
-    let error = match proxy
+    let prepared = proxy
         .protocols
         .prepare_claimed_tcp_relay_hop(ctx, &claimed)
-        .expect("fake relay prepare")
-        .execute(
-            proxy.tcp_runtime_services(),
-            TcpRelayStream::new(stream),
-            &session(),
-        )
-        .await
+        .expect("fake relay prepare");
+    let error = match crate::runtime::tcp_dispatch::relay::dispatch_prepared_tcp_relay_hop(
+        proxy.tcp_runtime_services(),
+        TcpRelayStream::new(stream),
+        &session(),
+        prepared,
+    )
+    .await
     {
         Ok(_) => panic!("fake relay hop unexpectedly succeeded"),
         Err(error) => error,

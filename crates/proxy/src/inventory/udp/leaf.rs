@@ -3,28 +3,11 @@ use crate::inventory::ClaimedInventoryLeaf;
 use crate::protocol_registry::UdpAdapterContext;
 use crate::runtime::path::TcpPathCategory;
 use crate::runtime::udp_dispatch::operation::PreparedUdpFlowOperation;
-use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
+use crate::runtime::udp_dispatch::FlowFailure;
 
 pub(crate) enum PreparedUdpLeafCandidate<'a> {
     Block { tag: String },
     Flow(Box<dyn PreparedUdpFlowOperation + 'a>),
-}
-
-impl PreparedUdpLeafCandidate<'_> {
-    pub(crate) async fn execute(
-        self,
-        dispatch: &mut UdpDispatch,
-        ctx: UdpAdapterContext<'_>,
-        session: &zero_core::Session,
-        payload: &[u8],
-    ) -> Result<FlowStartResult, FlowFailure> {
-        match self {
-            PreparedUdpLeafCandidate::Block { tag } => Ok(FlowStartResult::Blocked { tag }),
-            PreparedUdpLeafCandidate::Flow(operation) => {
-                operation.execute(dispatch, ctx, session, payload).await
-            }
-        }
-    }
 }
 
 impl ProtocolInventory {

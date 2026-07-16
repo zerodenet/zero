@@ -20,8 +20,7 @@ pub(crate) async fn dispatch_prepared_tcp_relay_chain(
     prepared: PreparedTcpRelayChain<'_>,
 ) -> Result<EstablishedTcpOutbound, TcpOutboundFailure> {
     let (stream, final_hop) = execute_relay_prefix(services.clone(), prepared).await?;
-    let stream = final_hop
-        .execute(services, stream, session)
+    let stream = dispatch_prepared_tcp_relay_hop(services, stream, session, final_hop)
         .await
         .map_err(|error| TcpOutboundFailure {
             stage: "relay_last",
@@ -30,6 +29,15 @@ pub(crate) async fn dispatch_prepared_tcp_relay_chain(
         })?;
 
     Ok(EstablishedTcpOutbound::relay(stream))
+}
+
+pub(crate) async fn dispatch_prepared_tcp_relay_hop(
+    services: TcpRuntimeServices,
+    stream: crate::transport::TcpRelayStream,
+    session: &Session,
+    prepared: crate::inventory::PreparedTcpRelayHop<'_>,
+) -> Result<crate::transport::TcpRelayStream, zero_engine::EngineError> {
+    prepared.operation.execute(services, stream, session).await
 }
 
 #[cfg(any(
@@ -70,7 +78,7 @@ async fn execute_relay_prefix<'a>(
         .expect("relay chain must have at least one prepared hop");
     let mut session_for_next = current_prepared.next_session();
 
-    let outbound = crate::inventory::dispatch_prepared_tcp_candidate(
+    let outbound = super::candidate::dispatch_prepared_tcp_candidate(
         services.clone(),
         &session_for_next,
         prepared.first,
@@ -86,14 +94,18 @@ async fn execute_relay_prefix<'a>(
 
     for next_prepared in relay_hops {
         session_for_next = next_prepared.next_session();
-        stream = current_prepared
-            .execute(services.clone(), stream, &session_for_next)
-            .await
-            .map_err(|error| TcpOutboundFailure {
-                stage: "relay_hop",
-                error,
-                upstream_endpoint: None,
-            })?;
+        stream = dispatch_prepared_tcp_relay_hop(
+            services.clone(),
+            stream,
+            &session_for_next,
+            current_prepared,
+        )
+        .await
+        .map_err(|error| TcpOutboundFailure {
+            stage: "relay_hop",
+            error,
+            upstream_endpoint: None,
+        })?;
         current_prepared = next_prepared;
     }
 
