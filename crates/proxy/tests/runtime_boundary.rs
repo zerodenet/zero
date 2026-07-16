@@ -3243,6 +3243,50 @@ fn udp_flow_state_root_stays_facade_only() {
 }
 
 #[test]
+fn udp_flow_managed_root_stays_facade_only() {
+    let managed_root = read(&proxy_src().join("runtime/udp_flow/managed/mod.rs"));
+    let managed = read_module(&proxy_src().join("runtime/udp_flow/managed"));
+    for module_name in [
+        "pub(crate) mod bridge;",
+        "mod cache;",
+        "mod connection;",
+        "mod datagram;",
+        "pub(crate) mod datagram_manager;",
+        "mod flow;",
+        "pub(crate) mod model;",
+        "pub(crate) mod state;",
+        "mod stream;",
+        "pub(crate) mod stream_manager;",
+    ] {
+        assert!(managed_root.contains(module_name));
+    }
+    for forbidden in [
+        "pub(crate) struct ManagedUdpFlowResume",
+        "pub(crate) struct ManagedUdpHandlers",
+        "pub(crate) struct ManagedUdpState",
+        "pub(crate) trait ManagedDatagramFlowHandler",
+        "pub(crate) struct ManagedStreamHandlerPair",
+    ] {
+        assert!(
+            !managed_root.contains(forbidden),
+            "udp_flow managed facade root must not keep `{forbidden}` inline"
+        );
+    }
+    for expected in [
+        "pub(crate) struct ManagedUdpFlowResume",
+        "pub(crate) struct ManagedUdpHandlers",
+        "pub(crate) struct ManagedUdpState",
+        "pub(crate) trait ManagedDatagramFlowHandler",
+        "pub(crate) struct ManagedStreamHandlerPair",
+    ] {
+        assert!(
+            managed.contains(expected),
+            "udp_flow managed module tree must still provide `{expected}`"
+        );
+    }
+}
+
+#[test]
 fn udp_flow_managed_flow_request_root_stays_facade_only() {
     let request_root = read(&proxy_src().join("runtime/udp_flow/managed/flow/request.rs"));
     let request = read_module(&proxy_src().join("runtime/udp_flow/managed/flow/request.rs"));
@@ -3501,6 +3545,76 @@ fn udp_flow_managed_datagram_manager_root_stays_facade_only() {
         assert!(
             manager.contains(expected),
             "udp_flow managed datagram_manager module tree must still provide `{expected}`"
+        );
+    }
+}
+
+#[test]
+fn udp_flow_registered_root_stays_facade_only() {
+    let registered_root = read(&proxy_src().join("runtime/udp_flow/registered/mod.rs"));
+    let registered = read_module(&proxy_src().join("runtime/udp_flow/registered"));
+    for module_name in ["mod forward;", "mod state;", "mod upstream;"] {
+        assert!(registered_root.contains(module_name));
+    }
+    for forbidden in [
+        "pub(crate) struct RegisteredUdpHandlers",
+        "pub(crate) struct RegisteredUdpState",
+        "pub(crate) trait UpstreamAssociationHandler",
+        "pub(crate) struct UpstreamAssociationSend",
+        "fn boxed_registered_upstream_handler<",
+        "pub(crate) struct UpstreamUdpHandlers",
+    ] {
+        assert!(
+            !registered_root.contains(forbidden),
+            "udp_flow registered facade root must not keep `{forbidden}` inline"
+        );
+    }
+    for expected in [
+        "pub(crate) struct RegisteredUdpHandlers",
+        "pub(crate) struct RegisteredUdpState",
+        "pub(crate) trait UpstreamAssociationHandler",
+        "pub(crate) struct UpstreamAssociationSend",
+        "fn boxed_registered_upstream_handler<",
+        "pub(crate) struct UpstreamUdpHandlers",
+    ] {
+        assert!(
+            registered.contains(expected),
+            "udp_flow registered module tree must still provide `{expected}`"
+        );
+    }
+}
+
+#[test]
+fn udp_flow_registered_upstream_root_stays_facade_only() {
+    let upstream_root = read(&proxy_src().join("runtime/udp_flow/registered/upstream.rs"));
+    let upstream = read_module(&proxy_src().join("runtime/udp_flow/registered/upstream"));
+    for module_name in ["mod contract;", "mod runtime;", "mod state;"] {
+        assert!(upstream_root.contains(module_name));
+    }
+    for forbidden in [
+        "pub(crate) trait UpstreamAssociationHandler",
+        "pub(crate) struct UpstreamAssociationSend",
+        "pub(crate) struct UpstreamUdpHandlers",
+        "fn boxed_registered_upstream_handler<",
+        "pub(crate) struct UpstreamAssociationRuntime",
+        "pub(crate) struct TrackedUpstreamAssociationState",
+    ] {
+        assert!(
+            !upstream_root.contains(forbidden),
+            "udp_flow registered upstream facade root must not keep `{forbidden}` inline"
+        );
+    }
+    for expected in [
+        "pub(crate) trait UpstreamAssociationHandler",
+        "pub(crate) struct UpstreamAssociationSend",
+        "pub(crate) struct UpstreamUdpHandlers",
+        "fn boxed_registered_upstream_handler<",
+        "pub(crate) struct UpstreamAssociationRuntime",
+        "pub(crate) struct TrackedUpstreamAssociationState",
+    ] {
+        assert!(
+            upstream.contains(expected),
+            "udp_flow registered upstream module tree must still provide `{expected}`"
         );
     }
 }
