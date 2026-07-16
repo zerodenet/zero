@@ -2693,6 +2693,39 @@ fn udp_flow_packet_path_chain_root_stays_facade_only() {
 }
 
 #[test]
+fn udp_flow_packet_path_chain_bridge_root_stays_facade_only() {
+    let bridge_root = read(&proxy_src().join("runtime/udp_flow/packet_path_chain/bridge.rs"));
+    let bridge = read_module(&proxy_src().join("runtime/udp_flow/packet_path_chain/bridge.rs"));
+    for module_name in ["mod dispatch;", "mod recv;", "mod waiter;"] {
+        assert!(bridge_root.contains(module_name));
+    }
+    for forbidden in [
+        "type RecvItem =",
+        "pub(super) struct Waiter",
+        "pub(super) async fn dispatch_via_entry(",
+        "pub(super) async fn recv_loop(",
+        "fn remove_waiter(",
+    ] {
+        assert!(
+            !bridge_root.contains(forbidden),
+            "udp_flow packet_path_chain bridge facade root must not keep `{forbidden}` inline"
+        );
+    }
+    for expected in [
+        "type RecvItem =",
+        "struct Waiter",
+        "async fn dispatch_via_entry(",
+        "async fn recv_loop(",
+        "fn remove_waiter(",
+    ] {
+        assert!(
+            bridge.contains(expected),
+            "udp_flow packet_path_chain bridge module tree must still provide `{expected}`"
+        );
+    }
+}
+
+#[test]
 fn udp_dispatch_forward_root_stays_facade_only() {
     let forward_root = read(&proxy_src().join("runtime/udp_dispatch/forward.rs"));
     let forward = read_module(&proxy_src().join("runtime/udp_dispatch/forward.rs"));
