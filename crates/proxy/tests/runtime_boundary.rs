@@ -2380,6 +2380,39 @@ fn udp_dispatch_managed_start_root_stays_facade_only() {
 }
 
 #[test]
+fn stream_udp_root_stays_facade_only() {
+    let stream_udp_root = read(&proxy_src().join("runtime/stream_udp.rs"));
+    let stream_udp = read_module(&proxy_src().join("runtime/stream_udp.rs"));
+    for module_name in ["mod handler;", "mod recording;", "mod relay;"] {
+        assert!(stream_udp_root.contains(module_name));
+    }
+    for forbidden in [
+        "pub(crate) struct StreamUdpRelayRequest",
+        "struct StreamPacketSessionUdpHandler",
+        "pub(crate) async fn run_mapped_protocol_stream_udp_relay",
+        "async fn run_stream_udp_relay",
+        "fn record_stream_udp_client_io",
+    ] {
+        assert!(
+            !stream_udp_root.contains(forbidden),
+            "stream_udp facade root must not keep `{forbidden}` inline"
+        );
+    }
+    for expected in [
+        "pub(crate) struct StreamUdpRelayRequest",
+        "pub(super) struct StreamPacketSessionUdpHandler",
+        "pub(crate) async fn run_mapped_protocol_stream_udp_relay",
+        "async fn run_stream_udp_relay",
+        "pub(super) fn record_stream_udp_client_io",
+    ] {
+        assert!(
+            stream_udp.contains(expected),
+            "stream_udp module tree must still provide `{expected}`"
+        );
+    }
+}
+
+#[test]
 fn udp_flow_sessions_root_stays_facade_only() {
     let sessions_root = read(&proxy_src().join("runtime/udp_flow/sessions.rs"));
     let sessions = read_module(&proxy_src().join("runtime/udp_flow/sessions.rs"));
