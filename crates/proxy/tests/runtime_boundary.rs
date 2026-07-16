@@ -1827,7 +1827,7 @@ fn tcp_dispatch_operations_use_runtime_services_for_connect_flows() {
 
 #[test]
 fn udp_dispatch_operations_use_runtime_services_for_direct_flows() {
-    let operation = read(&proxy_src().join("runtime/udp_dispatch/operation.rs"));
+    let operation = read_module(&proxy_src().join("runtime/udp_dispatch/operation.rs"));
     assert!(operation.contains("ctx.runtime_services()"));
     assert!(!operation.contains("ctx.proxy()"));
 }
