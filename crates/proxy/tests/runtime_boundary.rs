@@ -2200,6 +2200,42 @@ fn packet_session_udp_lifecycle_root_stays_facade_only() {
 }
 
 #[test]
+fn datagram_udp_lifecycle_root_stays_facade_only() {
+    let lifecycle_root = read(&proxy_src().join("runtime/datagram_udp/lifecycle.rs"));
+    let lifecycle = read_module(&proxy_src().join("runtime/datagram_udp/lifecycle.rs"));
+    for module_name in [
+        "mod read;",
+        "mod relay;",
+        "mod response;",
+        "mod without_upstream;",
+    ] {
+        assert!(lifecycle_root.contains(module_name));
+    }
+    for forbidden in [
+        "pub(crate) async fn run_protocol_datagram_udp_relay",
+        "async fn process_datagram_read",
+        "type ChainUdpResponseResult",
+        "tokio::select!",
+    ] {
+        assert!(
+            !lifecycle_root.contains(forbidden),
+            "datagram_udp lifecycle facade root must not keep `{forbidden}` inline"
+        );
+    }
+    for expected in [
+        "pub(crate) async fn run_protocol_datagram_udp_relay",
+        "async fn process_datagram_read",
+        "type ChainUdpResponseResult",
+        "select! {",
+    ] {
+        assert!(
+            lifecycle.contains(expected),
+            "datagram_udp lifecycle module tree must still provide `{expected}`"
+        );
+    }
+}
+
+#[test]
 fn udp_flow_state_root_stays_facade_only() {
     let state_root = read(&proxy_src().join("runtime/udp_flow/state.rs"));
     let state = read_module(&proxy_src().join("runtime/udp_flow/state.rs"));
