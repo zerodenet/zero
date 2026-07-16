@@ -3287,6 +3287,43 @@ fn udp_flow_managed_root_stays_facade_only() {
 }
 
 #[test]
+fn udp_flow_managed_cache_stream_insert_root_stays_facade_only() {
+    let insert_root =
+        read(&proxy_src().join("runtime/udp_flow/managed/cache/stream/insert.rs"));
+    let insert =
+        read_module(&proxy_src().join("runtime/udp_flow/managed/cache/stream/insert.rs"));
+    for module_name in ["mod establish;", "mod pre_sent;", "mod relay;"] {
+        assert!(insert_root.contains(module_name));
+    }
+    for forbidden in [
+        "async fn send_or_insert_pre_sent<",
+        "pub(crate) async fn send_or_insert_pre_sent_key<",
+        "async fn send_or_insert<",
+        "pub(crate) async fn send_or_insert_key<",
+        "async fn insert_and_send(",
+        "pub(crate) async fn insert_and_send_key(",
+    ] {
+        assert!(
+            !insert_root.contains(forbidden),
+            "udp_flow managed cache stream insert facade root must not keep `{forbidden}` inline"
+        );
+    }
+    for expected in [
+        "async fn send_or_insert_pre_sent<",
+        "pub(crate) async fn send_or_insert_pre_sent_key<",
+        "async fn send_or_insert<",
+        "pub(crate) async fn send_or_insert_key<",
+        "async fn insert_and_send(",
+        "pub(crate) async fn insert_and_send_key(",
+    ] {
+        assert!(
+            insert.contains(expected),
+            "udp_flow managed cache stream insert module tree must still provide `{expected}`"
+        );
+    }
+}
+
+#[test]
 fn udp_flow_managed_flow_request_root_stays_facade_only() {
     let request_root = read(&proxy_src().join("runtime/udp_flow/managed/flow/request.rs"));
     let request = read_module(&proxy_src().join("runtime/udp_flow/managed/flow/request.rs"));
