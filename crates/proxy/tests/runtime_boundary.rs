@@ -2438,6 +2438,37 @@ fn inventory_tcp_dispatch_root_is_not_a_proxy_impl_bucket() {
 }
 
 #[test]
+fn route_runtime_route_root_stays_facade_only() {
+    let route_root = read(&proxy_src().join("runtime/route_runtime/route.rs"));
+    let route = read_module(&proxy_src().join("runtime/route_runtime/route.rs"));
+    for module_name in ["mod access;", "mod model;", "mod serve;"] {
+        assert!(route_root.contains(module_name));
+    }
+    for forbidden in [
+        "pub(crate) struct InboundRouteRuntime",
+        "pub(crate) struct InboundRouteRuntimeFactory",
+        "pub(crate) async fn serve<P>(",
+        "pub(crate) fn for_connection(&self, source_addr: Option<SocketAddr>)",
+    ] {
+        assert!(
+            !route_root.contains(forbidden),
+            "route runtime route facade root must not keep `{forbidden}` inline"
+        );
+    }
+    for expected in [
+        "pub(crate) struct InboundRouteRuntime",
+        "pub(crate) struct InboundRouteRuntimeFactory",
+        "pub(crate) async fn serve<P>(",
+        "pub(crate) fn for_connection(&self, source_addr: Option<SocketAddr>)",
+    ] {
+        assert!(
+            route.contains(expected),
+            "route runtime route module tree must still provide `{expected}`"
+        );
+    }
+}
+
+#[test]
 fn udp_flow_outbound_root_stays_facade_only() {
     let outbound_root = read(&proxy_src().join("runtime/udp_flow/outbound.rs"));
     let outbound = read_module(&proxy_src().join("runtime/udp_flow/outbound.rs"));
