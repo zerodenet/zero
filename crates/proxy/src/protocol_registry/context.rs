@@ -122,7 +122,11 @@ impl TcpRuntimeServices {
         &self,
         prepared: crate::inventory::PreparedTcpRelayChain<'_>,
     ) -> Result<crate::transport::RelayCarrier, crate::transport::TcpOutboundFailure> {
-        crate::inventory::dispatch_prepared_tcp_relay_carrier(self.clone(), prepared).await
+        crate::runtime::tcp_dispatch::relay::dispatch_prepared_tcp_relay_carrier(
+            self.clone(),
+            prepared,
+        )
+        .await
     }
 
     #[cfg(any(

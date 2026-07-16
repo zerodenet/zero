@@ -2,7 +2,7 @@ use zero_core::Session;
 use zero_engine::ResolvedOutbound;
 
 use super::super::ProtocolInventory;
-use super::{dispatch_prepared_tcp_candidate, dispatch_prepared_tcp_relay_chain};
+use super::dispatch_prepared_tcp_candidate;
 use crate::protocol_registry::OutboundAdapterContext;
 use crate::protocol_registry::TcpRuntimeServices;
 use crate::transport::{EstablishedTcpOutbound, TcpOutboundFailure};
@@ -21,7 +21,10 @@ impl PreparedTcpOutbound<'_> {
     ) -> Result<EstablishedTcpOutbound, TcpOutboundFailure> {
         match self {
             PreparedTcpOutbound::Relay(prepared) => {
-                dispatch_prepared_tcp_relay_chain(services, session, prepared).await
+                crate::runtime::tcp_dispatch::relay::dispatch_prepared_tcp_relay_chain(
+                    services, session, prepared,
+                )
+                .await
             }
             PreparedTcpOutbound::Single(prepared) => {
                 dispatch_prepared_tcp_candidate(services, session, prepared).await

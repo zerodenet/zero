@@ -5,5 +5,6 @@
 
 mod leaf;
 pub(crate) mod operation;
+pub(crate) mod relay;
 
 pub(crate) use leaf::dispatch_tcp;

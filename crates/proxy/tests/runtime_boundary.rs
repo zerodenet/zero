@@ -1702,18 +1702,21 @@ fn inventory_udp_packet_path_builder_stays_prepared_operation_scoped() {
 }
 
 #[test]
-fn inventory_tcp_relay_executes_final_hop_without_old_helper_roundtrip() {
-    let relay = read(&proxy_src().join("inventory/tcp/relay.rs"));
+fn runtime_tcp_relay_executes_prepared_chain_without_engine_leaf_roundtrip() {
+    let inventory_relay = read(&proxy_src().join("inventory/tcp/relay.rs"));
+    let runtime_relay = read(&proxy_src().join("runtime/tcp_dispatch/relay.rs"));
     assert!(
-        !relay.contains("apply_tcp_relay_hop("),
-        "tcp relay execution should keep the final prepared hop local instead of re-routing through an old helper"
+        !runtime_relay.contains("apply_tcp_relay_hop("),
+        "tcp relay execution should consume the final prepared hop directly"
     );
     assert!(
-        !relay.contains("Result<(RelayCarrier, ResolvedLeafOutbound"),
-        "tcp relay prefix helpers must not return raw engine leaf values once the final hop is prepared"
+        !runtime_relay.contains("ResolvedLeafOutbound"),
+        "runtime relay execution must not recover raw engine leaf values"
     );
-    assert!(relay.contains("current_prepared"));
-    assert!(relay.contains("stage: \"relay_last\""));
+    assert!(!inventory_relay.contains("current_prepared"));
+    assert!(!inventory_relay.contains("stage: \"relay_last\""));
+    assert!(runtime_relay.contains("current_prepared"));
+    assert!(runtime_relay.contains("stage: \"relay_last\""));
 }
 
 #[test]
@@ -1747,6 +1750,18 @@ fn inventory_relay_modules_only_prepare_claimed_chains() {
         assert!(
             !relay.contains("claim_outbound_leaf("),
             "{relative} should prepare already claimed leaves instead of reclaiming raw outbounds"
+        );
+    }
+    let tcp_relay = read(&proxy_src().join("inventory/tcp/relay.rs"));
+    for forbidden in [
+        "dispatch_prepared_tcp_candidate(",
+        ".into_relay_stream()",
+        "current_prepared.execute(",
+        "stage: \"relay_last\"",
+    ] {
+        assert!(
+            !tcp_relay.contains(forbidden),
+            "inventory tcp relay must not execute prepared relay chains via `{forbidden}`"
         );
     }
 }
