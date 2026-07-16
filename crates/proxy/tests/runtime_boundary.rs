@@ -2483,6 +2483,37 @@ fn udp_flow_outbound_projection_root_stays_facade_only() {
 }
 
 #[test]
+fn udp_flow_outbound_projection_access_root_stays_facade_only() {
+    let access_root = read(&proxy_src().join("runtime/udp_flow/outbound/projection/access.rs"));
+    let access = read_module(&proxy_src().join("runtime/udp_flow/outbound/projection/access.rs"));
+    for module_name in ["mod identity;", "mod managed;", "mod upstream;"] {
+        assert!(access_root.contains(module_name));
+    }
+    for forbidden in [
+        "pub(crate) fn tag(&self) -> &str",
+        "pub(crate) fn path_category(&self) -> UdpPathCategory",
+        "pub(crate) fn managed_flow(&self) -> Option<ManagedUdpFlowRef>",
+        "pub(crate) fn upstream(&self) -> Option<UdpFlowUpstream<'_>>",
+    ] {
+        assert!(
+            !access_root.contains(forbidden),
+            "udp_flow outbound projection access facade root must not keep `{forbidden}` inline"
+        );
+    }
+    for expected in [
+        "pub(crate) fn tag(&self) -> &str",
+        "pub(crate) fn path_category(&self) -> UdpPathCategory",
+        "pub(crate) fn managed_flow(&self) -> Option<ManagedUdpFlowRef>",
+        "pub(crate) fn upstream(&self) -> Option<UdpFlowUpstream<'_>>",
+    ] {
+        assert!(
+            access.contains(expected),
+            "udp_flow outbound projection access module tree must still provide `{expected}`"
+        );
+    }
+}
+
+#[test]
 fn udp_flow_packet_path_root_stays_facade_only() {
     let packet_path_root = read(&proxy_src().join("runtime/udp_flow/packet_path.rs"));
     let packet_path = read_module(&proxy_src().join("runtime/udp_flow/packet_path.rs"));
