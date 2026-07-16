@@ -2276,6 +2276,37 @@ fn udp_dispatch_managed_start_root_stays_facade_only() {
 }
 
 #[test]
+fn udp_flow_sessions_root_stays_facade_only() {
+    let sessions_root = read(&proxy_src().join("runtime/udp_flow/sessions.rs"));
+    let sessions = read_module(&proxy_src().join("runtime/udp_flow/sessions.rs"));
+    for module_name in ["mod index;", "mod lifecycle;", "mod model;"] {
+        assert!(sessions_root.contains(module_name));
+    }
+    for forbidden in [
+        "pub(crate) struct UdpSessionFlows",
+        "struct UdpFlowKey",
+        "fn index_flow(",
+        "pub(crate) fn finish_all(&mut self)",
+    ] {
+        assert!(
+            !sessions_root.contains(forbidden),
+            "udp_flow sessions facade root must not keep `{forbidden}` inline"
+        );
+    }
+    for expected in [
+        "pub(crate) struct UdpSessionFlows",
+        "pub(crate) struct CompletedUdpFlow",
+        "pub(crate) fn finish_all(&mut self)",
+        "pub(crate) fn direct_response_session_id(&self, sender: SocketAddr)",
+    ] {
+        assert!(
+            sessions.contains(expected),
+            "udp_flow sessions module tree must still provide `{expected}`"
+        );
+    }
+}
+
+#[test]
 fn packet_session_udp_lifecycle_root_stays_facade_only() {
     let lifecycle_root = read(&proxy_src().join("runtime/packet_session_udp/lifecycle.rs"));
     let lifecycle = read_module(&proxy_src().join("runtime/packet_session_udp/lifecycle.rs"));
