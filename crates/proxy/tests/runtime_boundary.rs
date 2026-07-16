@@ -3653,6 +3653,39 @@ fn udp_flow_managed_connection_tuple_root_stays_facade_only() {
 }
 
 #[test]
+fn udp_flow_managed_connection_packet_root_stays_facade_only() {
+    let packet_root = read(&proxy_src().join("runtime/udp_flow/managed/connection/packet.rs"));
+    let packet = read_module(&proxy_src().join("runtime/udp_flow/managed/connection/packet.rs"));
+    for module_name in ["mod build;", "mod connection;", "mod flow;", "mod sender;"] {
+        assert!(packet_root.contains(module_name));
+    }
+    for forbidden in [
+        "pub(crate) trait ManagedPacketUdpSender",
+        "struct ManagedPacketUdpConnection",
+        "pub(crate) fn managed_packet_udp_connection(",
+        "pub(crate) trait ManagedPacketUdpFlowConnection",
+        "pub(crate) fn managed_packet_udp_connection_from_flow<",
+    ] {
+        assert!(
+            !packet_root.contains(forbidden),
+            "udp_flow managed connection packet facade root must not keep `{forbidden}` inline"
+        );
+    }
+    for expected in [
+        "pub(crate) trait ManagedPacketUdpSender",
+        "struct ManagedPacketUdpConnection",
+        "fn managed_packet_udp_connection(",
+        "pub(crate) trait ManagedPacketUdpFlowConnection",
+        "pub(crate) fn managed_packet_udp_connection_from_flow<",
+    ] {
+        assert!(
+            packet.contains(expected),
+            "udp_flow managed connection packet module tree must still provide `{expected}`"
+        );
+    }
+}
+
+#[test]
 fn udp_flow_registered_root_stays_facade_only() {
     let registered_root = read(&proxy_src().join("runtime/udp_flow/registered/mod.rs"));
     let registered = read_module(&proxy_src().join("runtime/udp_flow/registered"));
