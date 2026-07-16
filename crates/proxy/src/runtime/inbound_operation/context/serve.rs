@@ -1,0 +1,41 @@
+use zero_engine::EngineError;
+
+use super::model::InboundConnectionContext;
+
+impl InboundConnectionContext {
+    pub(crate) async fn serve<P>(
+        self,
+        session: zero_core::Session,
+        client: P::ClientStream,
+        protocol: P,
+    ) -> Result<(), EngineError>
+    where
+        P: crate::runtime::tcp_ingress::InboundProtocol + 'static,
+    {
+        self.runtime.serve(session, client, &protocol).await
+    }
+
+    #[cfg(feature = "http")]
+    pub(crate) fn select_http_redirect(
+        &self,
+        session: &zero_core::Session,
+    ) -> Option<(u16, String)> {
+        self.runtime.select_http_redirect(session)
+    }
+
+    #[cfg(any(feature = "socks5", feature = "hysteria2", feature = "mieru"))]
+    pub(crate) async fn serve_with_client_response<P, S>(
+        self,
+        session: zero_core::Session,
+        client: S,
+        response_protocol: P,
+    ) -> Result<(), EngineError>
+    where
+        P: zero_core::InboundClientResponse<S> + Send + Sync,
+        S: tokio::io::AsyncRead + tokio::io::AsyncWrite + zero_traits::AsyncSocket + Unpin + Send,
+    {
+        self.runtime
+            .serve_with_client_response(session, client, response_protocol)
+            .await
+    }
+}

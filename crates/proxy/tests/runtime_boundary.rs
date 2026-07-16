@@ -1978,6 +1978,40 @@ fn udp_ingress_runtime_collapses_proxy_and_services_for_session_loops() {
     assert!(!inbound_operation.contains("proxy: Proxy"));
     assert!(!inbound_operation.contains("execute(proxy"));
 
+    let inbound_context_root = read(&proxy_src().join("runtime/inbound_operation/context.rs"));
+    let inbound_context = read_module(&proxy_src().join("runtime/inbound_operation/context.rs"));
+    for module_name in [
+        "mod model;",
+        "mod no_client;",
+        "mod recorded;",
+        "mod serve;",
+        "mod udp;",
+    ] {
+        assert!(inbound_context_root.contains(module_name));
+    }
+    for forbidden in [
+        "pub(crate) async fn run_udp_association",
+        "pub(crate) async fn serve<P>(",
+        "pub(crate) async fn dispatch_no_client_stream_route",
+        "pub(crate) async fn dispatch_recorded_mux_tcp_route",
+    ] {
+        assert!(
+            !inbound_context_root.contains(forbidden),
+            "inbound_operation context facade root must not keep `{forbidden}` inline"
+        );
+    }
+    for expected in [
+        "pub(crate) async fn run_udp_association",
+        "pub(crate) async fn serve<P>(",
+        "pub(crate) async fn dispatch_no_client_stream_route",
+        "pub(crate) async fn dispatch_recorded_mux_tcp_route",
+    ] {
+        assert!(
+            inbound_context.contains(expected),
+            "inbound_operation context module tree must still provide `{expected}`"
+        );
+    }
+
     let inventory_inbound = read(&proxy_src().join("inventory/inbound.rs"));
     assert!(inventory_inbound.contains("InboundListenerRuntime"));
     assert!(!inventory_inbound.contains("use crate::runtime::Proxy"));
