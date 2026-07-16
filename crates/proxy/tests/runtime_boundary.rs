@@ -2410,6 +2410,39 @@ fn udp_association_contract_root_stays_facade_only() {
 }
 
 #[test]
+fn udp_association_lifecycle_root_stays_facade_only() {
+    let lifecycle_root = read(&proxy_src().join("runtime/udp_association/lifecycle.rs"));
+    let lifecycle = read_module(&proxy_src().join("runtime/udp_association/lifecycle.rs"));
+    for module_name in ["mod idle;", "mod relay;", "mod response;"] {
+        assert!(lifecycle_root.contains(module_name));
+    }
+    for forbidden in [
+        "pub(crate) async fn run_udp_association_loop",
+        "fn handle_idle_timeout(",
+        "async fn handle_upstream_response",
+        "async fn handle_chain_result",
+        "select! {",
+    ] {
+        assert!(
+            !lifecycle_root.contains(forbidden),
+            "udp_association lifecycle facade root must not keep `{forbidden}` inline"
+        );
+    }
+    for expected in [
+        "pub(crate) async fn run_udp_association_loop",
+        "pub(super) fn finish_dispatch(",
+        "pub(super) async fn handle_upstream_response",
+        "pub(super) async fn handle_chain_result",
+        "select! {",
+    ] {
+        assert!(
+            lifecycle.contains(expected),
+            "udp_association lifecycle module tree must still provide `{expected}`"
+        );
+    }
+}
+
+#[test]
 fn udp_flow_state_root_stays_facade_only() {
     let state_root = read(&proxy_src().join("runtime/udp_flow/state.rs"));
     let state = read_module(&proxy_src().join("runtime/udp_flow/state.rs"));
