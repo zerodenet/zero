@@ -3550,6 +3550,37 @@ fn udp_flow_managed_stream_manager_root_stays_facade_only() {
 }
 
 #[test]
+fn udp_flow_managed_stream_manager_send_root_stays_facade_only() {
+    let send_root =
+        read(&proxy_src().join("runtime/udp_flow/managed/stream_manager/manager/send.rs"));
+    let send =
+        read_module(&proxy_src().join("runtime/udp_flow/managed/stream_manager/manager/send.rs"));
+    for module_name in ["mod dispatch;", "mod existing;"] {
+        assert!(send_root.contains(module_name));
+    }
+    for forbidden in [
+        "pub(super) async fn send(",
+        "async fn send_managed_existing(",
+        "\"relay upstream is not established\"",
+    ] {
+        assert!(
+            !send_root.contains(forbidden),
+            "udp_flow managed stream_manager send facade root must not keep `{forbidden}` inline"
+        );
+    }
+    for expected in [
+        "pub(super) async fn send(",
+        "async fn send_managed_existing(",
+        "\"relay upstream is not established\"",
+    ] {
+        assert!(
+            send.contains(expected),
+            "udp_flow managed stream_manager send module tree must still provide `{expected}`"
+        );
+    }
+}
+
+#[test]
 fn udp_flow_managed_stream_manager_relay_root_stays_facade_only() {
     let relay_root =
         read(&proxy_src().join("runtime/udp_flow/managed/stream_manager/manager/relay.rs"));
