@@ -3397,6 +3397,39 @@ fn udp_flow_managed_datagram_manager_root_stays_facade_only() {
 }
 
 #[test]
+fn udp_flow_registered_state_start_root_stays_facade_only() {
+    let start_root = read(&proxy_src().join("runtime/udp_flow/registered/state/start.rs"));
+    let start = read_module(&proxy_src().join("runtime/udp_flow/registered/state/start.rs"));
+    for module_name in ["mod error;", "mod managed;", "mod upstream;"] {
+        assert!(start_root.contains(module_name));
+    }
+    for forbidden in [
+        "pub(crate) async fn start_upstream_udp_flow(",
+        "pub(crate) fn handles_upstream_resume(",
+        "pub(crate) async fn start_managed_udp_flow(",
+        "fn unhandled_managed_flow(",
+        "fn upstream_send(",
+    ] {
+        assert!(
+            !start_root.contains(forbidden),
+            "udp_flow registered state start facade root must not keep `{forbidden}` inline"
+        );
+    }
+    for expected in [
+        "pub(crate) async fn start_upstream_udp_flow(",
+        "pub(crate) fn handles_upstream_resume(",
+        "pub(crate) async fn start_managed_udp_flow(",
+        "fn unhandled_managed_flow(",
+        "fn upstream_send(",
+    ] {
+        assert!(
+            start.contains(expected),
+            "udp_flow registered state start module tree must still provide `{expected}`"
+        );
+    }
+}
+
+#[test]
 fn inventory_tcp_candidate_and_dispatch_use_runtime_services_instead_of_proxy() {
     for relative in ["inventory/tcp/candidate.rs", "inventory/tcp/dispatch.rs"] {
         let source = read(&proxy_src().join(relative));
