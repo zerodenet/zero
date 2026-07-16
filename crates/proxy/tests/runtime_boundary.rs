@@ -3583,6 +3583,40 @@ fn udp_flow_managed_stream_manager_relay_root_stays_facade_only() {
 }
 
 #[test]
+fn udp_flow_managed_stream_manager_relay_handler_root_stays_facade_only() {
+    let handler_root =
+        read(&proxy_src().join("runtime/udp_flow/managed/stream_manager/manager/relay/handler.rs"));
+    let handler = read_module(
+        &proxy_src().join("runtime/udp_flow/managed/stream_manager/manager/relay/handler.rs"),
+    );
+    for module_name in ["mod packet;", "mod relay;"] {
+        assert!(handler_root.contains(module_name));
+    }
+    for forbidden in [
+        "impl<T> ManagedStreamPacketFlowHandler for SharedManagedStreamFlowManager<T>",
+        "fn supports_managed_existing(&self, resume: &ManagedUdpFlowResume) -> bool",
+        "impl<T> ManagedRelayFlowHandler for SharedManagedStreamFlowManager<T>",
+        "fn supports_managed_relay_existing(&self, resume: &ManagedUdpFlowResume) -> bool",
+    ] {
+        assert!(
+            !handler_root.contains(forbidden),
+            "udp_flow managed stream_manager relay handler facade root must not keep `{forbidden}` inline"
+        );
+    }
+    for expected in [
+        "impl<T> ManagedStreamPacketFlowHandler for SharedManagedStreamFlowManager<T>",
+        "fn supports_managed_existing(&self, resume: &ManagedUdpFlowResume) -> bool",
+        "impl<T> ManagedRelayFlowHandler for SharedManagedStreamFlowManager<T>",
+        "fn supports_managed_relay_existing(&self, resume: &ManagedUdpFlowResume) -> bool",
+    ] {
+        assert!(
+            handler.contains(expected),
+            "udp_flow managed stream_manager relay handler module tree must still provide `{expected}`"
+        );
+    }
+}
+
+#[test]
 fn udp_flow_managed_datagram_manager_root_stays_facade_only() {
     let manager_root =
         read(&proxy_src().join("runtime/udp_flow/managed/datagram_manager/manager.rs"));
