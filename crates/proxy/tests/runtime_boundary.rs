@@ -2211,6 +2211,37 @@ fn listener_loop_quic_root_stays_facade_only() {
 }
 
 #[test]
+fn listener_loop_tcp_root_stays_facade_only() {
+    let tcp_root = read(&proxy_src().join("runtime/listener_loop/tcp.rs"));
+    let tcp = read_module(&proxy_src().join("runtime/listener_loop/tcp.rs"));
+    for module_name in ["mod connection;", "mod logged;"] {
+        assert!(tcp_root.contains(module_name));
+    }
+    for forbidden in [
+        "pub(crate) struct TcpListenerLoopRequest<H>",
+        "pub(crate) struct LoggedTcpSocketListenerRequest<R, D>",
+        "pub(crate) async fn run_tcp_listener_loop<H, Fut>(",
+        "pub(crate) async fn run_logged_tcp_socket_listener_loop<R, D, Fut>(",
+    ] {
+        assert!(
+            !tcp_root.contains(forbidden),
+            "listener_loop tcp facade root must not keep `{forbidden}` inline"
+        );
+    }
+    for expected in [
+        "pub(crate) struct TcpListenerLoopRequest<H>",
+        "pub(crate) struct LoggedTcpSocketListenerRequest<R, D>",
+        "pub(crate) async fn run_tcp_listener_loop<H, Fut>(",
+        "pub(crate) async fn run_logged_tcp_socket_listener_loop<R, D, Fut>(",
+    ] {
+        assert!(
+            tcp.contains(expected),
+            "listener_loop tcp module tree must still provide `{expected}`"
+        );
+    }
+}
+
+#[test]
 fn udp_ingress_root_stays_facade_only() {
     let ingress_root = read(&proxy_src().join("runtime/udp_ingress.rs"));
     let ingress = read_module(&proxy_src().join("runtime/udp_ingress.rs"));
