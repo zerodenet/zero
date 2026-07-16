@@ -1,19 +1,13 @@
 use tokio::select;
 use tokio::time::Instant as TokioInstant;
-use tracing::warn;
 use zero_engine::EngineError;
 
 use super::failure::handle_runtime_failure;
+use super::read::process_packet_session_read;
 use super::relay::PacketSessionUdpLoopContext;
-use crate::runtime::packet_session_udp::contract::{
-    PacketSessionUdpHandler, PacketSessionUdpReadFailureAction, PacketSessionUdpReadResult,
-};
-use crate::runtime::udp_delivery::write_upstream_response;
-use crate::runtime::udp_delivery::{
-    record_chain_udp_response_parts, record_direct_udp_response_parts, write_chain_response,
-    write_direct_response,
-};
-use crate::runtime::udp_delivery::{record_upstream_udp_response_received, wait_for_upstream_idle};
+use super::response::{handle_chain_result, handle_direct_response, handle_upstream_response};
+use crate::runtime::packet_session_udp::contract::PacketSessionUdpHandler;
+use crate::runtime::udp_delivery::wait_for_upstream_idle;
 
 pub(super) async fn run_loop<H>(
     context: &PacketSessionUdpLoopContext<'_>,
@@ -39,63 +33,22 @@ where
                 break;
             }
             read = handler.read_inbound_dispatch() => {
-                match read {
-                    Ok(PacketSessionUdpReadResult::Dispatch(inbound_dispatch)) => {
-                        *last_activity = TokioInstant::now();
-                        if let Err(error) = context
-                            .runtime
-                            .dispatch_inbound_packet(dispatch, &inbound_dispatch, context.auth)
-                            .await
-                        {
-                            warn!(error = %error, protocol = context.protocol, "packet session udp dispatch failed");
-                        }
-                    }
-                    Ok(PacketSessionUdpReadResult::End) => break,
-                    Err(failure) => {
-                        warn!(
-                            error = %failure.error,
-                            protocol = context.protocol,
-                            "packet session udp inbound read/decode error"
-                        );
-                        match failure.action {
-                            #[cfg(any(feature = "vless", feature = "vmess"))]
-                            PacketSessionUdpReadFailureAction::Continue => continue,
-                            PacketSessionUdpReadFailureAction::End => break,
-                        }
-                    }
+                if !process_packet_session_read(context, dispatch, last_activity, read).await {
+                    break;
                 }
             }
             recv = direct_sock.recv_from_addr(direct_buf) => {
                 match recv {
                     Ok((n, sender)) => {
-                        *last_activity = TokioInstant::now();
-                        let response = record_direct_udp_response_parts(
-                            context.runtime.services(),
+                        handle_direct_response(
+                            context,
+                            handler,
                             dispatch,
+                            last_activity,
                             sender,
                             &direct_buf[..n],
-                        );
-                        if let Err(error) = write_direct_response(&response, || async {
-                            handler
-                                .write_response_for_target(
-                                    &response.target,
-                                    response.port,
-                                    response.payload,
-                                )
-                                .await
-                        })
-                        .await
-                        {
-                            return handle_runtime_failure(
-                                handler,
-                                context.failure_policy,
-                                context.inbound_tag,
-                                context.protocol,
-                                "packet session udp direct response encode failed",
-                                error.into(),
-                            )
-                            .await;
-                        }
+                        )
+                        .await?;
                     }
                     Err(error) => {
                         return handle_runtime_failure(
@@ -111,77 +64,11 @@ where
                 }
             }
             upstream = upstream_udp.recv_response(upstream_buf) => {
-                match upstream {
-                    Ok(pkt) => {
-                        *last_activity = TokioInstant::now();
-                        let response = record_upstream_udp_response_received(
-                            context.runtime.services(),
-                            dispatch,
-                            context.timeout,
-                            pkt,
-                        );
-                        if let Err(error) = write_upstream_response(&response, || async {
-                            handler
-                                .write_response_for_target(
-                                    &response.target,
-                                    response.port,
-                                    &response.payload,
-                                )
-                                .await
-                        })
-                        .await
-                        {
-                            return handle_runtime_failure(
-                                handler,
-                                context.failure_policy,
-                                context.inbound_tag,
-                                context.protocol,
-                                "packet session udp upstream response encode failed",
-                                error.into(),
-                            )
-                            .await;
-                        }
-                    }
-                    Err(error) => warn!(error = %error, protocol = context.protocol, "packet session udp upstream recv failed"),
-                }
+                handle_upstream_response(context, handler, dispatch, last_activity, upstream).await?;
             }
             _ = wait_for_upstream_idle(upstream_idle_deadline) => {}
             Some(chain_result) = chain_tasks.join_next() => {
-                match chain_result {
-                    Ok(Ok((target, port, payload, session_id))) => {
-                        *last_activity = TokioInstant::now();
-                        let response = record_chain_udp_response_parts(
-                            context.runtime.services(),
-                            target,
-                            port,
-                            payload,
-                            session_id,
-                        );
-                        if let Err(error) = write_chain_response(&response, || async {
-                            handler
-                                .write_response_for_target(
-                                    &response.target,
-                                    response.port,
-                                    &response.payload,
-                                )
-                                .await
-                        })
-                        .await
-                        {
-                            return handle_runtime_failure(
-                                handler,
-                                context.failure_policy,
-                                context.inbound_tag,
-                                context.protocol,
-                                "packet session udp chain response encode failed",
-                                error.into(),
-                            )
-                            .await;
-                        }
-                    }
-                    Ok(Err(error)) => warn!(error = %error, protocol = context.protocol, "packet session udp chain response failed"),
-                    Err(error) => warn!(error = %error, protocol = context.protocol, "packet session udp chain task panicked"),
-                }
+                handle_chain_result(context, handler, last_activity, chain_result).await?;
             }
         }
     }

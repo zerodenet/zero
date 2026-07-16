@@ -1,11 +1,13 @@
 //! Packet-session UDP relay lifecycle facade.
 //!
-//! The root stays as a facade so relay orchestration, failure handling, and
-//! feature-specific event loops do not regrow into one large implementation
-//! bucket.
+//! The root stays as a facade so relay orchestration, inbound read dispatch,
+//! response handling, failure handling, and feature-specific event loops do not
+//! regrow into one large implementation bucket.
 
 mod failure;
+mod read;
 mod relay;
+mod response;
 #[cfg(feature = "socks5")]
 mod with_upstream;
 #[cfg(not(feature = "socks5"))]

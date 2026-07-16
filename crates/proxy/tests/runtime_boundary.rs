@@ -2992,12 +2992,14 @@ fn udp_flow_sessions_root_stays_facade_only() {
 fn packet_session_udp_lifecycle_root_stays_facade_only() {
     let lifecycle_root = read(&proxy_src().join("runtime/packet_session_udp/lifecycle.rs"));
     let lifecycle = read_module(&proxy_src().join("runtime/packet_session_udp/lifecycle.rs"));
-    for module_name in ["mod failure;", "mod relay;"] {
+    for module_name in ["mod failure;", "mod read;", "mod relay;", "mod response;"] {
         assert!(lifecycle_root.contains(module_name));
     }
     for forbidden in [
         "pub(crate) async fn run_packet_session_udp_relay",
+        "async fn process_packet_session_read",
         "async fn handle_runtime_failure",
+        "async fn handle_direct_response",
         "tokio::select!",
     ] {
         assert!(
@@ -3007,7 +3009,9 @@ fn packet_session_udp_lifecycle_root_stays_facade_only() {
     }
     for expected in [
         "pub(crate) async fn run_packet_session_udp_relay",
+        "async fn process_packet_session_read",
         "async fn handle_runtime_failure",
+        "async fn handle_direct_response",
         "select! {",
     ] {
         assert!(
