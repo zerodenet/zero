@@ -8,8 +8,28 @@ use crate::protocol_registry::{UdpAdapterContext, UdpRuntimeServices};
 use crate::runtime::udp_dispatch::UdpDispatch;
 use crate::runtime::udp_flow::result::{FlowFailure, FlowStartResult};
 
+#[derive(Debug, Clone)]
+pub(crate) struct ManagedDatagramStartPlan<T> {
+    pub(crate) tag: String,
+    pub(crate) server: String,
+    pub(crate) port: u16,
+    pub(crate) resume: T,
+}
+
+impl<T> ManagedDatagramStartPlan<T> {
+    pub(crate) fn from_parts(parts: (String, String, u16, T)) -> Self {
+        let (tag, server, port, resume) = parts;
+        Self {
+            tag,
+            server,
+            port,
+            resume,
+        }
+    }
+}
+
 pub(crate) struct ManagedDatagramUdpOperation<T> {
-    pub(crate) plan: zero_transport::managed_udp::ManagedDatagramStartPlan<T>,
+    pub(crate) plan: ManagedDatagramStartPlan<T>,
     pub(crate) needs_proxy: bool,
 }
 
@@ -40,7 +60,7 @@ async fn execute_managed_datagram_operation<T>(
     services: Option<UdpRuntimeServices>,
     session: &Session,
     payload: &[u8],
-    operation: zero_transport::managed_udp::ManagedDatagramStartPlan<T>,
+    operation: ManagedDatagramStartPlan<T>,
 ) -> Result<FlowStartResult, FlowFailure>
 where
     T: std::any::Any + Send + Sync + std::fmt::Debug,

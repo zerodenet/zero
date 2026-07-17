@@ -5,23 +5,21 @@
 
 mod accounting;
 #[cfg(any(
-    feature = "vless",
-    feature = "socks5",
-    feature = "hysteria2",
-    feature = "mieru"
+    feature = "managed-stream-runtime",
+    feature = "upstream-association-runtime",
+    feature = "managed-datagram-runtime"
 ))]
 mod client_response;
 mod no_response;
 mod protocol;
 
 #[cfg(any(
-    feature = "vless",
-    feature = "socks5",
-    feature = "hysteria2",
-    feature = "mieru"
+    feature = "managed-stream-runtime",
+    feature = "upstream-association-runtime",
+    feature = "managed-datagram-runtime"
 ))]
 pub(crate) use client_response::ClientResponseInboundProtocol;
-#[cfg(any(feature = "vmess", feature = "trojan"))]
+#[cfg(feature = "managed-stream-runtime")]
 pub(crate) use no_response::NoClientResponseInboundProtocol;
 pub(crate) use no_response::NoClientResponseStreamProtocol;
 pub(crate) use protocol::InboundProtocol;

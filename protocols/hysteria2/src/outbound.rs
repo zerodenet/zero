@@ -62,7 +62,7 @@ pub fn outbound_profile_from_config_password(
 
 impl Hysteria2Outbound {
     pub fn protocol(&self) -> ProtocolType {
-        ProtocolType::Hysteria2
+        ProtocolType::new("hysteria2")
     }
 
     /// Send the authentication frame over a QUIC stream.

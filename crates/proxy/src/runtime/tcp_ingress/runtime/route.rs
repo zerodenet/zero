@@ -6,7 +6,6 @@ use crate::logging::log_session_accepted;
 use super::model::TcpIngressRuntime;
 
 impl TcpIngressRuntime {
-    #[cfg(feature = "http")]
     pub(crate) fn select_http_redirect(&self, session: &Session) -> Option<(u16, String)> {
         crate::runtime::http_redirect::select_redirect_target(
             &self.services.config().route.url_rewrite,

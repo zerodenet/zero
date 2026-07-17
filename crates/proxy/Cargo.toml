@@ -27,6 +27,11 @@ socks5 = ["udp-response-runtime", "upstream-association-runtime", "tcp-tunnel-ru
 http = ["dep:http"]
 mixed = ["socks5", "http"]
 transport_quic = ["zero-transport/quic"]
+authenticated-quic-inbound-runtime = [
+    "managed-datagram-runtime",
+    "quic_packet_path",
+    "transport_quic",
+]
 vless = [
     "managed-stream-runtime",
     "tcp-tunnel-runtime",
@@ -35,10 +40,8 @@ vless = [
     "vless/reality",
 ]
 hysteria2 = [
-    "managed-datagram-runtime",
+    "authenticated-quic-inbound-runtime",
     "tcp-transport-session-runtime",
-    "quic_packet_path",
-    "transport_quic",
     "dep:hysteria2",
     "hysteria2/runtime",
 ]

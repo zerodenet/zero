@@ -1,15 +1,15 @@
 mod dispatch;
 mod model;
-#[cfg(feature = "vmess")]
+#[cfg(feature = "managed-stream-runtime")]
 mod no_client;
-#[cfg(all(test, feature = "vless"))]
+#[cfg(all(test, feature = "managed-stream-runtime"))]
 mod tests;
 
-#[cfg(feature = "vless")]
+#[cfg(feature = "managed-stream-runtime")]
 pub(super) use dispatch::dispatch_protocol_mux_route;
-#[cfg(feature = "vless")]
+#[cfg(feature = "managed-stream-runtime")]
 pub(super) use model::MuxRouteBridge;
-#[cfg(feature = "vmess")]
+#[cfg(feature = "managed-stream-runtime")]
 pub(crate) use model::NoClientMuxRouteDefaults;
-#[cfg(feature = "vmess")]
+#[cfg(feature = "managed-stream-runtime")]
 pub(crate) use no_client::dispatch_no_client_mux_route_request_with_defaults;

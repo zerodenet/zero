@@ -65,7 +65,7 @@ impl<'a> TrojanInboundUdpClientResponse<'a> {
 impl TrojanInboundUdpDispatchParts {
     fn into_inbound_dispatch(self) -> InboundUdpDispatch {
         InboundUdpDispatch::new(
-            ProtocolType::Trojan,
+            ProtocolType::new("trojan"),
             self.target,
             self.port,
             self.payload,

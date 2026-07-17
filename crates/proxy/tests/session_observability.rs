@@ -284,7 +284,7 @@ async fn tracks_udp_flow_with_tcp_session_observability_shape() {
     let active = probe.active_sessions();
     assert_eq!(active.len(), 1);
     assert_eq!(active[0].network, zero_core::Network::Udp);
-    assert_eq!(active[0].protocol, zero_core::ProtocolType::Socks5);
+    assert_eq!(active[0].protocol, zero_core::ProtocolType::new("socks5"));
     assert_eq!(active[0].mode, "rule");
     assert_eq!(active[0].inbound_tag.as_deref(), Some("socks-in"));
     assert_eq!(active[0].outbound_tag.as_deref(), Some("direct"));
@@ -341,7 +341,10 @@ async fn tracks_udp_flow_with_tcp_session_observability_shape() {
     let completed = probe.completed_sessions();
     assert!(!completed.is_empty());
     assert_eq!(completed[0].network, zero_core::Network::Udp);
-    assert_eq!(completed[0].protocol, zero_core::ProtocolType::Socks5);
+    assert_eq!(
+        completed[0].protocol,
+        zero_core::ProtocolType::new("socks5")
+    );
     assert_eq!(completed[0].mode, "rule");
     assert_eq!(completed[0].outbound_tag.as_deref(), Some("direct"));
     assert_eq!(completed[0].outcome.kind(), "direct_relayed");

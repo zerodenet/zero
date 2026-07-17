@@ -2,7 +2,7 @@ mod access;
 mod build;
 mod model;
 
-#[cfg(feature = "shadowsocks")]
+#[cfg(feature = "managed-datagram-runtime")]
 pub(crate) use build::{
     udp_datagram_source, udp_datagram_source_from_build, UdpDatagramSourceBuild,
 };

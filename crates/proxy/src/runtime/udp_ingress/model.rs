@@ -1,5 +1,3 @@
-use std::path::Path;
-
 use crate::protocol_registry::{TcpRuntimeServices, UdpRuntimeServices};
 
 #[derive(Clone)]
@@ -23,9 +21,5 @@ impl UdpIngressRuntime {
 
     pub(crate) fn runtime_services(&self) -> UdpRuntimeServices {
         self.services.clone()
-    }
-
-    pub(crate) fn source_dir(&self) -> Option<&Path> {
-        self.tcp_services.config().source_dir()
     }
 }

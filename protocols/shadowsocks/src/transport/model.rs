@@ -177,18 +177,6 @@ impl ShadowsocksManagedUdpFlowPlan {
         (self.tag, self.server, self.port, self.resume)
     }
 
-    pub fn into_start_plan(
-        self,
-    ) -> zero_transport::managed_udp::ManagedDatagramStartPlan<ShadowsocksManagedDatagramFlowResume>
-    {
-        zero_transport::managed_udp::ManagedDatagramStartPlan::new(
-            self.tag,
-            self.server,
-            self.port,
-            self.resume,
-        )
-    }
-
     pub fn into_resume(self) -> ShadowsocksManagedDatagramFlowResume {
         self.resume
     }

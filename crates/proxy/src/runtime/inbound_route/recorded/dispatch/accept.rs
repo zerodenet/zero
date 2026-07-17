@@ -1,8 +1,10 @@
 use core::future::Future;
 
-use zero_core::{InboundMuxServer, InboundMuxStreamRoute, Session, StreamUdpResponder};
+use zero_core::{
+    InboundFallbackReplay, InboundMuxServer, InboundMuxStreamRoute, InboundRouteAccept, Session,
+    StreamUdpResponder,
+};
 use zero_engine::EngineError;
-use zero_transport::protocol_inbound_route::{FallbackReplayToUpstream, RouteAcceptResult};
 
 use super::route::dispatch_recorded_protocol_mux_route_with_udp_logger;
 use crate::runtime::route_runtime::MuxSubstreamRuntime;
@@ -10,6 +12,7 @@ use crate::runtime::tcp_ingress::InboundProtocol;
 use crate::transport::{ClientStream, MeteredStream, RecordingStream, TcpRelayStream};
 
 use crate::runtime::inbound_route::recorded::model::RecordedProtocolMuxDispatch;
+use crate::runtime::{PreparedInboundFallback, PreparedInboundRouteAccept};
 
 pub(crate) async fn dispatch_recorded_protocol_mux_route_accept_result<
     R,
@@ -21,7 +24,7 @@ pub(crate) async fn dispatch_recorded_protocol_mux_route_accept_result<
     FUdp,
     FUdpFut,
 >(
-    result: RouteAcceptResult<R, FR>,
+    result: PreparedInboundRouteAccept<R, FR>,
     request: RecordedProtocolMuxDispatch<P>,
     spawn_tcp: FTcp,
     spawn_udp: FUdp,
@@ -38,7 +41,8 @@ where
         StreamUdpResponder<MeteredStream<S>>,
     R::MuxReader: Send,
     P: InboundProtocol<ClientStream = TcpRelayStream> + 'static,
-    FR: FallbackReplayToUpstream + 'static,
+    FR: InboundFallbackReplay + 'static,
+    FR::Stream: ClientStream,
     FTcp: FnMut(
             MuxSubstreamRuntime,
             Session,
@@ -54,16 +58,16 @@ where
     FUdpFut: Future<Output = ()> + Send + 'static,
 {
     match result {
-        RouteAcceptResult::Route(route) => {
+        InboundRouteAccept::Route(route) => {
             dispatch_recorded_protocol_mux_route_with_udp_logger(
                 route, request, spawn_tcp, spawn_udp,
             )
             .await
         }
-        RouteAcceptResult::Fallback(fallback) => {
+        InboundRouteAccept::Fallback(PreparedInboundFallback { target, replay }) => {
             request
                 .runtime
-                .relay_recorded_fallback_replay(fallback.config, fallback.replay)
+                .relay_recorded_fallback_replay(target, replay)
                 .await
         }
     }
@@ -79,7 +83,7 @@ pub(crate) async fn dispatch_optional_recorded_protocol_mux_route_accept_result<
     FUdp,
     FUdpFut,
 >(
-    result: Option<RouteAcceptResult<R, FR>>,
+    result: Option<PreparedInboundRouteAccept<R, FR>>,
     request: RecordedProtocolMuxDispatch<P>,
     spawn_tcp: FTcp,
     spawn_udp: FUdp,
@@ -96,7 +100,8 @@ where
         StreamUdpResponder<MeteredStream<S>>,
     R::MuxReader: Send,
     P: InboundProtocol<ClientStream = TcpRelayStream> + 'static,
-    FR: FallbackReplayToUpstream + 'static,
+    FR: InboundFallbackReplay + 'static,
+    FR::Stream: ClientStream,
     FTcp: FnMut(
             MuxSubstreamRuntime,
             Session,

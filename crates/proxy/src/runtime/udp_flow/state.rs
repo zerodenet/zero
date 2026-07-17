@@ -11,6 +11,6 @@ mod model;
 mod packet_path;
 
 pub(crate) use context::UdpFlowStartContext;
-#[cfg(feature = "socks5")]
+#[cfg(feature = "upstream-association-runtime")]
 pub(crate) use lifecycle::UpstreamUdpPoll;
 pub(crate) use model::UdpFlowState;

@@ -31,7 +31,7 @@ pub use plan::{
     TargetId, TargetKind, TargetNode, UrlTestGroupPlan,
 };
 pub use probe_trigger::{ProbeTrigger, ProbeTriggerRegistry};
-pub use resolve::{ResolvedLeafOutbound, ResolvedOutbound};
+pub use resolve::{OutboundIdentity, ResolvedLeafOutbound, ResolvedOutbound};
 pub use runtime::Engine;
 pub use runtime::RouteDecision;
 pub use session_lifecycle::SessionHandle;

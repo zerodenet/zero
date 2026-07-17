@@ -1,34 +1,57 @@
-use zero_engine::EngineError;
-
 use crate::adapters::shadowsocks::ShadowsocksAdapter;
-use crate::protocol_registry::ClaimedTcpOutboundLeaf;
-use crate::runtime::tcp_dispatch::operation::{
-    PreparedTcpConnectOperation, PreparedTcpRelayOperation, SocketTcpConnectOperation,
-    SocketTcpRelayOperation,
-};
-use crate::transport::TcpOutboundFailure;
+use crate::protocol_registry::{claim_socket_tcp_leaf, ClaimedTcpOutboundLeaf};
+use crate::runtime::tcp_dispatch::operation::SocketTcpHandshake;
 
-struct ClaimedShadowsocksTcpLeaf {
-    leaf: ::shadowsocks::transport::ShadowsocksTransportLeaf,
-}
-
-impl<'a> ClaimedTcpOutboundLeaf<'a> for ClaimedShadowsocksTcpLeaf {
-    fn prepare_tcp_connect(
-        &self,
-        _source_dir: Option<&std::path::Path>,
-    ) -> Result<Box<dyn PreparedTcpConnectOperation + 'a>, TcpOutboundFailure> {
-        Ok(Box::new(SocketTcpConnectOperation {
-            handshake: self.leaf.clone(),
-        }))
+#[async_trait::async_trait]
+impl SocketTcpHandshake for ::shadowsocks::transport::ShadowsocksTransportLeaf {
+    fn tag(&self) -> &str {
+        self.tag()
     }
 
-    fn prepare_tcp_relay_hop(
+    fn server(&self) -> &str {
+        self.server()
+    }
+
+    fn port(&self) -> u16 {
+        self.port()
+    }
+
+    fn connect_stage(&self) -> &'static str {
+        "connect_upstream_shadowsocks"
+    }
+
+    async fn open_tcp_stream(
         &self,
-        _source_dir: Option<&std::path::Path>,
-    ) -> Result<Box<dyn PreparedTcpRelayOperation + 'a>, EngineError> {
-        Ok(Box::new(SocketTcpRelayOperation {
-            handshake: self.leaf.clone(),
-        }))
+        services: crate::protocol_registry::TcpRuntimeServices,
+        session: &zero_core::Session,
+    ) -> Result<
+        (
+            crate::transport::TcpRelayStream,
+            zero_transport::StreamTraffic,
+        ),
+        zero_transport::RuntimeError,
+    > {
+        ::shadowsocks::transport::ShadowsocksTransportLeaf::open_tcp_stream(
+            self,
+            session,
+            move |server, port| {
+                let services = services.clone();
+                let server = server.to_owned();
+                async move { services.connect_upstream_owned(server, port).await }
+            },
+        )
+        .await
+    }
+
+    async fn open_tcp_relay_hop(
+        &self,
+        stream: crate::transport::TcpRelayStream,
+        session: &zero_core::Session,
+    ) -> Result<crate::transport::TcpRelayStream, zero_transport::RuntimeError> {
+        ::shadowsocks::transport::ShadowsocksTransportLeaf::open_tcp_relay_hop(
+            self, stream, session,
+        )
+        .await
     }
 }
 
@@ -37,6 +60,6 @@ impl ShadowsocksAdapter {
         &self,
         leaf: ::shadowsocks::transport::ShadowsocksTransportLeaf,
     ) -> Box<dyn ClaimedTcpOutboundLeaf<'a> + 'a> {
-        Box::new(ClaimedShadowsocksTcpLeaf { leaf })
+        claim_socket_tcp_leaf(leaf)
     }
 }

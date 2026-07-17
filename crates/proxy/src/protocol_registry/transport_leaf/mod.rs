@@ -1,11 +1,11 @@
-#[cfg(any(feature = "vless", feature = "vmess", feature = "trojan"))]
+#[cfg(any(feature = "tcp-tunnel-runtime", feature = "tcp-session-runtime"))]
 mod tcp;
-#[cfg(any(feature = "vless", feature = "vmess", feature = "trojan"))]
+#[cfg(feature = "managed-stream-runtime")]
 mod udp;
 
-#[cfg(any(feature = "vless", feature = "vmess", feature = "trojan"))]
+#[cfg(any(feature = "tcp-tunnel-runtime", feature = "tcp-session-runtime"))]
 pub(crate) use tcp::claim_transport_tcp_leaf;
-#[cfg(feature = "vless")]
+#[cfg(feature = "managed-stream-runtime")]
 pub(crate) use udp::claim_relay_two_stream_transport_udp_leaf;
-#[cfg(any(feature = "vless", feature = "vmess", feature = "trojan"))]
+#[cfg(feature = "managed-stream-runtime")]
 pub(crate) use udp::claim_transport_udp_leaf;

@@ -63,7 +63,7 @@ impl<'a> MieruInboundUdpClientResponse<'a> {
 
 impl MieruInboundUdpDispatchParts {
     pub fn protocol(&self) -> ProtocolType {
-        ProtocolType::Mieru
+        ProtocolType::new("mieru")
     }
 
     pub fn pipe_parts(&self) -> (&Address, u16, &[u8], Option<u64>) {
@@ -85,7 +85,7 @@ impl MieruInboundUdpDispatchParts {
 
     pub fn into_inbound_dispatch(self) -> InboundUdpDispatch {
         InboundUdpDispatch::new(
-            ProtocolType::Mieru,
+            ProtocolType::new("mieru"),
             self.target,
             self.port,
             self.payload,

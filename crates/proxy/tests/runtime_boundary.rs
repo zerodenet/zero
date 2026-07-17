@@ -64,8 +64,74 @@ fn read_module(path: &Path) -> String {
     combined
 }
 
+fn adapter_feature_names() -> Vec<String> {
+    let adapters = read(&proxy_src().join("adapters/mod.rs"));
+    let mut features = adapters
+        .lines()
+        .filter_map(|line| {
+            line.trim()
+                .strip_prefix("#[cfg(feature = \"")
+                .and_then(|feature| feature.strip_suffix("\")]"))
+                .map(str::to_owned)
+        })
+        .collect::<Vec<_>>();
+    features.sort_unstable();
+    features.dedup();
+    features
+}
+
+fn adapter_feature_tokens() -> Vec<String> {
+    adapter_feature_names()
+        .into_iter()
+        .map(|feature| format!("feature = \"{feature}\""))
+        .collect()
+}
+
+fn external_protocol_feature_names() -> Vec<String> {
+    adapter_feature_names()
+        .into_iter()
+        .filter(|feature| !matches!(feature.as_str(), "http" | "mixed"))
+        .collect()
+}
+
+fn protocol_crate_feature_names() -> Vec<String> {
+    let mut features = fs::read_dir(workspace_root().join("protocols"))
+        .expect("read protocol crates")
+        .filter_map(|entry| {
+            let path = entry.ok()?.path();
+            if !path.is_dir() {
+                return None;
+            }
+            path.file_name()?.to_str().map(str::to_owned)
+        })
+        .collect::<Vec<_>>();
+    features.push("mixed".to_owned());
+    features.sort_unstable();
+    features.dedup();
+    features
+}
+
 fn assert_sources_exclude(root: &Path, forbidden: &[&str]) {
     for path in rust_sources(root) {
+        let source = read(&path);
+        for token in forbidden {
+            assert!(
+                !source.contains(token),
+                "{} must not contain boundary token `{token}`",
+                path.display()
+            );
+        }
+    }
+}
+
+fn assert_non_test_sources_exclude(root: &Path, forbidden: &[&str]) {
+    for path in rust_sources(root) {
+        if path
+            .components()
+            .any(|component| component.as_os_str() == std::ffi::OsStr::new("tests"))
+        {
+            continue;
+        }
         let source = read(&path);
         for token in forbidden {
             assert!(
@@ -98,6 +164,355 @@ fn adapters_prepare_protocol_parts_but_do_not_own_runtime_execution() {
 }
 
 #[test]
+fn adapters_do_not_recover_engine_leaves_or_construct_runtime_facts() {
+    assert_sources_exclude(
+        &proxy_src().join("adapters"),
+        &[
+            "ResolvedLeafOutbound",
+            "OutboundLeafRuntime",
+            "config.outbounds",
+            ".outbounds.get(",
+            "find_outbound_leaf(",
+            "resolve_outbound(",
+            "struct VlessOutboundProjection",
+            "struct VmessOutboundProjection",
+            "struct TrojanOutboundProjection",
+        ],
+    );
+}
+
+#[test]
+fn transport_does_not_own_proxy_execution_contracts() {
+    assert_sources_exclude(
+        &workspace_root().join("crates/transport/src"),
+        &[
+            "PreparedTransportLeaf",
+            "PreparedTcpConnectOperation",
+            "PreparedTcpRelayOperation",
+            "PreparedUdpFlowOperation",
+            "PreparedUdpRelayOperation",
+            "ManagedDatagramStartPlan",
+            "ManagedStreamPacketBridgePlan",
+            "ProtocolManagedDatagramUdpResumeConnectionOps",
+            "ProtocolManagedDatagramSocketUdpResumeConnectionOps",
+            "ProtocolManagedTupleUdpFlowResumeConnectionOps",
+            "ProtocolManagedPacketUdpFlowResumeConnectionOps",
+            "ManagedTupleUdpConnectionOps",
+            "ManagedPacketUdpConnectionOps",
+            "ManagedDatagramConnectionOps",
+            "TCP_CONNECT_STAGE",
+            "UDP_DIRECT_STAGE",
+            "MISMATCH_MESSAGE",
+        ],
+    );
+    assert!(!workspace_root()
+        .join("crates/transport/src/inbound_quic.rs")
+        .exists());
+    assert!(!workspace_root()
+        .join("crates/transport/src/transport_plan.rs")
+        .exists());
+    assert!(!workspace_root()
+        .join("crates/transport/src/mux_stack.rs")
+        .exists());
+    assert!(!workspace_root()
+        .join("crates/transport/src/client_hello.rs")
+        .exists());
+
+    let quic_runtime = read(&proxy_src().join("runtime/inbound_operation/quic.rs"));
+    assert!(quic_runtime.contains("trait AuthenticatedQuicInboundProfile"));
+    assert!(quic_runtime.contains("trait AuthenticatedQuicInboundConnection"));
+
+    let hysteria2_adapter = read(&proxy_src().join("adapters/hysteria2/inbound.rs"));
+    assert!(hysteria2_adapter.contains("impl AuthenticatedQuicInboundProfile"));
+    assert!(hysteria2_adapter.contains("impl AuthenticatedQuicInboundConnection"));
+}
+
+#[test]
+fn engine_diagnostics_do_not_execute_network_io() {
+    let engine = read(&workspace_root().join("crates/engine/src/runtime/diagnostics.rs"));
+    for forbidden in [
+        "TcpStream::connect_timeout",
+        ".to_socket_addrs()",
+        "config.outbounds",
+        ".protocol.endpoint()",
+    ] {
+        assert!(
+            !engine.contains(forbidden),
+            "engine diagnostics must not execute network or project protocol endpoints via `{forbidden}`"
+        );
+    }
+
+    let proxy = read(&proxy_src().join("runtime/handle/command/diagnostics.rs"));
+    assert!(proxy.contains("execute_diagnostics_probe_target"));
+    assert!(proxy.contains("execute_diagnostics_dns_lookup"));
+    assert!(proxy.contains(".claim_outbound_leaf("));
+    assert!(!proxy.contains("config.outbounds"));
+}
+
+#[test]
+fn inbound_route_contracts_implementations_and_execution_have_distinct_owners() {
+    let core = read(&workspace_root().join("crates/core/src/inbound.rs"));
+    for contract in [
+        "pub trait InboundFallbackCapture",
+        "pub trait InboundFallbackReplay",
+        "pub enum InboundRouteAccept",
+    ] {
+        assert!(core.contains(contract));
+    }
+
+    let vless_inbound = read(&workspace_root().join("protocols/vless/src/inbound.rs"));
+    let vless_mux = read(&workspace_root().join("protocols/vless/src/mux.rs"));
+    assert!(vless_inbound.contains("impl<S> zero_core::InboundFallbackReplay"));
+    assert!(vless_mux.contains("impl InboundMuxTcpRelay"));
+    assert!(vless_mux.contains("impl InboundMuxUdpRelay"));
+
+    let fallback_runtime = read(&proxy_src().join("runtime/inbound_fallback.rs"));
+    let route_runtime = read_module(&proxy_src().join("runtime/inbound_route.rs"));
+    assert!(fallback_runtime.contains("relay_recorded_fallback_replay"));
+    assert!(route_runtime.contains("InboundRouteAccept"));
+
+    assert_sources_exclude(
+        &workspace_root().join("crates/transport/src"),
+        &[
+            "InboundFallbackReplay",
+            "InboundRouteAccept",
+            "InboundMuxTcpRelay",
+            "InboundMuxUdpRelay",
+        ],
+    );
+    assert_sources_exclude(
+        &proxy_src().join("adapters"),
+        &[
+            "impl InboundFallbackReplay",
+            "impl InboundMuxTcpRelay",
+            "impl InboundMuxUdpRelay",
+        ],
+    );
+}
+
+#[test]
+fn generic_proxy_sources_gate_capabilities_not_protocol_lists() {
+    let protocol_feature_tokens = adapter_feature_tokens();
+    let protocol_feature_refs = protocol_feature_tokens
+        .iter()
+        .map(String::as_str)
+        .collect::<Vec<_>>();
+    for root in [
+        proxy_src().join("runtime"),
+        proxy_src().join("protocol_registry"),
+        proxy_src().join("transport"),
+    ] {
+        assert_non_test_sources_exclude(&root, &protocol_feature_refs);
+    }
+    let logging = read(&proxy_src().join("logging.rs"));
+    for token in &protocol_feature_tokens {
+        assert!(!logging.contains(token.as_str()));
+    }
+
+    let main = read(&workspace_root().join("src/main.rs"));
+    for token in &protocol_feature_tokens {
+        assert!(!main.contains(token.as_str()));
+    }
+    assert!(main.contains("zero_proxy::compiled_protocol_features()"));
+}
+
+#[test]
+fn concrete_protocol_feature_gates_exist_only_in_adapters_and_registration() {
+    let protocol_feature_tokens = adapter_feature_tokens();
+    let proxy = proxy_src();
+    for path in rust_sources(&proxy) {
+        if path
+            .components()
+            .any(|component| component.as_os_str() == std::ffi::OsStr::new("tests"))
+        {
+            continue;
+        }
+        let source = read(&path);
+        if !protocol_feature_tokens
+            .iter()
+            .any(|token| source.contains(token.as_str()))
+        {
+            continue;
+        }
+        let relative = path.strip_prefix(&proxy).expect("proxy-relative path");
+        assert!(
+            relative == Path::new("register.rs") || relative.starts_with("adapters"),
+            "{} must gate generic code by capabilities instead of concrete protocols",
+            path.display()
+        );
+    }
+}
+
+#[test]
+fn protocol_crates_adapters_manifests_and_registration_share_one_feature_inventory() {
+    let adapter_features = adapter_feature_names();
+    assert_eq!(adapter_features, protocol_crate_feature_names());
+
+    let adapters = read(&proxy_src().join("adapters/mod.rs"));
+    let manifest = read(&workspace_root().join("crates/proxy/Cargo.toml"));
+    let root_manifest = read(&workspace_root().join("Cargo.toml"));
+    let full_start = root_manifest
+        .find("full = [")
+        .expect("root manifest full feature");
+    let full_feature = &root_manifest[full_start..];
+    let full_feature = &full_feature[..full_feature
+        .find(']')
+        .expect("root manifest full feature must close")];
+    let register = read(&proxy_src().join("register.rs"));
+    for feature in adapter_features {
+        let gate = format!("feature = \"{feature}\"");
+        assert_eq!(
+            adapters.matches(&gate).count(),
+            1,
+            "adapters/mod.rs must declare `{feature}` exactly once"
+        );
+        assert_eq!(
+            register.matches(&gate).count(),
+            1,
+            "register.rs must register `{feature}` exactly once"
+        );
+        assert!(
+            manifest
+                .lines()
+                .any(|line| line.trim_start().starts_with(&format!("{feature} ="))),
+            "proxy manifest must declare adapter feature `{feature}`"
+        );
+        let root_forward = root_manifest
+            .lines()
+            .find(|line| line.trim_start().starts_with(&format!("{feature} =")))
+            .unwrap_or_else(|| panic!("root manifest must forward protocol feature `{feature}`"));
+        assert!(
+            root_forward.contains(&format!("zero-proxy/{feature}")),
+            "root feature `{feature}` must forward to zero-proxy"
+        );
+        assert!(
+            full_feature.contains(&format!("\"{feature}\"")),
+            "root `full` feature must include protocol `{feature}`"
+        );
+        assert!(
+            register.contains(&format!("feature = \"{feature}\"")),
+            "register.rs must own the compiled entry for `{feature}`"
+        );
+    }
+}
+
+#[test]
+fn registration_uses_protocol_features_only_for_individual_entries() {
+    let register = read(&proxy_src().join("register.rs"));
+    let protocol_feature_tokens = adapter_feature_tokens();
+    let mut remaining = register.as_str();
+    while let Some(start) = remaining.find("#[cfg(any(") {
+        let block = &remaining[start..];
+        let end = block.find("))]").expect("cfg(any) block must close");
+        let block = &block[..end];
+        for token in &protocol_feature_tokens {
+            assert!(
+                !block.contains(token.as_str()),
+                "registration capability aggregation must not enumerate `{token}`"
+            );
+        }
+        remaining = &remaining[start + end + 3..];
+    }
+}
+
+#[test]
+fn production_protocol_registry_is_assembled_only_in_register() {
+    let proxy = proxy_src();
+    for path in rust_sources(&proxy) {
+        let relative = path.strip_prefix(&proxy).expect("proxy-relative path");
+        if relative == Path::new("register.rs")
+            || relative == Path::new("protocol_registry/registry/build.rs")
+            || relative
+                .components()
+                .any(|component| component.as_os_str() == "tests")
+            || relative.file_name().is_some_and(|name| name == "tests.rs")
+        {
+            continue;
+        }
+
+        let source = read(&path);
+        for forbidden in [
+            "ProtocolRegistry::default()",
+            ".register_core_capability(",
+            ".register_capability(",
+            ".register_upstream_capability(",
+            ".register_managed_capability(",
+        ] {
+            assert!(
+                !source.contains(forbidden),
+                "{} must not assemble protocol capabilities outside register.rs",
+                path.display()
+            );
+        }
+    }
+}
+
+#[test]
+fn engine_resolved_proxy_leaf_carries_only_opaque_identity() {
+    let resolve = read(&workspace_root().join("crates/engine/src/resolve.rs"));
+    let plan = read(&workspace_root().join("crates/engine/src/plan.rs"));
+    assert!(resolve.contains("Proxy { identity: OutboundIdentity }"));
+    assert!(!resolve.contains("pub fn protocol_name(&self)"));
+    assert!(!resolve.contains("pub fn proxy_endpoint(&self)"));
+    assert!(!resolve.contains("outbound_index: usize,"));
+    assert!(!resolve.contains("protocol: &'static str,"));
+    assert!(!resolve.contains("endpoint: Option<(&'a str, u16)>,"));
+    assert!(!plan.contains("protocol: &'static str,"));
+    assert!(!plan.contains("endpoint: Option<OutboundEndpoint>,"));
+}
+
+#[test]
+fn protocol_identity_is_open_and_engine_does_not_enumerate_protocols() {
+    let session = read(&workspace_root().join("crates/core/src/session.rs"));
+    assert!(session.contains("pub struct ProtocolType(&'static str);"));
+    assert!(session.contains("pub const fn new(name: &'static str) -> Self"));
+    assert!(session.contains("pub const fn as_str(self) -> &'static str"));
+    assert!(!session.contains("pub enum ProtocolType"));
+    let session_lower = session.to_ascii_lowercase();
+    for protocol in adapter_feature_names() {
+        assert!(!session_lower.contains(protocol.as_str()));
+    }
+    assert_sources_exclude(
+        &workspace_root().join("crates/engine/src"),
+        &["ProtocolType::"],
+    );
+}
+
+#[test]
+fn protocol_metadata_is_owned_by_registered_capabilities_not_a_secondary_catalog() {
+    assert!(!proxy_src().join("protocol_catalog.rs").exists());
+
+    let direct = read(&proxy_src().join("adapters/direct.rs"));
+    let mixed = read(&proxy_src().join("adapters/mixed.rs"));
+    let registry_metadata = read(&proxy_src().join("protocol_registry/registry/metadata.rs"));
+
+    assert!(direct.contains("impl ProtocolMetadata for DirectAdapter"));
+    assert!(mixed.contains("impl ProtocolMetadata for MixedAdapter"));
+    assert!(registry_metadata.contains("fn block_descriptor()"));
+    assert!(!registry_metadata.contains("match protocol"));
+}
+
+#[test]
+fn protocol_session_identities_are_assigned_by_protocol_crates_not_proxy_runtime() {
+    for path in rust_sources(&proxy_src()) {
+        if path
+            .components()
+            .any(|component| component.as_os_str() == std::ffi::OsStr::new("tests"))
+            || path
+                .file_name()
+                .is_some_and(|name| name == std::ffi::OsStr::new("tests.rs"))
+        {
+            continue;
+        }
+        assert!(
+            !read(&path).contains("ProtocolType::new"),
+            "{} must preserve protocol-owned session identity",
+            path.display()
+        );
+    }
+}
+
+#[test]
 fn runtime_operations_are_protocol_neutral() {
     let operation_files = [
         "runtime/inbound_operation.rs",
@@ -105,21 +520,13 @@ fn runtime_operations_are_protocol_neutral() {
         "runtime/udp_dispatch/operation.rs",
         "runtime/udp_dispatch/packet_path_operation.rs",
     ];
-    let protocol_names = [
-        "Vless",
-        "Vmess",
-        "Trojan",
-        "Socks5",
-        "Shadowsocks",
-        "Mieru",
-        "Hysteria2",
-    ];
+    let protocol_names = external_protocol_feature_names();
     for relative in operation_files {
         let path = proxy_src().join(relative);
-        let source = read_module(&path);
-        for protocol in protocol_names {
+        let source = read_module(&path).to_ascii_lowercase();
+        for protocol in &protocol_names {
             assert!(
-                !source.contains(protocol),
+                !source.contains(protocol.as_str()),
                 "{} must execute capabilities without concrete `{protocol}` types",
                 path.display()
             );
@@ -133,6 +540,23 @@ fn tcp_runtime_dispatch_does_not_retain_engine_leaf_types() {
         &proxy_src().join("runtime/tcp_dispatch"),
         &["ResolvedLeafOutbound"],
     );
+}
+
+#[test]
+fn tcp_prepared_operations_are_gated_by_tcp_capabilities_not_udp_runtime() {
+    let operations = read(&proxy_src().join("runtime/tcp_dispatch/operation.rs"));
+    assert!(operations.contains("feature = \"tcp-tunnel-runtime\""));
+    assert!(operations.contains("feature = \"tcp-session-runtime\""));
+    assert!(operations.contains("feature = \"tcp-transport-session-runtime\""));
+    assert!(!operations.contains("feature = \"udp-runtime\""));
+
+    let transport_leaf = read(&proxy_src().join("protocol_registry/transport_leaf/mod.rs"));
+    assert!(transport_leaf.contains("feature = \"tcp-tunnel-runtime\""));
+    assert!(transport_leaf.contains("feature = \"tcp-session-runtime\""));
+    let tcp_claim = read(&proxy_src().join("protocol_registry/transport_leaf/tcp.rs"));
+    assert!(!tcp_claim.contains("feature = \"udp-runtime\""));
+    let prepared = read(&proxy_src().join("runtime/transport_leaf.rs"));
+    assert!(!prepared.contains("feature = \"udp-runtime\""));
 }
 
 #[test]
@@ -254,7 +678,8 @@ fn capability_surface_is_split_and_context_is_narrow() {
     assert!(!capability.contains("fn claim_udp_packet_path_leaf"));
     assert!(capability.contains("BoundInbound"));
     assert!(!capability.contains("fn runtime(&self) -> OutboundLeafRuntime;"));
-    assert!(capability.contains("pub(crate) runtime: OutboundLeafRuntime,"));
+    assert!(capability.contains("pub(crate) tcp_path: TcpPathCategory,"));
+    assert!(!capability.contains("OutboundLeafRuntime"));
     assert!(!capability.contains("fn claims_outbound_leaf("));
     assert!(!capability.contains("fn outbound_leaf_runtime("));
     assert!(context.contains(
@@ -405,7 +830,9 @@ fn adapter_runtime_service_access_does_not_expose_proxy() {
         .map(|path| read(&path))
         .collect::<String>();
     assert!(!adapters.contains("ctx.proxy()"));
-    assert!(!adapters.contains("Proxy {"));
+    assert!(!adapters.contains("use crate::runtime::Proxy"));
+    assert!(!adapters.contains("proxy: Proxy"));
+    assert!(!adapters.contains("|proxy: Proxy"));
 }
 
 #[test]
@@ -1402,6 +1829,16 @@ fn mieru_adapter_uses_protocol_outbound_option_refs() {
 }
 
 #[test]
+fn mieru_adapter_consumes_the_protocol_owned_managed_connector_flow_type() {
+    let adapter = read(&proxy_src().join("adapters/mieru/udp.rs"));
+    assert!(adapter.contains("::mieru::transport::MieruManagedUdpConnectorFlow"));
+    assert!(!adapter.contains("ManagedConnectorFlow<::mieru::udp::MieruUdpConnectorFlow>"));
+
+    let protocol = read(&workspace_root().join("protocols/mieru/src/transport/managed_udp.rs"));
+    assert!(protocol.contains("pub type MieruManagedUdpConnectorFlow"));
+}
+
+#[test]
 fn mieru_inbound_projection_happens_at_adapter_boundary() {
     let adapter = read(&proxy_src().join("adapters/mieru.rs"));
     for required in [
@@ -1586,8 +2023,8 @@ fn trojan_inbound_projection_happens_at_adapter_boundary() {
 }
 
 #[test]
-fn heavy_transport_bridge_adapters_centralize_outbound_projection() {
-    for (relative, helper, config_variant, build_options) in [
+fn heavy_transport_bridge_adapters_use_protocol_owned_outbound_options_directly() {
+    for (relative, removed_projection, config_variant, build_options) in [
         (
             "adapters/vless.rs",
             "VlessOutboundProjection",
@@ -1609,25 +2046,29 @@ fn heavy_transport_bridge_adapters_centralize_outbound_projection() {
     ] {
         let source = read(&proxy_src().join(relative));
         assert!(
-            source.contains(&format!("struct {helper}")),
-            "{relative} should keep one named outbound projection helper `{helper}`"
+            !source.contains(&format!("struct {removed_projection}")),
+            "{relative} must not duplicate protocol-owned options in `{removed_projection}`"
         );
         assert!(
-            source.contains("fn from_config("),
-            "{relative} should centralize typed config materialization behind `from_config`"
-        );
-        assert!(
-            source.contains("fn build_options("),
-            "{relative} should centralize protocol-owned outbound build bundle construction"
+            source.contains("fn outbound_options<'a>("),
+            "{relative} should project config directly into the protocol-owned option surface"
         );
         assert!(
             source.contains("fn claim_outbound_leaf_impl"),
-            "{relative} should expose one claim-time outbound helper that reuses the shared projection"
+            "{relative} should expose one claim-time outbound helper"
+        );
+        assert!(
+            source.contains("OutboundLeafInput::Proxy { outbound, endpoint }"),
+            "{relative} should consume the registry-resolved endpoint"
+        );
+        assert!(
+            !source.contains("fn endpoint(&self)"),
+            "{relative} must not repeat endpoint projection after registry claim"
         );
         assert_eq!(
             source.matches(config_variant).count(),
             1,
-            "{relative} should match its protocol config variant in one projection helper"
+            "{relative} should match its protocol config variant in one thin option projection"
         );
         assert_eq!(
             source.matches(build_options).count(),
@@ -2054,7 +2495,7 @@ fn udp_ingress_runtime_collapses_proxy_and_services_for_session_loops() {
     assert!(!route_runtime.contains("from_proxy("));
     assert!(!route_runtime.contains("fallback_proxy"));
     assert!(!route_runtime.contains("proxy: Proxy"));
-    #[cfg(any(feature = "vless", feature = "vmess"))]
+    #[cfg(feature = "managed-stream-runtime")]
     assert!(route_runtime.contains("struct MuxSubstreamRuntime"));
 
     let inbound_operation = read_module(&proxy_src().join("runtime/inbound_operation.rs"));
@@ -3812,7 +4253,6 @@ fn udp_flow_managed_connection_tuple_root_stays_facade_only() {
         "pub(crate) fn managed_tuple_udp_connection(",
         "pub(crate) trait ManagedTupleUdpFlowConnection",
         "pub(crate) fn managed_tuple_udp_connection_from_flow<",
-        "pub(crate) fn managed_tuple_udp_connection_from_ops<",
     ] {
         assert!(
             !tuple_root.contains(forbidden),
@@ -3825,7 +4265,6 @@ fn udp_flow_managed_connection_tuple_root_stays_facade_only() {
         "fn managed_tuple_udp_connection(",
         "pub(crate) trait ManagedTupleUdpFlowConnection",
         "pub(crate) fn managed_tuple_udp_connection_from_flow<",
-        "pub(crate) fn managed_tuple_udp_connection_from_ops<",
     ] {
         assert!(
             tuple.contains(expected),
@@ -4216,15 +4655,16 @@ fn claimed_outbound_leaf_owns_capability_preparation() {
     assert!(!outbound.contains("pub(crate) struct ClaimedOutboundLeaf<'a> {\n    leaf:"));
     assert!(!outbound.contains("fn new(\n        _leaf: ResolvedLeafOutbound<'a>,"));
     assert!(!outbound.contains("fn new(\r\n        _leaf: ResolvedLeafOutbound<'a>,"));
-    assert!(outbound.contains("leaf.protocol_name()"));
-    assert!(outbound.contains("entry.support.name() == protocol"));
+    assert!(!outbound.contains("leaf.protocol_name()"));
+    assert!(outbound.contains("let protocol = outbound.protocol.protocol_name();"));
+    assert!(outbound.contains("ResolvedLeafOutbound::Proxy { identity }"));
     assert!(!outbound.contains("for entry in &self.entries {\n            if let Some(claimed) = entry.tcp.claim_tcp_outbound_leaf(leaf.clone()) {"));
     assert!(!outbound.contains("for entry in &self.entries {\r\n            if let Some(claimed) = entry.tcp.claim_tcp_outbound_leaf(leaf.clone()) {"));
     assert!(capability.contains("struct OutboundLeafClaim<'a>"));
     assert!(!capability.contains("trait OutboundLeafClaimCapability"));
     assert!(registry_mod.contains("trait OutboundLeafClaimer"));
     assert!(build.contains("type OutboundLeafClaimFn"));
-    assert!(outbound.contains(".claim_outbound_leaf(protocol, leaf.clone())"));
+    assert!(outbound.contains("entry.outbound.claim_outbound_leaf(input)"));
     assert!(outbound.contains("fn claim_outbound_hooks<'a>("));
     assert!(!outbound.contains("claim_tcp_outbound_leaf(leaf.clone())"));
     assert!(!outbound.contains("claim_udp_flow_leaf(leaf.clone())"));
@@ -4317,12 +4757,32 @@ fn transport_bridge_adapters_offer_claim_time_udp_projection() {
 
 #[test]
 fn managed_stream_udp_handlers_key_off_resume_metadata_not_bridge_types() {
-    let managed_udp = read(&workspace_root().join("crates/transport/src/managed_udp.rs"));
+    let managed_udp_traits = read(&workspace_root().join("crates/traits/src/udp_flow.rs"));
+    let transport_lib = read(&workspace_root().join("crates/transport/src/lib.rs"));
+    let proxy_connector =
+        read(&proxy_src().join("runtime/udp_flow/managed/stream_manager/connector.rs"));
     let handler =
         read(&proxy_src().join("runtime/udp_flow/managed/bridge/stream_packet/handler.rs"));
-    assert!(!managed_udp.contains("ProtocolManagedStreamUdpBridgeHandlerMetadata"));
-    assert!(managed_udp.contains("ProtocolManagedStreamUdpLeafOps"));
-    assert!(managed_udp.contains("ProtocolRelayTwoStreamManagedUdpLeafOps"));
+    assert!(!managed_udp_traits.contains("ProtocolManagedStreamUdpBridgeHandlerMetadata"));
+    assert!(managed_udp_traits.contains("ProtocolUdpFlowLeaf"));
+    assert!(managed_udp_traits.contains("ProtocolRelayTwoStreamUdpFlowLeaf"));
+    assert!(!managed_udp_traits.contains("ManagedStream"));
+    assert!(!workspace_root()
+        .join("crates/traits/src/managed_udp.rs")
+        .exists());
+    assert!(!managed_udp_traits.contains("ESTABLISH_STAGE"));
+    assert!(!managed_udp_traits.contains("MISMATCH_MESSAGE"));
+    assert!(!managed_udp_traits.contains("ProtocolManagedStreamFlowStages"));
+    assert!(!managed_udp_traits.contains("ManagedTupleUdpResume"));
+    assert!(!managed_udp_traits.contains("ManagedPacketUdpResume"));
+    assert!(!managed_udp_traits.contains("ManagedConnectorFlow"));
+    assert!(!managed_udp_traits.contains("ProtocolManagedStreamConnectorParts"));
+    assert!(!transport_lib.contains("pub mod managed_udp"));
+    assert!(!workspace_root()
+        .join("crates/transport/src/managed_udp.rs")
+        .exists());
+    assert!(proxy_connector.contains("struct ManagedTupleUdpResume"));
+    assert!(proxy_connector.contains("struct ManagedPacketUdpResume"));
     assert!(handler.contains("managed_stream_udp_handler_for_resume"));
     assert!(!handler.contains("managed_stream_udp_handler_for_bridge"));
 
@@ -4340,46 +4800,80 @@ fn managed_stream_udp_handlers_key_off_resume_metadata_not_bridge_types() {
             !source.contains("managed_stream_udp_handler_for_bridge::<"),
             "{relative} must not route managed stream UDP handler registration through bridge types"
         );
+        assert!(source.contains("type RuntimeResume = Managed"));
+        assert!(source.contains("impl ManagedStreamConnectorParts for"));
+    }
+
+    for relative in [
+        "protocols/vless/src/transport/managed_udp.rs",
+        "protocols/vmess/src/transport/managed_udp.rs",
+        "protocols/trojan/src/transport/managed_udp.rs",
+        "protocols/mieru/src/transport/managed_udp.rs",
+    ] {
+        let source = read(&workspace_root().join(relative));
+        assert!(!source.contains("ManagedTupleUdpResume"));
+        assert!(!source.contains("ManagedPacketUdpResume"));
+        assert!(!source.contains("ManagedConnectorFlowOps"));
+        assert!(!source.contains("ManagedStreamUdpResume"));
     }
 }
 
 #[test]
-fn transport_leaf_metadata_owns_live_runtime_stage_constants() {
-    let outbound_leaf = read(&workspace_root().join("crates/transport/src/outbound_leaf.rs"));
-    assert!(outbound_leaf.contains("pub trait ProtocolTcpTransportLeafMetadata"));
-    assert!(outbound_leaf.contains("pub trait ProtocolTcpTransportLeafOps"));
-    assert!(outbound_leaf.contains("pub trait ProtocolUdpTransportLeafMetadata"));
-    assert!(outbound_leaf.contains("pub trait ProtocolRelayTwoStreamUdpTransportLeafMetadata"));
-    assert!(!outbound_leaf.contains("pub trait ProtocolTcpTransportBridgeMetadata"));
-    assert!(!outbound_leaf.contains("pub trait ProtocolUdpTransportBridgeMetadata"));
-    assert!(!outbound_leaf.contains("pub trait ProtocolRelayTwoStreamUdpTransportBridgeMetadata"));
-    assert!(!outbound_leaf.contains("pub trait ProtocolTcpTransportBridgeOps"));
-    assert!(!outbound_leaf.contains("TCP_INVALID_CONNECT_LEAF_STAGE"));
-    assert!(!outbound_leaf.contains("TCP_INVALID_RELAY_LEAF_STAGE"));
-    assert!(!outbound_leaf.contains("EXPECTED_OUTBOUND_LEAF"));
-
-    let vless_leaf = read(&workspace_root().join("protocols/vless/src/transport/leaf.rs"));
-    assert!(vless_leaf.contains("impl ProtocolTcpTransportLeafMetadata for VlessOutboundLeaf"));
-    assert!(vless_leaf.contains("impl ProtocolUdpTransportLeafMetadata for VlessOutboundLeaf"));
-    assert!(vless_leaf
-        .contains("impl ProtocolRelayTwoStreamUdpTransportLeafMetadata for VlessOutboundLeaf"));
-    assert!(vless_leaf.contains("impl ProtocolTcpTransportLeafOps for VlessOutboundLeaf"));
-    assert!(vless_leaf.contains("impl ProtocolManagedStreamUdpLeafOps for VlessOutboundLeaf"));
-    assert!(
-        vless_leaf.contains("impl ProtocolRelayTwoStreamManagedUdpLeafOps for VlessOutboundLeaf")
+fn proxy_owns_transport_leaf_execution_contracts_and_stages() {
+    let transport_lib = read(&workspace_root().join("crates/transport/src/lib.rs"));
+    let proxy_contract = read(&proxy_src().join("runtime/transport_leaf.rs"));
+    assert!(!transport_lib.contains("pub mod outbound_leaf"));
+    assert!(!workspace_root()
+        .join("crates/transport/src/outbound_leaf.rs")
+        .exists());
+    assert!(!proxy_src()
+        .join("protocol_registry/transport_leaf/prepared.rs")
+        .exists());
+    assert_sources_exclude(
+        &proxy_src().join("protocol_registry/transport_leaf"),
+        &["trait ProxyTransport"],
     );
+    assert!(proxy_contract.contains("pub(crate) trait ProxyTransportTcpLeaf"));
+    assert!(proxy_contract.contains("pub(crate) trait ProxyTransportUdpLeaf"));
+    assert!(proxy_contract.contains("pub(crate) trait ProxyRelayTwoStreamTransportLeaf"));
+    assert!(proxy_contract.contains("const TCP_CONNECT_STAGE"));
+    assert!(proxy_contract.contains("const UDP_DIRECT_STAGE"));
 
-    let vmess_leaf = read(&workspace_root().join("protocols/vmess/src/transport/leaf.rs"));
-    assert!(vmess_leaf.contains("impl ProtocolTcpTransportLeafMetadata for VmessOutboundLeaf"));
-    assert!(vmess_leaf.contains("impl ProtocolUdpTransportLeafMetadata for VmessOutboundLeaf"));
-    assert!(vmess_leaf.contains("impl ProtocolTcpTransportLeafOps for VmessOutboundLeaf"));
-    assert!(vmess_leaf.contains("impl ProtocolManagedStreamUdpLeafOps for VmessOutboundLeaf"));
+    for relative in [
+        "protocol_registry/transport_leaf/udp.rs",
+        "runtime/transport_leaf.rs",
+        "runtime/udp_dispatch/operation/transport.rs",
+    ] {
+        let source = read(&proxy_src().join(relative));
+        assert!(!source.contains("ProtocolUdpFlowLeaf"));
+        assert!(!source.contains("ProtocolRelayTwoStreamUdpFlowLeaf"));
+    }
 
-    let trojan_leaf = read(&workspace_root().join("protocols/trojan/src/transport/leaf.rs"));
-    assert!(trojan_leaf.contains("impl ProtocolTcpTransportLeafMetadata for TrojanOutboundLeaf"));
-    assert!(trojan_leaf.contains("impl ProtocolUdpTransportLeafMetadata for TrojanOutboundLeaf"));
-    assert!(trojan_leaf.contains("impl ProtocolTcpTransportLeafOps for TrojanOutboundLeaf"));
-    assert!(trojan_leaf.contains("impl ProtocolManagedStreamUdpLeafOps for TrojanOutboundLeaf"));
+    for (adapter, leaf, managed_trait) in [
+        (
+            "adapters/vless.rs",
+            "protocols/vless/src/transport/leaf.rs",
+            "impl ProtocolUdpFlowLeaf for VlessOutboundLeaf",
+        ),
+        (
+            "adapters/vmess.rs",
+            "protocols/vmess/src/transport/leaf.rs",
+            "impl ProtocolUdpFlowLeaf for VmessOutboundLeaf",
+        ),
+        (
+            "adapters/trojan.rs",
+            "protocols/trojan/src/transport/leaf.rs",
+            "impl ProtocolUdpFlowLeaf for TrojanOutboundLeaf",
+        ),
+    ] {
+        let adapter_source = read(&proxy_src().join(adapter));
+        let leaf_source = read(&workspace_root().join(leaf));
+        assert!(adapter_source.contains("impl ProxyTransportTcpLeaf"));
+        assert!(adapter_source.contains("impl ProxyTransportUdpLeaf"));
+        assert!(leaf_source.contains(managed_trait));
+        assert!(!leaf_source.contains("TCP_CONNECT_STAGE"));
+        assert!(!leaf_source.contains("UDP_DIRECT_STAGE"));
+    }
 
     for relative in [
         "protocols/vless/src/transport.rs",
@@ -4445,12 +4939,15 @@ fn non_transport_bridge_adapters_offer_claim_time_tcp_projection() {
         );
     }
 
-    for relative in [
-        "adapters/direct/tcp.rs",
-        "adapters/socks5/tcp.rs",
-        "adapters/shadowsocks/tcp.rs",
-        "adapters/hysteria2/tcp.rs",
-        "adapters/mieru/tcp.rs",
+    let direct = read(&proxy_src().join("adapters/direct/tcp.rs"));
+    assert!(direct.contains("ClaimedTcpOutboundLeaf"));
+    assert!(direct.contains("claim_tcp_outbound_leaf_impl"));
+
+    for (relative, shared_claim) in [
+        ("adapters/socks5/tcp.rs", "claim_socket_tcp_leaf"),
+        ("adapters/shadowsocks/tcp.rs", "claim_socket_tcp_leaf"),
+        ("adapters/hysteria2/tcp.rs", "claim_session_tcp_leaf"),
+        ("adapters/mieru/tcp.rs", "claim_socket_tcp_leaf"),
     ] {
         let source = read(&proxy_src().join(relative));
         assert!(
@@ -4460,6 +4957,14 @@ fn non_transport_bridge_adapters_offer_claim_time_tcp_projection() {
         assert!(
             source.contains("claim_tcp_outbound_leaf_impl"),
             "{relative} should own the TCP claim-time projection helper"
+        );
+        assert!(
+            source.contains(shared_claim),
+            "{relative} should delegate generic claim wrapping through `{shared_claim}`"
+        );
+        assert!(
+            !source.contains("struct Claimed"),
+            "{relative} must not recreate generic claimed TCP wrappers"
         );
     }
 }

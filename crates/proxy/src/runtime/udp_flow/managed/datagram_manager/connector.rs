@@ -1,9 +1,15 @@
-#[cfg(feature = "hysteria2")]
+#[cfg(feature = "managed-datagram-runtime")]
 mod flow;
-#[cfg(feature = "shadowsocks")]
+#[cfg(feature = "managed-datagram-runtime")]
 mod socket;
 
-#[cfg(feature = "hysteria2")]
-pub(crate) use flow::{managed_datagram_handler_box, ManagedDatagramFlowConnector};
-#[cfg(feature = "shadowsocks")]
-pub(crate) use socket::{managed_datagram_socket_handler_box, ManagedDatagramSocketFlowConnector};
+#[cfg(feature = "managed-datagram-runtime")]
+pub(crate) use flow::{
+    managed_datagram_handler_box, ManagedDatagramConnectorFlow, ManagedDatagramFlowConnector,
+    ManagedDatagramResumeConnector,
+};
+#[cfg(feature = "managed-datagram-runtime")]
+pub(crate) use socket::{
+    managed_datagram_socket_handler_box, ManagedDatagramSocketConnectorFlow,
+    ManagedDatagramSocketFlowConnector, ManagedDatagramSocketResumeConnector,
+};

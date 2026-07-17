@@ -1,6 +1,6 @@
 use std::net::SocketAddr;
 
-#[cfg(feature = "socks5")]
+#[cfg(feature = "upstream-association-runtime")]
 use zero_core::Address;
 
 use crate::runtime::udp_dispatch::UdpDispatch;
@@ -12,7 +12,7 @@ impl UdpDispatch {
     }
 
     /// Look up a session ID by target+port only, regardless of outbound type.
-    #[cfg(feature = "socks5")]
+    #[cfg(feature = "upstream-association-runtime")]
     pub(crate) fn session_id_by_target(
         &self,
         target: &Address,
@@ -24,7 +24,7 @@ impl UdpDispatch {
     }
 
     /// Look up the session ID for an upstream response (requires outbound tag).
-    #[cfg(feature = "socks5")]
+    #[cfg(feature = "upstream-association-runtime")]
     pub(crate) fn upstream_response_session_id(
         &self,
         outbound_tag: &str,

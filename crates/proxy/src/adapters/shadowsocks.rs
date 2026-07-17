@@ -3,14 +3,14 @@ use ::shadowsocks::transport::{
     ShadowsocksTransportLeaf,
 };
 use zero_config::{InboundConfig, InboundProtocolConfig, OutboundProtocolConfig};
-use zero_engine::{EngineError, ResolvedLeafOutbound};
+use zero_engine::EngineError;
 use zero_traits::{ProtocolCapabilityDescriptor, ProtocolMetadata};
 
 use crate::adapters::identity::{
     named_protocol_supports_inbound, named_protocol_supports_outbound, NamedProtocolAdapter,
 };
 use crate::protocol_registry::{
-    InboundListenerCapability, ManagedUdpHandlerProvider, OutboundLeafClaim, OutboundLeafRuntime,
+    InboundListenerCapability, ManagedUdpHandlerProvider, OutboundLeafClaim, OutboundLeafInput,
     ProtocolSupportCapability, TcpOutboundCapability, UdpFlowCapability, UdpPacketPathCapability,
 };
 use crate::runtime::path::TcpPathCategory;
@@ -58,19 +58,15 @@ impl NamedProtocolAdapter for ShadowsocksAdapter {
 impl ShadowsocksAdapter {
     pub(crate) fn claim_outbound_leaf_impl<'a>(
         &self,
-        protocol: Option<&'a OutboundProtocolConfig>,
-        leaf: ResolvedLeafOutbound<'a>,
+        input: OutboundLeafInput<'a>,
     ) -> Option<OutboundLeafClaim<'a>> {
-        let leaf = transport_leaf(leaf.tag()?, protocol?)?;
-        let runtime = OutboundLeafRuntime::proxy(
-            leaf.tag(),
-            leaf.server(),
-            leaf.port(),
-            TcpPathCategory::Session,
-        );
+        let OutboundLeafInput::Proxy { outbound, .. } = input else {
+            return None;
+        };
+        let leaf = transport_leaf(outbound.tag(), &outbound.protocol)?;
         let tcp = self.claim_tcp_outbound_leaf_impl(leaf.clone());
         Some(OutboundLeafClaim {
-            runtime,
+            tcp_path: TcpPathCategory::Session,
             tcp,
             udp: Some(self.claim_udp_flow_leaf_impl(leaf.clone())),
             packet_path: self.claim_udp_packet_path_leaf_impl(leaf),

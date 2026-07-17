@@ -35,7 +35,10 @@ impl UdpIngressRuntime {
         }
     }
 
-    #[cfg(any(feature = "socks5", feature = "vless"))]
+    #[cfg(any(
+        feature = "upstream-association-runtime",
+        feature = "managed-stream-runtime"
+    ))]
     pub(crate) fn record_session_inbound_traffic(
         &self,
         session_id: u64,

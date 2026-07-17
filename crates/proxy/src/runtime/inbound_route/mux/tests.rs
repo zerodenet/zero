@@ -105,7 +105,7 @@ async fn mux_route_preserves_udp_session_and_inbound_tag() {
         Address::Domain("mux-udp-target.test".to_owned()),
         5353,
         Network::Udp,
-        ProtocolType::Vless,
+        ProtocolType::new("vless"),
     );
     let expected = session.clone();
 
@@ -129,7 +129,7 @@ async fn mux_route_preserves_udp_session_and_inbound_tag() {
                 assert_eq!(actual.target, expected.target);
                 assert_eq!(actual.port, expected.port);
                 assert_eq!(actual.network, Network::Udp);
-                assert_eq!(actual.protocol, ProtocolType::Vless);
+                assert_eq!(actual.protocol, ProtocolType::new("vless"));
                 assert_eq!(runtime.inbound_tag(), "vless-mux-in");
                 Ok(())
             },

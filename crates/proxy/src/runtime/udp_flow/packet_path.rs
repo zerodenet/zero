@@ -9,13 +9,16 @@ mod context;
 mod datagram;
 mod snapshot;
 
-#[cfg(any(feature = "socks5", feature = "shadowsocks", feature = "hysteria2"))]
+#[cfg(any(
+    feature = "upstream-association-runtime",
+    feature = "managed-datagram-runtime"
+))]
 #[allow(unused_imports)]
 pub(crate) use carrier::{
     packet_path_carrier_descriptor, packet_path_carrier_descriptor_from_build,
     PacketPathCarrierDescriptorBuild,
 };
-#[cfg(feature = "socks5")]
+#[cfg(feature = "upstream-association-runtime")]
 #[allow(unused_imports)]
 pub(crate) use carrier::{packet_path_payload_carrier, PacketPathPayloadTransport};
 #[allow(unused_imports)]
@@ -23,7 +26,7 @@ pub(crate) use carrier::{PacketPathCarrier, PacketPathCarrierDescriptor};
 #[cfg(feature = "udp-runtime")]
 #[allow(unused_imports)]
 pub(crate) use context::{ChainTask, UdpFlowContext, UdpPacketRef};
-#[cfg(feature = "shadowsocks")]
+#[cfg(feature = "managed-datagram-runtime")]
 #[allow(unused_imports)]
 pub(crate) use datagram::{
     udp_datagram_source, udp_datagram_source_from_build, UdpDatagramSourceBuild,

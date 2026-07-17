@@ -660,7 +660,7 @@ fn mux_cool_session() -> Session {
         Address::Domain(crate::shared::MUX_COOL_DOMAIN.to_owned()),
         crate::shared::MUX_COOL_PORT,
         Network::Tcp,
-        zero_core::ProtocolType::Vmess,
+        zero_core::ProtocolType::new("vmess"),
     )
 }
 
@@ -1355,7 +1355,13 @@ impl From<VmessMuxServerEvent> for VmessInboundMuxAction {
                 payload,
             } => Self::OpenStream {
                 session_id,
-                session: Box::new(Session::new(0, target, port, network, ProtocolType::Vmess)),
+                session: Box::new(Session::new(
+                    0,
+                    target,
+                    port,
+                    network,
+                    ProtocolType::new("vmess"),
+                )),
                 initial_payload: payload,
             },
             VmessMuxServerEvent::Data {

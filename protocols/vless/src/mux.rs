@@ -120,7 +120,7 @@ impl MuxTarget {
             self.address,
             self.port,
             network,
-            ProtocolType::Vless,
+            ProtocolType::new("vless"),
         ))
     }
 }

@@ -308,7 +308,7 @@ async fn roundtrip_cipher(cipher: VmessCipher) {
         Address::Domain("example.com".to_owned()),
         443,
         Network::Tcp,
-        ProtocolType::Vmess,
+        ProtocolType::new("vmess"),
     );
     let upload = build_payload(37_000);
     let download = build_payload(21_000);
@@ -387,7 +387,7 @@ async fn shutdown_roundtrip_cipher(cipher: VmessCipher) {
         Address::Domain("example.com".to_owned()),
         443,
         Network::Tcp,
-        ProtocolType::Vmess,
+        ProtocolType::new("vmess"),
     );
     let upload = build_payload(8192);
 

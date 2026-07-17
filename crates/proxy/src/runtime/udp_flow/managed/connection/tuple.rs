@@ -9,4 +9,5 @@ mod connection;
 mod flow;
 mod sender;
 
-pub(crate) use build::managed_tuple_udp_connection_from_ops;
+pub(crate) use build::managed_tuple_udp_connection_from_flow;
+pub(crate) use flow::ManagedTupleUdpFlowConnection;

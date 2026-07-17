@@ -2,7 +2,6 @@ use std::path::Path;
 
 use zero_platform_tokio::TokioSocket;
 use zero_traits::ServerTlsProfile;
-use zero_transport::protocol_inbound_route::{NoClientStreamRouteDefaults, OpaqueStreamRoute};
 use zero_transport::tls::{InboundTlsStream, TlsAcceptor};
 use zero_transport::RuntimeError;
 
@@ -68,26 +67,17 @@ impl TrojanInboundListenerRequest {
         Self::ERROR_PROTOCOL_NAME
     }
 
-    pub fn no_client_stream_route_defaults(&self) -> NoClientStreamRouteDefaults {
-        NoClientStreamRouteDefaults {
-            udp_protocol: Self::UDP_PROTOCOL,
-        }
-    }
-
     pub async fn accept_route(
         self,
         socket: TokioSocket,
-    ) -> Result<
-        OpaqueStreamRoute<crate::inbound::TrojanInboundAcceptedSession<TrojanInboundTlsStream>>,
-        RuntimeError,
-    > {
+    ) -> Result<crate::inbound::TrojanInboundAcceptedSession<TrojanInboundTlsStream>, RuntimeError>
+    {
         let stream =
             zero_transport::inbound_stack::accept_tls_inbound_stream(socket, &self.tls_acceptor)
                 .await?;
         self.profile
             .accept_client_owned(crate::inbound::TrojanInbound, stream)
             .await
-            .map(OpaqueStreamRoute::new)
             .map_err(RuntimeError::from)
     }
 }

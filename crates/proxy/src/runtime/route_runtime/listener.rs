@@ -15,7 +15,7 @@ impl InboundListenerRuntime {
         }
     }
 
-    #[cfg(feature = "shadowsocks")]
+    #[cfg(feature = "managed-datagram-runtime")]
     pub(crate) fn inbound_tag(&self) -> &str {
         self.route_factory.inbound_tag()
     }

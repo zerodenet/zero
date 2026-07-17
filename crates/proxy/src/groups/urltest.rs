@@ -334,7 +334,7 @@ impl UrlTestRuntime {
                 Address::Domain(probe.host.clone()),
                 probe.port,
                 Network::Tcp,
-                ProtocolType::Unknown,
+                ProtocolType::UNKNOWN,
             );
 
             let outbound = crate::runtime::tcp_dispatch::dispatch_tcp_outbound(

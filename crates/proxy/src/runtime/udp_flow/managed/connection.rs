@@ -1,38 +1,30 @@
 mod model;
-#[cfg(feature = "trojan")]
+#[cfg(feature = "managed-stream-runtime")]
 mod packet;
 #[cfg(any(
-    feature = "vless",
-    feature = "vmess",
-    feature = "trojan",
-    feature = "mieru",
-    feature = "hysteria2"
+    feature = "managed-stream-runtime",
+    feature = "managed-datagram-runtime"
 ))]
 mod response;
 #[cfg(any(
-    feature = "vless",
-    feature = "vmess",
-    feature = "mieru",
-    feature = "hysteria2"
+    feature = "managed-stream-runtime",
+    feature = "managed-datagram-runtime"
 ))]
 mod tuple;
 
 #[cfg(any(
-    feature = "vless",
-    feature = "vmess",
-    feature = "trojan",
-    feature = "mieru",
-    feature = "hysteria2"
+    feature = "managed-stream-runtime",
+    feature = "managed-datagram-runtime"
 ))]
 pub(crate) use model::SharedManagedUdpConnection;
-#[cfg(feature = "shadowsocks")]
+#[cfg(feature = "managed-datagram-runtime")]
 pub(crate) use model::{ManagedDatagramUdpConnection, SharedManagedDatagramUdpConnection};
-#[cfg(feature = "trojan")]
+#[cfg(feature = "managed-stream-runtime")]
 pub(crate) use packet::managed_packet_udp_connection_from_flow;
+#[cfg(feature = "managed-stream-runtime")]
+pub(crate) use packet::ManagedPacketUdpFlowConnection;
 #[cfg(any(
-    feature = "vless",
-    feature = "vmess",
-    feature = "mieru",
-    feature = "hysteria2"
+    feature = "managed-stream-runtime",
+    feature = "managed-datagram-runtime"
 ))]
-pub(crate) use tuple::managed_tuple_udp_connection_from_ops;
+pub(crate) use tuple::{managed_tuple_udp_connection_from_flow, ManagedTupleUdpFlowConnection};

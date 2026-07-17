@@ -162,7 +162,7 @@ async fn inbound_accepts_authorized_tcp_request_with_domain_target() {
     assert_eq!(session.target, Address::Domain("example.com".into()));
     assert_eq!(session.port, 443);
     assert_eq!(session.network, Network::Tcp);
-    assert_eq!(session.protocol, ProtocolType::Vless);
+    assert_eq!(session.protocol, ProtocolType::new("vless"));
     let auth = session.auth.expect("auth");
     assert_eq!(auth.scheme, "vless");
     assert_eq!(auth.credential_id.as_deref(), Some("node-user-1"));
@@ -206,7 +206,7 @@ async fn outbound_establishes_tcp_tunnel_for_ipv4_target() {
         Address::Ipv4([127, 0, 0, 1]),
         8080,
         Network::Tcp,
-        ProtocolType::Vless,
+        ProtocolType::new("vless"),
     );
 
     vless::outbound::PreparedVlessOutboundRequestBundle::from_config(USER_ID, None, None)
@@ -239,7 +239,7 @@ async fn outbound_deferred_tcp_tunnel_request_does_not_read_response() {
         Address::Ipv4([127, 0, 0, 1]),
         8080,
         Network::Tcp,
-        ProtocolType::Vless,
+        ProtocolType::new("vless"),
     );
 
     request
@@ -272,7 +272,7 @@ async fn outbound_stream_reports_handshake_traffic() {
         Address::Ipv4([127, 0, 0, 1]),
         8080,
         Network::Tcp,
-        ProtocolType::Vless,
+        ProtocolType::new("vless"),
     );
 
     let (_stream, written_bytes, read_bytes) = request
@@ -295,7 +295,7 @@ async fn outbound_establishes_udp_packet_tunnel_and_consumes_response() {
         Address::Ipv4([127, 0, 0, 1]),
         5353,
         Network::Udp,
-        ProtocolType::Vless,
+        ProtocolType::new("vless"),
     );
 
     vless::udp::establish_udp_packet_tunnel(&mut socket, &session, &id)
@@ -339,7 +339,7 @@ async fn inbound_accepts_authorized_udp_request_with_ipv4_target() {
     assert_eq!(session.target, Address::Ipv4([8, 8, 8, 8]));
     assert_eq!(session.port, 53);
     assert_eq!(session.network, Network::Udp);
-    assert_eq!(session.protocol, ProtocolType::Vless);
+    assert_eq!(session.protocol, ProtocolType::new("vless"));
 }
 
 #[test]

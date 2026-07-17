@@ -31,7 +31,7 @@ impl TcpIngressRuntime {
         self.source_addr
     }
 
-    #[cfg(any(feature = "vless", feature = "vmess"))]
+    #[cfg(feature = "managed-stream-runtime")]
     pub(crate) fn without_source_addr(&self) -> Self {
         Self {
             services: self.services.clone(),

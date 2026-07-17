@@ -8,17 +8,19 @@ pub enum Network {
     Udp,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ProtocolType {
-    Socks5,
-    HttpConnect,
-    Vless,
-    Hysteria2,
-    Shadowsocks,
-    Trojan,
-    Vmess,
-    Mieru,
-    Unknown,
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct ProtocolType(&'static str);
+
+impl ProtocolType {
+    pub const UNKNOWN: Self = Self("unknown");
+
+    pub const fn new(name: &'static str) -> Self {
+        Self(name)
+    }
+
+    pub const fn as_str(self) -> &'static str {
+        self.0
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -14,7 +14,6 @@ use zero_transport::profile::{
     OwnedClientTlsProfile, OwnedGrpcProfile, OwnedH2Profile, OwnedHttpUpgradeProfile,
     OwnedWebSocketProfile,
 };
-use zero_transport::transport_plan::{TcpStreamTransportPlan, TransportOpenFuture};
 use zero_transport::RuntimeError;
 
 #[derive(Clone, Copy)]
@@ -154,23 +153,6 @@ impl OwnedVmessOutboundTransportPlan {
             options: self.transport(),
         })
         .await
-    }
-}
-
-impl TcpStreamTransportPlan for OwnedVmessOutboundTransportPlan {
-    fn open_direct_stream<'a, OpenSocket, OpenSocketFut>(
-        &'a self,
-        open_socket: OpenSocket,
-    ) -> TransportOpenFuture<'a>
-    where
-        OpenSocket: FnOnce(&str, u16) -> OpenSocketFut + Send + 'a,
-        OpenSocketFut: Future<Output = Result<TokioSocket, RuntimeError>> + Send + 'a,
-    {
-        Box::pin(async move { self.open_direct(open_socket).await })
-    }
-
-    fn open_relay_stream<'a>(&'a self, stream: TcpRelayStream) -> TransportOpenFuture<'a> {
-        Box::pin(async move { self.open_relay(stream).await })
     }
 }
 

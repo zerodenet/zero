@@ -176,8 +176,8 @@ impl QuicInbound {
         Ok(QuicStream::new(send, recv))
     }
 
-    /// Accept a raw QUIC connection 鈥?returns the full Connection for protocols
-    /// that need multi-stream support and key export (e.g. Hysteria2).
+    /// Accept a raw QUIC connection for callers that need multi-stream support
+    /// and key export.
     pub async fn accept_connection(&self) -> Result<quinn::Connection, RuntimeError> {
         self.endpoint
             .accept()

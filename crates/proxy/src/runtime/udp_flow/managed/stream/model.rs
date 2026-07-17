@@ -3,12 +3,7 @@ use super::super::model::ManagedRelayFlowHandler;
 use super::super::model::ManagedStreamPacketFlowHandler;
 
 pub(in crate::runtime::udp_flow::managed) struct ManagedStreamState {
-    #[cfg(any(
-        feature = "vless",
-        feature = "vmess",
-        feature = "trojan",
-        feature = "mieru"
-    ))]
+    #[cfg(feature = "managed-stream-runtime")]
     pub(in crate::runtime::udp_flow::managed) stream_packet_handlers:
         Vec<Box<dyn ManagedStreamPacketFlowHandler>>,
     pub(in crate::runtime::udp_flow::managed) relay_handlers: Vec<Box<dyn ManagedRelayFlowHandler>>,
@@ -16,22 +11,13 @@ pub(in crate::runtime::udp_flow::managed) struct ManagedStreamState {
 
 impl ManagedStreamState {
     pub(in crate::runtime::udp_flow::managed) fn new(
-        #[cfg(any(
-            feature = "vless",
-            feature = "vmess",
-            feature = "trojan",
-            feature = "mieru"
-        ))]
-        stream_packet_handlers: Vec<Box<dyn ManagedStreamPacketFlowHandler>>,
+        #[cfg(feature = "managed-stream-runtime")] stream_packet_handlers: Vec<
+            Box<dyn ManagedStreamPacketFlowHandler>,
+        >,
         relay_handlers: Vec<Box<dyn ManagedRelayFlowHandler>>,
     ) -> Self {
         Self {
-            #[cfg(any(
-                feature = "vless",
-                feature = "vmess",
-                feature = "trojan",
-                feature = "mieru"
-            ))]
+            #[cfg(feature = "managed-stream-runtime")]
             stream_packet_handlers,
             relay_handlers,
         }

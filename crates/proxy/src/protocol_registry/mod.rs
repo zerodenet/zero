@@ -6,6 +6,12 @@
 //! hard-coded match statements in `ProtocolInventory`.
 
 mod capability;
+#[cfg(any(
+    feature = "tcp-tunnel-runtime",
+    feature = "tcp-session-runtime",
+    feature = "tcp-transport-session-runtime"
+))]
+mod claim;
 mod context;
 mod defaults;
 mod model;
@@ -17,27 +23,32 @@ mod transport_leaf;
     feature = "managed-stream-runtime"
 ))]
 pub(crate) use capability::ManagedUdpHandlerProvider;
-#[cfg(feature = "socks5")]
+#[cfg(feature = "upstream-association-runtime")]
 pub(crate) use capability::UpstreamUdpHandlerProvider;
 pub(crate) use capability::{
-    ClaimedTcpOutboundLeaf, InboundListenerCapability, OutboundLeafClaim,
+    ClaimedTcpOutboundLeaf, InboundListenerCapability, OutboundLeafClaim, OutboundLeafInput,
     ProtocolSupportCapability, TcpOutboundCapability,
 };
 #[cfg(feature = "udp-runtime")]
 pub(crate) use capability::{
     ClaimedUdpFlowLeaf, ClaimedUdpPacketPathLeaf, UdpFlowCapability, UdpPacketPathCapability,
 };
+#[cfg(feature = "tcp-transport-session-runtime")]
+pub(crate) use claim::claim_session_tcp_leaf;
+#[cfg(any(feature = "tcp-tunnel-runtime", feature = "tcp-session-runtime"))]
+pub(crate) use claim::claim_socket_tcp_leaf;
 pub(crate) use context::{OutboundAdapterContext, TcpRuntimeServices};
 #[cfg(feature = "udp-runtime")]
 pub(crate) use context::{UdpAdapterContext, UdpAssociationCloseKind, UdpRuntimeServices};
-#[cfg(feature = "transport_quic")]
-pub(crate) use defaults::bind_transport_inbound;
+pub(crate) use defaults::{bind_tcp_inbound, inbound_listen_addr};
 pub(crate) use model::{BoundInbound, OutboundLeafRuntime};
 #[cfg(test)]
 pub(crate) use registry::fake_direct_leaf;
 pub(crate) use registry::ClaimedOutboundLeaf;
 pub(crate) use registry::ProtocolRegistry;
-#[cfg(feature = "vless")]
+#[cfg(feature = "managed-stream-runtime")]
 pub(crate) use transport_leaf::claim_relay_two_stream_transport_udp_leaf;
-#[cfg(any(feature = "vless", feature = "vmess", feature = "trojan"))]
-pub(crate) use transport_leaf::{claim_transport_tcp_leaf, claim_transport_udp_leaf};
+#[cfg(any(feature = "tcp-tunnel-runtime", feature = "tcp-session-runtime"))]
+pub(crate) use transport_leaf::claim_transport_tcp_leaf;
+#[cfg(feature = "managed-stream-runtime")]
+pub(crate) use transport_leaf::claim_transport_udp_leaf;

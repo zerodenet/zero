@@ -1,38 +1,26 @@
 use crate::runtime::udp_dispatch::UdpDispatch;
 #[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "vmess",
-    feature = "trojan",
-    feature = "mieru"
+    feature = "upstream-association-runtime",
+    feature = "managed-stream-runtime"
 ))]
 use crate::runtime::udp_flow::outbound::ManagedUdpFlowRef;
-#[cfg(feature = "socks5")]
+#[cfg(feature = "upstream-association-runtime")]
 use crate::runtime::udp_flow::registered::UpstreamAssociationSend;
 #[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "vmess",
-    feature = "trojan",
-    feature = "mieru"
+    feature = "upstream-association-runtime",
+    feature = "managed-stream-runtime"
 ))]
 use crate::runtime::udp_flow::snapshot::UdpFlowSnapshot;
 #[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "vmess",
-    feature = "trojan",
-    feature = "mieru"
+    feature = "upstream-association-runtime",
+    feature = "managed-stream-runtime"
 ))]
 use zero_engine::EngineError;
 
 impl UdpDispatch {
     #[cfg(any(
-        feature = "socks5",
-        feature = "vless",
-        feature = "vmess",
-        feature = "trojan",
-        feature = "mieru"
+        feature = "upstream-association-runtime",
+        feature = "managed-stream-runtime"
     ))]
     pub(in crate::runtime::udp_dispatch) async fn forward_managed_relay_flow(
         &mut self,
@@ -45,11 +33,11 @@ impl UdpDispatch {
             .outbound
             .upstream()
             .expect("relay flow should expose upstream endpoint");
-        #[cfg(feature = "socks5")]
+        #[cfg(feature = "upstream-association-runtime")]
         let resume = self
             .managed_flow_resume(managed)
             .expect("managed relay flow should have protocol resume");
-        #[cfg(feature = "socks5")]
+        #[cfg(feature = "upstream-association-runtime")]
         if self.flow_state.handles_upstream_resume(&resume) {
             return self
                 .flow_state
@@ -67,14 +55,9 @@ impl UdpDispatch {
                 .await
                 .map_err(|failure| failure.error);
         }
-        #[cfg(not(feature = "socks5"))]
+        #[cfg(not(feature = "upstream-association-runtime"))]
         let _ = managed;
-        #[cfg(any(
-            feature = "vless",
-            feature = "vmess",
-            feature = "trojan",
-            feature = "mieru"
-        ))]
+        #[cfg(feature = "managed-stream-runtime")]
         return self
             .flow_state
             .forward_existing_managed_flow(services, (flow, payload))
@@ -82,10 +65,10 @@ impl UdpDispatch {
             .map_err(|failure| failure.error);
 
         #[cfg(not(any(
-            feature = "vless",
-            feature = "vmess",
-            feature = "trojan",
-            feature = "mieru"
+            feature = "managed-stream-runtime",
+            feature = "managed-stream-runtime",
+            feature = "managed-stream-runtime",
+            feature = "managed-stream-runtime"
         )))]
         Err(EngineError::Io(std::io::Error::other(
             "registered upstream flow resume is not handled by the compiled adapter",

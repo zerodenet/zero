@@ -1,5 +1,5 @@
 use zero_config::{InboundProtocolConfig, OutboundProtocolConfig, RuntimeConfig};
-use zero_engine::ResolvedLeafOutbound;
+use zero_engine::{OutboundIdentity, ResolvedLeafOutbound};
 
 pub(crate) fn fake_direct_leaf() -> ResolvedLeafOutbound<'static> {
     ResolvedLeafOutbound::Direct { tag: Some("fake") }
@@ -20,8 +20,17 @@ pub(super) fn inbound_protocol_name(config: &InboundProtocolConfig) -> &'static 
     }
 }
 
-pub(super) fn outbound_leaf_name(leaf: &ResolvedLeafOutbound<'_>) -> &'static str {
-    leaf.protocol_name()
+pub(super) fn outbound_leaf_name(
+    config: &RuntimeConfig,
+    leaf: &ResolvedLeafOutbound<'_>,
+) -> &'static str {
+    match leaf {
+        ResolvedLeafOutbound::Direct { .. } => "direct",
+        ResolvedLeafOutbound::Block { .. } => "block",
+        ResolvedLeafOutbound::Proxy { identity } => config.outbounds[identity.config_index()]
+            .protocol
+            .protocol_name(),
+    }
 }
 
 pub(super) fn compiled_in_inbound_configs() -> Vec<InboundProtocolConfig> {
@@ -103,17 +112,9 @@ fn config_with_outbound(tag: &str, protocol: OutboundProtocolConfig) -> RuntimeC
     config
 }
 
-fn proxy_leaf(
-    tag: &'static str,
-    protocol: &'static str,
-    server: &'static str,
-    port: u16,
-) -> ResolvedLeafOutbound<'static> {
+fn proxy_leaf() -> ResolvedLeafOutbound<'static> {
     ResolvedLeafOutbound::Proxy {
-        tag,
-        outbound_index: 0,
-        protocol,
-        endpoint: Some((server, port)),
+        identity: OutboundIdentity::from_config_index(0),
     }
 }
 
@@ -149,7 +150,7 @@ pub(super) fn compiled_in_outbound_leaves(
                 password: None,
             },
         ),
-        proxy_leaf("socks5", "socks5", "127.0.0.1", 1080),
+        proxy_leaf(),
         1,
     ));
     #[cfg(feature = "vless")]
@@ -173,7 +174,7 @@ pub(super) fn compiled_in_outbound_leaves(
                 quic: None,
             },
         ),
-        proxy_leaf("vless", "vless", "127.0.0.1", 443),
+        proxy_leaf(),
         1,
     ));
     #[cfg(feature = "hysteria2")]
@@ -188,7 +189,7 @@ pub(super) fn compiled_in_outbound_leaves(
                 client_fingerprint: None,
             },
         ),
-        proxy_leaf("hysteria2", "hysteria2", "127.0.0.1", 443),
+        proxy_leaf(),
         1,
     ));
     #[cfg(feature = "shadowsocks")]
@@ -202,7 +203,7 @@ pub(super) fn compiled_in_outbound_leaves(
                 cipher: "chacha20-ietf-poly1305".to_owned(),
             },
         ),
-        proxy_leaf("shadowsocks", "shadowsocks", "127.0.0.1", 8388),
+        proxy_leaf(),
         1,
     ));
     #[cfg(feature = "trojan")]
@@ -218,7 +219,7 @@ pub(super) fn compiled_in_outbound_leaves(
                 client_fingerprint: None,
             },
         ),
-        proxy_leaf("trojan", "trojan", "127.0.0.1", 443),
+        proxy_leaf(),
         1,
     ));
     #[cfg(feature = "vmess")]
@@ -237,7 +238,7 @@ pub(super) fn compiled_in_outbound_leaves(
                 grpc: None,
             },
         ),
-        proxy_leaf("vmess", "vmess", "127.0.0.1", 443),
+        proxy_leaf(),
         1,
     ));
     #[cfg(feature = "mieru")]
@@ -251,7 +252,7 @@ pub(super) fn compiled_in_outbound_leaves(
                 password: "password".to_owned(),
             },
         ),
-        proxy_leaf("mieru", "mieru", "127.0.0.1", 8964),
+        proxy_leaf(),
         1,
     ));
 

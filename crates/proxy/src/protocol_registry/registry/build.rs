@@ -1,24 +1,19 @@
 use std::sync::Arc;
 
-use zero_config::OutboundProtocolConfig;
-use zero_engine::ResolvedLeafOutbound;
-
 use super::ProtocolRegistry;
 #[cfg(feature = "managed-udp-runtime")]
 use crate::protocol_registry::ManagedUdpHandlerProvider;
 #[cfg(feature = "upstream-association-runtime")]
 use crate::protocol_registry::UpstreamUdpHandlerProvider;
 use crate::protocol_registry::{
-    InboundListenerCapability, OutboundLeafClaim, ProtocolSupportCapability, TcpOutboundCapability,
+    InboundListenerCapability, OutboundLeafClaim, OutboundLeafInput, ProtocolSupportCapability,
+    TcpOutboundCapability,
 };
 #[cfg(feature = "udp-runtime")]
 use crate::protocol_registry::{UdpFlowCapability, UdpPacketPathCapability};
 
-type OutboundLeafClaimFn<T> = for<'a> fn(
-    &T,
-    Option<&'a OutboundProtocolConfig>,
-    ResolvedLeafOutbound<'a>,
-) -> Option<OutboundLeafClaim<'a>>;
+type OutboundLeafClaimFn<T> =
+    for<'a> fn(&T, OutboundLeafInput<'a>) -> Option<OutboundLeafClaim<'a>>;
 
 struct NoOutboundClaimer<T> {
     adapter: Arc<T>,
@@ -30,43 +25,43 @@ where
 {
     fn claim_outbound_leaf<'a>(
         &self,
-        _protocol: Option<&'a OutboundProtocolConfig>,
-        _leaf: ResolvedLeafOutbound<'a>,
+        _input: OutboundLeafInput<'a>,
     ) -> Option<OutboundLeafClaim<'a>> {
         let _ = &self.adapter;
         None
     }
 }
 
-#[cfg(any(
-    not(any(feature = "http", feature = "mixed")),
-    feature = "http",
-    feature = "mixed"
-))]
 struct ProjectedOutboundClaimer<T> {
     adapter: Arc<T>,
     claim: OutboundLeafClaimFn<T>,
 }
 
-#[cfg(any(
-    not(any(feature = "http", feature = "mixed")),
-    feature = "http",
-    feature = "mixed"
-))]
 impl<T> super::OutboundLeafClaimer for ProjectedOutboundClaimer<T>
 where
     T: Send + Sync + 'static,
 {
     fn claim_outbound_leaf<'a>(
         &self,
-        protocol: Option<&'a OutboundProtocolConfig>,
-        leaf: ResolvedLeafOutbound<'a>,
+        input: OutboundLeafInput<'a>,
     ) -> Option<OutboundLeafClaim<'a>> {
-        (self.claim)(self.adapter.as_ref(), protocol, leaf)
+        (self.claim)(self.adapter.as_ref(), input)
     }
 }
 
 impl ProtocolRegistry {
+    fn push_registered_entry(&mut self, entry: super::RegisteredProtocolEntry) {
+        let name = entry.support.name();
+        assert!(
+            !self
+                .entries
+                .iter()
+                .any(|registered| registered.support.name() == name),
+            "protocol capability `{name}` registered more than once"
+        );
+        self.entries.push(entry);
+    }
+
     pub(crate) fn register_core_capability<T>(
         &mut self,
         adapter: Arc<T>,
@@ -74,7 +69,7 @@ impl ProtocolRegistry {
     ) where
         T: ProtocolSupportCapability + InboundListenerCapability + TcpOutboundCapability + 'static,
     {
-        self.entries.push(super::RegisteredProtocolEntry {
+        self.push_registered_entry(super::RegisteredProtocolEntry {
             support: adapter.clone(),
             inbound: adapter.clone(),
             outbound: match claim {
@@ -109,7 +104,7 @@ impl ProtocolRegistry {
             + UdpPacketPathCapability
             + 'static,
     {
-        self.entries.push(super::RegisteredProtocolEntry {
+        self.push_registered_entry(super::RegisteredProtocolEntry {
             support: adapter.clone(),
             inbound: adapter.clone(),
             outbound: Arc::new(ProjectedOutboundClaimer {
@@ -143,7 +138,7 @@ impl ProtocolRegistry {
             + UpstreamUdpHandlerProvider
             + 'static,
     {
-        self.entries.push(super::RegisteredProtocolEntry {
+        self.push_registered_entry(super::RegisteredProtocolEntry {
             support: adapter.clone(),
             inbound: adapter.clone(),
             outbound: Arc::new(ProjectedOutboundClaimer {
@@ -176,7 +171,7 @@ impl ProtocolRegistry {
             + ManagedUdpHandlerProvider
             + 'static,
     {
-        self.entries.push(super::RegisteredProtocolEntry {
+        self.push_registered_entry(super::RegisteredProtocolEntry {
             support: adapter.clone(),
             inbound: adapter.clone(),
             outbound: Arc::new(ProjectedOutboundClaimer {

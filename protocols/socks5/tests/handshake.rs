@@ -216,7 +216,7 @@ async fn parses_connect_request_with_domain_target() {
     assert_eq!(session.target, Address::Domain("example.com".into()));
     assert_eq!(session.port, 443);
     assert_eq!(session.network, Network::Tcp);
-    assert_eq!(session.protocol, ProtocolType::Socks5);
+    assert_eq!(session.protocol, ProtocolType::new("socks5"));
     assert_eq!(
         socket.writes,
         vec![
@@ -386,7 +386,7 @@ async fn outbound_establishes_tunnel_for_domain_target() {
         Address::Domain("example.com".into()),
         443,
         Network::Tcp,
-        ProtocolType::Socks5,
+        ProtocolType::new("socks5"),
     );
 
     Socks5Outbound
@@ -417,7 +417,7 @@ async fn outbound_establishes_tunnel_with_username_password_auth() {
         Address::Domain("example.com".into()),
         443,
         Network::Tcp,
-        ProtocolType::Socks5,
+        ProtocolType::new("socks5"),
     );
 
     Socks5Outbound
@@ -456,7 +456,7 @@ async fn outbound_rejects_upstream_failure_reply() {
         Address::Ipv4([1, 1, 1, 1]),
         53,
         Network::Tcp,
-        ProtocolType::Socks5,
+        ProtocolType::new("socks5"),
     );
 
     let error = Socks5Outbound

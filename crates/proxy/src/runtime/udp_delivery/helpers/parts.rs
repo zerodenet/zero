@@ -2,7 +2,7 @@ use zero_core::Address;
 
 use super::accounting::UdpInboundResponseAccounting;
 
-#[cfg(feature = "socks5")]
+#[cfg(feature = "upstream-association-runtime")]
 pub(crate) struct UdpUpstreamResponseParts {
     pub(crate) target: Address,
     pub(crate) port: u16,

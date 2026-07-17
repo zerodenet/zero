@@ -217,7 +217,11 @@ fn mieru_outbound_defaults_username_to_password_in_plan() {
     let TargetKind::Outbound(outbound) = target.kind() else {
         panic!("mieru-node should compile as an outbound");
     };
-    assert_eq!(outbound.protocol(), "mieru");
+    assert_eq!(outbound.outbound_index(), 0);
+    assert_eq!(
+        outbound.runtime_kind(),
+        zero_config::OutboundRuntimeKind::Proxy
+    );
     let zero_config::OutboundProtocolConfig::Mieru {
         username, password, ..
     } = &config.outbounds[0].protocol

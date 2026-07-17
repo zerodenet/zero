@@ -13,24 +13,28 @@ mod listener;
 use zero_config::InboundConfig;
 use zero_config::{InboundProtocolConfig, OutboundProtocolConfig};
 #[cfg(feature = "vless")]
-use zero_engine::{EngineError, ResolvedLeafOutbound};
-use zero_traits::{ProtocolCapabilityDescriptor, ProtocolMetadata};
-#[cfg(feature = "vless")]
-use zero_transport::managed_udp::ProtocolManagedStreamUdpLeafOps;
+use zero_engine::EngineError;
+use zero_traits::{ProtocolCapabilityDescriptor, ProtocolMetadata, ProtocolUdpFlowLeaf};
 
 use crate::adapters::identity::{
     named_protocol_supports_inbound, named_protocol_supports_outbound, NamedProtocolAdapter,
 };
 use crate::protocol_registry::{
-    bind_transport_inbound, claim_relay_two_stream_transport_udp_leaf, claim_transport_tcp_leaf,
-    BoundInbound, InboundListenerCapability, ManagedUdpHandlerProvider, OutboundLeafClaim,
-    OutboundLeafRuntime, ProtocolSupportCapability, TcpOutboundCapability, UdpFlowCapability,
-    UdpPacketPathCapability,
+    bind_tcp_inbound, claim_relay_two_stream_transport_udp_leaf, claim_transport_tcp_leaf,
+    inbound_listen_addr, BoundInbound, InboundListenerCapability, ManagedUdpHandlerProvider,
+    OutboundLeafClaim, OutboundLeafInput, ProtocolSupportCapability, TcpOutboundCapability,
+    UdpFlowCapability, UdpPacketPathCapability,
 };
 use crate::runtime::path::TcpPathCategory;
+use crate::runtime::transport_leaf::{
+    ProxyRelayTwoStreamTransportLeaf, ProxyTransportLeaf, ProxyTransportTcpLeaf,
+    ProxyTransportUdpLeaf,
+};
 #[cfg(feature = "vless")]
 use crate::runtime::udp_flow::managed::{
-    bridge::managed_stream_udp_handler_for_resume, ManagedStreamHandlerPair,
+    bridge::managed_stream_udp_handler_for_resume, ManagedStreamConnectorParts,
+    ManagedStreamHandlerPair, ManagedTupleUdpFlowConnection, ManagedTupleUdpResume,
+    ManagedTupleUdpResumeConnector,
 };
 
 #[cfg(feature = "vless")]
@@ -40,71 +44,12 @@ pub(crate) struct VlessAdapter {
 }
 
 #[cfg(feature = "vless")]
-#[derive(Clone, Copy)]
-struct VlessOutboundProjection<'a> {
+fn outbound_options<'a>(
     tag: &'a str,
-    server: &'a str,
-    port: u16,
-    id: &'a str,
-    flow: Option<&'a str>,
-    mux_concurrency: Option<u32>,
-    tls: Option<&'a zero_config::ClientTlsConfig>,
-    reality: Option<&'a zero_config::RealityConfig>,
-    ws: Option<&'a zero_config::WebSocketConfig>,
-    grpc: Option<&'a zero_config::GrpcConfig>,
-    h2: Option<&'a zero_config::H2Config>,
-    http_upgrade: Option<&'a zero_config::HttpUpgradeConfig>,
-    split_http: Option<&'a zero_config::SplitHttpConfig>,
-    quic: Option<&'a zero_config::QuicConfig>,
-}
-
-#[cfg(feature = "vless")]
-impl<'a> VlessOutboundProjection<'a> {
-    fn from_config(tag: &'a str, protocol: &'a OutboundProtocolConfig) -> Option<Self> {
-        let OutboundProtocolConfig::Vless {
-            server,
-            port,
-            id,
-            flow,
-            mux_concurrency,
-            tls,
-            reality,
-            ws,
-            grpc,
-            h2,
-            http_upgrade,
-            split_http,
-            quic,
-            ..
-        } = protocol
-        else {
-            return None;
-        };
-        Some(Self {
-            tag,
-            server,
-            port: *port,
-            id,
-            flow: flow.as_deref(),
-            mux_concurrency: *mux_concurrency,
-            tls: tls.as_deref(),
-            reality: reality.as_deref(),
-            ws: ws.as_deref(),
-            grpc: grpc.as_deref(),
-            h2: h2.as_deref(),
-            http_upgrade: http_upgrade.as_deref(),
-            split_http: split_http.as_deref(),
-            quic: quic.as_deref(),
-        })
-    }
-
-    fn endpoint(&self) -> (&'a str, u16) {
-        (self.server, self.port)
-    }
-
-    fn build_options(
-        &self,
-    ) -> VlessOutboundBuildOptionsRef<
+    endpoint: (&'a str, u16),
+    protocol: &'a OutboundProtocolConfig,
+) -> Option<
+    VlessOutboundBuildOptionsRef<
         'a,
         zero_config::ClientTlsConfig,
         zero_config::WebSocketConfig,
@@ -112,74 +57,266 @@ impl<'a> VlessOutboundProjection<'a> {
         zero_config::H2Config,
         zero_config::HttpUpgradeConfig,
         zero_config::SplitHttpConfig,
-    > {
-        VlessOutboundBuildOptionsRef {
-            tag: self.tag,
-            server: self.server,
-            port: self.port,
-            protocol: VlessOutboundOptionsRef {
-                id: self.id,
-                flow: self.flow,
-                mux_concurrency: self.mux_concurrency,
-                reality: self.reality.map(|reality| VlessRealityClientOptionsRef {
+    >,
+> {
+    let OutboundProtocolConfig::Vless {
+        id,
+        flow,
+        mux_concurrency,
+        tls,
+        reality,
+        ws,
+        grpc,
+        h2,
+        http_upgrade,
+        split_http,
+        quic,
+        ..
+    } = protocol
+    else {
+        return None;
+    };
+    Some(VlessOutboundBuildOptionsRef {
+        tag,
+        server: endpoint.0,
+        port: endpoint.1,
+        protocol: VlessOutboundOptionsRef {
+            id,
+            flow: flow.as_deref(),
+            mux_concurrency: *mux_concurrency,
+            reality: reality
+                .as_deref()
+                .map(|reality| VlessRealityClientOptionsRef {
                     public_key: reality.public_key.as_str(),
                     short_id: reality.short_id.as_str(),
                     server_name: reality.server_name.as_deref(),
                     cipher_suites: reality.cipher_suites.as_slice(),
                 }),
-                quic: self.quic.map(|quic| VlessQuicClientOptionsRef {
-                    server_name: quic.server_name.as_deref(),
-                    insecure: quic.insecure,
-                    ca_cert_path: quic.ca_cert_path.as_deref(),
-                }),
-            },
-            tls: self.tls,
-            ws: self.ws,
-            grpc: self.grpc,
-            h2: self.h2,
-            http_upgrade: self.http_upgrade,
-            split_http: self.split_http,
-        }
-    }
+            quic: quic.as_deref().map(|quic| VlessQuicClientOptionsRef {
+                server_name: quic.server_name.as_deref(),
+                insecure: quic.insecure,
+                ca_cert_path: quic.ca_cert_path.as_deref(),
+            }),
+        },
+        tls: tls.as_deref(),
+        ws: ws.as_deref(),
+        grpc: grpc.as_deref(),
+        h2: h2.as_deref(),
+        http_upgrade: http_upgrade.as_deref(),
+        split_http: split_http.as_deref(),
+    })
 }
 
 #[cfg(feature = "vless")]
 const TCP_PATH: TcpPathCategory = TcpPathCategory::Tunnel;
 
 #[cfg(feature = "vless")]
+impl ProxyTransportLeaf for VlessOutboundLeaf {
+    fn tag(&self) -> &str {
+        self.tag()
+    }
+
+    fn server(&self) -> &str {
+        self.server()
+    }
+
+    fn port(&self) -> u16 {
+        self.port()
+    }
+
+    fn validate_udp_relay_final_hop(&self) -> Result<(), zero_transport::RuntimeError> {
+        VlessOutboundLeaf::validate_udp_relay_final_hop(self)
+    }
+}
+
+#[cfg(feature = "vless")]
+#[async_trait::async_trait]
+impl ProxyTransportTcpLeaf for VlessOutboundLeaf {
+    const TCP_CONNECT_STAGE: &'static str = "connect_upstream_vless";
+    const TCP_INVALID_CONNECT_CONFIG: &'static str = "invalid vless tcp config";
+    const TCP_INVALID_RELAY_CONFIG: &'static str = "invalid vless tcp relay config";
+
+    async fn open_tcp_stream(
+        &self,
+        services: crate::protocol_registry::TcpRuntimeServices,
+        session: &zero_core::Session,
+    ) -> Result<
+        (
+            crate::transport::TcpRelayStream,
+            zero_transport::StreamTraffic,
+        ),
+        zero_transport::RuntimeError,
+    > {
+        let opened = VlessOutboundLeaf::open_tcp_stream(self, session, move |server, port| {
+            let services = services.clone();
+            let server = server.to_owned();
+            async move {
+                services
+                    .connect_upstream_owned(server, port)
+                    .await
+                    .map_err(zero_transport::RuntimeError::from)
+            }
+        })
+        .await?;
+        let (stream, handshake_written_bytes, handshake_read_bytes) = opened.into_parts();
+        Ok((
+            crate::transport::TcpRelayStream::new(stream),
+            zero_transport::StreamTraffic {
+                read_bytes: handshake_read_bytes,
+                written_bytes: handshake_written_bytes,
+            },
+        ))
+    }
+
+    async fn open_tcp_relay_hop(
+        &self,
+        stream: crate::transport::TcpRelayStream,
+        session: &zero_core::Session,
+    ) -> Result<crate::transport::TcpRelayStream, zero_transport::RuntimeError> {
+        VlessOutboundLeaf::open_tcp_relay_hop(self, stream, session).await
+    }
+}
+
+#[cfg(feature = "vless")]
+impl ProxyTransportUdpLeaf for VlessOutboundLeaf {
+    type RuntimeResume = ManagedTupleUdpResume<::vless::transport::VlessManagedUdpFlowResume>;
+
+    const UDP_DIRECT_STAGE: &'static str = "udp_vless_leaf";
+    const UDP_INVALID_CONFIG: &'static str = "invalid vless udp config";
+    const UDP_RELAY_FINAL_STAGE: &'static str = "udp_vless_relay_final_leaf";
+
+    fn direct_udp_resume(&self) -> Self::RuntimeResume {
+        ManagedTupleUdpResume::new(ProtocolUdpFlowLeaf::direct_udp_resume(self))
+    }
+
+    fn relay_final_hop_udp_resume(&self) -> Self::RuntimeResume {
+        ManagedTupleUdpResume::new(ProtocolUdpFlowLeaf::relay_final_hop_udp_resume(self))
+    }
+}
+
+#[cfg(feature = "vless")]
+#[async_trait::async_trait]
+impl ProxyRelayTwoStreamTransportLeaf for VlessOutboundLeaf {
+    const UDP_RELAY_CHAIN_STAGE: &'static str = "udp_vless_relay_chain";
+
+    fn udp_relay_needs_two_streams(&self) -> bool {
+        zero_traits::ProtocolRelayTwoStreamUdpFlowLeaf::udp_relay_needs_two_streams(self)
+    }
+
+    fn relay_two_stream_udp_resume(&self) -> Self::RuntimeResume {
+        ManagedTupleUdpResume::new(
+            zero_traits::ProtocolRelayTwoStreamUdpFlowLeaf::relay_two_stream_udp_resume(self),
+        )
+    }
+
+    async fn open_relay_two_stream_udp_transport(
+        &self,
+        post_stream: crate::transport::TcpRelayStream,
+        get_stream: crate::transport::TcpRelayStream,
+    ) -> Result<crate::transport::TcpRelayStream, zero_transport::RuntimeError> {
+        VlessOutboundLeaf::build_relay_two_stream_udp_transport(self, post_stream, get_stream).await
+    }
+}
+
+#[cfg(feature = "vless")]
+#[async_trait::async_trait]
+impl ManagedTupleUdpResumeConnector for ::vless::transport::VlessManagedUdpFlowResume {
+    type ConnectorFlow = ::vless::transport::VlessManagedUdpConnectorFlow;
+    type Connection = ::vless::udp::VlessUdpFlowConnection;
+
+    const ESTABLISH_STAGE: &'static str = "vless_establish";
+    const RELAY_UPSTREAM_STAGE: &'static str = "vless_relay_upstream";
+    const RELAY_ESTABLISH_STAGE: &'static str = "vless_relay_establish";
+    const RELAY_SEND_STAGE: &'static str = "vless_relay_send";
+    const MISMATCH_STAGE: &'static str = "udp_vless_resume";
+    const MISMATCH_MESSAGE: &'static str = "expected VLESS UDP flow resume";
+
+    fn connector_flow(&self, server: &str, port: u16, session_id: u64) -> Self::ConnectorFlow {
+        ::vless::transport::VlessManagedUdpFlowResume::connector_flow(
+            self, server, port, session_id,
+        )
+    }
+
+    async fn open_direct(
+        &self,
+        services: crate::protocol_registry::UdpRuntimeServices,
+        session: &zero_core::Session,
+    ) -> Result<Self::Connection, EngineError> {
+        self.open_direct_connection(session, move |server, port| {
+            let services = services.clone();
+            let server = server.to_owned();
+            async move { services.connect_upstream(&server, port).await }
+        })
+        .await
+        .map_err(EngineError::from)
+    }
+
+    async fn open_relay(
+        &self,
+        stream: crate::transport::TcpRelayStream,
+        session: &zero_core::Session,
+        _tls_server_name: Option<&str>,
+    ) -> Result<Self::Connection, EngineError> {
+        self.open_relay_connection(stream, session)
+            .await
+            .map_err(EngineError::from)
+    }
+}
+
+#[cfg(feature = "vless")]
+impl ManagedStreamConnectorParts for ::vless::transport::VlessManagedUdpConnectorFlow {
+    fn into_managed_connector_parts(self) -> (String, bool) {
+        self.into_parts()
+    }
+}
+
+#[cfg(feature = "vless")]
+#[async_trait::async_trait]
+impl ManagedTupleUdpFlowConnection for ::vless::udp::VlessUdpFlowConnection {
+    async fn send(
+        &self,
+        target: &zero_core::Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<usize, EngineError> {
+        ::vless::udp::VlessUdpFlowConnection::send(self, target, port, payload)
+            .await
+            .map_err(|error| EngineError::Io(std::io::Error::other(error.to_string())))
+    }
+
+    fn subscribe_responses(
+        &self,
+    ) -> tokio::sync::broadcast::Receiver<(zero_core::Address, u16, Vec<u8>)> {
+        ::vless::udp::VlessUdpFlowConnection::subscribe_responses(self)
+    }
+
+    fn closed_message(&self) -> &'static str {
+        "vless upstream closed"
+    }
+}
+
+#[cfg(feature = "vless")]
 impl VlessAdapter {
     pub(crate) fn claim_outbound_leaf_impl<'a>(
         &self,
-        protocol: Option<&'a OutboundProtocolConfig>,
-        leaf: ResolvedLeafOutbound<'a>,
+        input: OutboundLeafInput<'a>,
     ) -> Option<OutboundLeafClaim<'a>> {
-        let projection = VlessOutboundProjection::from_config(leaf.tag()?, protocol?)?;
-        let runtime = OutboundLeafRuntime::proxy(
-            projection.tag,
-            projection.server,
-            projection.port,
-            TCP_PATH,
-        );
-        let endpoint = Some(projection.endpoint());
+        let OutboundLeafInput::Proxy { outbound, endpoint } = input else {
+            return None;
+        };
+        let options = outbound_options(outbound.tag(), endpoint, &outbound.protocol)?;
+        let endpoint = Some(endpoint);
         let tcp_runtime = self.runtime.clone();
         let udp_runtime = self.runtime.clone();
         Some(OutboundLeafClaim {
-            runtime: runtime.clone(),
+            tcp_path: TCP_PATH,
             tcp: claim_transport_tcp_leaf(endpoint, move |source_dir| {
-                VlessOutboundLeaf::from_options_refs(
-                    source_dir,
-                    projection.build_options(),
-                    &tcp_runtime,
-                )
+                VlessOutboundLeaf::from_options_refs(source_dir, options, &tcp_runtime)
             }),
             udp: Some(claim_relay_two_stream_transport_udp_leaf(
                 endpoint,
                 move |source_dir| {
-                    VlessOutboundLeaf::from_options_refs(
-                        source_dir,
-                        projection.build_options(),
-                        &udp_runtime,
-                    )
+                    VlessOutboundLeaf::from_options_refs(source_dir, options, &udp_runtime)
                 },
             )),
             packet_path: None,
@@ -247,7 +384,11 @@ impl InboundListenerCapability for VlessAdapter {
                 key_path: quic.key_path.as_deref(),
             }),
         );
-        bind_transport_inbound(inbound, plan).await
+        let listen = inbound_listen_addr(inbound);
+        match plan.bind(&listen).await? {
+            Some(endpoint) => Ok(BoundInbound::Quic(endpoint)),
+            None => bind_tcp_inbound(inbound).await,
+        }
     }
 
     fn prepare_inbound_listener(
@@ -258,7 +399,7 @@ impl InboundListenerCapability for VlessAdapter {
         Box<dyn crate::runtime::inbound_operation::PreparedInboundListenerOperation>,
         EngineError,
     > {
-        let request = match &inbound.protocol {
+        let (request, fallback_target) = match &inbound.protocol {
             InboundProtocolConfig::Vless {
                 users,
                 reality,
@@ -270,35 +411,41 @@ impl InboundListenerCapability for VlessAdapter {
                 split_http,
                 fallback,
                 ..
-            } => VlessInboundListenerRequest::from_options_refs(
-                source_dir,
-                VlessInboundOptionsRef {
-                    users: users.iter().map(|user| VlessInboundUserRef {
-                        id: user.id.as_str(),
-                        flow: user.flow.as_deref(),
-                        credential_id: user.credential_id.as_deref(),
-                        principal_key: user.principal_key.as_deref(),
-                        up_bps: user.up_bps,
-                        down_bps: user.down_bps,
-                    }),
-                    reality: reality
-                        .as_deref()
-                        .map(|reality| VlessRealityServerOptionsRef {
-                            private_key: reality.private_key.as_str(),
-                            short_ids: reality.short_ids.as_slice(),
-                            server_name: reality.server_name.as_deref(),
-                            cipher_suites: reality.cipher_suites.as_slice(),
+            } => {
+                let request = VlessInboundListenerRequest::from_options_refs(
+                    source_dir,
+                    VlessInboundOptionsRef {
+                        users: users.iter().map(|user| VlessInboundUserRef {
+                            id: user.id.as_str(),
+                            flow: user.flow.as_deref(),
+                            credential_id: user.credential_id.as_deref(),
+                            principal_key: user.principal_key.as_deref(),
+                            up_bps: user.up_bps,
+                            down_bps: user.down_bps,
                         }),
-                    tls: tls.as_deref(),
-                    ws: ws.as_deref(),
-                    grpc: grpc.as_deref(),
-                    h2: h2.as_deref(),
-                    http_upgrade: http_upgrade.as_deref(),
-                    split_http: split_http.as_deref(),
-                    fallback: fallback.as_deref(),
-                },
-            )
-            .map_err(EngineError::from)?,
+                        reality: reality
+                            .as_deref()
+                            .map(|reality| VlessRealityServerOptionsRef {
+                                private_key: reality.private_key.as_str(),
+                                short_ids: reality.short_ids.as_slice(),
+                                server_name: reality.server_name.as_deref(),
+                                cipher_suites: reality.cipher_suites.as_slice(),
+                            }),
+                        tls: tls.as_deref(),
+                        ws: ws.as_deref(),
+                        grpc: grpc.as_deref(),
+                        h2: h2.as_deref(),
+                        http_upgrade: http_upgrade.as_deref(),
+                        split_http: split_http.as_deref(),
+                        fallback: fallback.as_deref(),
+                    },
+                )
+                .map_err(EngineError::from)?;
+                let fallback_target = fallback
+                    .as_deref()
+                    .map(crate::runtime::InboundFallbackTarget::from_profile);
+                (request, fallback_target)
+            }
             _ => {
                 return Err(EngineError::Io(std::io::Error::new(
                     std::io::ErrorKind::InvalidInput,
@@ -306,7 +453,7 @@ impl InboundListenerCapability for VlessAdapter {
                 )));
             }
         };
-        Ok(listener::prepare(request))
+        Ok(listener::prepare(request, fallback_target))
     }
 }
 
@@ -320,7 +467,7 @@ impl UdpFlowCapability for VlessAdapter {}
 impl ManagedUdpHandlerProvider for VlessAdapter {
     fn managed_stream_udp_handlers(&self) -> Option<ManagedStreamHandlerPair> {
         Some(managed_stream_udp_handler_for_resume::<
-            <VlessOutboundLeaf as ProtocolManagedStreamUdpLeafOps>::Resume,
+            <VlessOutboundLeaf as ProxyTransportUdpLeaf>::RuntimeResume,
         >())
     }
 }

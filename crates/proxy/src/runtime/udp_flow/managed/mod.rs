@@ -6,21 +6,13 @@
 #[cfg(feature = "managed-stream-runtime")]
 pub(crate) mod bridge;
 #[cfg(any(
-    feature = "vless",
-    feature = "vmess",
-    feature = "trojan",
-    feature = "mieru",
-    feature = "hysteria2",
-    feature = "shadowsocks"
+    feature = "managed-stream-runtime",
+    feature = "managed-datagram-runtime"
 ))]
 mod cache;
 #[cfg(any(
-    feature = "vless",
-    feature = "vmess",
-    feature = "trojan",
-    feature = "mieru",
-    feature = "hysteria2",
-    feature = "shadowsocks"
+    feature = "managed-stream-runtime",
+    feature = "managed-datagram-runtime"
 ))]
 mod connection;
 #[cfg(feature = "managed-datagram-runtime")]
@@ -30,37 +22,34 @@ pub(crate) mod datagram_manager;
 mod flow;
 pub(crate) mod model;
 #[cfg(any(
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
+    feature = "managed-stream-runtime",
+    feature = "managed-datagram-runtime"
 ))]
 pub(crate) mod state;
 #[cfg(feature = "managed-stream-runtime")]
 mod stream;
 #[cfg(feature = "managed-stream-runtime")]
 pub(crate) mod stream_manager;
-#[cfg(test)]
+#[cfg(all(test, feature = "managed-datagram-runtime"))]
 mod tests;
+#[cfg(feature = "managed-stream-runtime")]
+pub(crate) use connection::ManagedPacketUdpFlowConnection;
 #[cfg(any(
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
+    feature = "managed-stream-runtime",
+    feature = "managed-datagram-runtime"
+))]
+pub(crate) use connection::ManagedTupleUdpFlowConnection;
+#[cfg(feature = "managed-datagram-runtime")]
+pub(crate) use datagram::ManagedDatagramFlowConnection;
+#[cfg(any(
+    feature = "managed-stream-runtime",
+    feature = "managed-datagram-runtime"
 ))]
 pub(crate) use flow::ManagedExistingFlowForward;
 pub(crate) use flow::ManagedUdpFlowResume;
 #[cfg(any(
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
+    feature = "managed-stream-runtime",
+    feature = "managed-datagram-runtime"
 ))]
 pub(crate) use flow::{ManagedUdpFlowKind, ManagedUdpFlowRequest};
 #[cfg(feature = "managed-datagram-runtime")]
@@ -68,11 +57,12 @@ pub(crate) use model::ManagedDatagramFlowHandler;
 #[cfg(feature = "managed-stream-runtime")]
 pub(crate) use model::ManagedStreamHandlerPair;
 #[cfg(any(
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
+    feature = "managed-stream-runtime",
+    feature = "managed-datagram-runtime"
 ))]
 pub(crate) use state::{ManagedUdpHandlers, ManagedUdpState};
+#[cfg(feature = "managed-stream-runtime")]
+pub(crate) use stream_manager::{
+    ManagedPacketUdpResume, ManagedPacketUdpResumeConnector, ManagedStreamConnectorParts,
+    ManagedTupleUdpResume, ManagedTupleUdpResumeConnector,
+};

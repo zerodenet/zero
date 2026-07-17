@@ -32,18 +32,9 @@ impl EnginePlan {
         let mut loadbalance_groups = Vec::new();
 
         for (outbound_index, outbound) in config.outbounds.iter().enumerate() {
-            let endpoint = outbound
-                .protocol
-                .endpoint()
-                .map(|(server, port)| OutboundEndpoint {
-                    server: server.to_owned(),
-                    port,
-                });
             let kind = TargetKind::Outbound(OutboundTarget {
                 outbound_index,
-                protocol: outbound.protocol.protocol_name(),
                 runtime_kind: outbound.protocol.runtime_kind(),
-                endpoint,
             });
 
             targets.push(TargetNode {
@@ -251,9 +242,7 @@ pub enum TargetKind {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OutboundTarget {
     outbound_index: usize,
-    protocol: &'static str,
     runtime_kind: OutboundRuntimeKind,
-    endpoint: Option<OutboundEndpoint>,
 }
 
 impl OutboundTarget {
@@ -261,25 +250,9 @@ impl OutboundTarget {
         self.outbound_index
     }
 
-    pub fn protocol(&self) -> &'static str {
-        self.protocol
-    }
-
     pub fn runtime_kind(&self) -> OutboundRuntimeKind {
         self.runtime_kind
     }
-
-    pub fn endpoint(&self) -> Option<(&str, u16)> {
-        self.endpoint
-            .as_ref()
-            .map(|endpoint| (endpoint.server.as_str(), endpoint.port))
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct OutboundEndpoint {
-    server: String,
-    port: u16,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

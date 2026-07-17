@@ -1,11 +1,19 @@
 #[cfg(feature = "managed-datagram-runtime")]
 use crate::runtime::udp_dispatch::managed::model::{ManagedDatagramStart, ManagedUdpSend};
-#[cfg(any(feature = "socks5", feature = "hysteria2", feature = "shadowsocks"))]
+#[cfg(feature = "managed-datagram-runtime")]
+use crate::runtime::udp_dispatch::operation::ManagedDatagramStartPlan;
+#[cfg(any(
+    feature = "upstream-association-runtime",
+    feature = "managed-datagram-runtime"
+))]
 use crate::runtime::udp_dispatch::FlowStartResult;
 use crate::runtime::udp_dispatch::{FlowFailure, UdpDispatch};
 #[cfg(feature = "managed-datagram-runtime")]
 use crate::runtime::udp_flow::managed::{ManagedUdpFlowKind, ManagedUdpFlowResume};
-#[cfg(any(feature = "socks5", feature = "hysteria2", feature = "shadowsocks"))]
+#[cfg(any(
+    feature = "upstream-association-runtime",
+    feature = "managed-datagram-runtime"
+))]
 use crate::runtime::udp_flow::outbound::UdpFlowOutbound;
 
 impl UdpDispatch {
@@ -40,12 +48,12 @@ impl UdpDispatch {
         services: Option<crate::protocol_registry::UdpRuntimeServices>,
         session: &zero_core::Session,
         payload: &[u8],
-        plan: zero_transport::managed_udp::ManagedDatagramStartPlan<T>,
+        plan: ManagedDatagramStartPlan<T>,
     ) -> Result<FlowStartResult, FlowFailure>
     where
         T: std::any::Any + Send + Sync + std::fmt::Debug,
     {
-        let zero_transport::managed_udp::ManagedDatagramStartPlan {
+        let ManagedDatagramStartPlan {
             tag,
             server,
             port,
@@ -76,19 +84,9 @@ impl UdpDispatch {
             services: request.services,
             tag: request.tag,
             session: request.session,
-            #[cfg(any(
-                feature = "vless",
-                feature = "vmess",
-                feature = "trojan",
-                feature = "mieru"
-            ))]
+            #[cfg(feature = "managed-stream-runtime")]
             carrier: None,
-            #[cfg(any(
-                feature = "vless",
-                feature = "vmess",
-                feature = "trojan",
-                feature = "mieru"
-            ))]
+            #[cfg(feature = "managed-stream-runtime")]
             tls_server_name: None,
             server: request.server,
             port: request.port,

@@ -5,11 +5,8 @@ use zero_core::Address;
 use zero_engine::EngineError;
 
 #[cfg(any(
-    feature = "vless",
-    feature = "vmess",
-    feature = "trojan",
-    feature = "mieru",
-    feature = "hysteria2"
+    feature = "managed-stream-runtime",
+    feature = "managed-datagram-runtime"
 ))]
 #[async_trait::async_trait]
 pub(crate) trait ManagedUdpConnection: Send + Sync {
@@ -20,15 +17,12 @@ pub(crate) trait ManagedUdpConnection: Send + Sync {
 }
 
 #[cfg(any(
-    feature = "vless",
-    feature = "vmess",
-    feature = "trojan",
-    feature = "mieru",
-    feature = "hysteria2"
+    feature = "managed-stream-runtime",
+    feature = "managed-datagram-runtime"
 ))]
 pub(crate) type SharedManagedUdpConnection = Arc<dyn ManagedUdpConnection>;
 
-#[cfg(feature = "shadowsocks")]
+#[cfg(feature = "managed-datagram-runtime")]
 #[async_trait::async_trait]
 pub(crate) trait ManagedDatagramUdpConnection: Send + Sync {
     async fn send_datagram(
@@ -41,5 +35,5 @@ pub(crate) trait ManagedDatagramUdpConnection: Send + Sync {
     ) -> Result<usize, EngineError>;
 }
 
-#[cfg(feature = "shadowsocks")]
+#[cfg(feature = "managed-datagram-runtime")]
 pub(crate) type SharedManagedDatagramUdpConnection = Arc<dyn ManagedDatagramUdpConnection>;

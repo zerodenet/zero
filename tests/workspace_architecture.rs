@@ -32,6 +32,43 @@ fn read(path: &Path) -> String {
     fs::read_to_string(path).unwrap_or_else(|error| panic!("read {}: {error}", path.display()))
 }
 
+fn adapter_feature_names() -> Vec<String> {
+    let adapters = read(&workspace_root().join("crates/proxy/src/adapters/mod.rs"));
+    let mut features = adapters
+        .lines()
+        .filter_map(|line| {
+            line.trim()
+                .strip_prefix("#[cfg(feature = \"")
+                .and_then(|feature| feature.strip_suffix("\")]"))
+                .map(str::to_owned)
+        })
+        .collect::<Vec<_>>();
+    features.sort_unstable();
+    features.dedup();
+    features
+}
+
+fn non_http_protocol_feature_names() -> Vec<String> {
+    adapter_feature_names()
+        .into_iter()
+        .filter(|feature| feature != "http")
+        .collect()
+}
+
+fn upper_camel_identifier(value: &str) -> String {
+    value
+        .split('_')
+        .map(|part| {
+            let mut chars = part.chars();
+            chars
+                .next()
+                .map(|first| first.to_ascii_uppercase().to_string() + chars.as_str())
+                .unwrap_or_default()
+        })
+        .collect::<Vec<_>>()
+        .join("")
+}
+
 #[test]
 fn transport_does_not_project_engine_outbound_leaves() {
     let transport = workspace_root().join("crates/transport/src");
@@ -81,6 +118,7 @@ fn protocol_crates_keep_runtime_support_deps_optional_and_out_of_config_space() 
             "zero-api",
             "zero-config",
             "zero-dns",
+            "zero-engine",
             "zero-proxy",
             "zero-router",
         ] {
@@ -90,7 +128,7 @@ fn protocol_crates_keep_runtime_support_deps_optional_and_out_of_config_space() 
                 manifest.display()
             );
         }
-        for runtime_support in ["zero-engine", "zero-platform-tokio", "zero-transport"] {
+        for runtime_support in ["zero-platform-tokio", "zero-transport"] {
             if source.contains(runtime_support) {
                 assert!(
                     source.contains("runtime = ["),
@@ -141,20 +179,29 @@ fn foundational_crates_do_not_depend_on_runtime_or_integration_crates() {
 }
 
 #[test]
-fn protocol_projection_is_confined_to_proxy_adapters() {
+fn engine_leaf_projection_stops_at_the_inventory_registry_claim_boundary() {
     let proxy = workspace_root().join("crates/proxy/src");
     for path in rust_sources(&proxy) {
         let source = read(&path);
-        if !source.contains("ResolvedLeafOutbound::") {
+        if !source.contains("ResolvedLeafOutbound") {
             continue;
         }
         let relative = path.strip_prefix(&proxy).expect("proxy-relative path");
-        let allowed = relative.starts_with("adapters")
-            || relative.starts_with("protocol_registry")
-            || relative.starts_with("inventory/tests");
+        let allowed = relative == Path::new("inventory/runtime.rs")
+            || relative == Path::new("protocol_registry/registry/outbound.rs")
+            || relative.starts_with("inventory/tests")
+            || relative.starts_with("protocol_registry/registry/tests");
         assert!(
             allowed,
-            "{} must not project concrete engine leaves outside adapter/registry integration",
+            "{} must not carry engine leaves past the inventory-to-registry claim boundary",
+            path.display()
+        );
+    }
+
+    for path in rust_sources(&proxy.join("adapters")) {
+        assert!(
+            !read(&path).contains("ResolvedLeafOutbound"),
+            "{} must consume registry claim inputs instead of projecting engine leaves",
             path.display()
         );
     }
@@ -163,24 +210,17 @@ fn protocol_projection_is_confined_to_proxy_adapters() {
 #[test]
 fn engine_outbound_leaves_are_protocol_neutral() {
     let engine = workspace_root().join("crates/engine/src");
+    let protocols = non_http_protocol_feature_names();
     for path in rust_sources(&engine) {
-        let source = read(&path);
-        for protocol in [
-            "Hysteria2",
-            "Mieru",
-            "Shadowsocks",
-            "Socks5",
-            "Trojan",
-            "Vless",
-            "Vmess",
-        ] {
+        let source = read(&path).to_ascii_lowercase();
+        for protocol in &protocols {
             assert!(
-                !source.contains(&format!("ResolvedLeafOutbound::{protocol}")),
+                !source.contains(&format!("resolvedleafoutbound::{protocol}")),
                 "{} must not expose a concrete protocol leaf `{protocol}`",
                 path.display()
             );
             assert!(
-                !source.contains(&format!("OutboundTarget::{protocol}")),
+                !source.contains(&format!("outboundtarget::{protocol}")),
                 "{} must not expose a concrete protocol target `{protocol}`",
                 path.display()
             );
@@ -191,17 +231,23 @@ fn engine_outbound_leaves_are_protocol_neutral() {
 #[test]
 fn proxy_adapters_materialize_protocol_config_once() {
     let adapters = workspace_root().join("crates/proxy/src/adapters");
-    for (protocol, config_variant) in [
-        ("socks5", "Socks5"),
-        ("hysteria2", "Hysteria2"),
-        ("shadowsocks", "Shadowsocks"),
-        ("mieru", "Mieru"),
-        ("vless", "Vless"),
-        ("vmess", "Vmess"),
-        ("trojan", "Trojan"),
-    ] {
-        let root = adapters.join(format!("{protocol}.rs"));
+    for entry in fs::read_dir(&adapters).expect("adapter directory") {
+        let root = entry.expect("adapter entry").path();
+        if root.extension().and_then(|extension| extension.to_str()) != Some("rs") {
+            continue;
+        }
         let source = read(&root);
+        if !source.contains("fn claim_outbound_leaf_impl")
+            || source.contains("OutboundLeafInput::Direct")
+        {
+            continue;
+        }
+
+        let protocol = root
+            .file_stem()
+            .and_then(|stem| stem.to_str())
+            .expect("adapter file stem");
+        let config_variant = upper_camel_identifier(protocol);
         assert!(
             source.contains("fn claim_outbound_leaf_impl"),
             "{} must own the protocol materialization boundary",
@@ -218,12 +264,15 @@ fn proxy_adapters_materialize_protocol_config_once() {
             root.display()
         );
 
-        for path in rust_sources(&adapters.join(protocol)) {
-            assert!(
-                !read(&path).contains("ResolvedLeafOutbound"),
-                "{} must consume the protocol-owned projected leaf",
-                path.display()
-            );
+        let adapter_dir = adapters.join(protocol);
+        if adapter_dir.exists() {
+            for path in rust_sources(&adapter_dir) {
+                assert!(
+                    !read(&path).contains("ResolvedLeafOutbound"),
+                    "{} must consume the protocol-owned projected leaf",
+                    path.display()
+                );
+            }
         }
     }
 }
@@ -231,15 +280,7 @@ fn proxy_adapters_materialize_protocol_config_once() {
 #[test]
 fn generic_proxy_modules_do_not_repeat_the_complete_protocol_feature_set() {
     let proxy = workspace_root().join("crates/proxy/src");
-    let protocols = [
-        "socks5",
-        "vless",
-        "vmess",
-        "trojan",
-        "mieru",
-        "hysteria2",
-        "shadowsocks",
-    ];
+    let protocols = adapter_feature_names();
     for relative in ["inventory", "runtime", "protocol_registry"] {
         for path in rust_sources(&proxy.join(relative)) {
             if path
@@ -276,6 +317,12 @@ fn protocol_registry_does_not_project_proxy_leaf_runtime_facts() {
             "protocol registry must not derive adapter-owned runtime facts through `{forbidden}`"
         );
     }
+    assert_eq!(
+        registry.matches(".endpoint()").count(),
+        1,
+        "registry must resolve the configured proxy endpoint exactly once before claim"
+    );
+    assert!(registry.contains("OutboundLeafInput::Proxy { outbound, endpoint }"));
 }
 
 #[test]
@@ -384,22 +431,35 @@ fn engine_runtime_domains_do_not_regrow_in_the_facade() {
 #[test]
 fn generic_transport_carriers_do_not_depend_on_protocol_crates() {
     let transport = workspace_root().join("crates/transport/src");
+    let protocols = non_http_protocol_feature_names();
     for path in rust_sources(&transport) {
         let source = read(&path);
-        for protocol in [
-            "hysteria2",
-            "mieru",
-            "shadowsocks",
-            "socks5",
-            "trojan",
-            "vless",
-            "vmess",
-        ] {
+        for protocol in &protocols {
             assert!(
                 !source.contains(&format!("use {protocol}::")),
                 "generic carrier {} must not import protocol crate `{protocol}`",
                 path.display()
             );
+        }
+    }
+}
+
+#[test]
+fn engine_and_transport_sources_do_not_name_concrete_proxy_protocols() {
+    let protocols = non_http_protocol_feature_names();
+    for root in [
+        workspace_root().join("crates/engine/src"),
+        workspace_root().join("crates/transport/src"),
+    ] {
+        for path in rust_sources(&root) {
+            let source = read(&path).to_ascii_lowercase();
+            for protocol in &protocols {
+                assert!(
+                    !source.contains(protocol.as_str()),
+                    "{} must not know concrete protocol `{protocol}`",
+                    path.display()
+                );
+            }
         }
     }
 }
@@ -420,6 +480,14 @@ fn transport_does_not_hardcode_protocol_service_or_alpn_defaults() {
             );
         }
     }
+}
+
+#[test]
+fn outbound_carrier_stack_does_not_require_tls_for_other_carrier_features() {
+    let stack = read(&workspace_root().join("crates/transport/src/outbound_stack.rs"));
+    assert!(stack.contains("#[cfg(feature = \"tls\")]"));
+    assert!(stack.contains("use crate::tls;"));
+    assert!(stack.matches("#[cfg(not(feature = \"tls\"))]").count() >= 2);
 }
 
 #[test]
@@ -455,19 +523,35 @@ fn transport_does_not_depend_on_config_protocol_adts() {
         !manifest.contains("zero-config"),
         "crates/transport/Cargo.toml must not depend on zero-config"
     );
-    for protocol in [
-        "hysteria2",
-        "mieru",
-        "shadowsocks",
-        "socks5",
-        "trojan",
-        "vless",
-        "vmess",
-    ] {
+    for protocol in non_http_protocol_feature_names() {
         assert!(
             !manifest.contains(&format!("name = \"{protocol}\""))
                 && !manifest.contains(&format!("path = \"../../protocols/{protocol}\"")),
             "crates/transport/Cargo.toml must not depend on protocol crate `{protocol}`"
+        );
+    }
+}
+
+#[test]
+fn transport_and_engine_manifests_lock_the_orchestration_dependency_direction() {
+    let transport = read(&workspace_root().join("crates/transport/Cargo.toml"));
+    for forbidden in [
+        "zero-config",
+        "zero-engine",
+        "zero-proxy",
+        "../../protocols/",
+    ] {
+        assert!(
+            !transport.contains(forbidden),
+            "zero-transport must not depend on orchestration boundary `{forbidden}`"
+        );
+    }
+
+    let engine = read(&workspace_root().join("crates/engine/Cargo.toml"));
+    for forbidden in ["zero-proxy", "zero-transport", "../../protocols/"] {
+        assert!(
+            !engine.contains(forbidden),
+            "zero-engine must not depend on execution boundary `{forbidden}`"
         );
     }
 }

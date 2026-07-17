@@ -44,7 +44,7 @@ pub struct HttpConnectInbound;
 
 impl HttpConnectInbound {
     pub fn protocol(&self) -> ProtocolType {
-        ProtocolType::HttpConnect
+        ProtocolType::new("http")
     }
 
     pub async fn accept_request<S>(&self, stream: &mut S) -> Result<Session, Error>
@@ -60,7 +60,7 @@ impl HttpConnectInbound {
             target,
             port,
             Network::Tcp,
-            ProtocolType::HttpConnect,
+            ProtocolType::new("http"),
         ))
     }
 

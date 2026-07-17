@@ -6,5 +6,5 @@
 
 mod error;
 mod managed;
-#[cfg(feature = "socks5")]
+#[cfg(feature = "upstream-association-runtime")]
 mod upstream;

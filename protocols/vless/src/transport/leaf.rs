@@ -5,23 +5,12 @@ use zero_core::Session;
 use zero_platform_tokio::{TcpRelayStream, TokioSocket};
 use zero_traits::{
     ClientTlsProfile, GrpcTransportProfile, H2TransportProfile, HttpUpgradeTransportProfile,
-    SplitHttpTransportProfile, WebSocketTransportProfile,
-};
-use zero_transport::managed_udp::{
-    ManagedTupleUdpResume, ProtocolManagedStreamUdpLeafOps, ProtocolRelayTwoStreamManagedUdpLeafOps,
+    ProtocolRelayTwoStreamUdpFlowLeaf, ProtocolUdpFlowLeaf, SplitHttpTransportProfile,
+    WebSocketTransportProfile,
 };
 use zero_transport::RuntimeError;
 
-use zero_transport::outbound_leaf::{
-    clone_socket_opener, ProtocolRelayTwoStreamTransportLeaf,
-    ProtocolRelayTwoStreamUdpTransportLeafMetadata, ProtocolTcpTransportLeafMetadata,
-    ProtocolTcpTransportLeafOps, ProtocolTcpTransportOpenResult, ProtocolTransportLeaf,
-    ProtocolUdpTransportLeafMetadata,
-};
-use zero_transport::transport_plan::{direct_stream_opener, relay_stream_opener};
-use zero_transport::StreamTraffic;
-
-use super::managed_udp::{VlessManagedStreamUdpResume, VlessManagedUdpFlowResume};
+use super::managed_udp::VlessManagedUdpFlowResume;
 use super::outbound::OwnedVlessOutboundTransportPlan;
 use super::profile::{VlessQuicClientProfile, VlessRealityClientProfile};
 use super::runtime::VlessTransportRuntime;
@@ -160,7 +149,29 @@ impl VlessOutboundLeaf {
         }
     }
 
-    pub(super) fn relay_needs_two_streams(&self) -> bool {
+    pub fn tag(&self) -> &str {
+        &self.tag
+    }
+
+    pub fn server(&self) -> &str {
+        &self.server
+    }
+
+    pub fn port(&self) -> u16 {
+        self.port
+    }
+
+    pub fn validate_udp_relay_final_hop(&self) -> Result<(), RuntimeError> {
+        if self.owned_transport_plan().uses_quic() {
+            return Err(zero_core::Error::Unsupported(
+                "VLESS QUIC final hop over TCP relay chain is not supported",
+            )
+            .into());
+        }
+        Ok(())
+    }
+
+    pub fn relay_needs_two_streams(&self) -> bool {
         self.transport.relay_needs_two_streams()
     }
 
@@ -172,7 +183,7 @@ impl VlessOutboundLeaf {
         self.transport.clone()
     }
 
-    async fn build_relay_two_stream_udp_transport(
+    pub async fn build_relay_two_stream_udp_transport(
         &self,
         post_stream: TcpRelayStream,
         get_stream: TcpRelayStream,
@@ -182,7 +193,7 @@ impl VlessOutboundLeaf {
             .await
     }
 
-    pub(super) async fn open_tcp_stream<OpenSocket, OpenSocketFut>(
+    pub async fn open_tcp_stream<OpenSocket, OpenSocketFut>(
         &self,
         session: &Session,
         open_socket: OpenSocket,
@@ -193,8 +204,8 @@ impl VlessOutboundLeaf {
     {
         let protocol = self.protocol.clone();
         let transport = self.owned_transport_plan();
-        let open_socket = clone_socket_opener(open_socket);
-        let direct_transport = direct_stream_opener(&transport, open_socket.clone());
+        let direct_transport =
+            || transport.open_direct(move |server, port| open_socket.clone()(server, port));
         protocol
             .open_tcp_stream_with_transport_or_mux(
                 session,
@@ -207,7 +218,7 @@ impl VlessOutboundLeaf {
             .await
     }
 
-    pub(super) async fn open_tcp_relay_hop(
+    pub async fn open_tcp_relay_hop(
         &self,
         stream: TcpRelayStream,
         session: &Session,
@@ -216,11 +227,9 @@ impl VlessOutboundLeaf {
         let transport = self.owned_transport_plan();
         let quic_requested = transport.uses_quic();
         protocol
-            .open_tcp_relay_hop_with_transport(
-                session,
-                quic_requested,
-                relay_stream_opener(&transport, stream),
-            )
+            .open_tcp_relay_hop_with_transport(session, quic_requested, || {
+                transport.open_relay(stream)
+            })
             .await
             .map(TcpRelayStream::new)
     }
@@ -250,118 +259,24 @@ impl VlessOutboundLeaf {
     }
 }
 
-impl ProtocolTransportLeaf for VlessOutboundLeaf {
-    fn tag(&self) -> &str {
-        &self.tag
-    }
-
-    fn server(&self) -> &str {
-        &self.server
-    }
-
-    fn port(&self) -> u16 {
-        self.port
-    }
-
-    fn validate_udp_relay_final_hop(&self) -> Result<(), RuntimeError> {
-        if self.owned_transport_plan().uses_quic() {
-            return Err(zero_core::Error::Unsupported(
-                "VLESS QUIC final hop over TCP relay chain is not supported",
-            )
-            .into());
-        }
-        Ok(())
-    }
-}
-
-impl ProtocolTcpTransportLeafMetadata for VlessOutboundLeaf {
-    const TCP_CONNECT_STAGE: &'static str = "connect_upstream_vless";
-    const TCP_INVALID_CONNECT_CONFIG: &'static str = "invalid vless tcp config";
-    const TCP_INVALID_RELAY_CONFIG: &'static str = "invalid vless tcp relay config";
-}
-
-impl ProtocolUdpTransportLeafMetadata for VlessOutboundLeaf {
-    const UDP_DIRECT_STAGE: &'static str = "udp_vless_leaf";
-    const UDP_INVALID_CONFIG: &'static str = "invalid vless udp config";
-    const UDP_RELAY_FINAL_STAGE: &'static str = "udp_vless_relay_final_leaf";
-}
-
-impl ProtocolRelayTwoStreamUdpTransportLeafMetadata for VlessOutboundLeaf {
-    const UDP_RELAY_CAPABILITY_STAGE: &'static str = "udp_vless_relay_capability";
-    const UDP_RELAY_CHAIN_STAGE: &'static str = "udp_vless_relay_chain";
-}
-
-#[async_trait::async_trait]
-impl ProtocolTcpTransportLeafOps for VlessOutboundLeaf {
-    type Opened = crate::outbound::VlessTcpStreamOpen;
-
-    async fn open_tcp_stream<OpenSocket, OpenSocketFut>(
-        &self,
-        session: &Session,
-        open_socket: OpenSocket,
-    ) -> Result<Self::Opened, RuntimeError>
-    where
-        OpenSocket: Clone + Fn(&str, u16) -> OpenSocketFut + Send + Sync,
-        OpenSocketFut: Future<Output = Result<TokioSocket, RuntimeError>> + Send,
-    {
-        VlessOutboundLeaf::open_tcp_stream(self, session, open_socket).await
-    }
-
-    async fn open_tcp_relay_hop(
-        &self,
-        stream: TcpRelayStream,
-        session: &Session,
-    ) -> Result<TcpRelayStream, RuntimeError> {
-        VlessOutboundLeaf::open_tcp_relay_hop(self, stream, session).await
-    }
-}
-
-impl ProtocolManagedStreamUdpLeafOps for VlessOutboundLeaf {
-    type Resume = VlessManagedStreamUdpResume;
+impl ProtocolUdpFlowLeaf for VlessOutboundLeaf {
+    type Resume = VlessManagedUdpFlowResume;
 
     fn direct_udp_resume(&self) -> Self::Resume {
-        ManagedTupleUdpResume::new(VlessOutboundLeaf::direct_udp_resume(self))
+        VlessOutboundLeaf::direct_udp_resume(self)
     }
 
     fn relay_final_hop_udp_resume(&self) -> Self::Resume {
-        ManagedTupleUdpResume::new(VlessOutboundLeaf::relay_final_hop_udp_resume(self))
+        VlessOutboundLeaf::relay_final_hop_udp_resume(self)
     }
 }
 
-impl ProtocolRelayTwoStreamManagedUdpLeafOps for VlessOutboundLeaf {
+impl ProtocolRelayTwoStreamUdpFlowLeaf for VlessOutboundLeaf {
     fn udp_relay_needs_two_streams(&self) -> bool {
         VlessOutboundLeaf::relay_needs_two_streams(self)
     }
 
     fn relay_two_stream_udp_resume(&self) -> Self::Resume {
-        ManagedTupleUdpResume::new(VlessOutboundLeaf::relay_two_stream_udp_resume(self))
-    }
-}
-
-impl ProtocolTcpTransportOpenResult for crate::outbound::VlessTcpStreamOpen {
-    fn into_proxied_stream_parts(self) -> (TcpRelayStream, StreamTraffic) {
-        let (stream, handshake_written_bytes, handshake_read_bytes) = self.into_parts();
-        (
-            TcpRelayStream::new(stream),
-            StreamTraffic {
-                read_bytes: handshake_read_bytes,
-                written_bytes: handshake_written_bytes,
-            },
-        )
-    }
-}
-
-#[async_trait::async_trait]
-impl ProtocolRelayTwoStreamTransportLeaf for VlessOutboundLeaf {
-    async fn open_relay_two_stream_udp_transport(
-        &self,
-        post_stream: TcpRelayStream,
-        get_stream: TcpRelayStream,
-    ) -> Result<TcpRelayStream, RuntimeError> {
-        VlessOutboundLeaf::build_relay_two_stream_udp_transport(self, post_stream, get_stream).await
-    }
-
-    fn needs_relay_two_streams(&self) -> bool {
-        VlessOutboundLeaf::relay_needs_two_streams(self)
+        VlessOutboundLeaf::relay_two_stream_udp_resume(self)
     }
 }

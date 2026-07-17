@@ -46,7 +46,6 @@ impl TcpRuntimeServices {
         &self.protocols
     }
 
-    #[cfg(feature = "udp-runtime")]
     pub(crate) async fn connect_upstream_owned(
         &self,
         server: String,
@@ -103,7 +102,6 @@ impl TcpRuntimeServices {
         .await
     }
 
-    #[cfg(feature = "udp-runtime")]
     pub(crate) fn record_control_traffic(
         &self,
         session_id: u64,
@@ -256,7 +254,7 @@ impl UdpRuntimeServices {
         self.tcp.record_session_outbound_tx(session_id, bytes);
     }
 
-    #[cfg(any(feature = "socks5", feature = "vless"))]
+    #[cfg(feature = "udp-response-runtime")]
     pub(crate) fn record_session_inbound_traffic(
         &self,
         session_id: u64,
@@ -303,12 +301,12 @@ impl UdpRuntimeServices {
         self.tcp.engine().record_udp_upstream_packet_sent();
     }
 
-    #[cfg(feature = "socks5")]
+    #[cfg(feature = "upstream-association-runtime")]
     pub(crate) fn record_udp_upstream_recv_failure(&self) {
         self.tcp.engine().record_udp_upstream_recv_failure();
     }
 
-    #[cfg(feature = "socks5")]
+    #[cfg(feature = "upstream-association-runtime")]
     pub(crate) fn record_udp_upstream_packet_received(&self) {
         self.tcp.engine().record_udp_upstream_packet_received();
     }
@@ -328,7 +326,7 @@ impl UdpRuntimeServices {
         }
     }
 
-    #[cfg(feature = "shadowsocks")]
+    #[cfg(feature = "managed-datagram-runtime")]
     pub(crate) async fn build_udp_socket_carrier(
         &self,
         server: &str,

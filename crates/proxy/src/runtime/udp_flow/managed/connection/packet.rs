@@ -10,3 +10,4 @@ mod flow;
 mod sender;
 
 pub(crate) use build::managed_packet_udp_connection_from_flow;
+pub(crate) use flow::ManagedPacketUdpFlowConnection;

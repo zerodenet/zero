@@ -115,7 +115,7 @@ async fn registered_udp_state_forwards_with_restored_opaque_resume() {
             Address::Domain("target.test".to_owned()),
             53,
             Network::Udp,
-            ProtocolType::Unknown,
+            ProtocolType::UNKNOWN,
         ),
         outbound: UdpFlowOutbound::Datagram {
             tag: "fake-datagram".to_owned(),

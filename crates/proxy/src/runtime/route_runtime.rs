@@ -5,13 +5,13 @@
 //! one large implementation bucket.
 
 mod listener;
-#[cfg(any(feature = "vless", feature = "vmess"))]
+#[cfg(feature = "managed-stream-runtime")]
 mod mux;
 mod route;
 mod shared;
 
 pub(crate) use listener::{InboundListenerRuntime, InboundListenerRuntimeFactory};
-#[cfg(any(feature = "vless", feature = "vmess"))]
+#[cfg(feature = "managed-stream-runtime")]
 pub(crate) use mux::MuxSubstreamRuntime;
 pub(crate) use route::{InboundRouteRuntime, InboundRouteRuntimeFactory};
 pub(crate) use shared::SharedIngressRuntimeServices;

@@ -35,7 +35,7 @@ impl VlessInboundBindPlan {
         }
     }
 
-    async fn bind(&self, listen_addr: &str) -> Result<Option<quic::QuicInbound>, RuntimeError> {
+    pub async fn bind(&self, listen_addr: &str) -> Result<Option<quic::QuicInbound>, RuntimeError> {
         match (
             self.quic_cert_path.as_deref(),
             self.quic_key_path.as_deref(),
@@ -55,21 +55,6 @@ impl VlessInboundBindPlan {
                 io::ErrorKind::InvalidInput,
                 "vless quic inbound bind requires both cert_path and key_path",
             ))),
-        }
-    }
-}
-
-#[async_trait::async_trait]
-impl zero_transport::inbound_route::ProtocolInboundBindPlan for VlessInboundBindPlan {
-    async fn bind(
-        &self,
-        listen_addr: &str,
-    ) -> Result<zero_transport::inbound_route::TransportInboundBindTarget, RuntimeError> {
-        match VlessInboundBindPlan::bind(self, listen_addr).await? {
-            Some(endpoint) => {
-                Ok(zero_transport::inbound_route::TransportInboundBindTarget::Quic(endpoint))
-            }
-            None => Ok(zero_transport::inbound_route::TransportInboundBindTarget::Tcp),
         }
     }
 }

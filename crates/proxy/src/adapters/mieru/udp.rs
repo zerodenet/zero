@@ -1,19 +1,112 @@
 use crate::adapters::mieru::MieruAdapter;
 use crate::protocol_registry::ClaimedUdpFlowLeaf;
 use crate::runtime::udp_dispatch::operation::{
-    ManagedStreamPacketUdpOperation, PreparedManagedStreamPacketOperation, PreparedUdpFlowOperation,
+    ManagedStreamPacketBridgePlan, ManagedStreamPacketUdpOperation,
+    PreparedManagedStreamPacketOperation, PreparedUdpFlowOperation,
 };
 use crate::runtime::udp_dispatch::relay::PreparedUdpRelayOperation;
 use crate::runtime::udp_dispatch::FlowFailure;
 use crate::runtime::udp_flow::managed::{
     bridge::{managed_stream_handler_box, ManagedStreamStages},
-    ManagedStreamHandlerPair,
+    ManagedStreamConnectorParts, ManagedStreamHandlerPair, ManagedTupleUdpFlowConnection,
+    ManagedTupleUdpResume, ManagedTupleUdpResumeConnector,
 };
 
+#[async_trait::async_trait]
+impl ManagedTupleUdpResumeConnector for ::mieru::transport::MieruManagedUdpFlowResume {
+    type ConnectorFlow = ::mieru::transport::MieruManagedUdpConnectorFlow;
+    type Connection = ::mieru::udp::MieruUdpFlowConnection;
+
+    const ESTABLISH_STAGE: &'static str = "mieru_establish";
+    const RELAY_UPSTREAM_STAGE: &'static str = "mieru_relay_upstream";
+    const RELAY_ESTABLISH_STAGE: &'static str = "mieru_relay_establish";
+    const RELAY_SEND_STAGE: &'static str = "mieru_relay_send";
+    const MISMATCH_STAGE: &'static str = "udp_mieru_resume";
+    const MISMATCH_MESSAGE: &'static str = "expected Mieru UDP flow resume";
+
+    fn connector_flow(&self, _server: &str, _port: u16, session_id: u64) -> Self::ConnectorFlow {
+        ::mieru::transport::MieruManagedUdpFlowResume::connector_flow(self, session_id)
+    }
+
+    async fn open_direct(
+        &self,
+        services: crate::protocol_registry::UdpRuntimeServices,
+        _session: &zero_core::Session,
+    ) -> Result<Self::Connection, zero_engine::EngineError> {
+        self.open_direct_connection(move |server, port| {
+            let services = services.clone();
+            let server = server.to_owned();
+            async move { services.connect_upstream(&server, port).await }
+        })
+        .await
+        .map_err(zero_engine::EngineError::from)
+    }
+
+    async fn open_relay(
+        &self,
+        stream: crate::transport::TcpRelayStream,
+        _session: &zero_core::Session,
+        _tls_server_name: Option<&str>,
+    ) -> Result<Self::Connection, zero_engine::EngineError> {
+        self.open_relay_connection(stream)
+            .await
+            .map_err(zero_engine::EngineError::from)
+    }
+}
+
+impl ManagedStreamConnectorParts for ::mieru::transport::MieruManagedUdpConnectorFlow {
+    fn into_managed_connector_parts(self) -> (String, bool) {
+        self.into_parts()
+    }
+}
+
+#[async_trait::async_trait]
+impl ManagedTupleUdpFlowConnection for ::mieru::udp::MieruUdpFlowConnection {
+    async fn send(
+        &self,
+        target: &zero_core::Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<usize, zero_engine::EngineError> {
+        ::mieru::udp::MieruUdpFlowConnection::send(self, target, port, payload)
+            .await
+            .map_err(|error| zero_engine::EngineError::Io(std::io::Error::other(error.to_string())))
+    }
+
+    fn subscribe_responses(
+        &self,
+    ) -> tokio::sync::broadcast::Receiver<(zero_core::Address, u16, Vec<u8>)> {
+        ::mieru::udp::MieruUdpFlowConnection::subscribe_responses(self)
+    }
+
+    fn closed_message(&self) -> &'static str {
+        "mieru upstream closed"
+    }
+}
+
 pub(crate) fn managed_stream_handler() -> ManagedStreamHandlerPair {
-    managed_stream_handler_box::<::mieru::transport::MieruManagedStreamUdpResume>(
-        ManagedStreamStages::from_resume::<::mieru::transport::MieruManagedStreamUdpResume>(),
+    managed_stream_handler_box::<ManagedTupleUdpResume<::mieru::transport::MieruManagedUdpFlowResume>>(
+        ManagedStreamStages::from_resume::<
+            ManagedTupleUdpResume<::mieru::transport::MieruManagedUdpFlowResume>,
+        >(),
     )
+}
+
+fn runtime_flow_plan_parts(
+    parts: (
+        String,
+        String,
+        u16,
+        ::mieru::transport::MieruManagedUdpFlowResume,
+    ),
+) -> (
+    String,
+    String,
+    u16,
+    ManagedTupleUdpResume<::mieru::transport::MieruManagedUdpFlowResume>,
+) {
+    let (tag, server, port, resume) = parts;
+    (tag, server, port, ManagedTupleUdpResume::new(resume))
 }
 
 struct ClaimedMieruUdpLeaf {
@@ -21,8 +114,8 @@ struct ClaimedMieruUdpLeaf {
 }
 
 struct PreparedMieruUdpRelay {
-    plan: zero_transport::managed_udp::ManagedStreamPacketBridgePlan<
-        ::mieru::transport::MieruManagedStreamUdpResume,
+    plan: ManagedStreamPacketBridgePlan<
+        ManagedTupleUdpResume<::mieru::transport::MieruManagedUdpFlowResume>,
     >,
 }
 
@@ -33,7 +126,10 @@ impl<'a> ClaimedUdpFlowLeaf<'a> for ClaimedMieruUdpLeaf {
     ) -> Result<Box<dyn PreparedUdpFlowOperation + 'a>, FlowFailure> {
         Ok(Box::new(ManagedStreamPacketUdpOperation {
             operation: PreparedManagedStreamPacketOperation::Direct {
-                plan: self.leaf.clone().udp_flow_plan(false).into_bridge_plan(),
+                plan: ManagedStreamPacketBridgePlan::from_parts(
+                    runtime_flow_plan_parts(self.leaf.clone().udp_flow_plan(false).into_parts()),
+                    false,
+                ),
             },
             needs_proxy: true,
         }))
@@ -44,7 +140,10 @@ impl<'a> ClaimedUdpFlowLeaf<'a> for ClaimedMieruUdpLeaf {
         _source_dir: Option<&std::path::Path>,
     ) -> Result<Box<dyn PreparedUdpRelayOperation<'a> + 'a>, FlowFailure> {
         Ok(Box::new(PreparedMieruUdpRelay {
-            plan: self.leaf.clone().udp_flow_plan(true).into_bridge_plan(),
+            plan: ManagedStreamPacketBridgePlan::from_parts(
+                runtime_flow_plan_parts(self.leaf.clone().udp_flow_plan(true).into_parts()),
+                true,
+            ),
         }))
     }
 }

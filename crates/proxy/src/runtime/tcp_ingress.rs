@@ -12,15 +12,14 @@ mod lifecycle;
 mod runtime;
 
 #[cfg(any(
-    feature = "vless",
-    feature = "socks5",
-    feature = "hysteria2",
-    feature = "mieru"
+    feature = "managed-stream-runtime",
+    feature = "upstream-association-runtime",
+    feature = "managed-datagram-runtime"
 ))]
-#[cfg(feature = "vless")]
+#[cfg(feature = "managed-stream-runtime")]
 pub(crate) use contract::ClientResponseInboundProtocol;
 pub(crate) use contract::InboundProtocol;
-#[cfg(any(feature = "vmess", feature = "trojan"))]
+#[cfg(feature = "managed-stream-runtime")]
 pub(crate) use contract::NoClientResponseInboundProtocol;
 pub(crate) use contract::NoClientResponseStreamProtocol;
 #[cfg(feature = "udp-runtime")]

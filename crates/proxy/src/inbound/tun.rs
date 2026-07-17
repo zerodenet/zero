@@ -1,4 +1,4 @@
-﻿//! TUN inbound 鈥?virtual network interface.
+//! TUN inbound 鈥?virtual network interface.
 //!
 //! Reads raw IP packets from a [`TunDevice`], feeds them to a
 //! [`NetworkStack`] (which handles TCP termination and UDP forwarding),
@@ -103,7 +103,7 @@ async fn tun_loop<S: NetworkStack + Send + Sync + 'static>(
                     sockaddr_to_address(&dst),
                     dst.port,
                     Network::Tcp,
-                    ProtocolType::Unknown,
+                    ProtocolType::UNKNOWN,
                 );
                 let p = proxy.clone();
                 let t = tag.clone();

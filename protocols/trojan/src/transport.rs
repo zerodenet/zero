@@ -8,6 +8,7 @@ mod outbound;
 
 pub use inbound::TrojanInboundListenerRequest;
 pub use leaf::TrojanOutboundLeaf;
+pub use managed_udp::{TrojanManagedUdpConnectorFlow, TrojanManagedUdpFlowResume};
 pub use options::{
     TrojanInboundOptionsRef, TrojanOutboundBuildOptionsRef, TrojanOutboundOptionsRef,
 };

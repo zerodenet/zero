@@ -17,7 +17,11 @@ impl InboundRouteRuntime {
         self.tcp_runtime.serve(session, client, protocol).await
     }
 
-    #[cfg(any(feature = "socks5", feature = "hysteria2", feature = "mieru"))]
+    #[cfg(any(
+        feature = "upstream-association-runtime",
+        feature = "managed-datagram-runtime",
+        feature = "managed-stream-runtime"
+    ))]
     pub(crate) async fn serve_with_client_response<P, S>(
         &self,
         session: Session,
@@ -33,14 +37,15 @@ impl InboundRouteRuntime {
             .await
     }
 
-    #[cfg(feature = "vless")]
+    #[cfg(feature = "managed-stream-runtime")]
     pub(crate) async fn relay_recorded_fallback_replay<R>(
         &self,
-        fallback: zero_transport::OwnedInboundFallbackProfile,
+        fallback: crate::runtime::InboundFallbackTarget,
         replay: R,
     ) -> Result<(), EngineError>
     where
-        R: zero_transport::protocol_inbound_route::FallbackReplayToUpstream + 'static,
+        R: zero_core::InboundFallbackReplay + 'static,
+        R::Stream: crate::transport::ClientStream,
     {
         self.tcp_runtime
             .relay_recorded_fallback_replay(fallback, replay)

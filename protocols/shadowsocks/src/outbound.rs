@@ -22,7 +22,7 @@ pub struct ShadowsocksOutboundSession {
 
 impl ShadowsocksOutbound {
     pub fn protocol(&self) -> ProtocolType {
-        ProtocolType::Shadowsocks
+        ProtocolType::new("shadowsocks")
     }
 
     /// Write the initial encrypted stream payload containing target address.

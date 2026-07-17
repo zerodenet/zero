@@ -8,23 +8,26 @@ use ::trojan::transport::{
 use zero_config::InboundConfig;
 use zero_config::{InboundProtocolConfig, OutboundProtocolConfig};
 #[cfg(feature = "trojan")]
-use zero_engine::{EngineError, ResolvedLeafOutbound};
-use zero_traits::{ProtocolCapabilityDescriptor, ProtocolMetadata};
-#[cfg(feature = "trojan")]
-use zero_transport::managed_udp::ProtocolManagedStreamUdpLeafOps;
+use zero_engine::EngineError;
+use zero_traits::{ProtocolCapabilityDescriptor, ProtocolMetadata, ProtocolUdpFlowLeaf};
 
 use crate::adapters::identity::{
     named_protocol_supports_inbound, named_protocol_supports_outbound, NamedProtocolAdapter,
 };
 use crate::protocol_registry::{
     claim_transport_tcp_leaf, claim_transport_udp_leaf, InboundListenerCapability,
-    ManagedUdpHandlerProvider, OutboundLeafClaim, OutboundLeafRuntime, ProtocolSupportCapability,
+    ManagedUdpHandlerProvider, OutboundLeafClaim, OutboundLeafInput, ProtocolSupportCapability,
     TcpOutboundCapability, UdpFlowCapability, UdpPacketPathCapability,
 };
 use crate::runtime::path::TcpPathCategory;
+use crate::runtime::transport_leaf::{
+    ProxyTransportLeaf, ProxyTransportTcpLeaf, ProxyTransportUdpLeaf,
+};
 #[cfg(feature = "trojan")]
 use crate::runtime::udp_flow::managed::{
-    bridge::managed_stream_udp_handler_for_resume, ManagedStreamHandlerPair,
+    bridge::managed_stream_udp_handler_for_resume, ManagedPacketUdpFlowConnection,
+    ManagedPacketUdpResume, ManagedPacketUdpResumeConnector, ManagedStreamConnectorParts,
+    ManagedStreamHandlerPair,
 };
 
 #[cfg(feature = "trojan")]
@@ -32,91 +35,213 @@ use crate::runtime::udp_flow::managed::{
 pub(crate) struct TrojanAdapter;
 
 #[cfg(feature = "trojan")]
-#[derive(Clone, Copy)]
-struct TrojanOutboundProjection<'a> {
-    tag: &'a str,
-    server: &'a str,
-    port: u16,
-    password: &'a str,
-    sni: Option<&'a str>,
-    insecure: bool,
-    client_fingerprint: Option<&'a str>,
+impl ProxyTransportLeaf for TrojanOutboundLeaf {
+    fn tag(&self) -> &str {
+        self.tag()
+    }
+
+    fn server(&self) -> &str {
+        self.server()
+    }
+
+    fn port(&self) -> u16 {
+        self.port()
+    }
 }
 
 #[cfg(feature = "trojan")]
-impl<'a> TrojanOutboundProjection<'a> {
-    fn from_config(tag: &'a str, protocol: &'a OutboundProtocolConfig) -> Option<Self> {
-        let OutboundProtocolConfig::Trojan {
-            server,
-            port,
-            password,
-            sni,
-            insecure,
-            client_fingerprint,
-        } = protocol
-        else {
-            return None;
-        };
-        Some(Self {
-            tag,
-            server,
-            port: *port,
+#[async_trait::async_trait]
+impl ProxyTransportTcpLeaf for TrojanOutboundLeaf {
+    const TCP_CONNECT_STAGE: &'static str = "connect_upstream_trojan";
+    const TCP_INVALID_CONNECT_CONFIG: &'static str = "invalid trojan tcp config";
+    const TCP_INVALID_RELAY_CONFIG: &'static str = "invalid trojan tcp relay config";
+
+    async fn open_tcp_stream(
+        &self,
+        services: crate::protocol_registry::TcpRuntimeServices,
+        session: &zero_core::Session,
+    ) -> Result<
+        (
+            crate::transport::TcpRelayStream,
+            zero_transport::StreamTraffic,
+        ),
+        zero_transport::RuntimeError,
+    > {
+        let opened = TrojanOutboundLeaf::open_tcp_stream(self, session, move |server, port| {
+            let services = services.clone();
+            let server = server.to_owned();
+            async move {
+                services
+                    .connect_upstream_owned(server, port)
+                    .await
+                    .map_err(zero_transport::RuntimeError::from)
+            }
+        })
+        .await?;
+        let (stream, handshake_written_bytes) = opened.into_parts();
+        Ok((
+            stream,
+            zero_transport::StreamTraffic {
+                read_bytes: 0,
+                written_bytes: handshake_written_bytes,
+            },
+        ))
+    }
+
+    async fn open_tcp_relay_hop(
+        &self,
+        stream: crate::transport::TcpRelayStream,
+        session: &zero_core::Session,
+    ) -> Result<crate::transport::TcpRelayStream, zero_transport::RuntimeError> {
+        TrojanOutboundLeaf::open_tcp_relay_hop(self, stream, session).await
+    }
+}
+
+#[cfg(feature = "trojan")]
+impl ProxyTransportUdpLeaf for TrojanOutboundLeaf {
+    type RuntimeResume = ManagedPacketUdpResume<::trojan::transport::TrojanManagedUdpFlowResume>;
+
+    const UDP_DIRECT_STAGE: &'static str = "udp_trojan_leaf";
+    const UDP_INVALID_CONFIG: &'static str = "invalid trojan udp config";
+    const UDP_RELAY_FINAL_STAGE: &'static str = "udp_trojan_relay_leaf";
+
+    fn direct_udp_resume(&self) -> Self::RuntimeResume {
+        ManagedPacketUdpResume::new(ProtocolUdpFlowLeaf::direct_udp_resume(self))
+    }
+
+    fn relay_final_hop_udp_resume(&self) -> Self::RuntimeResume {
+        ManagedPacketUdpResume::new(ProtocolUdpFlowLeaf::relay_final_hop_udp_resume(self))
+    }
+}
+
+#[cfg(feature = "trojan")]
+fn outbound_options<'a>(
+    tag: &'a str,
+    endpoint: (&'a str, u16),
+    protocol: &'a OutboundProtocolConfig,
+) -> Option<TrojanOutboundBuildOptionsRef<'a>> {
+    let OutboundProtocolConfig::Trojan {
+        password,
+        sni,
+        insecure,
+        client_fingerprint,
+        ..
+    } = protocol
+    else {
+        return None;
+    };
+    Some(TrojanOutboundBuildOptionsRef {
+        tag,
+        server: endpoint.0,
+        port: endpoint.1,
+        protocol: TrojanOutboundOptionsRef {
             password,
             sni: sni.as_deref(),
             insecure: *insecure,
             client_fingerprint: client_fingerprint.as_deref(),
-        })
-    }
-
-    fn endpoint(&self) -> (&'a str, u16) {
-        (self.server, self.port)
-    }
-
-    fn build_options(&self) -> TrojanOutboundBuildOptionsRef<'a> {
-        TrojanOutboundBuildOptionsRef {
-            tag: self.tag,
-            server: self.server,
-            port: self.port,
-            protocol: TrojanOutboundOptionsRef {
-                password: self.password,
-                sni: self.sni,
-                insecure: self.insecure,
-                client_fingerprint: self.client_fingerprint,
-            },
-        }
-    }
+        },
+    })
 }
 
 #[cfg(feature = "trojan")]
 const TCP_PATH: TcpPathCategory = TcpPathCategory::Tunnel;
 
 #[cfg(feature = "trojan")]
+#[async_trait::async_trait]
+impl ManagedPacketUdpResumeConnector for ::trojan::transport::TrojanManagedUdpFlowResume {
+    type ConnectorFlow = ::trojan::transport::TrojanManagedUdpConnectorFlow;
+    type Connection = ::trojan::udp::TrojanUdpFlowConnection;
+
+    const ESTABLISH_STAGE: &'static str = "trojan_establish";
+    const RELAY_UPSTREAM_STAGE: &'static str = "trojan_relay_upstream";
+    const RELAY_ESTABLISH_STAGE: &'static str = "trojan_relay_establish";
+    const RELAY_SEND_STAGE: &'static str = "trojan_relay_send";
+    const MISMATCH_STAGE: &'static str = "udp_trojan_resume";
+    const MISMATCH_MESSAGE: &'static str = "expected Trojan UDP flow resume";
+
+    fn connector_flow(&self, server: &str, port: u16, session_id: u64) -> Self::ConnectorFlow {
+        ::trojan::transport::TrojanManagedUdpFlowResume::connector_flow(
+            self, server, port, session_id,
+        )
+    }
+
+    async fn open_direct(
+        &self,
+        services: crate::protocol_registry::UdpRuntimeServices,
+        session: &zero_core::Session,
+    ) -> Result<Self::Connection, EngineError> {
+        self.open_direct_connection(session, move |server, port| {
+            let services = services.clone();
+            let server = server.to_owned();
+            async move { services.connect_upstream(&server, port).await }
+        })
+        .await
+        .map_err(EngineError::from)
+    }
+
+    async fn open_relay(
+        &self,
+        stream: crate::transport::TcpRelayStream,
+        session: &zero_core::Session,
+        tls_server_name: Option<&str>,
+    ) -> Result<Self::Connection, EngineError> {
+        self.open_relay_connection(stream, session, tls_server_name)
+            .await
+            .map_err(EngineError::from)
+    }
+}
+
+#[cfg(feature = "trojan")]
+impl ManagedStreamConnectorParts for ::trojan::transport::TrojanManagedUdpConnectorFlow {
+    fn into_managed_connector_parts(self) -> (String, bool) {
+        self.into_parts()
+    }
+}
+
+#[cfg(feature = "trojan")]
+#[async_trait::async_trait]
+impl ManagedPacketUdpFlowConnection for ::trojan::udp::TrojanUdpFlowConnection {
+    async fn send(
+        &self,
+        target: &zero_core::Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<usize, EngineError> {
+        ::trojan::udp::TrojanUdpFlowConnection::send(self, target, port, payload)
+            .await
+            .map_err(|error| EngineError::Io(std::io::Error::other(error.to_string())))
+    }
+
+    fn subscribe_responses(&self) -> tokio::sync::broadcast::Receiver<zero_core::UdpFlowPacket> {
+        ::trojan::udp::TrojanUdpFlowConnection::subscribe_responses(self)
+    }
+
+    fn closed_message(&self) -> &'static str {
+        "trojan upstream closed"
+    }
+}
+
+#[cfg(feature = "trojan")]
 impl TrojanAdapter {
     pub(crate) fn claim_outbound_leaf_impl<'a>(
         &self,
-        protocol: Option<&'a OutboundProtocolConfig>,
-        leaf: ResolvedLeafOutbound<'a>,
+        input: OutboundLeafInput<'a>,
     ) -> Option<OutboundLeafClaim<'a>> {
-        let projection = TrojanOutboundProjection::from_config(leaf.tag()?, protocol?)?;
-        let runtime = OutboundLeafRuntime::proxy(
-            projection.tag,
-            projection.server,
-            projection.port,
-            TCP_PATH,
-        );
-        let endpoint = Some(projection.endpoint());
+        let OutboundLeafInput::Proxy { outbound, endpoint } = input else {
+            return None;
+        };
+        let options = outbound_options(outbound.tag(), endpoint, &outbound.protocol)?;
+        let endpoint = Some(endpoint);
         Some(OutboundLeafClaim {
-            runtime: runtime.clone(),
+            tcp_path: TCP_PATH,
             tcp: claim_transport_tcp_leaf(endpoint, move |source_dir| {
                 Ok::<TrojanOutboundLeaf, zero_core::Error>(TrojanOutboundLeaf::from_options_refs(
-                    source_dir,
-                    projection.build_options(),
+                    source_dir, options,
                 ))
             }),
             udp: Some(claim_transport_udp_leaf(endpoint, move |source_dir| {
                 Ok::<TrojanOutboundLeaf, zero_core::Error>(TrojanOutboundLeaf::from_options_refs(
-                    source_dir,
-                    projection.build_options(),
+                    source_dir, options,
                 ))
             })),
             packet_path: None,
@@ -199,7 +324,7 @@ impl UdpFlowCapability for TrojanAdapter {}
 impl ManagedUdpHandlerProvider for TrojanAdapter {
     fn managed_stream_udp_handlers(&self) -> Option<ManagedStreamHandlerPair> {
         Some(managed_stream_udp_handler_for_resume::<
-            <TrojanOutboundLeaf as ProtocolManagedStreamUdpLeafOps>::Resume,
+            <TrojanOutboundLeaf as ProxyTransportUdpLeaf>::RuntimeResume,
         >())
     }
 }

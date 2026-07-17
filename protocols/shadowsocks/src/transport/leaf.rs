@@ -4,7 +4,6 @@ use std::sync::Arc;
 use zero_core::{Address, Session};
 use zero_platform_tokio::TokioSocket;
 use zero_traits::DatagramCodec;
-use zero_transport::outbound_leaf::{ProtocolSocketTcpHandshake, ProtocolTransportLeaf};
 use zero_transport::RuntimeError;
 use zero_transport::{MeteredStream, StreamTraffic, TcpRelayStream};
 
@@ -15,42 +14,6 @@ use super::{
     ShadowsocksManagedUdpPacketPathDatagramSourceBuild, ShadowsocksManagedUdpPacketPathPlan,
     ShadowsocksOutboundOptionsRef, ShadowsocksTransportLeaf,
 };
-
-impl ProtocolTransportLeaf for ShadowsocksTransportLeaf {
-    fn tag(&self) -> &str {
-        self.tag()
-    }
-    fn server(&self) -> &str {
-        self.server()
-    }
-    fn port(&self) -> u16 {
-        self.port()
-    }
-}
-
-#[async_trait::async_trait]
-impl ProtocolSocketTcpHandshake for ShadowsocksTransportLeaf {
-    fn connect_stage(&self) -> &'static str {
-        "connect_upstream_shadowsocks"
-    }
-
-    async fn handshake_socket(
-        &self,
-        socket: TokioSocket,
-        session: &Session,
-    ) -> Result<(TcpRelayStream, StreamTraffic), RuntimeError> {
-        let metered = MeteredStream::new(TcpRelayStream::from(socket));
-        establish_shadowsocks_tcp_connect(metered, session, &self.cipher, &self.password).await
-    }
-
-    async fn handshake_relay(
-        &self,
-        stream: TcpRelayStream,
-        session: &Session,
-    ) -> Result<TcpRelayStream, RuntimeError> {
-        apply_shadowsocks_tcp_relay_hop(stream, session, &self.cipher, &self.password).await
-    }
-}
 
 impl ShadowsocksTransportLeaf {
     pub fn from_options_refs(

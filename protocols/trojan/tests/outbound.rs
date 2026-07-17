@@ -103,7 +103,7 @@ async fn outbound_writes_complete_request_in_one_write() {
         Address::Domain("www.gstatic.com".to_owned()),
         80,
         Network::Tcp,
-        ProtocolType::Trojan,
+        ProtocolType::new("trojan"),
     );
     let request =
         PreparedTrojanOutboundRequestBundle::from_config("test-password", None, false, None);
@@ -149,7 +149,7 @@ async fn outbound_establishes_udp_packet_tunnel() {
         Address::Domain("dns.google".to_owned()),
         53,
         Network::Udp,
-        ProtocolType::Trojan,
+        ProtocolType::new("trojan"),
     );
     let mut socket = RecordingSocket::default();
 
@@ -219,7 +219,7 @@ async fn inbound_udp_helpers_roundtrip_response_packet() {
         Address::Domain("dns.example".to_owned()),
         5353,
         Network::Udp,
-        ProtocolType::Trojan,
+        ProtocolType::new("trojan"),
     );
     let mut handshake_writer = RecordingSocket::default();
     trojan::udp::establish_udp_packet_tunnel(&mut handshake_writer, &session, password)

@@ -2,11 +2,24 @@ use std::future::Future;
 use std::pin::Pin;
 
 use zero_core::Session;
-use zero_transport::outbound_leaf::ProtocolSessionTcpHandshake;
+use zero_transport::{RuntimeError, TcpRelayStream};
 
 use super::contract::PreparedTcpConnectOperation;
 use crate::protocol_registry::TcpRuntimeServices;
 use crate::transport::{EstablishedTcpOutbound, TcpOutboundFailure};
+
+#[async_trait::async_trait]
+pub(crate) trait SessionTcpHandshake: Send + Sync {
+    fn tag(&self) -> &str;
+
+    fn server(&self) -> &str;
+
+    fn port(&self) -> u16;
+
+    fn connect_stage(&self) -> &'static str;
+
+    async fn open_tcp_stream(&self, session: &Session) -> Result<TcpRelayStream, RuntimeError>;
+}
 
 pub(crate) struct SessionTcpConnectOperation<T> {
     pub(crate) handshake: T,
@@ -14,7 +27,7 @@ pub(crate) struct SessionTcpConnectOperation<T> {
 
 impl<T> PreparedTcpConnectOperation for SessionTcpConnectOperation<T>
 where
-    T: ProtocolSessionTcpHandshake + Send + Sync,
+    T: SessionTcpHandshake + Send + Sync,
 {
     fn execute<'a>(
         self: Box<Self>,
@@ -45,12 +58,12 @@ async fn execute_session_tcp_connect_operation<T>(
     operation: PreparedSessionTcpOperation<'_, T>,
 ) -> Result<EstablishedTcpOutbound, TcpOutboundFailure>
 where
-    T: ProtocolSessionTcpHandshake,
+    T: SessionTcpHandshake,
 {
     let handshake = operation.handshake;
     let endpoint = (handshake.server().to_owned(), handshake.port());
     let stream = handshake
-        .connect_session_stream(session)
+        .open_tcp_stream(session)
         .await
         .map_err(|error| TcpOutboundFailure {
             stage: handshake.connect_stage(),

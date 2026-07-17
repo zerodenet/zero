@@ -216,7 +216,7 @@ async fn inventory_executes_handler_produced_by_registered_provider() {
             zero_core::Address::Domain("provider-target.test".to_owned()),
             53,
             zero_core::Network::Udp,
-            zero_core::ProtocolType::Unknown,
+            zero_core::ProtocolType::UNKNOWN,
         ),
         outbound: UdpFlowOutbound::Datagram {
             tag: "fake-provider".to_owned(),
@@ -265,7 +265,7 @@ async fn reload_invalidates_provider_resumes_before_new_generation_flows() {
             zero_core::Address::Domain("reload-target.test".to_owned()),
             53,
             zero_core::Network::Udp,
-            zero_core::ProtocolType::Unknown,
+            zero_core::ProtocolType::UNKNOWN,
         ),
         outbound: UdpFlowOutbound::Datagram {
             tag: "old-generation".to_owned(),

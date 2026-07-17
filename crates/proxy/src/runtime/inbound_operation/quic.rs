@@ -1,10 +1,42 @@
 use std::pin::Pin;
+use std::sync::Arc;
 
+use zero_core::{InboundClientResponse, InboundDatagramUdpRelay, Session};
 use zero_engine::EngineError;
+use zero_traits::AsyncSocket;
 
 use super::{InboundConnectionContext, PreparedInboundListenerOperation};
 use crate::protocol_registry::BoundInbound;
 use crate::runtime::route_runtime::{InboundListenerRuntime, InboundRouteRuntime};
+
+#[async_trait::async_trait]
+pub(crate) trait AuthenticatedQuicInboundProfile: Clone + Send + Sync + 'static {
+    type Connection: AuthenticatedQuicInboundConnection;
+
+    async fn accept_authenticated_connection(
+        &self,
+        connection: quinn::Connection,
+    ) -> Result<Self::Connection, EngineError>;
+}
+
+#[async_trait::async_trait]
+pub(crate) trait AuthenticatedQuicInboundConnection: Send + Sync + 'static {
+    type Stream: AsyncSocket
+        + tokio::io::AsyncRead
+        + tokio::io::AsyncWrite
+        + Unpin
+        + Send
+        + Sync
+        + 'static;
+    type ResponseProtocol: InboundClientResponse<Self::Stream> + Send + Sync + Copy + 'static;
+    type UdpRelay: InboundDatagramUdpRelay<Arc<quinn::Connection>> + Send + 'static;
+
+    fn datagram_source(&self) -> Arc<quinn::Connection>;
+    fn udp_relay(&self) -> Self::UdpRelay;
+    fn response_protocol(&self) -> Self::ResponseProtocol;
+
+    async fn accept_next_tcp_stream(&self) -> Result<Option<(Session, Self::Stream)>, EngineError>;
+}
 
 pub(crate) struct AuthenticatedQuicInboundListenerOperation<P> {
     pub(crate) protocol_name: &'static str,
@@ -13,7 +45,7 @@ pub(crate) struct AuthenticatedQuicInboundListenerOperation<P> {
 
 impl<P> PreparedInboundListenerOperation for AuthenticatedQuicInboundListenerOperation<P>
 where
-    P: zero_transport::inbound_quic::AuthenticatedQuicInboundProfile,
+    P: AuthenticatedQuicInboundProfile,
 {
     fn execute(
         self: Box<Self>,
@@ -66,10 +98,8 @@ async fn run_authenticated_quic_connection<P>(
     connection: quinn::Connection,
 ) -> Result<(), EngineError>
 where
-    P: zero_transport::inbound_quic::AuthenticatedQuicInboundProfile,
+    P: AuthenticatedQuicInboundProfile,
 {
-    use zero_transport::inbound_quic::AuthenticatedQuicInboundConnection;
-
     let connection = profile.accept_authenticated_connection(connection).await?;
     let mut tasks = tokio::task::JoinSet::new();
     let udp_source = connection.datagram_source();

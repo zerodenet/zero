@@ -4,16 +4,18 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use zero_config::{InboundProtocolConfig, OutboundProtocolConfig};
 use zero_core::Session;
-use zero_engine::{EngineError, ResolvedLeafOutbound};
-use zero_traits::{ProtocolCapabilityDescriptor, ProtocolMetadata};
+use zero_engine::EngineError;
+use zero_traits::{
+    ProtocolCapabilityDescriptor, ProtocolCapabilityLevel, ProtocolCapabilityState,
+    ProtocolMetadata, ProtocolNetworkCapability,
+};
 
-use crate::protocol_catalog::protocol_descriptor;
 use crate::protocol_registry::{
     ClaimedTcpOutboundLeaf, ClaimedUdpFlowLeaf, ClaimedUdpPacketPathLeaf,
-    InboundListenerCapability, OutboundLeafClaim, OutboundLeafRuntime, ProtocolSupportCapability,
+    InboundListenerCapability, OutboundLeafClaim, OutboundLeafInput, ProtocolSupportCapability,
     TcpOutboundCapability, TcpRuntimeServices, UdpFlowCapability, UdpPacketPathCapability,
 };
-use crate::runtime::path::{OutboundEndpoint, TcpPathCategory};
+use crate::runtime::path::TcpPathCategory;
 use crate::runtime::tcp_dispatch::operation::{
     PreparedTcpConnectOperation, PreparedTcpRelayOperation,
 };
@@ -232,23 +234,50 @@ impl crate::runtime::udp_flow::managed::ManagedDatagramFlowHandler for FakeProvi
 #[derive(Debug)]
 pub(super) struct FakeTcpCapability {
     calls: Arc<TcpCapabilityCalls>,
+    protocol: &'static str,
 }
 
 impl FakeTcpCapability {
     pub(super) fn new(calls: Arc<TcpCapabilityCalls>) -> Self {
-        Self { calls }
+        Self {
+            calls,
+            protocol: "direct",
+        }
+    }
+
+    pub(super) fn new_proxy(calls: Arc<TcpCapabilityCalls>) -> Self {
+        Self {
+            calls,
+            protocol: "socks5",
+        }
     }
 }
 
 impl ProtocolMetadata for FakeTcpCapability {
     fn descriptor(&self) -> ProtocolCapabilityDescriptor {
-        protocol_descriptor("direct", "test")
+        ProtocolCapabilityDescriptor {
+            protocol: self.protocol,
+            feature: "test",
+            status: ProtocolCapabilityLevel::Experimental,
+            compatibility_baseline: "test",
+            inbound: ProtocolNetworkCapability::new(
+                ProtocolCapabilityState::unsupported(&[]),
+                ProtocolCapabilityState::unsupported(&[]),
+            ),
+            outbound: ProtocolNetworkCapability::new(
+                ProtocolCapabilityState::unsupported(&[]),
+                ProtocolCapabilityState::unsupported(&[]),
+            ),
+            transports: &[],
+            mux: ProtocolCapabilityState::unsupported(&[]),
+            limitations: &[],
+        }
     }
 }
 
 impl ProtocolSupportCapability for FakeTcpCapability {
     fn name(&self) -> &'static str {
-        "direct"
+        self.protocol
     }
 
     fn feature_name(&self) -> &'static str {
@@ -256,11 +285,11 @@ impl ProtocolSupportCapability for FakeTcpCapability {
     }
 
     fn supports_inbound(&self, config: &InboundProtocolConfig) -> bool {
-        config.protocol_name() == "direct"
+        config.protocol_name() == self.protocol
     }
 
-    fn supports_outbound(&self, _: &OutboundProtocolConfig) -> bool {
-        false
+    fn supports_outbound(&self, config: &OutboundProtocolConfig) -> bool {
+        config.protocol_name() == self.protocol
     }
 
     fn has_inbound(&self) -> bool {
@@ -582,6 +611,7 @@ impl PreparedUdpPacketPathOperation for FakePacketPathOperation {
         })
     }
 
+    #[cfg(feature = "managed-datagram-runtime")]
     fn datagram_source(&self) -> Option<crate::runtime::udp_flow::packet_path::UdpDatagramSource> {
         self.calls.packet_sources.fetch_add(1, Ordering::SeqCst);
         Some(crate::runtime::udp_flow::packet_path::udp_datagram_source(
@@ -682,29 +712,22 @@ impl PreparedTcpRelayOperation for FakeTcpRelayOperation {
 impl FakeTcpCapability {
     pub(crate) fn claim_outbound_leaf_impl<'a>(
         &self,
-        _protocol: Option<&'a OutboundProtocolConfig>,
-        leaf: ResolvedLeafOutbound<'a>,
+        input: OutboundLeafInput<'a>,
     ) -> Option<OutboundLeafClaim<'a>> {
-        let ResolvedLeafOutbound::Direct { tag } = leaf else {
+        let matches_protocol = match input {
+            OutboundLeafInput::Direct { .. } => self.protocol == "direct",
+            OutboundLeafInput::Proxy { outbound, .. } => {
+                outbound.protocol.protocol_name() == self.protocol
+            }
+        };
+        if !matches_protocol {
             return None;
-        };
-        let runtime = OutboundLeafRuntime {
-            tcp_path: TcpPathCategory::Direct,
-            #[cfg(feature = "udp-runtime")]
-            health_tag: None,
-            endpoint: Some(OutboundEndpoint {
-                server: "fake-tcp.test".to_owned(),
-                port: 8443,
-            }),
-            kernel_tag: tag.map(str::to_owned),
-            #[cfg(feature = "udp-runtime")]
-            udp_policy_tag: tag.map(str::to_owned),
-        };
+        }
         let tcp: Box<dyn ClaimedTcpOutboundLeaf<'a> + 'a> = Box::new(FakeClaimedTcpLeaf {
             calls: self.calls.clone(),
         });
         Some(OutboundLeafClaim {
-            runtime,
+            tcp_path: TcpPathCategory::Direct,
             tcp,
             #[cfg(feature = "udp-runtime")]
             udp: Some(Box::new(FakeClaimedUdpLeaf {

@@ -496,7 +496,7 @@ where
 
 impl MieruInbound {
     pub fn protocol(&self) -> ProtocolType {
-        ProtocolType::Mieru
+        ProtocolType::new("mieru")
     }
 
     pub fn inbound_auth(&self) -> SessionAuth {

@@ -5,7 +5,6 @@ use zero_platform_tokio::{TcpRelayStream, TokioSocket};
 use zero_traits::{GrpcTransportProfile, ServerTlsProfile, WebSocketTransportProfile};
 use zero_transport::inbound_stack::InboundStreamStack;
 use zero_transport::profile::{OwnedGrpcProfile, OwnedH2Profile, OwnedWebSocketProfile};
-use zero_transport::protocol_inbound_route::{NoClientMuxRouteDefaults, OpaqueMuxRoute};
 use zero_transport::tls;
 use zero_transport::RuntimeError;
 
@@ -93,23 +92,11 @@ impl VmessInboundListenerRequest {
         Self::ERROR_PROTOCOL_NAME
     }
 
-    pub fn no_client_mux_route_defaults(&self) -> NoClientMuxRouteDefaults {
-        NoClientMuxRouteDefaults {
-            udp_protocol: Self::UDP_PROTOCOL,
-            mux_protocol: Self::MUX_PROTOCOL,
-            panic_message: Self::PANIC_MESSAGE,
-            abort_on_end: Self::ABORT_ON_END,
-            read_error_log: Self::READ_ERROR_LOG,
-        }
-    }
-
     pub async fn accept_route(
         self,
         socket: TokioSocket,
     ) -> Result<
-        OpaqueMuxRoute<
-            crate::mux::VmessInboundAcceptedStream<crate::stream::VmessAeadStream<TcpRelayStream>>,
-        >,
+        crate::mux::VmessInboundAcceptedStream<crate::stream::VmessAeadStream<TcpRelayStream>>,
         RuntimeError,
     > {
         let stream = zero_transport::inbound_stack::accept_tls_inbound_stream_stack(
@@ -126,7 +113,6 @@ impl VmessInboundListenerRequest {
         self.profile
             .accept_client_owned(crate::inbound::VmessInbound, stream)
             .await
-            .map(OpaqueMuxRoute::new)
             .map_err(RuntimeError::from)
     }
 }

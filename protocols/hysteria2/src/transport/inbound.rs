@@ -53,20 +53,6 @@ impl Hysteria2InboundBindPlan {
     }
 }
 
-#[async_trait::async_trait]
-impl zero_transport::inbound_route::ProtocolInboundBindPlan for Hysteria2InboundBindPlan {
-    async fn bind(
-        &self,
-        listen_addr: &str,
-    ) -> Result<zero_transport::inbound_route::TransportInboundBindTarget, RuntimeError> {
-        Ok(
-            zero_transport::inbound_route::TransportInboundBindTarget::Quic(
-                Hysteria2InboundBindPlan::bind(self, listen_addr).await?,
-            ),
-        )
-    }
-}
-
 fn inbound_tcp_acceptor() -> Hysteria2InboundTcpResponseProtocol {
     Hysteria2InboundTcpResponseProtocol {
         protocol: crate::inbound::Hysteria2InboundTcpAcceptor::new(),
@@ -87,6 +73,18 @@ impl Hysteria2AuthenticatedInboundProfile {
     pub fn tcp_response_protocol(&self) -> Hysteria2InboundTcpResponseProtocol {
         inbound_tcp_acceptor()
     }
+
+    pub async fn accept_authenticated_connection(
+        &self,
+        connection: quinn::Connection,
+    ) -> Result<Hysteria2AuthenticatedQuicConnection, RuntimeError> {
+        let protocol = self
+            .protocol
+            .accept_authenticated_quic_session(connection, Hysteria2Stream::new)
+            .await
+            .map_err(RuntimeError::from)?;
+        Ok(Hysteria2AuthenticatedQuicConnection { protocol })
+    }
 }
 
 impl<S> InboundClientResponse<S> for Hysteria2InboundTcpResponseProtocol
@@ -106,48 +104,22 @@ where
     }
 }
 
-#[async_trait::async_trait]
-impl zero_transport::inbound_quic::AuthenticatedQuicInboundProfile
-    for Hysteria2AuthenticatedInboundProfile
-{
-    type Connection = Hysteria2AuthenticatedQuicConnection;
-
-    async fn accept_authenticated_connection(
-        &self,
-        connection: quinn::Connection,
-    ) -> Result<Self::Connection, RuntimeError> {
-        let protocol = self
-            .protocol
-            .accept_authenticated_quic_session(connection, Hysteria2Stream::new)
-            .await
-            .map_err(RuntimeError::from)?;
-        Ok(Hysteria2AuthenticatedQuicConnection { protocol })
-    }
-}
-
-#[async_trait::async_trait]
-impl zero_transport::inbound_quic::AuthenticatedQuicInboundConnection
-    for Hysteria2AuthenticatedQuicConnection
-{
-    type Stream = Hysteria2Stream;
-    type ResponseProtocol = Hysteria2InboundTcpResponseProtocol;
-    type UdpRelay = crate::udp::Hysteria2InboundUdpRelay;
-
-    fn datagram_source(&self) -> std::sync::Arc<quinn::Connection> {
+impl Hysteria2AuthenticatedQuicConnection {
+    pub fn datagram_source(&self) -> std::sync::Arc<quinn::Connection> {
         self.protocol.connection()
     }
 
-    fn udp_relay(&self) -> Self::UdpRelay {
+    pub fn udp_relay(&self) -> crate::udp::Hysteria2InboundUdpRelay {
         self.protocol.accept_udp_session()
     }
 
-    fn response_protocol(&self) -> Self::ResponseProtocol {
+    pub fn response_protocol(&self) -> Hysteria2InboundTcpResponseProtocol {
         inbound_tcp_acceptor()
     }
 
-    async fn accept_next_tcp_stream(
+    pub async fn accept_next_tcp_stream(
         &self,
-    ) -> Result<Option<(zero_core::Session, Self::Stream)>, RuntimeError> {
+    ) -> Result<Option<(zero_core::Session, Hysteria2Stream)>, RuntimeError> {
         self.protocol
             .accept_next_tcp_stream(Hysteria2Stream::new)
             .await

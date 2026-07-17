@@ -5,7 +5,6 @@ use tokio::sync::broadcast;
 use tracing::{debug, warn};
 use zero_core::{Address, UdpFlowPacket};
 use zero_traits::DatagramCodec;
-use zero_transport::managed_udp::ManagedDatagramConnectionOps;
 use zero_transport::RuntimeError;
 
 use super::{ShadowsocksManagedDatagramFlowResume, ShadowsocksUdpResponse};
@@ -65,28 +64,6 @@ impl ShadowsocksUdpSocketFlow {
         let datagram = self.codec.encode(target, port, payload)?;
         self.socket.send_to(&datagram, self.endpoint).await?;
         Ok(())
-    }
-}
-
-#[async_trait::async_trait]
-impl ManagedDatagramConnectionOps for ShadowsocksUdpSocketFlow {
-    type SendError = RuntimeError;
-
-    async fn send_protocol_datagram(
-        &self,
-        target: &Address,
-        port: u16,
-        payload: &[u8],
-    ) -> Result<(), Self::SendError> {
-        self.send_datagram(target, port, payload).await
-    }
-
-    fn subscribe_protocol_datagrams(&self) -> broadcast::Receiver<ShadowsocksUdpResponse> {
-        self.subscribe()
-    }
-
-    fn closed_message_for_datagram_connection(&self) -> &'static str {
-        "ss upstream closed"
     }
 }
 

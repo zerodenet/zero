@@ -17,7 +17,7 @@ pub(crate) mod packet_path;
 pub(crate) mod packet_path_chain;
 #[cfg(feature = "udp-runtime")]
 pub(crate) mod registered;
-#[cfg(feature = "socks5")]
+#[cfg(feature = "upstream-association-runtime")]
 pub(crate) mod response;
 pub(crate) mod result;
 #[cfg(feature = "udp-runtime")]

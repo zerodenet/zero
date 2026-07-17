@@ -1,27 +1,20 @@
 use std::future::Future;
 use std::pin::Pin;
 
-use zero_core::Session;
-use zero_engine::EngineError;
-use zero_transport::managed_udp::{
-    ProtocolManagedStreamUdpLeafOps, ProtocolRelayTwoStreamManagedUdpLeafOps,
-};
-use zero_transport::outbound_leaf::{
-    open_prepared_relay_two_stream_udp_transport, prepared_direct_udp_resume,
-    prepared_relay_final_hop_udp_resume, prepared_relay_two_stream_udp_resume,
-    PreparedTransportLeaf, ProtocolRelayTwoStreamTransportLeaf,
-    ProtocolRelayTwoStreamUdpTransportLeafMetadata, ProtocolTransportLeaf,
-    ProtocolUdpTransportLeafMetadata,
-};
-
 use super::PreparedUdpFlowOperation;
 use crate::protocol_registry::{UdpAdapterContext, UdpRuntimeServices};
+use crate::runtime::transport_leaf::{
+    PreparedTransportLeaf, ProxyRelayTwoStreamTransportLeaf, ProxyTransportLeaf,
+    ProxyTransportUdpLeaf,
+};
 use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
 use crate::runtime::udp_flow::managed::bridge::{
     start_direct_managed_stream_packet, start_relay_managed_stream_packet,
     ManagedStreamPacketRelay, ManagedStreamPacketStartBridge,
 };
 use crate::transport::RelayCarrier;
+use zero_core::Session;
+use zero_engine::EngineError;
 
 enum PreparedTransportUdpOperation<TLeaf> {
     Direct {
@@ -47,11 +40,7 @@ pub(crate) fn prepare_transport_udp_direct<'a, TLeaf>(
     prepared: PreparedTransportLeaf<TLeaf>,
 ) -> Box<dyn PreparedUdpFlowOperation + 'a>
 where
-    TLeaf: ProtocolTransportLeaf
-        + ProtocolUdpTransportLeafMetadata
-        + ProtocolManagedStreamUdpLeafOps
-        + Send
-        + 'a,
+    TLeaf: ProxyTransportLeaf + ProxyTransportUdpLeaf + Send + 'a,
 {
     Box::new(TransportLeafUdpOperation::<TLeaf> {
         operation: PreparedTransportUdpOperation::Direct { prepared },
@@ -63,11 +52,7 @@ pub(crate) fn prepare_transport_udp_relay_final_hop<'a, TLeaf>(
     prepared: PreparedTransportLeaf<TLeaf>,
 ) -> Box<dyn PreparedUdpFlowOperation + 'a>
 where
-    TLeaf: ProtocolTransportLeaf
-        + ProtocolUdpTransportLeafMetadata
-        + ProtocolManagedStreamUdpLeafOps
-        + Send
-        + 'a,
+    TLeaf: ProxyTransportLeaf + ProxyTransportUdpLeaf + Send + 'a,
 {
     Box::new(TransportLeafUdpOperation::<TLeaf> {
         operation: PreparedTransportUdpOperation::RelayFinalHop { carrier, prepared },
@@ -80,12 +65,7 @@ pub(crate) fn prepare_transport_udp_relay_two_stream<'a, TLeaf>(
     prepared: PreparedTransportLeaf<TLeaf>,
 ) -> Box<dyn PreparedUdpFlowOperation + 'a>
 where
-    TLeaf: ProtocolRelayTwoStreamTransportLeaf
-        + ProtocolRelayTwoStreamUdpTransportLeafMetadata
-        + ProtocolRelayTwoStreamManagedUdpLeafOps
-        + Send
-        + Sync
-        + 'a,
+    TLeaf: ProxyRelayTwoStreamTransportLeaf + Send + Sync + 'a,
 {
     Box::new(RelayTwoStreamUdpOperation::<TLeaf> {
         post_carrier,
@@ -96,10 +76,7 @@ where
 
 impl<TLeaf> PreparedUdpFlowOperation for TransportLeafUdpOperation<TLeaf>
 where
-    TLeaf: ProtocolTransportLeaf
-        + ProtocolUdpTransportLeafMetadata
-        + ProtocolManagedStreamUdpLeafOps
-        + Send,
+    TLeaf: ProxyTransportLeaf + ProxyTransportUdpLeaf + Send,
 {
     fn execute<'a>(
         self: Box<Self>,
@@ -126,11 +103,7 @@ where
 
 impl<TLeaf> PreparedUdpFlowOperation for RelayTwoStreamUdpOperation<TLeaf>
 where
-    TLeaf: ProtocolRelayTwoStreamTransportLeaf
-        + ProtocolRelayTwoStreamUdpTransportLeafMetadata
-        + ProtocolRelayTwoStreamManagedUdpLeafOps
-        + Send
-        + Sync,
+    TLeaf: ProxyRelayTwoStreamTransportLeaf + Send + Sync,
 {
     fn execute<'a>(
         self: Box<Self>,
@@ -167,24 +140,19 @@ async fn execute_relay_two_stream_udp_operation<TLeaf>(
     prepared: PreparedTransportLeaf<TLeaf>,
 ) -> Result<FlowStartResult, FlowFailure>
 where
-    TLeaf: ProtocolRelayTwoStreamTransportLeaf
-        + ProtocolRelayTwoStreamUdpTransportLeafMetadata
-        + ProtocolRelayTwoStreamManagedUdpLeafOps,
+    TLeaf: ProxyRelayTwoStreamTransportLeaf,
 {
     let mut context = dispatch.flow_start_context();
     let endpoint = prepared.endpoint();
-    let resume = prepared_relay_two_stream_udp_resume(&prepared);
-    let paired_stream = open_prepared_relay_two_stream_udp_transport(
-        &prepared,
-        post_carrier.stream,
-        get_carrier.stream,
-    )
-    .await
-    .map_err(|error| FlowFailure {
-        stage: TLeaf::UDP_RELAY_CHAIN_STAGE,
-        error: error.into(),
-        upstream: None,
-    })?;
+    let resume = prepared.relay_two_stream_udp_resume();
+    let paired_stream = prepared
+        .open_relay_two_stream_udp_transport(post_carrier.stream, get_carrier.stream)
+        .await
+        .map_err(|error| FlowFailure {
+            stage: TLeaf::UDP_RELAY_CHAIN_STAGE,
+            error: error.into(),
+            upstream: None,
+        })?;
 
     start_relay_managed_stream_packet(
         &mut context,
@@ -216,8 +184,7 @@ async fn execute_transport_udp_operation<TLeaf>(
     operation: PreparedTransportUdpOperation<TLeaf>,
 ) -> Result<FlowStartResult, FlowFailure>
 where
-    TLeaf:
-        ProtocolTransportLeaf + ProtocolUdpTransportLeafMetadata + ProtocolManagedStreamUdpLeafOps,
+    TLeaf: ProxyTransportLeaf + ProxyTransportUdpLeaf,
 {
     match operation {
         PreparedTransportUdpOperation::Direct { prepared } => {
@@ -230,7 +197,7 @@ where
                     endpoint.tag,
                     session,
                     (endpoint.server, endpoint.port),
-                    prepared_direct_udp_resume(&prepared),
+                    prepared.direct_udp_resume(),
                     payload,
                 ),
             )
@@ -257,7 +224,7 @@ where
                         tls_server_name: None,
                     },
                     (endpoint.server, endpoint.port),
-                    prepared_relay_final_hop_udp_resume(&prepared),
+                    prepared.relay_final_hop_udp_resume(),
                     payload,
                 ),
             )

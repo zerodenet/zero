@@ -43,7 +43,7 @@ impl PreparedInboundListenerOperation for DirectInboundListenerOperation {
                     target,
                     port.unwrap_or(443),
                     Network::Tcp,
-                    ProtocolType::Unknown,
+                    ProtocolType::UNKNOWN,
                 );
                 context
                     .serve(

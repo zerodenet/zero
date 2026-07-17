@@ -1,11 +1,13 @@
 use std::marker::PhantomData;
+use std::net::SocketAddr;
 
 use async_trait::async_trait;
 use zero_engine::EngineError;
-use zero_transport::managed_udp::ProtocolManagedDatagramSocketUdpResumeConnectionOps;
 
 use super::super::super::connection::SharedManagedDatagramUdpConnection;
-use super::super::super::datagram::managed_datagram_connection_from_ops;
+use super::super::super::datagram::{
+    managed_datagram_connection_from_flow, ManagedDatagramFlowConnection,
+};
 use super::super::manager::ManagedDatagramSocketFlowManager;
 use crate::protocol_registry::UdpRuntimeServices;
 use crate::runtime::path::OutboundEndpoint;
@@ -32,6 +34,24 @@ pub(crate) struct ManagedDatagramSocketConnectorFlow {
     cache_key: String,
 }
 
+#[async_trait]
+pub(crate) trait ManagedDatagramSocketResumeConnector:
+    Clone + Send + Sync + std::fmt::Debug + 'static
+{
+    type Connection: ManagedDatagramFlowConnection;
+
+    const ESTABLISH_STAGE: &'static str;
+    const SEND_STAGE: &'static str;
+    const MISMATCH_STAGE: &'static str;
+    const MISMATCH_MESSAGE: &'static str;
+    const RESOLVE_UPSTREAM_MESSAGE: &'static str;
+    const PROXY_CONTEXT_MESSAGE: &'static str = "expected proxy context for managed datagram flow";
+
+    fn connector_flow(&self, endpoint: OutboundEndpoint) -> ManagedDatagramSocketConnectorFlow;
+
+    async fn open_connection(self, endpoint: SocketAddr) -> Result<Self::Connection, EngineError>;
+}
+
 impl ManagedDatagramSocketConnectorFlow {
     pub(crate) fn new(cache_key: String) -> Self {
         Self { cache_key }
@@ -42,31 +62,15 @@ impl ManagedDatagramSocketConnectorFlow {
     }
 }
 
-pub(crate) trait ManagedDatagramSocketConnectorFlowBuild {
-    fn into_cache_key(self) -> String;
-}
-
-impl ManagedDatagramSocketConnectorFlowBuild for String {
-    fn into_cache_key(self) -> String {
-        self
-    }
-}
-
-fn managed_datagram_socket_connector_flow_from_build(
-    build: impl ManagedDatagramSocketConnectorFlowBuild,
-) -> ManagedDatagramSocketConnectorFlow {
-    ManagedDatagramSocketConnectorFlow::new(build.into_cache_key())
-}
-
-struct ManagedDatagramSocketResumeConnector<T>(PhantomData<fn() -> T>);
+struct RegisteredManagedDatagramSocketResumeConnector<T>(PhantomData<fn() -> T>);
 
 pub(crate) fn managed_datagram_socket_handler_box<T>(
 ) -> Box<dyn super::super::super::model::ManagedDatagramFlowHandler>
 where
-    T: ProtocolManagedDatagramSocketUdpResumeConnectionOps,
+    T: ManagedDatagramSocketResumeConnector,
 {
     Box::new(ManagedDatagramSocketFlowManager::new(
-        ManagedDatagramSocketResumeConnector::<T>(PhantomData),
+        RegisteredManagedDatagramSocketResumeConnector::<T>(PhantomData),
         T::ESTABLISH_STAGE,
         T::SEND_STAGE,
         T::MISMATCH_STAGE,
@@ -75,18 +79,16 @@ where
 }
 
 #[async_trait]
-impl<T> ManagedDatagramSocketFlowConnector<T> for ManagedDatagramSocketResumeConnector<T>
+impl<T> ManagedDatagramSocketFlowConnector<T> for RegisteredManagedDatagramSocketResumeConnector<T>
 where
-    T: ProtocolManagedDatagramSocketUdpResumeConnectionOps,
+    T: ManagedDatagramSocketResumeConnector,
 {
     fn connector_flow(
         &self,
         resume: &T,
         endpoint: OutboundEndpoint,
     ) -> ManagedDatagramSocketConnectorFlow {
-        managed_datagram_socket_connector_flow_from_build(
-            resume.connector_flow_cache_key(&endpoint.server, endpoint.port),
-        )
+        resume.connector_flow(endpoint)
     }
 
     async fn establish(
@@ -105,7 +107,7 @@ where
                 T::RESOLVE_UPSTREAM_MESSAGE,
             )
             .await?;
-        let connection = resume.open_protocol_connection(target_addr).await?;
-        Ok(managed_datagram_connection_from_ops(connection))
+        let connection = resume.open_connection(target_addr).await?;
+        Ok(managed_datagram_connection_from_flow(connection))
     }
 }

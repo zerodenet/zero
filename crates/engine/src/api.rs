@@ -226,20 +226,6 @@ fn execute_engine_command(
                 Err(error) => Err(engine_error_to_api(error)),
             }
         }
-        CommandRequest::DiagnosticsProbeTarget(cmd) => match engine.probe_target(&cmd.target_tag) {
-            Ok(result) => Ok(CommandResponse {
-                accepted: true,
-                result: Some(result),
-            }),
-            Err(error) => Err(engine_error_to_api(error)),
-        },
-        CommandRequest::DiagnosticsDnsLookup(cmd) => match engine.dns_lookup(&cmd.hostname) {
-            Ok(result) => Ok(CommandResponse {
-                accepted: true,
-                result: Some(result),
-            }),
-            Err(error) => Err(engine_error_to_api(error)),
-        },
         CommandRequest::DiagnosticsTraceRoute(cmd) => {
             let protocol = cmd.protocol.as_deref().unwrap_or("tcp");
             match engine.trace_route(&cmd.target, cmd.port, protocol, cmd.inbound_tag.as_deref()) {
@@ -277,9 +263,17 @@ fn execute_engine_command(
             ApiErrorCode::Internal,
             "TUN commands are handled by the proxy runtime, not the engine",
         )),
+        CommandRequest::DiagnosticsProbeTarget(_) => Err(ApiError::new(
+            ApiErrorCode::Internal,
+            "probe_target is handled by the proxy runtime, not the engine",
+        )),
         CommandRequest::DiagnosticsProbeOutbound(_) => Err(ApiError::new(
             ApiErrorCode::Internal,
             "probe_outbound is handled by the proxy runtime, not the engine",
+        )),
+        CommandRequest::DiagnosticsDnsLookup(_) => Err(ApiError::new(
+            ApiErrorCode::Internal,
+            "dns_lookup is handled by the proxy runtime, not the engine",
         )),
         CommandRequest::DiagnosticsDnsCache(_) => Err(ApiError::new(
             ApiErrorCode::Internal,
@@ -413,17 +407,7 @@ fn api_network_name(network: ApiNetwork) -> &'static str {
 // ── Name helpers (shared with export) ────────────────────────────────
 
 fn protocol_name(protocol: zero_core::ProtocolType) -> &'static str {
-    match protocol {
-        zero_core::ProtocolType::Socks5 => "socks5",
-        zero_core::ProtocolType::HttpConnect => "http",
-        zero_core::ProtocolType::Vless => "vless",
-        zero_core::ProtocolType::Hysteria2 => "hysteria2",
-        zero_core::ProtocolType::Shadowsocks => "shadowsocks",
-        zero_core::ProtocolType::Trojan => "trojan",
-        zero_core::ProtocolType::Vmess => "vmess",
-        zero_core::ProtocolType::Mieru => "mieru",
-        zero_core::ProtocolType::Unknown => "unknown",
-    }
+    protocol.as_str()
 }
 
 fn network_name(network: zero_core::Network) -> &'static str {
@@ -457,7 +441,7 @@ fn config_error_to_api(error: zero_config::ConfigError) -> ApiError {
     let field_detail = match &error {
         ConfigError::EmptyTag { scope } => detail(Some(scope), format!("`{scope}` tag must not be empty")),
         ConfigError::DuplicateTag { scope, tag } => detail(Some(scope), format!("duplicate `{scope}` tag `{tag}`")),
-        ConfigError::DuplicateInboundListen { address, port } => detail(Some("inbounds"), format!("duplicate listen endpoint `{address}:{port}`; use `mixed` for multi-protocol same-port listening")),
+        ConfigError::DuplicateInboundListen { address, port } => detail(Some("inbounds"), format!("duplicate listen endpoint `{address}:{port}`; use an inbound multiplexor for multi-protocol same-port listening")),
         ConfigError::UndefinedRouteTargetTag { tag } => detail(Some("route"), format!("route or mode references undefined target tag `{tag}`")),
         ConfigError::UndefinedRuleSetTag { tag } => detail(Some("route.rules"), format!("route references undefined rule set tag `{tag}`")),
         ConfigError::DuplicateRouteTargetTag { tag } => detail(Some("route"), format!("duplicate route target tag `{tag}` across outbounds and outbound groups")),

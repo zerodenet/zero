@@ -20,12 +20,7 @@ impl ManagedStreamState {
             .outbound
             .upstream()
             .expect("protocol flow should have upstream");
-        #[cfg(any(
-            feature = "vless",
-            feature = "vmess",
-            feature = "trojan",
-            feature = "mieru"
-        ))]
+        #[cfg(feature = "managed-stream-runtime")]
         for handler in &mut self.stream_packet_handlers {
             if !handler.supports_managed_existing(resume) {
                 continue;

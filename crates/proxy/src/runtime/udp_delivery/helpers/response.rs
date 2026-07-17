@@ -4,11 +4,11 @@ use zero_core::Address;
 
 use crate::protocol_registry::UdpRuntimeServices;
 use crate::runtime::udp_dispatch::UdpDispatch;
-#[cfg(feature = "socks5")]
+#[cfg(feature = "upstream-association-runtime")]
 use crate::runtime::udp_flow::response::UpstreamUdpResponse;
 
 use super::accounting::UdpInboundResponseAccounting;
-#[cfg(feature = "socks5")]
+#[cfg(feature = "upstream-association-runtime")]
 use super::parts::UdpUpstreamResponseParts;
 use super::parts::{UdpChainResponseParts, UdpDirectResponseParts};
 
@@ -23,7 +23,7 @@ fn udp_response_target_from_socket_addr(addr: SocketAddr) -> (Address, u16) {
     (address_from_socket_addr(addr), addr.port())
 }
 
-#[cfg(feature = "socks5")]
+#[cfg(feature = "upstream-association-runtime")]
 pub(crate) fn record_upstream_udp_response_received(
     services: &UdpRuntimeServices,
     dispatch: &mut UdpDispatch,
@@ -99,7 +99,7 @@ pub(crate) fn record_chain_udp_response_parts(
     }
 }
 
-#[cfg(feature = "socks5")]
+#[cfg(feature = "upstream-association-runtime")]
 fn udp_response_session_id(dispatch: &UdpDispatch, target: &Address, port: u16) -> Option<u64> {
     dispatch.session_id_by_target(target, port, None)
 }

@@ -2,9 +2,9 @@ use zero_core::{DatagramUdpResponder, InboundDatagramUdpRelay, SessionAuth};
 use zero_engine::EngineError;
 
 use super::response::finish_dispatch;
-#[cfg(feature = "socks5")]
+#[cfg(feature = "upstream-association-runtime")]
 use super::with_upstream::run_loop;
-#[cfg(not(feature = "socks5"))]
+#[cfg(not(feature = "upstream-association-runtime"))]
 use super::without_upstream::run_loop;
 use crate::runtime::datagram_udp::contract::DatagramUdpRelayRequest;
 use crate::runtime::udp_ingress::UdpIngressRuntime;
@@ -56,7 +56,7 @@ where
     } = request;
     let mut dispatch = runtime.new_dispatch(inbound_tag).await?;
     let mut direct_buf = vec![0_u8; 64 * 1024];
-    #[cfg(feature = "socks5")]
+    #[cfg(feature = "upstream-association-runtime")]
     let mut upstream_buf = vec![0_u8; 64 * 1024];
 
     let context = DatagramUdpLoopContext {
@@ -64,7 +64,7 @@ where
         auth: auth.as_ref(),
     };
 
-    #[cfg(feature = "socks5")]
+    #[cfg(feature = "upstream-association-runtime")]
     {
         if poll_upstream {
             run_loop(
@@ -88,7 +88,7 @@ where
         }
     }
 
-    #[cfg(not(feature = "socks5"))]
+    #[cfg(not(feature = "upstream-association-runtime"))]
     {
         let _ = poll_upstream;
         run_loop(

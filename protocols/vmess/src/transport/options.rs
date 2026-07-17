@@ -31,3 +31,16 @@ pub struct VmessOutboundBuildOptionsRef<'a, TTls: ?Sized, TWs: ?Sized, TGrpc: ?S
     pub ws: Option<&'a TWs>,
     pub grpc: Option<&'a TGrpc>,
 }
+
+impl<'a, TTls: ?Sized, TWs: ?Sized, TGrpc: ?Sized> Copy
+    for VmessOutboundBuildOptionsRef<'a, TTls, TWs, TGrpc>
+{
+}
+
+impl<'a, TTls: ?Sized, TWs: ?Sized, TGrpc: ?Sized> Clone
+    for VmessOutboundBuildOptionsRef<'a, TTls, TWs, TGrpc>
+{
+    fn clone(&self) -> Self {
+        *self
+    }
+}

@@ -204,7 +204,7 @@ async fn relays_udp_through_vmess_to_vmess_relay_chain() {
                 .map(|session| {
                     session.network == zero_core::Network::Udp
                         && session.outbound_tag.as_deref() == Some("final-vmess")
-                        && session.protocol == zero_core::ProtocolType::Socks5
+                        && session.protocol == zero_core::ProtocolType::new("socks5")
                         && session.bytes_up > 0
                         && session.bytes_down > 0
                 })

@@ -6,10 +6,6 @@ use zero_traits::{
     ServerTlsProfile, SplitHttpTransportProfile, WebSocketTransportProfile,
 };
 
-use zero_transport::protocol_inbound_route::{
-    OpaqueFallbackReplay, OpaqueMuxRoute, RouteAcceptResult,
-};
-use zero_transport::OwnedInboundFallbackProfile;
 use zero_transport::RuntimeError;
 
 mod bind;
@@ -34,7 +30,35 @@ where
 pub struct VlessInboundListenerRequest {
     profile: crate::inbound::VlessInboundProfile,
     transport: OwnedVlessInboundTransportPlan,
-    fallback: Option<OwnedInboundFallbackProfile>,
+    fallback_enabled: bool,
+}
+
+pub enum VlessTcpFallbackReplay {
+    Client(crate::inbound::VlessFallbackReplay<TcpRelayStream>),
+    Socket(crate::inbound::VlessFallbackReplay<TokioSocket>),
+}
+
+impl zero_core::InboundFallbackReplay for VlessTcpFallbackReplay {
+    type Stream = TcpRelayStream;
+
+    fn replay_to<'a, W>(
+        self,
+        upstream: &'a mut W,
+    ) -> impl core::future::Future<Output = Result<Self::Stream, W::Error>> + Send + 'a
+    where
+        Self: 'a,
+        W: zero_traits::AsyncSocket + Send + 'a,
+    {
+        async move {
+            match self {
+                Self::Client(replay) => replay.replay_to_upstream(upstream).await,
+                Self::Socket(replay) => replay
+                    .replay_to_upstream(upstream)
+                    .await
+                    .map(TcpRelayStream::from),
+            }
+        }
+    }
 }
 
 impl VlessInboundListenerRequest {
@@ -47,12 +71,12 @@ impl VlessInboundListenerRequest {
     fn new(
         profile: crate::inbound::VlessInboundProfile,
         transport: OwnedVlessInboundTransportPlan,
-        fallback: Option<OwnedInboundFallbackProfile>,
+        fallback_enabled: bool,
     ) -> Self {
         Self {
             profile,
             transport,
-            fallback,
+            fallback_enabled,
         }
     }
 
@@ -90,11 +114,7 @@ impl VlessInboundListenerRequest {
             fallback,
         )?;
 
-        Ok(Self::new(
-            profile,
-            transport,
-            fallback.map(OwnedInboundFallbackProfile::from_profile),
-        ))
+        Ok(Self::new(profile, transport, fallback.is_some()))
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -147,18 +167,6 @@ impl VlessInboundListenerRequest {
         Self::ERROR_PROTOCOL_NAME
     }
 
-    pub fn recorded_mux_route_defaults(
-        &self,
-    ) -> zero_transport::protocol_inbound_route::RecordedMuxRouteDefaults {
-        zero_transport::protocol_inbound_route::RecordedMuxRouteDefaults {
-            udp_protocol: Self::UDP_PROTOCOL,
-            mux_protocol: Self::MUX_PROTOCOL,
-            panic_message: Self::PANIC_MESSAGE,
-            abort_on_end: Self::ABORT_ON_END,
-            udp_accept_log_message: Some("MUX stream accepted"),
-        }
-    }
-
     pub fn response_protocol(&self) -> crate::inbound::VlessInbound {
         crate::inbound::VlessInbound
     }
@@ -169,9 +177,9 @@ impl VlessInboundListenerRequest {
         wrap_stream: FWrap,
     ) -> Result<
         Option<
-            RouteAcceptResult<
-                OpaqueMuxRoute<crate::inbound::VlessAcceptedClientRoute<S>>,
-                OpaqueFallbackReplay<TcpRelayStream>,
+            zero_core::InboundRouteAccept<
+                crate::inbound::VlessAcceptedClientRoute<S>,
+                VlessTcpFallbackReplay,
             >,
         >,
         RuntimeError,
@@ -183,10 +191,10 @@ impl VlessInboundListenerRequest {
         let Self {
             profile,
             transport,
-            fallback,
+            fallback_enabled,
         } = self;
         transport
-            .accept_tcp_route(profile, fallback, socket, wrap_stream)
+            .accept_tcp_route(profile, fallback_enabled, socket, wrap_stream)
             .await
     }
 
@@ -196,9 +204,9 @@ impl VlessInboundListenerRequest {
         sni: Option<String>,
         wrap_stream: FWrap,
     ) -> Result<
-        RouteAcceptResult<
-            OpaqueMuxRoute<crate::inbound::VlessAcceptedClientRoute<S>>,
-            OpaqueFallbackReplay<<S as zero_core::InboundFallbackCapture>::Stream>,
+        zero_core::InboundRouteAccept<
+            crate::inbound::VlessAcceptedClientRoute<S>,
+            crate::inbound::VlessFallbackReplay<<S as zero_core::InboundFallbackCapture>::Stream>,
         >,
         RuntimeError,
     >
@@ -209,9 +217,11 @@ impl VlessInboundListenerRequest {
         FWrap: Fn(T) -> S + Clone + Send + 'static,
     {
         let Self {
-            profile, fallback, ..
+            profile,
+            fallback_enabled,
+            ..
         } = self;
-        accept_vless_stream_route(profile, fallback, stream, sni, wrap_stream).await
+        accept_vless_stream_route(profile, fallback_enabled, stream, sni, wrap_stream).await
     }
 
     pub async fn accept_recorded_tcp_route(
@@ -219,15 +229,11 @@ impl VlessInboundListenerRequest {
         socket: TokioSocket,
     ) -> Result<
         Option<
-            RouteAcceptResult<
-                OpaqueMuxRoute<
-                    crate::inbound::VlessAcceptedClientRoute<
-                        zero_transport::MeteredStream<
-                            zero_transport::RecordingStream<TcpRelayStream>,
-                        >,
-                    >,
+            zero_core::InboundRouteAccept<
+                crate::inbound::VlessAcceptedClientRoute<
+                    zero_transport::MeteredStream<zero_transport::RecordingStream<TcpRelayStream>>,
                 >,
-                OpaqueFallbackReplay<TcpRelayStream>,
+                VlessTcpFallbackReplay,
             >,
         >,
         RuntimeError,
@@ -239,13 +245,11 @@ impl VlessInboundListenerRequest {
         self,
         stream: T,
     ) -> Result<
-        RouteAcceptResult<
-            OpaqueMuxRoute<
-                crate::inbound::VlessAcceptedClientRoute<
-                    zero_transport::MeteredStream<zero_transport::RecordingStream<T>>,
-                >,
+        zero_core::InboundRouteAccept<
+            crate::inbound::VlessAcceptedClientRoute<
+                zero_transport::MeteredStream<zero_transport::RecordingStream<T>>,
             >,
-            OpaqueFallbackReplay<T>,
+            crate::inbound::VlessFallbackReplay<T>,
         >,
         RuntimeError,
     >

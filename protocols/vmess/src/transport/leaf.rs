@@ -3,17 +3,12 @@ use std::path::Path;
 
 use zero_core::Session;
 use zero_platform_tokio::{TcpRelayStream, TokioSocket};
-use zero_traits::{ClientTlsProfile, GrpcTransportProfile, WebSocketTransportProfile};
-use zero_transport::managed_udp::{ManagedTupleUdpResume, ProtocolManagedStreamUdpLeafOps};
-use zero_transport::outbound_leaf::{
-    clone_socket_opener, ProtocolTcpTransportLeafMetadata, ProtocolTcpTransportLeafOps,
-    ProtocolTcpTransportOpenResult, ProtocolTransportLeaf, ProtocolUdpTransportLeafMetadata,
+use zero_traits::{
+    ClientTlsProfile, GrpcTransportProfile, ProtocolUdpFlowLeaf, WebSocketTransportProfile,
 };
-use zero_transport::transport_plan::{direct_stream_opener, relay_stream_opener};
 use zero_transport::RuntimeError;
-use zero_transport::StreamTraffic;
 
-use super::managed_udp::{VmessManagedStreamUdpResume, VmessManagedUdpFlowResume};
+use super::managed_udp::VmessManagedUdpFlowResume;
 use super::outbound::OwnedVmessOutboundTransportPlan;
 use super::runtime::VmessTransportRuntime;
 
@@ -112,11 +107,23 @@ impl VmessOutboundLeaf {
         }
     }
 
+    pub fn tag(&self) -> &str {
+        &self.tag
+    }
+
+    pub fn server(&self) -> &str {
+        &self.server
+    }
+
+    pub fn port(&self) -> u16 {
+        self.port
+    }
+
     fn owned_transport_plan(&self) -> OwnedVmessOutboundTransportPlan {
         self.transport.clone()
     }
 
-    pub(super) async fn open_tcp_stream<OpenSocket, OpenSocketFut>(
+    pub async fn open_tcp_stream<OpenSocket, OpenSocketFut>(
         &self,
         session: &Session,
         open_socket: OpenSocket,
@@ -127,8 +134,8 @@ impl VmessOutboundLeaf {
     {
         let protocol = self.protocol.clone();
         let transport = self.owned_transport_plan();
-        let open_socket = clone_socket_opener(open_socket);
-        let direct_transport = direct_stream_opener(&transport, open_socket.clone());
+        let direct_transport =
+            || transport.open_direct(move |server, port| open_socket.clone()(server, port));
         protocol
             .open_tcp_stream_with_transport_or_mux(
                 session,
@@ -140,7 +147,7 @@ impl VmessOutboundLeaf {
             .await
     }
 
-    pub(super) async fn open_tcp_relay_hop(
+    pub async fn open_tcp_relay_hop(
         &self,
         stream: TcpRelayStream,
         session: &Session,
@@ -148,7 +155,7 @@ impl VmessOutboundLeaf {
         let protocol = self.protocol.clone();
         let transport = self.owned_transport_plan();
         protocol
-            .open_tcp_relay_hop_with_transport(session, relay_stream_opener(&transport, stream))
+            .open_tcp_relay_hop_with_transport(session, || transport.open_relay(stream))
             .await
             .map(TcpRelayStream::new)
     }
@@ -170,78 +177,14 @@ impl VmessOutboundLeaf {
     }
 }
 
-impl ProtocolTransportLeaf for VmessOutboundLeaf {
-    fn tag(&self) -> &str {
-        &self.tag
-    }
-
-    fn server(&self) -> &str {
-        &self.server
-    }
-
-    fn port(&self) -> u16 {
-        self.port
-    }
-}
-
-impl ProtocolTcpTransportLeafMetadata for VmessOutboundLeaf {
-    const TCP_CONNECT_STAGE: &'static str = "connect_upstream_vmess";
-    const TCP_INVALID_CONNECT_CONFIG: &'static str = "invalid vmess tcp config";
-    const TCP_INVALID_RELAY_CONFIG: &'static str = "invalid vmess tcp relay config";
-}
-
-impl ProtocolUdpTransportLeafMetadata for VmessOutboundLeaf {
-    const UDP_DIRECT_STAGE: &'static str = "udp_vmess_leaf";
-    const UDP_INVALID_CONFIG: &'static str = "invalid vmess udp config";
-    const UDP_RELAY_FINAL_STAGE: &'static str = "udp_vmess_relay_final_leaf";
-}
-
-#[async_trait::async_trait]
-impl ProtocolTcpTransportLeafOps for VmessOutboundLeaf {
-    type Opened = crate::outbound::VmessTcpStreamOpen;
-
-    async fn open_tcp_stream<OpenSocket, OpenSocketFut>(
-        &self,
-        session: &Session,
-        open_socket: OpenSocket,
-    ) -> Result<Self::Opened, RuntimeError>
-    where
-        OpenSocket: Clone + Fn(&str, u16) -> OpenSocketFut + Send + Sync,
-        OpenSocketFut: Future<Output = Result<TokioSocket, RuntimeError>> + Send,
-    {
-        VmessOutboundLeaf::open_tcp_stream(self, session, open_socket).await
-    }
-
-    async fn open_tcp_relay_hop(
-        &self,
-        stream: TcpRelayStream,
-        session: &Session,
-    ) -> Result<TcpRelayStream, RuntimeError> {
-        VmessOutboundLeaf::open_tcp_relay_hop(self, stream, session).await
-    }
-}
-
-impl ProtocolManagedStreamUdpLeafOps for VmessOutboundLeaf {
-    type Resume = VmessManagedStreamUdpResume;
+impl ProtocolUdpFlowLeaf for VmessOutboundLeaf {
+    type Resume = VmessManagedUdpFlowResume;
 
     fn direct_udp_resume(&self) -> Self::Resume {
-        ManagedTupleUdpResume::new(VmessOutboundLeaf::direct_udp_resume(self))
+        VmessOutboundLeaf::direct_udp_resume(self)
     }
 
     fn relay_final_hop_udp_resume(&self) -> Self::Resume {
-        ManagedTupleUdpResume::new(VmessOutboundLeaf::relay_final_hop_udp_resume(self))
-    }
-}
-
-impl ProtocolTcpTransportOpenResult for crate::outbound::VmessTcpStreamOpen {
-    fn into_proxied_stream_parts(self) -> (TcpRelayStream, StreamTraffic) {
-        let (stream, handshake_bytes) = self.into_parts();
-        (
-            TcpRelayStream::new(stream),
-            StreamTraffic {
-                read_bytes: 0,
-                written_bytes: handshake_bytes,
-            },
-        )
+        VmessOutboundLeaf::relay_final_hop_udp_resume(self)
     }
 }

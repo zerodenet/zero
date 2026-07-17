@@ -1,22 +1,16 @@
-#[cfg(feature = "shadowsocks")]
+#[cfg(feature = "managed-datagram-runtime")]
 mod datagram;
 mod key;
 #[cfg(any(
-    feature = "vless",
-    feature = "vmess",
-    feature = "trojan",
-    feature = "mieru",
-    feature = "hysteria2"
+    feature = "managed-stream-runtime",
+    feature = "managed-datagram-runtime"
 ))]
 mod stream;
 
-#[cfg(feature = "shadowsocks")]
+#[cfg(feature = "managed-datagram-runtime")]
 pub(crate) use datagram::ManagedDatagramConnectionCache;
 #[cfg(any(
-    feature = "vless",
-    feature = "vmess",
-    feature = "trojan",
-    feature = "mieru",
-    feature = "hysteria2"
+    feature = "managed-stream-runtime",
+    feature = "managed-datagram-runtime"
 ))]
 pub(crate) use stream::ManagedUdpConnectionCache;

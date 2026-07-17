@@ -22,19 +22,11 @@ impl OutboundEndpoint {
 pub(crate) enum UdpPathCategory {
     Direct,
     #[cfg(any(
-        feature = "socks5",
-        feature = "vless",
-        feature = "vmess",
-        feature = "trojan",
-        feature = "mieru"
+        feature = "upstream-association-runtime",
+        feature = "managed-stream-runtime"
     ))]
     Relay,
-    #[cfg(any(
-        feature = "vless",
-        feature = "vmess",
-        feature = "trojan",
-        feature = "mieru"
-    ))]
+    #[cfg(feature = "managed-stream-runtime")]
     StreamPacket,
     #[cfg(feature = "managed-datagram-runtime")]
     Datagram,

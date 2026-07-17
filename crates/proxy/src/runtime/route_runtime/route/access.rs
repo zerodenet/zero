@@ -1,6 +1,6 @@
 use std::net::SocketAddr;
 
-#[cfg(any(feature = "vless", feature = "vmess"))]
+#[cfg(feature = "managed-stream-runtime")]
 use super::super::MuxSubstreamRuntime;
 use super::model::{InboundRouteRuntime, InboundRouteRuntimeFactory};
 #[cfg(feature = "udp-runtime")]
@@ -15,7 +15,6 @@ impl InboundRouteRuntime {
         self.tcp_runtime.source_addr()
     }
 
-    #[cfg(feature = "http")]
     pub(crate) fn select_http_redirect(
         &self,
         session: &zero_core::Session,
@@ -28,7 +27,7 @@ impl InboundRouteRuntime {
         self.udp_runtime.clone()
     }
 
-    #[cfg(any(feature = "vless", feature = "vmess"))]
+    #[cfg(feature = "managed-stream-runtime")]
     pub(crate) fn into_mux_substream_runtime(self) -> MuxSubstreamRuntime {
         MuxSubstreamRuntime::new(self.tcp_runtime.without_source_addr(), self.udp_runtime)
     }

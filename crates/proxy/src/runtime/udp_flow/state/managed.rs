@@ -1,33 +1,21 @@
 #[cfg(any(
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
+    feature = "managed-stream-runtime",
+    feature = "managed-datagram-runtime"
 ))]
 use crate::protocol_registry::UdpRuntimeServices;
 #[cfg(any(
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
+    feature = "managed-stream-runtime",
+    feature = "managed-datagram-runtime"
 ))]
 use crate::runtime::udp_flow::managed::ManagedExistingFlowForward;
 #[cfg(any(
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
+    feature = "managed-stream-runtime",
+    feature = "managed-datagram-runtime"
 ))]
 use crate::runtime::udp_flow::managed::ManagedUdpFlowRequest;
 use crate::runtime::udp_flow::managed::ManagedUdpFlowResume;
 use crate::runtime::udp_flow::outbound::ManagedUdpFlowRef;
-#[cfg(feature = "socks5")]
+#[cfg(feature = "upstream-association-runtime")]
 use crate::runtime::udp_flow::registered::UpstreamAssociationSend;
 use crate::runtime::udp_flow::result::FlowFailure;
 
@@ -35,12 +23,8 @@ use super::UdpFlowState;
 
 impl UdpFlowState {
     #[cfg(any(
-        feature = "vless",
-        feature = "hysteria2",
-        feature = "shadowsocks",
-        feature = "trojan",
-        feature = "vmess",
-        feature = "mieru"
+        feature = "managed-stream-runtime",
+        feature = "managed-datagram-runtime"
     ))]
     pub(crate) async fn start_managed_flow(
         &mut self,
@@ -53,7 +37,7 @@ impl UdpFlowState {
             .await
     }
 
-    #[cfg(feature = "socks5")]
+    #[cfg(feature = "upstream-association-runtime")]
     pub(crate) async fn start_upstream_flow(
         &mut self,
         inbound_tag: &str,
@@ -64,7 +48,7 @@ impl UdpFlowState {
             .await
     }
 
-    #[cfg(feature = "socks5")]
+    #[cfg(feature = "upstream-association-runtime")]
     pub(crate) fn handles_upstream_resume(&self, resume: &ManagedUdpFlowResume) -> bool {
         self.registered.handles_upstream_resume(resume)
     }
@@ -77,11 +61,8 @@ impl UdpFlowState {
     }
 
     #[cfg(any(
-        feature = "socks5",
-        feature = "vless",
-        feature = "vmess",
-        feature = "trojan",
-        feature = "mieru"
+        feature = "upstream-association-runtime",
+        feature = "managed-stream-runtime"
     ))]
     pub(crate) fn managed_flow_resume(
         &self,
@@ -91,12 +72,8 @@ impl UdpFlowState {
     }
 
     #[cfg(any(
-        feature = "vless",
-        feature = "hysteria2",
-        feature = "shadowsocks",
-        feature = "trojan",
-        feature = "vmess",
-        feature = "mieru"
+        feature = "managed-stream-runtime",
+        feature = "managed-datagram-runtime"
     ))]
     pub(crate) async fn forward_existing_managed_flow(
         &mut self,

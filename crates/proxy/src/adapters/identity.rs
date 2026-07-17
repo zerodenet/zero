@@ -1,4 +1,4 @@
-//! Adapter identity, support predicates, and transport-bridge classification.
+//! Adapter identity and support predicates.
 
 use zero_config::{InboundProtocolConfig, OutboundProtocolConfig};
 

@@ -1,7 +1,7 @@
 use super::model::InboundConnectionContext;
 
 impl InboundConnectionContext {
-    #[cfg(feature = "trojan")]
+    #[cfg(feature = "managed-stream-runtime")]
     pub(crate) async fn dispatch_no_client_stream_route<R>(
         self,
         route: R,
@@ -24,7 +24,7 @@ impl InboundConnectionContext {
         .await
     }
 
-    #[cfg(feature = "vmess")]
+    #[cfg(feature = "managed-stream-runtime")]
     pub(crate) async fn dispatch_no_client_mux_route<R>(
         self,
         route: R,

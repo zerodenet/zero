@@ -1,10 +1,6 @@
 #[cfg(any(
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
+    feature = "managed-stream-runtime",
+    feature = "managed-datagram-runtime"
 ))]
 use crate::runtime::udp_flow::managed::ManagedUdpFlowRequest;
 use crate::runtime::udp_flow::managed::ManagedUdpFlowResume;
@@ -24,12 +20,8 @@ impl<'a> UdpFlowStartContext<'a> {
     }
 
     #[cfg(any(
-        feature = "vless",
-        feature = "hysteria2",
-        feature = "shadowsocks",
-        feature = "trojan",
-        feature = "vmess",
-        feature = "mieru"
+        feature = "managed-stream-runtime",
+        feature = "managed-datagram-runtime"
     ))]
     pub(crate) async fn start_managed_flow(
         &mut self,

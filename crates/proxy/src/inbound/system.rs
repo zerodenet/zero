@@ -73,7 +73,7 @@ async fn system_tcp_loop(
                 sockaddr_to_address(&destination),
                 destination.port,
                 Network::Tcp,
-                ProtocolType::Unknown,
+                ProtocolType::UNKNOWN,
             );
             let _ = runtime.serve(session, stream, &SystemProtocol).await;
         },

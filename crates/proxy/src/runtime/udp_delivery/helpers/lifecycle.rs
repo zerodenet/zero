@@ -1,4 +1,4 @@
-#[cfg(feature = "socks5")]
+#[cfg(feature = "upstream-association-runtime")]
 use tokio::time::{sleep_until, Instant as TokioInstant};
 
 use crate::logging::log_session_finished;
@@ -14,7 +14,7 @@ pub(crate) fn log_completed_udp_flow(completed: CompletedUdpFlow) {
     );
 }
 
-#[cfg(feature = "socks5")]
+#[cfg(feature = "upstream-association-runtime")]
 pub(crate) async fn wait_for_upstream_idle(deadline: Option<TokioInstant>) {
     match deadline {
         Some(deadline) => sleep_until(deadline).await,

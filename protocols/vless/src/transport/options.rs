@@ -60,6 +60,19 @@ pub struct VlessOutboundBuildOptionsRef<
     pub split_http: Option<&'a TSplit>,
 }
 
+impl<'a, TTls: ?Sized, TWs: ?Sized, TGrpc: ?Sized, TH2: ?Sized, THttp: ?Sized, TSplit: ?Sized> Copy
+    for VlessOutboundBuildOptionsRef<'a, TTls, TWs, TGrpc, TH2, THttp, TSplit>
+{
+}
+
+impl<'a, TTls: ?Sized, TWs: ?Sized, TGrpc: ?Sized, TH2: ?Sized, THttp: ?Sized, TSplit: ?Sized> Clone
+    for VlessOutboundBuildOptionsRef<'a, TTls, TWs, TGrpc, TH2, THttp, TSplit>
+{
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct VlessRealityClientOptionsRef<'a> {
     pub public_key: &'a str,

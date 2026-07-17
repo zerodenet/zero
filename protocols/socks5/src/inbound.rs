@@ -276,7 +276,7 @@ impl Socks5PasswordAuth for NoSocks5PasswordAuth {
 
 impl Socks5Inbound {
     pub fn protocol(&self) -> ProtocolType {
-        ProtocolType::Socks5
+        ProtocolType::new("socks5")
     }
 
     pub async fn accept_request<S>(&self, stream: &mut S) -> Result<Session, Error>
@@ -576,7 +576,7 @@ where
             address,
             port,
             Network::Tcp,
-            ProtocolType::Socks5,
+            ProtocolType::new("socks5"),
         )))),
         CMD_UDP_ASSOCIATE => Ok(Socks5Request::UdpAssociate(Socks5UdpAssociateRequest {
             client_hint: address,

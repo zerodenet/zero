@@ -110,7 +110,7 @@ pub struct Hysteria2InboundUdpDispatchParts {
 
 impl Hysteria2InboundUdpDispatchParts {
     pub fn protocol(&self) -> ProtocolType {
-        ProtocolType::Hysteria2
+        ProtocolType::new("hysteria2")
     }
 
     pub fn pipe_parts(&self) -> (&Address, u16, &[u8], Option<u64>) {
@@ -131,7 +131,7 @@ impl Hysteria2InboundUdpDispatchParts {
         Hysteria2InboundUdpTrackedDispatch {
             request_session_id,
             dispatch: InboundUdpDispatch::new(
-                ProtocolType::Hysteria2,
+                ProtocolType::new("hysteria2"),
                 self.target,
                 self.port,
                 self.payload,

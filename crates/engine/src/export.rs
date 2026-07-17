@@ -311,17 +311,7 @@ fn build_policy_member_snapshot(
 // ── Name helpers ────────────────────────────────────────────────────
 
 fn protocol_name(protocol: ProtocolType) -> &'static str {
-    match protocol {
-        ProtocolType::Socks5 => "socks5",
-        ProtocolType::HttpConnect => "http",
-        ProtocolType::Vless => "vless",
-        ProtocolType::Hysteria2 => "hysteria2",
-        ProtocolType::Shadowsocks => "shadowsocks",
-        ProtocolType::Trojan => "trojan",
-        ProtocolType::Vmess => "vmess",
-        ProtocolType::Mieru => "mieru",
-        ProtocolType::Unknown => "unknown",
-    }
+    protocol.as_str()
 }
 
 fn network_name(network: Network) -> &'static str {

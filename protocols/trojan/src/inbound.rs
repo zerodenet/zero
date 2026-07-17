@@ -215,7 +215,7 @@ where
 
 impl TrojanInbound {
     pub fn protocol(&self) -> ProtocolType {
-        ProtocolType::Trojan
+        ProtocolType::new("trojan")
     }
 
     pub fn inbound_auth(&self, password: impl Into<String>) -> SessionAuth {
@@ -260,7 +260,7 @@ impl TrojanInbound {
         };
 
         Ok(TrojanAccept {
-            session: Session::new(0, addr, port, network, ProtocolType::Trojan),
+            session: Session::new(0, addr, port, network, ProtocolType::new("trojan")),
         })
     }
 }

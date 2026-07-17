@@ -14,6 +14,7 @@ use crate::grpc;
 use crate::h2;
 #[cfg(feature = "http_upgrade")]
 use crate::http_upgrade;
+#[cfg(feature = "tls")]
 use crate::tls;
 #[cfg(feature = "ws")]
 use crate::ws;
@@ -58,9 +59,19 @@ where
         source_dir,
     } = stack;
 
+    #[cfg(feature = "tls")]
     let carrier = match tls_config {
         Some(tls) => tls::connect_tls_upstream(socket, tls, source_dir, server).await?,
         None => TcpRelayStream::new(socket),
+    };
+
+    #[cfg(not(feature = "tls"))]
+    let carrier = {
+        if tls_config.is_some() {
+            return invalid_transport_stack(invalid_message);
+        }
+        let _ = source_dir;
+        TcpRelayStream::new(socket)
     };
 
     connect_layered_transport_stack(
@@ -99,9 +110,19 @@ where
         source_dir,
     } = stack;
 
+    #[cfg(feature = "tls")]
     let carrier = match tls_config {
         Some(tls) => tls::connect_tls_stream(stream, tls, source_dir, server).await?,
         None => stream,
+    };
+
+    #[cfg(not(feature = "tls"))]
+    let carrier = {
+        if tls_config.is_some() {
+            return invalid_transport_stack(invalid_message);
+        }
+        let _ = source_dir;
+        stream
     };
 
     connect_layered_transport_stack(

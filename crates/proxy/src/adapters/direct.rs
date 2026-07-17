@@ -1,16 +1,20 @@
 use zero_config::{InboundConfig, InboundProtocolConfig, OutboundProtocolConfig};
-use zero_engine::{EngineError, ResolvedLeafOutbound};
-use zero_traits::{ProtocolCapabilityDescriptor, ProtocolMetadata};
+use zero_engine::EngineError;
+use zero_traits::{
+    ProtocolCapabilityDescriptor, ProtocolCapabilityLevel, ProtocolCapabilityState,
+    ProtocolMetadata, ProtocolNetworkCapability,
+};
 
 use crate::adapters::identity::{
     named_protocol_supports_inbound, named_protocol_supports_outbound, NamedProtocolAdapter,
 };
-use crate::protocol_catalog::protocol_descriptor;
 use crate::protocol_registry::{
-    InboundListenerCapability, OutboundLeafClaim, ProtocolSupportCapability, TcpOutboundCapability,
+    InboundListenerCapability, OutboundLeafClaim, OutboundLeafInput, ProtocolSupportCapability,
+    TcpOutboundCapability,
 };
 #[cfg(feature = "udp-runtime")]
 use crate::protocol_registry::{UdpFlowCapability, UdpPacketPathCapability};
+use crate::runtime::path::TcpPathCategory;
 
 mod inbound;
 mod tcp;
@@ -30,17 +34,15 @@ impl NamedProtocolAdapter for DirectAdapter {
 impl DirectAdapter {
     pub(crate) fn claim_outbound_leaf_impl<'a>(
         &self,
-        _protocol: Option<&'a OutboundProtocolConfig>,
-        leaf: ResolvedLeafOutbound<'a>,
+        input: OutboundLeafInput<'a>,
     ) -> Option<OutboundLeafClaim<'a>> {
-        let ResolvedLeafOutbound::Direct { tag } = leaf else {
+        let OutboundLeafInput::Direct { tag } = input else {
             return None;
         };
-        let runtime = crate::protocol_registry::OutboundLeafRuntime::direct(tag);
         let tag = tag.unwrap_or("direct").to_owned();
         let tcp = self.claim_tcp_outbound_leaf_impl(tag.clone());
         Some(OutboundLeafClaim {
-            runtime,
+            tcp_path: TcpPathCategory::Direct,
             tcp,
             #[cfg(feature = "udp-runtime")]
             udp: Some(self.claim_udp_flow_leaf_impl(tag)),
@@ -96,6 +98,22 @@ impl ProtocolSupportCapability for DirectAdapter {
 
 impl ProtocolMetadata for DirectAdapter {
     fn descriptor(&self) -> ProtocolCapabilityDescriptor {
-        protocol_descriptor("direct", "core")
+        ProtocolCapabilityDescriptor {
+            protocol: "direct",
+            feature: "core",
+            status: ProtocolCapabilityLevel::Supported,
+            compatibility_baseline: "kernel_builtin",
+            inbound: ProtocolNetworkCapability::new(
+                ProtocolCapabilityState::supported(),
+                ProtocolCapabilityState::unsupported(&[]),
+            ),
+            outbound: ProtocolNetworkCapability::new(
+                ProtocolCapabilityState::supported(),
+                ProtocolCapabilityState::supported(),
+            ),
+            transports: &["tcp", "udp"],
+            mux: ProtocolCapabilityState::not_applicable(),
+            limitations: &[],
+        }
     }
 }

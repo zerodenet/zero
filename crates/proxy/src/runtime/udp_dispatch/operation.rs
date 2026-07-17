@@ -7,20 +7,21 @@ mod contract;
 mod direct;
 #[cfg(feature = "managed-datagram-runtime")]
 mod managed_datagram;
-#[cfg(feature = "socks5")]
+#[cfg(feature = "upstream-association-runtime")]
 mod registered;
-#[cfg(feature = "mieru")]
+#[cfg(feature = "managed-stream-runtime")]
 mod stream_packet;
-#[cfg(any(feature = "vless", feature = "vmess", feature = "trojan"))]
+#[cfg(feature = "managed-stream-runtime")]
 pub(crate) mod transport;
 
 pub(crate) use contract::PreparedUdpFlowOperation;
 pub(crate) use direct::DirectUdpFlowOperation;
 #[cfg(feature = "managed-datagram-runtime")]
-pub(crate) use managed_datagram::ManagedDatagramUdpOperation;
-#[cfg(feature = "socks5")]
+pub(crate) use managed_datagram::{ManagedDatagramStartPlan, ManagedDatagramUdpOperation};
+#[cfg(feature = "upstream-association-runtime")]
 pub(crate) use registered::RegisteredAssociationUdpOperation;
-#[cfg(feature = "mieru")]
+#[cfg(feature = "managed-stream-runtime")]
 pub(crate) use stream_packet::{
-    ManagedStreamPacketUdpOperation, PreparedManagedStreamPacketOperation,
+    ManagedStreamPacketBridgePlan, ManagedStreamPacketUdpOperation,
+    PreparedManagedStreamPacketOperation,
 };

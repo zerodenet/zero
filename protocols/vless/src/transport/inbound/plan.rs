@@ -11,14 +11,13 @@ use zero_transport::profile::{
     OwnedGrpcProfile, OwnedH2Profile, OwnedHttpUpgradeProfile, OwnedSplitHttpProfile,
     OwnedWebSocketProfile,
 };
-use zero_transport::protocol_inbound_route::{
-    InboundFallback, OpaqueFallbackReplay, OpaqueMuxRoute, RouteAcceptResult,
-};
-use zero_transport::OwnedInboundFallbackProfile;
 use zero_transport::{split_http, tls, RuntimeError};
 
-use super::carrier::{
-    accept_vless_inbound_carrier, accept_vless_inbound_transport, VlessInboundTransportResult,
+use super::{
+    carrier::{
+        accept_vless_inbound_carrier, accept_vless_inbound_transport, VlessInboundTransportResult,
+    },
+    VlessTcpFallbackReplay,
 };
 
 #[derive(Clone)]
@@ -113,14 +112,14 @@ impl OwnedVlessInboundTransportPlan {
     pub(super) async fn accept_tcp_route<S, FWrap>(
         self,
         profile: crate::inbound::VlessInboundProfile,
-        fallback: Option<OwnedInboundFallbackProfile>,
+        fallback_enabled: bool,
         socket: TokioSocket,
         wrap_stream: FWrap,
     ) -> Result<
         Option<
-            RouteAcceptResult<
-                OpaqueMuxRoute<crate::inbound::VlessAcceptedClientRoute<S>>,
-                OpaqueFallbackReplay<TcpRelayStream>,
+            zero_core::InboundRouteAccept<
+                crate::inbound::VlessAcceptedClientRoute<S>,
+                VlessTcpFallbackReplay,
             >,
         >,
         RuntimeError,
@@ -143,50 +142,30 @@ impl OwnedVlessInboundTransportPlan {
                     Ok(accepted) => accepted
                         .into_route_with_sni(sni)
                         .await
-                        .map(|route| Some(RouteAcceptResult::Route(OpaqueMuxRoute::new(route))))
+                        .map(|route| Some(zero_core::InboundRouteAccept::Route(route)))
                         .map_err(RuntimeError::from),
                     Err(rejected) => {
                         let (auth_error, fallback_replay) = rejected.into_fallback_replay();
-                        match fallback {
-                            Some(fallback) => {
-                                Ok(Some(RouteAcceptResult::Fallback(InboundFallback {
-                                    config: fallback,
-                                    replay: OpaqueFallbackReplay::new(move |upstream| {
-                                        Box::pin(async move {
-                                            crate::inbound::VlessFallbackReplay::replay_to_upstream(
-                                                fallback_replay,
-                                                upstream,
-                                            )
-                                            .await
-                                        })
-                                    }),
-                                })))
-                            }
-                            None => Err(RuntimeError::Core(auth_error)),
+                        if fallback_enabled {
+                            Ok(Some(zero_core::InboundRouteAccept::Fallback(
+                                VlessTcpFallbackReplay::Client(fallback_replay),
+                            )))
+                        } else {
+                            Err(RuntimeError::Core(auth_error))
                         }
                     }
                 }
             }
             VlessTcpInboundAcceptResult::FallbackReplay(fallback_replay) => {
-                let fallback = fallback.ok_or_else(|| {
-                    RuntimeError::Io(io::Error::new(
+                if !fallback_enabled {
+                    return Err(RuntimeError::Io(io::Error::new(
                         io::ErrorKind::InvalidInput,
                         "fallback replay requires fallback config",
-                    ))
-                })?;
-                Ok(Some(RouteAcceptResult::Fallback(InboundFallback {
-                    config: fallback,
-                    replay: OpaqueFallbackReplay::new(move |upstream| {
-                        Box::pin(async move {
-                            crate::inbound::VlessFallbackReplay::replay_to_upstream(
-                                fallback_replay,
-                                upstream,
-                            )
-                            .await
-                            .map(TcpRelayStream::from)
-                        })
-                    }),
-                })))
+                    )));
+                }
+                Ok(Some(zero_core::InboundRouteAccept::Fallback(
+                    VlessTcpFallbackReplay::Socket(fallback_replay),
+                )))
             }
         }
     }
@@ -202,14 +181,14 @@ enum VlessTcpInboundAcceptResult {
 
 pub(super) async fn accept_vless_stream_route<T, S, FWrap>(
     profile: crate::inbound::VlessInboundProfile,
-    fallback: Option<OwnedInboundFallbackProfile>,
+    fallback_enabled: bool,
     stream: T,
     sni: Option<String>,
     wrap_stream: FWrap,
 ) -> Result<
-    RouteAcceptResult<
-        OpaqueMuxRoute<crate::inbound::VlessAcceptedClientRoute<S>>,
-        OpaqueFallbackReplay<<S as zero_core::InboundFallbackCapture>::Stream>,
+    zero_core::InboundRouteAccept<
+        crate::inbound::VlessAcceptedClientRoute<S>,
+        crate::inbound::VlessFallbackReplay<<S as zero_core::InboundFallbackCapture>::Stream>,
     >,
     RuntimeError,
 >
@@ -226,24 +205,14 @@ where
         Ok(accepted) => accepted
             .into_route_with_sni(sni)
             .await
-            .map(|route| RouteAcceptResult::Route(OpaqueMuxRoute::new(route)))
+            .map(zero_core::InboundRouteAccept::Route)
             .map_err(RuntimeError::from),
         Err(rejected) => {
             let (auth_error, fallback_replay) = rejected.into_fallback_replay();
-            match fallback {
-                Some(fallback) => Ok(RouteAcceptResult::Fallback(InboundFallback {
-                    config: fallback,
-                    replay: OpaqueFallbackReplay::new(move |upstream| {
-                        Box::pin(async move {
-                            crate::inbound::VlessFallbackReplay::replay_to_upstream(
-                                fallback_replay,
-                                upstream,
-                            )
-                            .await
-                        })
-                    }),
-                })),
-                None => Err(RuntimeError::Core(auth_error)),
+            if fallback_enabled {
+                Ok(zero_core::InboundRouteAccept::Fallback(fallback_replay))
+            } else {
+                Err(RuntimeError::Core(auth_error))
             }
         }
     }

@@ -1,6 +1,8 @@
-use zero_core::{InboundMuxServer, InboundMuxStreamRoute, InboundMuxTcpRelay, InboundMuxUdpRelay};
+use zero_core::{
+    InboundFallbackReplay, InboundMuxServer, InboundMuxStreamRoute, InboundMuxTcpRelay,
+    InboundMuxUdpRelay,
+};
 use zero_engine::EngineError;
-use zero_transport::protocol_inbound_route::{FallbackReplayToUpstream, RouteAcceptResult};
 
 use super::result::{
     dispatch_recorded_protocol_mux_stream_request_result,
@@ -13,10 +15,11 @@ use crate::runtime::mux_tcp::run_protocol_mux_tcp_task;
 use crate::runtime::mux_udp::run_protocol_mux_udp_task_with_accept_log;
 use crate::runtime::route_runtime::InboundRouteRuntime;
 use crate::runtime::tcp_ingress::InboundProtocol;
+use crate::runtime::PreparedInboundRouteAccept;
 use crate::transport::{ClientStream, MeteredStream, RecordingStream, TcpRelayStream};
 
 pub(crate) async fn dispatch_recorded_protocol_mux_tcp_request_with_defaults<R, P, S, FR>(
-    accept_result: Result<Option<RouteAcceptResult<R, FR>>, EngineError>,
+    accept_result: Result<Option<PreparedInboundRouteAccept<R, FR>>, EngineError>,
     runtime: InboundRouteRuntime,
     protocol: P,
     defaults: RecordedProtocolMuxRouteDefaults,
@@ -33,7 +36,8 @@ where
         zero_core::StreamUdpResponder<MeteredStream<S>>,
     R::MuxReader: Send,
     P: InboundProtocol<ClientStream = TcpRelayStream> + 'static,
-    FR: FallbackReplayToUpstream + 'static,
+    FR: InboundFallbackReplay + 'static,
+    FR::Stream: ClientStream,
     <R::MuxServer as InboundMuxServer<MeteredStream<S>>>::TcpRelay: InboundMuxTcpRelay + 'static,
     <R::MuxServer as InboundMuxServer<MeteredStream<S>>>::UdpRelay: InboundMuxUdpRelay + 'static,
 {
@@ -60,7 +64,7 @@ where
 }
 
 pub(crate) async fn dispatch_recorded_protocol_mux_stream_request_with_defaults<R, P, S, FR>(
-    accept_result: Result<RouteAcceptResult<R, FR>, EngineError>,
+    accept_result: Result<PreparedInboundRouteAccept<R, FR>, EngineError>,
     runtime: InboundRouteRuntime,
     protocol: P,
     defaults: RecordedProtocolMuxRouteDefaults,
@@ -77,7 +81,8 @@ where
         zero_core::StreamUdpResponder<MeteredStream<S>>,
     R::MuxReader: Send,
     P: InboundProtocol<ClientStream = TcpRelayStream> + 'static,
-    FR: FallbackReplayToUpstream + 'static,
+    FR: InboundFallbackReplay + 'static,
+    FR::Stream: ClientStream,
     <R::MuxServer as InboundMuxServer<MeteredStream<S>>>::TcpRelay: InboundMuxTcpRelay + 'static,
     <R::MuxServer as InboundMuxServer<MeteredStream<S>>>::UdpRelay: InboundMuxUdpRelay + 'static,
 {

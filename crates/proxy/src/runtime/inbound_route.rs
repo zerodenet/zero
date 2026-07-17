@@ -1,18 +1,18 @@
-#[cfg(any(feature = "vless", feature = "vmess"))]
+#[cfg(feature = "managed-stream-runtime")]
 mod mux;
-#[cfg(feature = "vless")]
+#[cfg(feature = "managed-stream-runtime")]
 mod recorded;
-#[cfg(feature = "trojan")]
+#[cfg(feature = "managed-stream-runtime")]
 mod stream;
 
-#[cfg(feature = "vmess")]
+#[cfg(feature = "managed-stream-runtime")]
 pub(crate) use mux::{
     dispatch_no_client_mux_route_request_with_defaults, NoClientMuxRouteDefaults,
 };
-#[cfg(feature = "vless")]
+#[cfg(feature = "managed-stream-runtime")]
 pub(crate) use recorded::{
     dispatch_recorded_protocol_mux_stream_request_with_defaults,
     dispatch_recorded_protocol_mux_tcp_request_with_defaults, RecordedProtocolMuxRouteDefaults,
 };
-#[cfg(feature = "trojan")]
+#[cfg(feature = "managed-stream-runtime")]
 pub(crate) use stream::dispatch_no_client_stream_route;

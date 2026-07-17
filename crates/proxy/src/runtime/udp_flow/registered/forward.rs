@@ -21,7 +21,7 @@ impl RegisteredUdpState {
         let Some(resume) = self.managed_flow_resume(flow_ref) else {
             return Err(unavailable("managed UDP flow resume was dropped"));
         };
-        #[cfg(feature = "socks5")]
+        #[cfg(feature = "upstream-association-runtime")]
         if self.upstream.handles_resume(&resume) {
             return Err(unavailable(
                 "upstream association flows are handled by generic UDP dispatch",
@@ -29,12 +29,8 @@ impl RegisteredUdpState {
         }
 
         #[cfg(any(
-            feature = "vless",
-            feature = "hysteria2",
-            feature = "shadowsocks",
-            feature = "trojan",
-            feature = "vmess",
-            feature = "mieru"
+            feature = "managed-stream-runtime",
+            feature = "managed-datagram-runtime"
         ))]
         if let Some(result) = self
             .managed

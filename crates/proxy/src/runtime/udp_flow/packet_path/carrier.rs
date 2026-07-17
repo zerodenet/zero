@@ -27,7 +27,7 @@ pub(crate) trait PacketPathCarrier: Send + Sync {
 /// Runtime wraps those transports into a neutral `PacketPathCarrier` so
 /// adapters do not need to define one-off carrier structs.
 #[async_trait]
-#[cfg(feature = "socks5")]
+#[cfg(feature = "upstream-association-runtime")]
 pub(crate) trait PacketPathPayloadTransport: Send + Sync {
     async fn send_to(&self, target: &Address, port: u16, payload: &[u8])
         -> Result<(), EngineError>;
@@ -35,11 +35,11 @@ pub(crate) trait PacketPathPayloadTransport: Send + Sync {
     async fn recv_from(&self, buf: &mut [u8]) -> Result<usize, EngineError>;
 }
 
-#[cfg(feature = "socks5")]
+#[cfg(feature = "upstream-association-runtime")]
 struct PacketPathPayloadCarrier(Arc<dyn PacketPathPayloadTransport>);
 
 #[async_trait]
-#[cfg(feature = "socks5")]
+#[cfg(feature = "upstream-association-runtime")]
 impl PacketPathCarrier for PacketPathPayloadCarrier {
     async fn send_to(
         &self,
@@ -55,7 +55,7 @@ impl PacketPathCarrier for PacketPathPayloadCarrier {
     }
 }
 
-#[cfg(feature = "socks5")]
+#[cfg(feature = "upstream-association-runtime")]
 pub(crate) fn packet_path_payload_carrier(
     transport: Arc<dyn PacketPathPayloadTransport>,
 ) -> Arc<dyn PacketPathCarrier> {
@@ -74,7 +74,10 @@ pub(crate) struct PacketPathCarrierDescriptor {
     pub(crate) port: u16,
 }
 
-#[cfg(any(feature = "socks5", feature = "shadowsocks", feature = "hysteria2"))]
+#[cfg(any(
+    feature = "upstream-association-runtime",
+    feature = "managed-datagram-runtime"
+))]
 pub(crate) fn packet_path_carrier_descriptor(
     cache_key: String,
     server: &str,
@@ -87,12 +90,18 @@ pub(crate) fn packet_path_carrier_descriptor(
     }
 }
 
-#[cfg(any(feature = "socks5", feature = "shadowsocks", feature = "hysteria2"))]
+#[cfg(any(
+    feature = "upstream-association-runtime",
+    feature = "managed-datagram-runtime"
+))]
 pub(crate) trait PacketPathCarrierDescriptorBuild {
     fn into_parts(self) -> (String, String, u16);
 }
 
-#[cfg(any(feature = "socks5", feature = "shadowsocks", feature = "hysteria2"))]
+#[cfg(any(
+    feature = "upstream-association-runtime",
+    feature = "managed-datagram-runtime"
+))]
 pub(crate) fn packet_path_carrier_descriptor_from_build(
     build: impl PacketPathCarrierDescriptorBuild,
 ) -> PacketPathCarrierDescriptor {

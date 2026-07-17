@@ -73,33 +73,7 @@ fn collect_build_features() -> Vec<String> {
     if cfg!(feature = "grpc_api") {
         features.push("grpc_api".to_owned());
     }
-    if cfg!(feature = "socks5") {
-        features.push("socks5".to_owned());
-    }
-    if cfg!(feature = "http") {
-        features.push("http".to_owned());
-    }
-    if cfg!(feature = "mixed") {
-        features.push("mixed".to_owned());
-    }
-    if cfg!(feature = "vless") {
-        features.push("vless".to_owned());
-    }
-    if cfg!(feature = "hysteria2") {
-        features.push("hysteria2".to_owned());
-    }
-    if cfg!(feature = "shadowsocks") {
-        features.push("shadowsocks".to_owned());
-    }
-    if cfg!(feature = "trojan") {
-        features.push("trojan".to_owned());
-    }
-    if cfg!(feature = "vmess") {
-        features.push("vmess".to_owned());
-    }
-    if cfg!(feature = "mieru") {
-        features.push("mieru".to_owned());
-    }
+    features.extend(zero_proxy::compiled_protocol_features());
     if cfg!(feature = "dns") {
         features.push("dns".to_owned());
     }

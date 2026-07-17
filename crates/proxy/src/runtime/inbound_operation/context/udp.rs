@@ -1,7 +1,7 @@
 use super::model::InboundConnectionContext;
 
 impl InboundConnectionContext {
-    #[cfg(feature = "socks5")]
+    #[cfg(feature = "upstream-association-runtime")]
     pub(crate) async fn run_udp_association<S, H>(
         self,
         mut client: crate::transport::MeteredStream<S>,
@@ -28,12 +28,7 @@ impl InboundConnectionContext {
         .await
     }
 
-    #[cfg(any(
-        feature = "vless",
-        feature = "vmess",
-        feature = "trojan",
-        feature = "mieru"
-    ))]
+    #[cfg(feature = "managed-stream-runtime")]
     pub(crate) async fn run_stream_udp_relay<R>(
         self,
         session: zero_core::Session,

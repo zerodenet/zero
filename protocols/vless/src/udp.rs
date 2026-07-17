@@ -803,7 +803,7 @@ impl VlessInboundUdpRequest {
 
 impl VlessInboundUdpDispatchParts {
     pub fn protocol(&self) -> ProtocolType {
-        ProtocolType::Vless
+        ProtocolType::new("vless")
     }
 
     pub fn into_parts(self) -> (Address, u16, Vec<u8>, Option<u64>) {

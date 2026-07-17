@@ -18,7 +18,7 @@ where
 {
     match failure_policy {
         PacketSessionUdpFailurePolicy::ReturnError => Err(error),
-        #[cfg(any(feature = "vless", feature = "vmess"))]
+        #[cfg(feature = "managed-stream-runtime")]
         PacketSessionUdpFailurePolicy::LogAndBreak => {
             warn!(
                 inbound_tag = inbound_tag,

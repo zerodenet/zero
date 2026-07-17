@@ -14,10 +14,10 @@ impl MieruTunnelRequest {
     fn into_session(self) -> Session {
         match self {
             Self::Tcp { target, port } => {
-                Session::new(0, target, port, Network::Tcp, ProtocolType::Mieru)
+                Session::new(0, target, port, Network::Tcp, ProtocolType::new("mieru"))
             }
             Self::UdpAssociate { target, port } => {
-                Session::new(0, target, port, Network::Udp, ProtocolType::Mieru)
+                Session::new(0, target, port, Network::Udp, ProtocolType::new("mieru"))
             }
         }
     }

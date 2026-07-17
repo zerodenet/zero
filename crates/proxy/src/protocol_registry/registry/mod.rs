@@ -1,9 +1,6 @@
 use std::fmt;
 use std::sync::Arc;
 
-use zero_config::OutboundProtocolConfig;
-use zero_engine::ResolvedLeafOutbound;
-
 #[cfg(feature = "managed-udp-runtime")]
 use crate::protocol_registry::ManagedUdpHandlerProvider;
 #[cfg(test)]
@@ -11,7 +8,7 @@ use crate::protocol_registry::TcpOutboundCapability;
 #[cfg(feature = "upstream-association-runtime")]
 use crate::protocol_registry::UpstreamUdpHandlerProvider;
 use crate::protocol_registry::{
-    InboundListenerCapability, OutboundLeafClaim, ProtocolSupportCapability,
+    InboundListenerCapability, OutboundLeafClaim, OutboundLeafInput, ProtocolSupportCapability,
 };
 #[cfg(all(test, feature = "udp-runtime"))]
 use crate::protocol_registry::{UdpFlowCapability, UdpPacketPathCapability};
@@ -28,8 +25,8 @@ pub(crate) use outbound::ClaimedOutboundLeaf;
 
 /// Registry of all compiled-in protocol adapters.
 ///
-/// Constructed at proxy startup via `build()`. Replaces the manual
-/// match arms in `ProtocolInventory::supports_*` and `protocol_name` functions.
+/// Constructed only by `register.rs`. Replaces manual protocol matches in
+/// inventory and generic runtime code.
 #[derive(Clone, Default)]
 pub(crate) struct ProtocolRegistry {
     entries: Vec<RegisteredProtocolEntry>,
@@ -38,8 +35,7 @@ pub(crate) struct ProtocolRegistry {
 pub(crate) trait OutboundLeafClaimer: Send + Sync {
     fn claim_outbound_leaf<'a>(
         &self,
-        protocol: Option<&'a OutboundProtocolConfig>,
-        leaf: ResolvedLeafOutbound<'a>,
+        input: OutboundLeafInput<'a>,
     ) -> Option<OutboundLeafClaim<'a>>;
 }
 

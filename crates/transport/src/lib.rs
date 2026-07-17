@@ -1,5 +1,3 @@
-#[cfg(feature = "tls")]
-pub mod client_hello;
 #[cfg(any(feature = "tls", feature = "quic"))]
 pub mod fingerprint;
 #[cfg(feature = "grpc")]
@@ -8,15 +6,9 @@ pub mod grpc;
 pub mod h2;
 #[cfg(feature = "http_upgrade")]
 pub mod http_upgrade;
-#[cfg(feature = "quic")]
-pub mod inbound_quic;
-pub mod inbound_route;
 #[cfg(feature = "tls")]
 pub mod inbound_stack;
-pub mod managed_udp;
 pub mod metered;
-pub mod mux_stack;
-pub mod outbound_leaf;
 #[cfg(any(
     feature = "tls",
     feature = "ws",
@@ -26,7 +18,6 @@ pub mod outbound_leaf;
 ))]
 pub mod outbound_stack;
 pub mod profile;
-pub mod protocol_inbound_route;
 #[cfg(feature = "quic")]
 pub mod quic;
 #[cfg(feature = "split_http")]
@@ -34,7 +25,6 @@ pub mod split_http;
 pub mod stream;
 #[cfg(feature = "tls")]
 pub mod tls;
-pub mod transport_plan;
 pub mod udp_packet_path;
 #[cfg(feature = "ws")]
 pub mod ws;
@@ -51,34 +41,5 @@ pub struct StreamTraffic {
 impl StreamTraffic {
     pub fn is_empty(self) -> bool {
         self.read_bytes == 0 && self.written_bytes == 0
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct OwnedInboundFallbackProfile {
-    pub server: String,
-    pub port: u16,
-    pub alpn: Option<String>,
-}
-
-impl OwnedInboundFallbackProfile {
-    pub fn from_profile(profile: &(impl zero_traits::InboundFallbackProfile + ?Sized)) -> Self {
-        Self {
-            server: profile.server().to_owned(),
-            port: profile.port(),
-            alpn: profile.alpn().map(str::to_owned),
-        }
-    }
-}
-
-impl zero_traits::InboundFallbackProfile for OwnedInboundFallbackProfile {
-    fn server(&self) -> &str {
-        &self.server
-    }
-    fn port(&self) -> u16 {
-        self.port
-    }
-    fn alpn(&self) -> Option<&str> {
-        self.alpn.as_deref()
     }
 }

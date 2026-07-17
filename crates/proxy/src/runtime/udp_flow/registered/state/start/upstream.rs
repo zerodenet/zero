@@ -1,10 +1,10 @@
 #[cfg(all(
-    feature = "socks5",
+    feature = "upstream-association-runtime",
     any(
-        feature = "vless",
-        feature = "vmess",
-        feature = "trojan",
-        feature = "mieru"
+        feature = "managed-stream-runtime",
+        feature = "managed-stream-runtime",
+        feature = "managed-stream-runtime",
+        feature = "managed-stream-runtime"
     )
 ))]
 use crate::runtime::udp_flow::managed::ManagedUdpFlowRequest;
@@ -31,12 +31,12 @@ impl RegisteredUdpState {
 }
 
 #[cfg(all(
-    feature = "socks5",
+    feature = "upstream-association-runtime",
     any(
-        feature = "vless",
-        feature = "vmess",
-        feature = "trojan",
-        feature = "mieru"
+        feature = "managed-stream-runtime",
+        feature = "managed-stream-runtime",
+        feature = "managed-stream-runtime",
+        feature = "managed-stream-runtime"
     )
 ))]
 pub(super) fn upstream_send(request: ManagedUdpFlowRequest<'_>) -> UpstreamAssociationSend<'_> {

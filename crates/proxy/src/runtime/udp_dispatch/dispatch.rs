@@ -10,10 +10,9 @@ use crate::runtime::pipe::UdpPipeInput;
 impl UdpDispatch {
     /// Dispatch a UDP packet: route, select outbound, send.
     ///
-    /// If a flow already exists for `(target, port, client_session_id)`
-    /// (including VLESS chain connections cached in the manager), forwards the
-    /// payload. Otherwise creates a new session, routes through the engine, and
-    /// dispatches to the resolved outbound.
+    /// If a flow already exists for `(target, port, client_session_id)`, forwards
+    /// the payload. Otherwise creates a new session, routes through the engine,
+    /// and dispatches to the resolved outbound.
     pub(crate) async fn dispatch(&mut self, input: UdpPipeInput<'_>) -> Result<u64, EngineError> {
         if let Some(flow) = self
             .flows

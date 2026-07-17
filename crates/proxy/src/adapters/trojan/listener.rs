@@ -13,10 +13,12 @@ pub(super) fn prepare(
             |request: TrojanInboundListenerRequest,
              socket,
              context: crate::runtime::inbound_operation::InboundConnectionContext| async move {
-                let defaults = request.no_client_stream_route_defaults();
                 let route = request.accept_route(socket).await?;
                 context
-                    .dispatch_no_client_stream_route(route, defaults.udp_protocol)
+                    .dispatch_no_client_stream_route(
+                        route,
+                        TrojanInboundListenerRequest::UDP_PROTOCOL,
+                    )
                     .await
             },
     })

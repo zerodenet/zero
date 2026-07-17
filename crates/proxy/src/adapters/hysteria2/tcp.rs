@@ -1,22 +1,30 @@
 use crate::adapters::hysteria2::Hysteria2Adapter;
-use crate::protocol_registry::ClaimedTcpOutboundLeaf;
-use crate::runtime::tcp_dispatch::operation::{
-    PreparedTcpConnectOperation, SessionTcpConnectOperation,
-};
-use crate::transport::TcpOutboundFailure;
+use crate::protocol_registry::{claim_session_tcp_leaf, ClaimedTcpOutboundLeaf};
+use crate::runtime::tcp_dispatch::operation::SessionTcpHandshake;
 
-struct ClaimedHysteria2TcpLeaf {
-    leaf: ::hysteria2::transport::Hysteria2TransportLeaf,
-}
+#[async_trait::async_trait]
+impl SessionTcpHandshake for ::hysteria2::transport::Hysteria2TransportLeaf {
+    fn tag(&self) -> &str {
+        self.tag()
+    }
 
-impl<'a> ClaimedTcpOutboundLeaf<'a> for ClaimedHysteria2TcpLeaf {
-    fn prepare_tcp_connect(
+    fn server(&self) -> &str {
+        self.server()
+    }
+
+    fn port(&self) -> u16 {
+        self.port()
+    }
+
+    fn connect_stage(&self) -> &'static str {
+        "connect_upstream_hysteria2"
+    }
+
+    async fn open_tcp_stream(
         &self,
-        _source_dir: Option<&std::path::Path>,
-    ) -> Result<Box<dyn PreparedTcpConnectOperation + 'a>, TcpOutboundFailure> {
-        Ok(Box::new(SessionTcpConnectOperation {
-            handshake: self.leaf.clone(),
-        }))
+        session: &zero_core::Session,
+    ) -> Result<crate::transport::TcpRelayStream, zero_transport::RuntimeError> {
+        ::hysteria2::transport::Hysteria2TransportLeaf::open_tcp_stream(self, session).await
     }
 }
 
@@ -25,6 +33,6 @@ impl Hysteria2Adapter {
         &self,
         leaf: ::hysteria2::transport::Hysteria2TransportLeaf,
     ) -> Box<dyn ClaimedTcpOutboundLeaf<'a> + 'a> {
-        Box::new(ClaimedHysteria2TcpLeaf { leaf })
+        claim_session_tcp_leaf(leaf)
     }
 }

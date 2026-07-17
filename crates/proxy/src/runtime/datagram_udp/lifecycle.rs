@@ -7,7 +7,7 @@
 mod read;
 mod relay;
 mod response;
-#[cfg(feature = "socks5")]
+#[cfg(feature = "upstream-association-runtime")]
 mod with_upstream;
 mod without_upstream;
 

@@ -1,11 +1,8 @@
-#[cfg(feature = "hysteria2")]
+#[cfg(feature = "authenticated-quic-inbound-runtime")]
 mod connection;
-#[cfg(feature = "vless")]
 mod logged;
-#[cfg(feature = "vless")]
 mod stream;
 
-#[cfg(feature = "hysteria2")]
+#[cfg(feature = "authenticated-quic-inbound-runtime")]
 pub(crate) use connection::{run_quic_listener_loop, QuicListenerLoopRequest};
-#[cfg(feature = "vless")]
 pub(crate) use logged::{run_logged_quic_stream_listener_loop, LoggedQuicStreamListenerRequest};

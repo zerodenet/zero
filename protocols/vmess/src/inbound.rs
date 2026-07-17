@@ -218,7 +218,7 @@ struct ParsedCommand {
 
 impl VmessInbound {
     pub fn protocol(&self) -> ProtocolType {
-        ProtocolType::Vmess
+        ProtocolType::new("vmess")
     }
 
     /// Accept with a single known user.
@@ -441,7 +441,7 @@ fn parse_command_body(plaintext: &[u8], user: &VmessUser) -> Result<ParsedComman
             CMD_UDP => Network::Udp,
             _ => return Err(Error::Protocol("vmess unsupported command")),
         };
-        let mut session = Session::new(0, target, port, network, ProtocolType::Vmess);
+        let mut session = Session::new(0, target, port, network, ProtocolType::new("vmess"));
         apply_user_auth(&mut session, user);
         return Ok(ParsedCommand {
             session,
@@ -460,7 +460,7 @@ fn parse_command_body(plaintext: &[u8], user: &VmessUser) -> Result<ParsedComman
         target,
         crate::shared::MUX_COOL_PORT,
         Network::Tcp,
-        ProtocolType::Vmess,
+        ProtocolType::new("vmess"),
     );
     apply_user_auth(&mut session, user);
     let _ = padding_len;

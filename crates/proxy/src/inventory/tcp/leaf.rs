@@ -32,7 +32,7 @@ impl PreparedTcpRelayHop<'_> {
             zero_core::Address::Domain(self.server.clone()),
             self.port,
             zero_core::Network::Tcp,
-            zero_core::ProtocolType::Unknown,
+            zero_core::ProtocolType::UNKNOWN,
         )
     }
 

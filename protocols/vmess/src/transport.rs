@@ -9,6 +9,7 @@ mod runtime;
 
 pub use inbound::VmessInboundListenerRequest;
 pub use leaf::VmessOutboundLeaf;
+pub use managed_udp::{VmessManagedUdpConnectorFlow, VmessManagedUdpFlowResume};
 pub use options::{
     VmessInboundOptionsRef, VmessInboundUserRef, VmessOutboundBuildOptionsRef,
     VmessOutboundOptionsRef,

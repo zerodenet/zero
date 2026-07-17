@@ -24,10 +24,8 @@ pub(crate) fn spawn_response_bridge<T, F>(
 }
 
 #[cfg(any(
-    feature = "vless",
-    feature = "vmess",
-    feature = "mieru",
-    feature = "hysteria2"
+    feature = "managed-stream-runtime",
+    feature = "managed-datagram-runtime"
 ))]
 pub(crate) fn spawn_tuple_response_bridge(
     chain_tasks: &mut JoinSet<ChainTask>,

@@ -1,14 +1,12 @@
 use std::any::Any;
 
-use async_trait::async_trait;
-use zero_core::Session;
-use zero_engine::EngineError;
-use zero_transport::managed_udp::ProtocolManagedStreamConnectorParts;
-
 use super::super::super::connection::SharedManagedUdpConnection;
 use crate::protocol_registry::UdpRuntimeServices;
 use crate::runtime::path::OutboundEndpoint;
 use crate::transport::TcpRelayStream;
+use async_trait::async_trait;
+use zero_core::Session;
+use zero_engine::EngineError;
 
 #[async_trait]
 pub(crate) trait ManagedStreamFlowConnector:
@@ -55,16 +53,20 @@ impl ManagedStreamConnectorFlow {
     }
 }
 
+pub(crate) trait ManagedStreamConnectorParts {
+    fn into_managed_connector_parts(self) -> (String, bool);
+}
+
 pub(crate) trait ManagedStreamConnectorFlowBuild {
     fn into_parts(self) -> (String, bool);
 }
 
 impl<T> ManagedStreamConnectorFlowBuild for T
 where
-    T: ProtocolManagedStreamConnectorParts,
+    T: ManagedStreamConnectorParts,
 {
     fn into_parts(self) -> (String, bool) {
-        self.into_managed_connector_parts()
+        ManagedStreamConnectorParts::into_managed_connector_parts(self)
     }
 }
 

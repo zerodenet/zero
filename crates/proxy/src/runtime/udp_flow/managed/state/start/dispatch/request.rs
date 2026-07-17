@@ -10,19 +10,9 @@ impl ManagedUdpState {
         match request.kind {
             #[cfg(feature = "managed-datagram-runtime")]
             ManagedUdpFlowKind::Datagram => self.start_datagram_request(request).await,
-            #[cfg(any(
-                feature = "vless",
-                feature = "vmess",
-                feature = "trojan",
-                feature = "mieru"
-            ))]
+            #[cfg(feature = "managed-stream-runtime")]
             ManagedUdpFlowKind::StreamPacket => self.start_stream_packet_request(request).await,
-            #[cfg(any(
-                feature = "vless",
-                feature = "vmess",
-                feature = "trojan",
-                feature = "mieru"
-            ))]
+            #[cfg(feature = "managed-stream-runtime")]
             ManagedUdpFlowKind::RelayStream => self.start_relay_stream_request(request).await,
         }
     }

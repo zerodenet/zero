@@ -9,12 +9,7 @@ use crate::runtime::udp_flow::managed::flow::ManagedStreamPacketFlow;
 use crate::runtime::udp_flow::result::FlowFailure;
 
 impl ManagedStreamState {
-    #[cfg(any(
-        feature = "vless",
-        feature = "vmess",
-        feature = "trojan",
-        feature = "mieru"
-    ))]
+    #[cfg(feature = "managed-stream-runtime")]
     pub(in crate::runtime::udp_flow::managed) async fn start_stream_packet_flow(
         &mut self,
         request: ManagedStreamPacketFlow<'_>,

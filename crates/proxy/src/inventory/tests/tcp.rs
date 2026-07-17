@@ -2,10 +2,11 @@ use std::sync::Arc;
 
 use zero_config::RuntimeConfig;
 use zero_core::{Address, Network, ProtocolType, Session};
+use zero_engine::{OutboundIdentity, ResolvedLeafOutbound};
 
 use super::fixtures::{FakeTcpCapability, TcpCapabilityCalls};
 use crate::inventory::ProtocolInventory;
-use crate::protocol_registry::{fake_direct_leaf, OutboundAdapterContext, ProtocolRegistry};
+use crate::protocol_registry::{OutboundAdapterContext, ProtocolRegistry};
 use crate::runtime::Proxy;
 use crate::transport::TcpRelayStream;
 
@@ -46,21 +47,72 @@ pub(super) fn proxy_with_fake_tcp(calls: Arc<TcpCapabilityCalls>) -> Proxy {
     proxy
 }
 
+fn proxy_with_fake_proxy_tcp(calls: Arc<TcpCapabilityCalls>) -> Proxy {
+    let config = RuntimeConfig::parse(
+        r#"{
+            "outbounds": [{
+                "tag": "fake-proxy",
+                "protocol": {
+                    "type": "socks5",
+                    "server": "fake-tcp.test",
+                    "port": 8443
+                }
+            }],
+            "route": { "rules": [], "final": { "type": "direct" } }
+        }"#,
+    )
+    .expect("fake proxy runtime config");
+    let mut proxy = Proxy::new(config).expect("fake proxy");
+    let mut registry = ProtocolRegistry::default();
+    #[cfg(any(
+        feature = "vless",
+        feature = "hysteria2",
+        feature = "shadowsocks",
+        feature = "trojan",
+        feature = "vmess",
+        feature = "mieru"
+    ))]
+    registry.register_managed_capability(
+        Arc::new(FakeTcpCapability::new_proxy(calls.clone())),
+        FakeTcpCapability::claim_outbound_leaf_impl,
+    );
+    #[cfg(not(any(
+        feature = "vless",
+        feature = "hysteria2",
+        feature = "shadowsocks",
+        feature = "trojan",
+        feature = "vmess",
+        feature = "mieru"
+    )))]
+    registry.register_capability(
+        Arc::new(FakeTcpCapability::new_proxy(calls)),
+        FakeTcpCapability::claim_outbound_leaf_impl,
+    );
+    proxy.protocols = ProtocolInventory { registry };
+    proxy
+}
+
+fn fake_proxy_leaf() -> ResolvedLeafOutbound<'static> {
+    ResolvedLeafOutbound::Proxy {
+        identity: OutboundIdentity::from_config_index(0),
+    }
+}
+
 pub(super) fn session() -> Session {
     Session::new(
         7,
         Address::Domain("example.test".to_owned()),
         443,
         Network::Tcp,
-        ProtocolType::Unknown,
+        ProtocolType::UNKNOWN,
     )
 }
 
 #[tokio::test]
 async fn inventory_invokes_fake_tcp_leaf_and_relay_capabilities() {
     let calls = Arc::new(TcpCapabilityCalls::default());
-    let proxy = proxy_with_fake_tcp(calls.clone());
-    let leaf = fake_direct_leaf();
+    let proxy = proxy_with_fake_proxy_tcp(calls.clone());
+    let leaf = fake_proxy_leaf();
     let ctx = OutboundAdapterContext::new(&proxy.config);
     let claimed = proxy
         .protocols
@@ -108,8 +160,8 @@ async fn inventory_invokes_fake_tcp_leaf_and_relay_capabilities() {
 async fn inventory_preserves_tcp_and_relay_capability_failures() {
     let calls = Arc::new(TcpCapabilityCalls::default());
     calls.set_fail_tcp(true);
-    let proxy = proxy_with_fake_tcp(calls.clone());
-    let leaf = fake_direct_leaf();
+    let proxy = proxy_with_fake_proxy_tcp(calls.clone());
+    let leaf = fake_proxy_leaf();
     let ctx = OutboundAdapterContext::new(&proxy.config);
     let claimed = proxy
         .protocols

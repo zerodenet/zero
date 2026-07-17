@@ -37,7 +37,7 @@ pub(super) async fn process_packet_session_read(
                 "packet session udp inbound read/decode error"
             );
             match failure.action {
-                #[cfg(any(feature = "vless", feature = "vmess"))]
+                #[cfg(feature = "managed-stream-runtime")]
                 PacketSessionUdpReadFailureAction::Continue => true,
                 PacketSessionUdpReadFailureAction::End => false,
             }

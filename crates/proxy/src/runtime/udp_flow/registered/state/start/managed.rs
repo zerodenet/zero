@@ -1,20 +1,16 @@
 #[cfg(all(
-    feature = "socks5",
+    feature = "upstream-association-runtime",
     any(
-        feature = "vless",
-        feature = "vmess",
-        feature = "trojan",
-        feature = "mieru"
+        feature = "managed-stream-runtime",
+        feature = "managed-stream-runtime",
+        feature = "managed-stream-runtime",
+        feature = "managed-stream-runtime"
     )
 ))]
 use crate::runtime::udp_flow::managed::ManagedUdpFlowKind;
 #[cfg(any(
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
+    feature = "managed-stream-runtime",
+    feature = "managed-datagram-runtime"
 ))]
 use crate::runtime::udp_flow::managed::ManagedUdpFlowRequest;
 use crate::runtime::udp_flow::result::FlowFailure;
@@ -22,24 +18,20 @@ use crate::runtime::udp_flow::result::FlowFailure;
 use super::super::model::RegisteredUdpState;
 use super::error::unhandled_managed_flow;
 #[cfg(all(
-    feature = "socks5",
+    feature = "upstream-association-runtime",
     any(
-        feature = "vless",
-        feature = "vmess",
-        feature = "trojan",
-        feature = "mieru"
+        feature = "managed-stream-runtime",
+        feature = "managed-stream-runtime",
+        feature = "managed-stream-runtime",
+        feature = "managed-stream-runtime"
     )
 ))]
 use super::upstream::upstream_send;
 
 impl RegisteredUdpState {
     #[cfg(any(
-        feature = "vless",
-        feature = "hysteria2",
-        feature = "shadowsocks",
-        feature = "trojan",
-        feature = "vmess",
-        feature = "mieru"
+        feature = "managed-stream-runtime",
+        feature = "managed-datagram-runtime"
     ))]
     pub(crate) async fn start_managed_udp_flow(
         &mut self,
@@ -47,12 +39,12 @@ impl RegisteredUdpState {
         request: ManagedUdpFlowRequest<'_>,
     ) -> Result<usize, FlowFailure> {
         #[cfg(all(
-            feature = "socks5",
+            feature = "upstream-association-runtime",
             any(
-                feature = "vless",
-                feature = "vmess",
-                feature = "trojan",
-                feature = "mieru"
+                feature = "managed-stream-runtime",
+                feature = "managed-stream-runtime",
+                feature = "managed-stream-runtime",
+                feature = "managed-stream-runtime"
             )
         ))]
         if matches!(request.kind, ManagedUdpFlowKind::RelayStream) && request.carrier.is_none() {

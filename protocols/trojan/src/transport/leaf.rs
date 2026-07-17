@@ -3,15 +3,11 @@ use std::path::Path;
 
 use zero_core::Session;
 use zero_platform_tokio::TokioSocket;
-use zero_transport::managed_udp::{ManagedPacketUdpResume, ProtocolManagedStreamUdpLeafOps};
-use zero_transport::outbound_leaf::{
-    ProtocolTcpTransportLeafMetadata, ProtocolTcpTransportLeafOps, ProtocolTcpTransportOpenResult,
-    ProtocolTransportLeaf, ProtocolUdpTransportLeafMetadata,
-};
+use zero_traits::ProtocolUdpFlowLeaf;
 use zero_transport::RuntimeError;
-use zero_transport::{StreamTraffic, TcpRelayStream};
+use zero_transport::TcpRelayStream;
 
-use super::managed_udp::{TrojanManagedStreamUdpResume, TrojanManagedUdpFlowResume};
+use super::managed_udp::TrojanManagedUdpFlowResume;
 use super::options::{TrojanOutboundBuildOptionsRef, TrojanOutboundOptionsRef};
 use super::outbound::{OwnedTrojanOutboundTlsPlan, TrojanTcpStreamOpen};
 
@@ -90,11 +86,23 @@ impl TrojanOutboundLeaf {
         }
     }
 
+    pub fn tag(&self) -> &str {
+        &self.tag
+    }
+
+    pub fn server(&self) -> &str {
+        &self.server
+    }
+
+    pub fn port(&self) -> u16 {
+        self.port
+    }
+
     fn owned_transport_plan(&self) -> OwnedTrojanOutboundTlsPlan {
         self.transport.clone()
     }
 
-    pub(super) async fn open_tcp_stream<OpenSocket, OpenSocketFut>(
+    pub async fn open_tcp_stream<OpenSocket, OpenSocketFut>(
         &self,
         session: &Session,
         open_socket: OpenSocket,
@@ -114,7 +122,7 @@ impl TrojanOutboundLeaf {
             .await
     }
 
-    pub(super) async fn open_tcp_relay_hop(
+    pub async fn open_tcp_relay_hop(
         &self,
         stream: TcpRelayStream,
         session: &Session,
@@ -144,78 +152,14 @@ impl TrojanOutboundLeaf {
     }
 }
 
-impl ProtocolTransportLeaf for TrojanOutboundLeaf {
-    fn tag(&self) -> &str {
-        &self.tag
-    }
-
-    fn server(&self) -> &str {
-        &self.server
-    }
-
-    fn port(&self) -> u16 {
-        self.port
-    }
-}
-
-impl ProtocolTcpTransportLeafMetadata for TrojanOutboundLeaf {
-    const TCP_CONNECT_STAGE: &'static str = "connect_upstream_trojan";
-    const TCP_INVALID_CONNECT_CONFIG: &'static str = "invalid trojan tcp config";
-    const TCP_INVALID_RELAY_CONFIG: &'static str = "invalid trojan tcp relay config";
-}
-
-impl ProtocolUdpTransportLeafMetadata for TrojanOutboundLeaf {
-    const UDP_DIRECT_STAGE: &'static str = "udp_trojan_leaf";
-    const UDP_INVALID_CONFIG: &'static str = "invalid trojan udp config";
-    const UDP_RELAY_FINAL_STAGE: &'static str = "udp_trojan_relay_leaf";
-}
-
-#[async_trait::async_trait]
-impl ProtocolTcpTransportLeafOps for TrojanOutboundLeaf {
-    type Opened = TrojanTcpStreamOpen;
-
-    async fn open_tcp_stream<OpenSocket, OpenSocketFut>(
-        &self,
-        session: &Session,
-        open_socket: OpenSocket,
-    ) -> Result<Self::Opened, RuntimeError>
-    where
-        OpenSocket: Clone + Fn(&str, u16) -> OpenSocketFut + Send + Sync,
-        OpenSocketFut: Future<Output = Result<TokioSocket, RuntimeError>> + Send,
-    {
-        TrojanOutboundLeaf::open_tcp_stream(self, session, open_socket).await
-    }
-
-    async fn open_tcp_relay_hop(
-        &self,
-        stream: TcpRelayStream,
-        session: &Session,
-    ) -> Result<TcpRelayStream, RuntimeError> {
-        TrojanOutboundLeaf::open_tcp_relay_hop(self, stream, session).await
-    }
-}
-
-impl ProtocolManagedStreamUdpLeafOps for TrojanOutboundLeaf {
-    type Resume = TrojanManagedStreamUdpResume;
+impl ProtocolUdpFlowLeaf for TrojanOutboundLeaf {
+    type Resume = TrojanManagedUdpFlowResume;
 
     fn direct_udp_resume(&self) -> Self::Resume {
-        ManagedPacketUdpResume::new(TrojanOutboundLeaf::direct_udp_resume(self))
+        TrojanOutboundLeaf::direct_udp_resume(self)
     }
 
     fn relay_final_hop_udp_resume(&self) -> Self::Resume {
-        ManagedPacketUdpResume::new(TrojanOutboundLeaf::relay_final_hop_udp_resume(self))
-    }
-}
-
-impl ProtocolTcpTransportOpenResult for TrojanTcpStreamOpen {
-    fn into_proxied_stream_parts(self) -> (TcpRelayStream, StreamTraffic) {
-        let (upstream, handshake_written_bytes) = self.into_parts();
-        (
-            upstream,
-            StreamTraffic {
-                read_bytes: 0,
-                written_bytes: handshake_written_bytes,
-            },
-        )
+        TrojanOutboundLeaf::relay_final_hop_udp_resume(self)
     }
 }

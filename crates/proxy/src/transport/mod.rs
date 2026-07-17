@@ -13,23 +13,11 @@ pub(crate) use direct::DirectConnector;
 pub(crate) use tcp_outbound::{
     extract_tcp_stream, is_block_error, EstablishedTcpOutbound, TcpOutboundFailure, TcpRouteResult,
 };
-#[cfg(feature = "vless")]
 pub(crate) use tcp_relay::relay_bidirectional_metered;
 pub(crate) use tcp_relay::relay_bidirectional_metered_throttled;
-#[cfg(any(feature = "socks5", feature = "vless"))]
 pub(crate) use zero_transport::ClientStream;
-#[cfg(any(
-    feature = "socks5",
-    feature = "http",
-    feature = "mixed",
-    feature = "vless",
-    feature = "shadowsocks",
-    feature = "mieru"
-))]
 pub(crate) use zero_transport::MeteredStream;
-#[cfg(feature = "mixed")]
 pub(crate) use zero_transport::PrefixedSocket;
-#[cfg(feature = "vless")]
 pub(crate) use zero_transport::RecordingStream;
 #[cfg(feature = "udp-runtime")]
 pub(crate) use zero_transport::RelayCarrier;
@@ -39,7 +27,7 @@ pub(crate) use zero_transport::TcpRelayStream;
 
 // Re-export transport implementations from zero-transport.
 // Only items used directly by proxy code are listed.
-#[cfg(any(feature = "hysteria2", feature = "vless"))]
+#[cfg(feature = "transport_quic")]
 pub(crate) use zero_transport::quic::QuicInbound;
-#[cfg(feature = "vless")]
+#[cfg(feature = "transport_quic")]
 pub(crate) use zero_transport::quic::QuicStream;

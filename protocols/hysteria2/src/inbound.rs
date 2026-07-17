@@ -246,7 +246,7 @@ pub trait Hysteria2UserStore {
 
 impl Hysteria2Inbound {
     pub fn protocol(&self) -> ProtocolType {
-        ProtocolType::Hysteria2
+        ProtocolType::new("hysteria2")
     }
 
     #[cfg(feature = "tokio")]
@@ -271,7 +271,7 @@ impl Hysteria2Inbound {
             target,
             port,
             Network::Tcp,
-            ProtocolType::Hysteria2,
+            ProtocolType::new("hysteria2"),
         ))
     }
 
@@ -337,7 +337,7 @@ impl Hysteria2Inbound {
             zero_core::Address::Domain(String::new()),
             0,
             zero_core::Network::Tcp,
-            ProtocolType::Hysteria2,
+            ProtocolType::new("hysteria2"),
         );
         session.auth = Some(auth);
         Ok(session)

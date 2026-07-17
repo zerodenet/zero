@@ -2,5 +2,5 @@ mod forward;
 mod model;
 mod start;
 
-#[cfg(feature = "socks5")]
+#[cfg(feature = "upstream-association-runtime")]
 pub(crate) use model::UpstreamTrackedStart;

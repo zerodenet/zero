@@ -8,7 +8,7 @@ pub(crate) struct MuxRouteBridge<P, FMapTcp, FRunUdp, FRunMux> {
     pub(crate) run_mux: FRunMux,
 }
 
-#[cfg(feature = "vmess")]
+#[cfg(feature = "managed-stream-runtime")]
 #[derive(Clone, Copy)]
 pub(crate) struct NoClientMuxRouteDefaults {
     pub(crate) udp_protocol: &'static str,
@@ -16,19 +16,4 @@ pub(crate) struct NoClientMuxRouteDefaults {
     pub(crate) panic_message: &'static str,
     pub(crate) abort_on_end: bool,
     pub(crate) read_error_log: &'static str,
-}
-
-#[cfg(feature = "vmess")]
-impl From<zero_transport::protocol_inbound_route::NoClientMuxRouteDefaults>
-    for NoClientMuxRouteDefaults
-{
-    fn from(defaults: zero_transport::protocol_inbound_route::NoClientMuxRouteDefaults) -> Self {
-        Self {
-            udp_protocol: defaults.udp_protocol,
-            mux_protocol: defaults.mux_protocol,
-            panic_message: defaults.panic_message,
-            abort_on_end: defaults.abort_on_end,
-            read_error_log: defaults.read_error_log,
-        }
-    }
 }

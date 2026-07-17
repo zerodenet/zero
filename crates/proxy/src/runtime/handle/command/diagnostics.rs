@@ -1,8 +1,141 @@
 use crate::groups::{UrlTestRuntime, DEFAULT_PROBE_URL};
+use zero_traits::{DnsResolver, IpAddress};
 
 use super::super::util::parse_ip_address;
 use super::super::ProxyHandle;
 use super::runtime::with_current_runtime;
+
+pub(super) fn execute_diagnostics_probe_target(
+    handle: &ProxyHandle,
+    cmd: &zero_api::DiagnosticsProbeTargetCommand,
+) -> zero_api::ApiResult<zero_api::CommandResponse> {
+    let proxy = handle.proxy.clone();
+    let target_tag = cmd.target_tag.clone();
+
+    with_current_runtime(
+        "no tokio runtime available for probe_target command",
+        |rt| {
+            rt.block_on(async move {
+                let Some((host, port)) = probe_target_endpoint(&proxy, &target_tag)? else {
+                    return Ok(zero_api::CommandResponse {
+                        accepted: true,
+                        result: Some(serde_json::json!({
+                            "target_tag": target_tag,
+                            "reachable": false,
+                            "error": "outbound has no probeable fixed server",
+                        })),
+                    });
+                };
+
+                let started = std::time::Instant::now();
+                let reachable = matches!(
+                    tokio::time::timeout(
+                        std::time::Duration::from_secs(2),
+                        proxy.protocols.direct_connector().connect_host(
+                            &host,
+                            port,
+                            proxy.resolver.as_ref()
+                        ),
+                    )
+                    .await,
+                    Ok(Ok(_))
+                );
+                Ok(zero_api::CommandResponse {
+                    accepted: true,
+                    result: Some(serde_json::json!({
+                        "target_tag": target_tag,
+                        "server": host,
+                        "port": port,
+                        "reachable": reachable,
+                        "latency_ms": reachable.then(|| started.elapsed().as_millis() as u64),
+                    })),
+                })
+            })
+        },
+    )
+}
+
+pub(super) fn execute_diagnostics_dns_lookup(
+    handle: &ProxyHandle,
+    cmd: &zero_api::DiagnosticsDnsLookupCommand,
+) -> zero_api::ApiResult<zero_api::CommandResponse> {
+    let proxy = handle.proxy.clone();
+    let hostname = cmd.hostname.clone();
+
+    with_current_runtime("no tokio runtime available for dns_lookup command", |rt| {
+        rt.block_on(async move {
+            let addresses = proxy
+                .resolver
+                .resolve(&hostname)
+                .await
+                .map_err(|error| {
+                    zero_api::ApiError::new(
+                        zero_api::ApiErrorCode::InvalidArgument,
+                        format!("failed to resolve `{hostname}`: {error}"),
+                    )
+                })?
+                .into_iter()
+                .map(ip_address_string)
+                .collect::<Vec<_>>();
+            let count = addresses.len();
+            Ok(zero_api::CommandResponse {
+                accepted: true,
+                result: Some(serde_json::json!({
+                    "hostname": hostname,
+                    "resolved_addresses": addresses,
+                    "count": count,
+                })),
+            })
+        })
+    })
+}
+
+fn probe_target_endpoint(
+    proxy: &crate::runtime::Proxy,
+    target_tag: &str,
+) -> zero_api::ApiResult<Option<(String, u16)>> {
+    let plan = proxy.engine().plan();
+    let target_id = plan.target_id(target_tag).ok_or_else(|| {
+        zero_api::ApiError::new(
+            zero_api::ApiErrorCode::NotFound,
+            format!("target `{target_tag}` was not found"),
+        )
+    })?;
+    let (resolved, _plan) = proxy.engine().resolve_target_id(target_id).ok_or_else(|| {
+        zero_api::ApiError::new(
+            zero_api::ApiErrorCode::NotFound,
+            format!("target `{target_tag}` could not be resolved"),
+        )
+    })?;
+    let leaf = match &resolved {
+        zero_engine::ResolvedOutbound::Single(leaf) => Some(leaf),
+        zero_engine::ResolvedOutbound::Fallback { candidates } => candidates.first(),
+        zero_engine::ResolvedOutbound::Relay { .. } => None,
+    };
+    let Some(leaf) = leaf else {
+        return Ok(None);
+    };
+    let runtime = proxy
+        .protocols
+        .claim_outbound_leaf(proxy.config.as_ref(), leaf.clone())
+        .map_err(|error| {
+            zero_api::ApiError::new(
+                zero_api::ApiErrorCode::InvalidArgument,
+                format!("failed to claim probe target `{target_tag}`: {error}"),
+            )
+        })?
+        .runtime();
+    Ok(runtime
+        .endpoint
+        .map(|endpoint| (endpoint.server, endpoint.port)))
+}
+
+fn ip_address_string(address: IpAddress) -> String {
+    match address {
+        IpAddress::V4(bytes) => std::net::Ipv4Addr::from(bytes).to_string(),
+        IpAddress::V6(bytes) => std::net::Ipv6Addr::from(bytes).to_string(),
+    }
+}
 
 pub(super) fn execute_diagnostics_probe_outbound(
     handle: &ProxyHandle,

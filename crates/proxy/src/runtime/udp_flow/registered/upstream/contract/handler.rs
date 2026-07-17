@@ -30,10 +30,10 @@ pub(crate) trait UpstreamAssociationHandler: Send + Sync {
 
     fn touch_upstream_idle(&mut self, timeout: Duration);
 
-    #[cfg(feature = "socks5")]
+    #[cfg(feature = "upstream-association-runtime")]
     fn drop_upstream_association(&mut self) -> Option<(String, String, u16)>;
 
-    #[cfg(feature = "socks5")]
+    #[cfg(feature = "upstream-association-runtime")]
     fn close_idle_upstream(&mut self) -> Option<(String, String, u16)>;
 
     fn close_all_upstreams(&mut self);

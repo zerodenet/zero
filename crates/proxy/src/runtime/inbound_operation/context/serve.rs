@@ -15,7 +15,6 @@ impl InboundConnectionContext {
         self.runtime.serve(session, client, &protocol).await
     }
 
-    #[cfg(feature = "http")]
     pub(crate) fn select_http_redirect(
         &self,
         session: &zero_core::Session,
@@ -23,7 +22,11 @@ impl InboundConnectionContext {
         self.runtime.select_http_redirect(session)
     }
 
-    #[cfg(any(feature = "socks5", feature = "hysteria2", feature = "mieru"))]
+    #[cfg(any(
+        feature = "upstream-association-runtime",
+        feature = "managed-datagram-runtime",
+        feature = "managed-stream-runtime"
+    ))]
     pub(crate) async fn serve_with_client_response<P, S>(
         self,
         session: zero_core::Session,

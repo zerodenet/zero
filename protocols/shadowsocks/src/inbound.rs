@@ -233,7 +233,7 @@ pub fn inbound_profile_from_config_cipher_password(
 
 impl ShadowsocksInbound {
     pub fn protocol(&self) -> ProtocolType {
-        ProtocolType::Shadowsocks
+        ProtocolType::new("shadowsocks")
     }
 
     /// Decrypt the initial stream payload, extract target address,
@@ -283,7 +283,13 @@ impl ShadowsocksInbound {
         let (target, port, payload_offset) = parse_target_data(&plain)?;
         let remaining_payload = plain[payload_offset..].to_vec();
 
-        let session = Session::new(0, target, port, Network::Tcp, ProtocolType::Shadowsocks);
+        let session = Session::new(
+            0,
+            target,
+            port,
+            Network::Tcp,
+            ProtocolType::new("shadowsocks"),
+        );
 
         Ok(ShadowsocksAccept {
             session,
@@ -383,7 +389,13 @@ impl ShadowsocksInbound {
         }
         let (target, port, initial_payload) = parse_2022_request_var_header(&var_plain)?;
 
-        let session = Session::new(0, target, port, Network::Tcp, ProtocolType::Shadowsocks);
+        let session = Session::new(
+            0,
+            target,
+            port,
+            Network::Tcp,
+            ProtocolType::new("shadowsocks"),
+        );
 
         Ok(ShadowsocksAccept {
             session,

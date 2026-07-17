@@ -22,12 +22,7 @@ impl ManagedUdpState {
         {
             return result.map(Some);
         }
-        #[cfg(any(
-            feature = "vless",
-            feature = "vmess",
-            feature = "trojan",
-            feature = "mieru"
-        ))]
+        #[cfg(feature = "managed-stream-runtime")]
         if let Some(result) = self
             .stream
             .forward_existing_flow(chain_tasks, services, flow, &resume, payload)

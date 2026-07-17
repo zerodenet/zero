@@ -2,11 +2,8 @@ use crate::runtime::udp_flow::outbound::model::{ManagedUdpFlowRef, UdpFlowOutbou
 
 impl UdpFlowOutbound {
     #[cfg(any(
-        feature = "socks5",
-        feature = "vless",
-        feature = "vmess",
-        feature = "trojan",
-        feature = "mieru"
+        feature = "upstream-association-runtime",
+        feature = "managed-stream-runtime"
     ))]
     pub(crate) fn relay_managed_flow(&self) -> Option<ManagedUdpFlowRef> {
         match self {
@@ -16,23 +13,14 @@ impl UdpFlowOutbound {
             Self::PacketPathDatagram { .. } => None,
             #[cfg(feature = "managed-datagram-runtime")]
             Self::Datagram { .. } => None,
-            #[cfg(any(
-                feature = "vless",
-                feature = "vmess",
-                feature = "trojan",
-                feature = "mieru"
-            ))]
+            #[cfg(feature = "managed-stream-runtime")]
             Self::StreamPacket { .. } => None,
         }
     }
 
     #[cfg(any(
-        feature = "vless",
-        feature = "hysteria2",
-        feature = "shadowsocks",
-        feature = "trojan",
-        feature = "vmess",
-        feature = "mieru"
+        feature = "managed-stream-runtime",
+        feature = "managed-datagram-runtime"
     ))]
     pub(crate) fn managed_flow(&self) -> Option<ManagedUdpFlowRef> {
         match self {
@@ -40,21 +28,13 @@ impl UdpFlowOutbound {
             #[cfg(feature = "udp-runtime")]
             Self::PacketPathDatagram { .. } => None,
             #[cfg(any(
-                feature = "socks5",
-                feature = "vless",
-                feature = "vmess",
-                feature = "trojan",
-                feature = "mieru"
+                feature = "upstream-association-runtime",
+                feature = "managed-stream-runtime"
             ))]
             Self::Relay { managed, .. } => Some(*managed),
             #[cfg(feature = "managed-datagram-runtime")]
             Self::Datagram { managed, .. } => Some(*managed),
-            #[cfg(any(
-                feature = "vless",
-                feature = "vmess",
-                feature = "trojan",
-                feature = "mieru"
-            ))]
+            #[cfg(feature = "managed-stream-runtime")]
             Self::StreamPacket { managed, .. } => Some(*managed),
         }
     }

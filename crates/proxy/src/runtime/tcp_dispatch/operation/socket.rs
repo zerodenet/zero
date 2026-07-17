@@ -3,11 +3,34 @@ use std::pin::Pin;
 
 use zero_core::Session;
 use zero_engine::EngineError;
-use zero_transport::outbound_leaf::ProtocolSocketTcpHandshake;
+use zero_transport::{RuntimeError, StreamTraffic};
 
 use super::contract::{PreparedTcpConnectOperation, PreparedTcpRelayOperation};
 use crate::protocol_registry::TcpRuntimeServices;
 use crate::transport::{EstablishedTcpOutbound, TcpOutboundFailure, TcpRelayStream};
+
+#[async_trait::async_trait]
+pub(crate) trait SocketTcpHandshake: Send + Sync {
+    fn tag(&self) -> &str;
+
+    fn server(&self) -> &str;
+
+    fn port(&self) -> u16;
+
+    fn connect_stage(&self) -> &'static str;
+
+    async fn open_tcp_stream(
+        &self,
+        services: TcpRuntimeServices,
+        session: &Session,
+    ) -> Result<(TcpRelayStream, StreamTraffic), RuntimeError>;
+
+    async fn open_tcp_relay_hop(
+        &self,
+        stream: TcpRelayStream,
+        session: &Session,
+    ) -> Result<TcpRelayStream, RuntimeError>;
+}
 
 pub(crate) struct SocketTcpConnectOperation<T> {
     pub(crate) handshake: T,
@@ -15,7 +38,7 @@ pub(crate) struct SocketTcpConnectOperation<T> {
 
 impl<T> PreparedTcpConnectOperation for SocketTcpConnectOperation<T>
 where
-    T: ProtocolSocketTcpHandshake + Send + Sync,
+    T: SocketTcpHandshake + Send + Sync,
 {
     fn execute<'a>(
         self: Box<Self>,
@@ -44,7 +67,7 @@ pub(crate) struct SocketTcpRelayOperation<T> {
 
 impl<T> PreparedTcpRelayOperation for SocketTcpRelayOperation<T>
 where
-    T: ProtocolSocketTcpHandshake + Send + Sync,
+    T: SocketTcpHandshake + Send + Sync,
 {
     fn execute<'a>(
         self: Box<Self>,
@@ -78,20 +101,12 @@ async fn execute_socket_tcp_connect_operation<T>(
     operation: PreparedSocketTcpOperation<'_, T>,
 ) -> Result<EstablishedTcpOutbound, TcpOutboundFailure>
 where
-    T: ProtocolSocketTcpHandshake,
+    T: SocketTcpHandshake,
 {
     let handshake = operation.handshake;
     let endpoint = (handshake.server().to_owned(), handshake.port());
-    let socket = services
-        .connect_upstream_owned(endpoint.0.clone(), endpoint.1)
-        .await
-        .map_err(|error| TcpOutboundFailure {
-            stage: handshake.connect_stage(),
-            error: error.into(),
-            upstream_endpoint: Some(endpoint.clone()),
-        })?;
     let (stream, traffic) = handshake
-        .handshake_socket(socket, session)
+        .open_tcp_stream(services.clone(), session)
         .await
         .map_err(|error| TcpOutboundFailure {
             stage: handshake.connect_stage(),
@@ -115,11 +130,11 @@ async fn execute_socket_tcp_relay_hop_operation<T>(
     operation: PreparedSocketTcpOperation<'_, T>,
 ) -> Result<TcpRelayStream, EngineError>
 where
-    T: ProtocolSocketTcpHandshake,
+    T: SocketTcpHandshake,
 {
     operation
         .handshake
-        .handshake_relay(stream, session)
+        .open_tcp_relay_hop(stream, session)
         .await
         .map_err(Into::into)
 }

@@ -4,51 +4,24 @@ use zero_config::OutboundRuntimeKind;
 use super::groups::OutboundGroupStateStore;
 use super::plan::{EnginePlan, OutboundTarget, TargetId, TargetKind};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ResolvedLeafOutbound<'a> {
-    Direct {
-        tag: Option<&'a str>,
-    },
-    Block {
-        tag: Option<&'a str>,
-    },
-    Proxy {
-        tag: &'a str,
-        outbound_index: usize,
-        protocol: &'static str,
-        endpoint: Option<(&'a str, u16)>,
-    },
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct OutboundIdentity(usize);
+
+impl OutboundIdentity {
+    pub const fn from_config_index(index: usize) -> Self {
+        Self(index)
+    }
+
+    pub const fn config_index(self) -> usize {
+        self.0
+    }
 }
 
-impl<'a> ResolvedLeafOutbound<'a> {
-    pub fn protocol_name(&self) -> &'static str {
-        match self {
-            Self::Direct { .. } => "direct",
-            Self::Block { .. } => "block",
-            Self::Proxy { protocol, .. } => protocol,
-        }
-    }
-
-    pub fn tag(&self) -> Option<&'a str> {
-        match self {
-            Self::Direct { tag } | Self::Block { tag } => *tag,
-            Self::Proxy { tag, .. } => Some(*tag),
-        }
-    }
-
-    pub fn proxy_endpoint(&self) -> Option<(&'a str, u16)> {
-        match self {
-            Self::Proxy { endpoint, .. } => *endpoint,
-            Self::Direct { .. } | Self::Block { .. } => None,
-        }
-    }
-
-    pub fn outbound_index(&self) -> Option<usize> {
-        match self {
-            Self::Proxy { outbound_index, .. } => Some(*outbound_index),
-            Self::Direct { .. } | Self::Block { .. } => None,
-        }
-    }
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ResolvedLeafOutbound<'a> {
+    Direct { tag: Option<&'a str> },
+    Block { tag: Option<&'a str> },
+    Proxy { identity: OutboundIdentity },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -175,10 +148,7 @@ fn resolve_leaf_outbound<'a>(
         OutboundRuntimeKind::Direct => ResolvedLeafOutbound::Direct { tag: Some(tag) },
         OutboundRuntimeKind::Block => ResolvedLeafOutbound::Block { tag: Some(tag) },
         OutboundRuntimeKind::Proxy => ResolvedLeafOutbound::Proxy {
-            tag,
-            outbound_index: outbound.outbound_index(),
-            protocol: outbound.protocol(),
-            endpoint: outbound.endpoint(),
+            identity: OutboundIdentity::from_config_index(outbound.outbound_index()),
         },
     }
 }

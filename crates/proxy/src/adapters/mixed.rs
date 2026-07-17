@@ -1,11 +1,13 @@
 use zero_config::{InboundConfig, InboundProtocolConfig, OutboundProtocolConfig};
 use zero_engine::EngineError;
-use zero_traits::{ProtocolCapabilityDescriptor, ProtocolMetadata};
+use zero_traits::{
+    ProtocolCapabilityDescriptor, ProtocolCapabilityLevel, ProtocolCapabilityState,
+    ProtocolMetadata, ProtocolNetworkCapability,
+};
 
 use crate::adapters::identity::{
     named_protocol_supports_inbound, named_protocol_supports_outbound, NamedProtocolAdapter,
 };
-use crate::protocol_catalog::protocol_descriptor;
 use crate::protocol_registry::{
     InboundListenerCapability, ProtocolSupportCapability, TcpOutboundCapability, UdpFlowCapability,
     UdpPacketPathCapability,
@@ -78,6 +80,22 @@ impl ProtocolSupportCapability for MixedAdapter {
 #[cfg(feature = "mixed")]
 impl ProtocolMetadata for MixedAdapter {
     fn descriptor(&self) -> ProtocolCapabilityDescriptor {
-        protocol_descriptor("mixed", "mixed")
+        ProtocolCapabilityDescriptor {
+            protocol: "mixed",
+            feature: "mixed",
+            status: ProtocolCapabilityLevel::Supported,
+            compatibility_baseline: "kernel_builtin",
+            inbound: ProtocolNetworkCapability::new(
+                ProtocolCapabilityState::supported(),
+                ProtocolCapabilityState::supported(),
+            ),
+            outbound: ProtocolNetworkCapability::new(
+                ProtocolCapabilityState::unsupported(&[]),
+                ProtocolCapabilityState::unsupported(&[]),
+            ),
+            transports: &["tcp"],
+            mux: ProtocolCapabilityState::not_applicable(),
+            limitations: &[],
+        }
     }
 }

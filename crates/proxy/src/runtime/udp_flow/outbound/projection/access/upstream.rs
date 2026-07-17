@@ -9,21 +9,13 @@ impl UdpFlowOutbound {
             Self::PacketPathDatagram { snapshot, .. } => Some(snapshot),
             Self::Direct { .. } => None,
             #[cfg(any(
-                feature = "socks5",
-                feature = "vless",
-                feature = "vmess",
-                feature = "trojan",
-                feature = "mieru"
+                feature = "upstream-association-runtime",
+                feature = "managed-stream-runtime"
             ))]
             Self::Relay { .. } => None,
             #[cfg(feature = "managed-datagram-runtime")]
             Self::Datagram { .. } => None,
-            #[cfg(any(
-                feature = "vless",
-                feature = "vmess",
-                feature = "trojan",
-                feature = "mieru"
-            ))]
+            #[cfg(feature = "managed-stream-runtime")]
             Self::StreamPacket { .. } => None,
         }
     }
@@ -37,11 +29,8 @@ impl UdpFlowOutbound {
                 port: *port,
             }),
             #[cfg(any(
-                feature = "socks5",
-                feature = "vless",
-                feature = "vmess",
-                feature = "trojan",
-                feature = "mieru"
+                feature = "upstream-association-runtime",
+                feature = "managed-stream-runtime"
             ))]
             Self::Relay { server, port, .. } => Some(UdpFlowUpstream {
                 server,
@@ -52,12 +41,7 @@ impl UdpFlowOutbound {
                 server,
                 port: *port,
             }),
-            #[cfg(any(
-                feature = "vless",
-                feature = "vmess",
-                feature = "trojan",
-                feature = "mieru"
-            ))]
+            #[cfg(feature = "managed-stream-runtime")]
             Self::StreamPacket { server, port, .. } => Some(UdpFlowUpstream {
                 server,
                 port: *port,

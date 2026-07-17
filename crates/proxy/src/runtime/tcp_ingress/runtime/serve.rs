@@ -1,9 +1,9 @@
 use zero_core::Session;
 use zero_engine::EngineError;
 
-#[cfg(any(feature = "vless", feature = "vmess"))]
+#[cfg(feature = "managed-stream-runtime")]
 use crate::runtime::pipe::{KernelPipe, TcpPipe, TcpPipeInput};
-#[cfg(any(feature = "vless", feature = "vmess"))]
+#[cfg(feature = "managed-stream-runtime")]
 use crate::transport::TcpRouteResult;
 
 use super::super::contract::InboundProtocol;
@@ -23,7 +23,11 @@ impl TcpIngressRuntime {
         serve_inbound(self, session, client, protocol).await
     }
 
-    #[cfg(any(feature = "socks5", feature = "hysteria2", feature = "mieru"))]
+    #[cfg(any(
+        feature = "upstream-association-runtime",
+        feature = "managed-datagram-runtime",
+        feature = "managed-stream-runtime"
+    ))]
     pub(crate) async fn serve_with_client_response<P, S>(
         &self,
         session: Session,
@@ -43,14 +47,15 @@ impl TcpIngressRuntime {
         .await
     }
 
-    #[cfg(feature = "vless")]
+    #[cfg(feature = "managed-stream-runtime")]
     pub(crate) async fn relay_recorded_fallback_replay<R>(
         &self,
-        fallback: zero_transport::OwnedInboundFallbackProfile,
+        fallback: crate::runtime::InboundFallbackTarget,
         replay: R,
     ) -> Result<(), EngineError>
     where
-        R: zero_transport::protocol_inbound_route::FallbackReplayToUpstream + 'static,
+        R: zero_core::InboundFallbackReplay + 'static,
+        R::Stream: crate::transport::ClientStream,
     {
         crate::runtime::inbound_fallback::relay_recorded_fallback_replay(
             self.runtime_services(),
@@ -60,7 +65,7 @@ impl TcpIngressRuntime {
         .await
     }
 
-    #[cfg(any(feature = "vless", feature = "vmess"))]
+    #[cfg(feature = "managed-stream-runtime")]
     pub(crate) async fn open_tcp_upstream(
         &self,
         session: &mut Session,

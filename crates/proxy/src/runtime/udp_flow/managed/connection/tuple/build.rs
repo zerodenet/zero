@@ -5,7 +5,6 @@ use crate::runtime::udp_flow::managed::connection::model::SharedManagedUdpConnec
 use std::sync::Arc;
 use zero_core::Address;
 use zero_engine::EngineError;
-use zero_transport::managed_udp::ManagedTupleUdpConnectionOps;
 
 struct ManagedTupleUdpFlowSender<T> {
     connection: T,
@@ -39,11 +38,4 @@ where
     T: ManagedTupleUdpFlowConnection,
 {
     managed_tuple_udp_connection(Arc::new(ManagedTupleUdpFlowSender { connection }))
-}
-
-pub(crate) fn managed_tuple_udp_connection_from_ops<T>(connection: T) -> SharedManagedUdpConnection
-where
-    T: ManagedTupleUdpConnectionOps,
-{
-    managed_tuple_udp_connection_from_flow(connection)
 }

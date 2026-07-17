@@ -1,32 +1,59 @@
-use async_trait::async_trait;
-use zero_core::Session;
-use zero_engine::EngineError;
-use zero_transport::managed_udp::{
-    ManagedPacketUdpResume, ProtocolManagedPacketUdpFlowResumeConnectionOps,
-};
-
 use super::super::super::connection::{
     managed_packet_udp_connection_from_flow, SharedManagedUdpConnection,
 };
 use super::flow::{
     managed_stream_connector_flow_from_build, ManagedStreamConnectorFlow,
-    ManagedStreamFlowConnector,
+    ManagedStreamConnectorParts, ManagedStreamFlowConnector,
 };
+use super::ManagedPacketUdpResume;
 use crate::protocol_registry::UdpRuntimeServices;
 use crate::runtime::path::OutboundEndpoint;
 use crate::transport::TcpRelayStream;
+use async_trait::async_trait;
+use zero_core::Session;
+use zero_engine::EngineError;
+
+#[async_trait]
+pub(crate) trait ManagedPacketUdpResumeConnector:
+    Clone + Send + Sync + std::fmt::Debug + 'static
+{
+    type ConnectorFlow: ManagedStreamConnectorParts;
+    type Connection: super::super::super::connection::ManagedPacketUdpFlowConnection;
+
+    const ESTABLISH_STAGE: &'static str;
+    const RELAY_UPSTREAM_STAGE: &'static str;
+    const RELAY_ESTABLISH_STAGE: &'static str;
+    const RELAY_SEND_STAGE: &'static str;
+    const MISMATCH_STAGE: &'static str;
+    const MISMATCH_MESSAGE: &'static str;
+
+    fn connector_flow(&self, server: &str, port: u16, session_id: u64) -> Self::ConnectorFlow;
+
+    async fn open_direct(
+        &self,
+        services: UdpRuntimeServices,
+        session: &Session,
+    ) -> Result<Self::Connection, EngineError>;
+
+    async fn open_relay(
+        &self,
+        stream: TcpRelayStream,
+        session: &Session,
+        tls_server_name: Option<&str>,
+    ) -> Result<Self::Connection, EngineError>;
+}
 
 #[async_trait]
 impl<T> ManagedStreamFlowConnector for ManagedPacketUdpResume<T>
 where
-    T: ProtocolManagedPacketUdpFlowResumeConnectionOps + Clone,
+    T: ManagedPacketUdpResumeConnector,
 {
     fn connector_flow(
         &self,
         endpoint: OutboundEndpoint,
         session_id: u64,
     ) -> ManagedStreamConnectorFlow {
-        managed_stream_connector_flow_from_build(self.0.connector_flow_for_resume(
+        managed_stream_connector_flow_from_build(self.0.connector_flow(
             &endpoint.server,
             endpoint.port,
             session_id,
@@ -39,14 +66,7 @@ where
         session: &Session,
         _endpoint: OutboundEndpoint,
     ) -> Result<SharedManagedUdpConnection, EngineError> {
-        let connection = self
-            .0
-            .open_direct_protocol_connection(session, move |server, port| {
-                let services = services.clone();
-                let server = server.to_owned();
-                async move { services.connect_upstream(&server, port).await }
-            })
-            .await?;
+        let connection = self.0.open_direct(services, session).await?;
         Ok(managed_packet_udp_connection_from_flow(connection))
     }
 
@@ -58,10 +78,7 @@ where
         session: &Session,
         _endpoint: OutboundEndpoint,
     ) -> Result<SharedManagedUdpConnection, EngineError> {
-        let connection = self
-            .0
-            .open_relay_protocol_connection(stream, session, tls_server_name)
-            .await?;
+        let connection = self.0.open_relay(stream, session, tls_server_name).await?;
         Ok(managed_packet_udp_connection_from_flow(connection))
     }
 }

@@ -1,15 +1,31 @@
 use std::time::Instant;
 
-#[cfg(any(feature = "socks5", feature = "hysteria2", feature = "mieru"))]
+#[cfg(any(
+    feature = "upstream-association-runtime",
+    feature = "managed-datagram-runtime",
+    feature = "managed-stream-runtime"
+))]
 use tokio::io::{AsyncRead, AsyncWrite};
-#[cfg(any(feature = "socks5", feature = "hysteria2", feature = "mieru"))]
+#[cfg(any(
+    feature = "upstream-association-runtime",
+    feature = "managed-datagram-runtime",
+    feature = "managed-stream-runtime"
+))]
 use zero_core::InboundClientResponse;
 use zero_core::Session;
 use zero_engine::{EngineError, SessionOutcome};
-#[cfg(any(feature = "socks5", feature = "hysteria2", feature = "mieru"))]
+#[cfg(any(
+    feature = "upstream-association-runtime",
+    feature = "managed-datagram-runtime",
+    feature = "managed-stream-runtime"
+))]
 use zero_traits::AsyncSocket;
 
-#[cfg(any(feature = "socks5", feature = "hysteria2", feature = "mieru"))]
+#[cfg(any(
+    feature = "upstream-association-runtime",
+    feature = "managed-datagram-runtime",
+    feature = "managed-stream-runtime"
+))]
 use super::super::contract::ClientResponseInboundProtocol;
 use super::super::contract::InboundProtocol;
 use super::super::runtime::TcpIngressRuntime;
@@ -20,7 +36,11 @@ use super::result::{
 use crate::runtime::pipe::{KernelPipe, TcpPipe, TcpPipeInput};
 use crate::transport::is_block_error;
 
-#[cfg(any(feature = "socks5", feature = "hysteria2", feature = "mieru"))]
+#[cfg(any(
+    feature = "upstream-association-runtime",
+    feature = "managed-datagram-runtime",
+    feature = "managed-stream-runtime"
+))]
 pub(crate) async fn serve_inbound_with_client_response<P, S>(
     runtime: &TcpIngressRuntime,
     session: Session,

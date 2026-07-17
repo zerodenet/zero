@@ -4,7 +4,7 @@ use zero_core::Address;
 
 use super::model::{DatagramCodec, UdpDatagramDescriptor, UdpDatagramSource};
 
-#[cfg(feature = "shadowsocks")]
+#[cfg(feature = "managed-datagram-runtime")]
 pub(crate) fn udp_datagram_source(
     tag: &str,
     server: &str,
@@ -23,7 +23,7 @@ pub(crate) fn udp_datagram_source(
     }
 }
 
-#[cfg(feature = "shadowsocks")]
+#[cfg(feature = "managed-datagram-runtime")]
 pub(crate) trait UdpDatagramSourceBuild {
     fn into_parts(
         self,
@@ -36,7 +36,7 @@ pub(crate) trait UdpDatagramSourceBuild {
     );
 }
 
-#[cfg(feature = "shadowsocks")]
+#[cfg(feature = "managed-datagram-runtime")]
 pub(crate) fn udp_datagram_source_from_build(
     build: impl UdpDatagramSourceBuild,
 ) -> UdpDatagramSource {

@@ -2,7 +2,7 @@ use zero_engine::EngineError;
 
 use crate::protocol_registry::BoundInbound;
 
-pub(in crate::protocol_registry) async fn bind_tcp_inbound(
+pub(crate) async fn bind_tcp_inbound(
     inbound: &zero_config::InboundConfig,
 ) -> Result<BoundInbound, EngineError> {
     let listen = format!("{}:{}", inbound.listen.address, inbound.listen.port);
@@ -12,21 +12,6 @@ pub(in crate::protocol_registry) async fn bind_tcp_inbound(
     Ok(BoundInbound::Tcp(tcp))
 }
 
-#[cfg(feature = "transport_quic")]
-pub(crate) async fn bind_transport_inbound<P>(
-    inbound: &zero_config::InboundConfig,
-    plan: P,
-) -> Result<BoundInbound, EngineError>
-where
-    P: zero_transport::inbound_route::ProtocolInboundBindPlan,
-{
-    let listen = format!("{}:{}", inbound.listen.address, inbound.listen.port);
-    match plan.bind(&listen).await? {
-        zero_transport::inbound_route::TransportInboundBindTarget::Tcp => {
-            bind_tcp_inbound(inbound).await
-        }
-        zero_transport::inbound_route::TransportInboundBindTarget::Quic(endpoint) => {
-            Ok(BoundInbound::Quic(endpoint))
-        }
-    }
+pub(crate) fn inbound_listen_addr(inbound: &zero_config::InboundConfig) -> String {
+    format!("{}:{}", inbound.listen.address, inbound.listen.port)
 }

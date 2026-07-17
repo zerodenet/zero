@@ -6,9 +6,9 @@ use zero_core::SessionAuth;
 use zero_engine::EngineError;
 
 use super::failure::handle_runtime_failure;
-#[cfg(feature = "socks5")]
+#[cfg(feature = "upstream-association-runtime")]
 use super::with_upstream::run_loop;
-#[cfg(not(feature = "socks5"))]
+#[cfg(not(feature = "upstream-association-runtime"))]
 use super::without_upstream::run_loop;
 use crate::runtime::packet_session_udp::contract::{
     PacketSessionUdpFailurePolicy, PacketSessionUdpHandler, PacketSessionUdpRelayRequest,
@@ -58,7 +58,7 @@ where
     let timeout = runtime.services().udp_upstream_idle_timeout();
     let mut last_activity = TokioInstant::now();
     let mut direct_buf = vec![0_u8; 64 * 1024];
-    #[cfg(feature = "socks5")]
+    #[cfg(feature = "upstream-association-runtime")]
     let mut upstream_buf = vec![0_u8; 64 * 1024];
 
     let context = PacketSessionUdpLoopContext {
@@ -76,7 +76,7 @@ where
         "packet session udp relay started"
     );
 
-    #[cfg(feature = "socks5")]
+    #[cfg(feature = "upstream-association-runtime")]
     run_loop(
         &context,
         &mut handler,
@@ -87,7 +87,7 @@ where
     )
     .await?;
 
-    #[cfg(not(feature = "socks5"))]
+    #[cfg(not(feature = "upstream-association-runtime"))]
     run_loop(
         &context,
         &mut handler,

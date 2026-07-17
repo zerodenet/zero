@@ -1,17 +1,23 @@
-#[cfg(feature = "socks5")]
+#[cfg(feature = "upstream-association-runtime")]
 use crate::runtime::udp_dispatch::managed::model::UpstreamTrackedStart;
-#[cfg(any(feature = "socks5", feature = "hysteria2", feature = "shadowsocks"))]
+#[cfg(any(
+    feature = "upstream-association-runtime",
+    feature = "managed-datagram-runtime"
+))]
 use crate::runtime::udp_dispatch::FlowStartResult;
 use crate::runtime::udp_dispatch::{FlowFailure, UdpDispatch};
-#[cfg(feature = "socks5")]
+#[cfg(feature = "upstream-association-runtime")]
 use crate::runtime::udp_flow::managed::ManagedUdpFlowResume;
-#[cfg(any(feature = "socks5", feature = "hysteria2", feature = "shadowsocks"))]
+#[cfg(any(
+    feature = "upstream-association-runtime",
+    feature = "managed-datagram-runtime"
+))]
 use crate::runtime::udp_flow::outbound::UdpFlowOutbound;
-#[cfg(feature = "socks5")]
+#[cfg(feature = "upstream-association-runtime")]
 use crate::runtime::udp_flow::registered::UpstreamAssociationSend;
 
 impl UdpDispatch {
-    #[cfg(feature = "socks5")]
+    #[cfg(feature = "upstream-association-runtime")]
     pub(crate) async fn start_tracked_upstream<T>(
         &mut self,
         request: UpstreamTrackedStart<'_, T>,

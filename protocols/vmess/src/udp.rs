@@ -583,7 +583,7 @@ impl VmessInboundUdpRequest {
 
 impl VmessInboundUdpDispatchParts {
     pub fn protocol(&self) -> ProtocolType {
-        ProtocolType::Vmess
+        ProtocolType::new("vmess")
     }
 
     pub fn into_parts(self) -> (Address, u16, Vec<u8>, Option<u64>) {
@@ -936,7 +936,7 @@ impl VmessOutbound {
             session.target.clone(),
             session.port,
             Network::Udp,
-            ProtocolType::Vmess,
+            ProtocolType::new("vmess"),
         );
         establish_outbound_session(stream, &udp_session, uuid, cipher, CMD_UDP).await
     }

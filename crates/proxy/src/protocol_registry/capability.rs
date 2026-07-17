@@ -1,10 +1,11 @@
 use async_trait::async_trait;
 
-use zero_config::{InboundConfig, InboundProtocolConfig, OutboundProtocolConfig};
+use zero_config::{InboundConfig, InboundProtocolConfig, OutboundConfig, OutboundProtocolConfig};
 use zero_engine::EngineError;
 use zero_traits::ProtocolMetadata;
 
-use super::{BoundInbound, OutboundLeafRuntime};
+use super::BoundInbound;
+use crate::runtime::path::TcpPathCategory;
 use crate::runtime::tcp_dispatch::operation::{
     PreparedTcpConnectOperation, PreparedTcpRelayOperation,
 };
@@ -16,7 +17,7 @@ use crate::runtime::udp_dispatch::relay::PreparedUdpRelayOperation;
 use crate::runtime::udp_flow::managed::model::ManagedDatagramFlowHandler;
 #[cfg(feature = "managed-stream-runtime")]
 use crate::runtime::udp_flow::managed::ManagedStreamHandlerPair;
-#[cfg(feature = "socks5")]
+#[cfg(feature = "upstream-association-runtime")]
 use crate::runtime::udp_flow::registered::UpstreamAssociationHandler;
 use crate::transport::TcpOutboundFailure;
 
@@ -67,12 +68,23 @@ pub(crate) trait ClaimedUdpPacketPathLeaf<'a>: Send + Sync {
 }
 
 pub(crate) struct OutboundLeafClaim<'a> {
-    pub(crate) runtime: OutboundLeafRuntime,
+    pub(crate) tcp_path: TcpPathCategory,
     pub(crate) tcp: Box<dyn ClaimedTcpOutboundLeaf<'a> + 'a>,
     #[cfg(feature = "udp-runtime")]
     pub(crate) udp: Option<Box<dyn ClaimedUdpFlowLeaf<'a> + 'a>>,
     #[cfg(feature = "udp-runtime")]
     pub(crate) packet_path: Option<Box<dyn ClaimedUdpPacketPathLeaf<'a> + 'a>>,
+}
+
+#[derive(Clone, Copy)]
+pub(crate) enum OutboundLeafInput<'a> {
+    Direct {
+        tag: Option<&'a str>,
+    },
+    Proxy {
+        outbound: &'a OutboundConfig,
+        endpoint: (&'a str, u16),
+    },
 }
 
 pub(crate) trait ProtocolSupportCapability: ProtocolMetadata + Send + Sync {
@@ -121,7 +133,7 @@ pub(crate) trait TcpOutboundCapability: Send + Sync {}
 
 pub(crate) trait UdpFlowCapability: Send + Sync {}
 
-#[cfg(feature = "socks5")]
+#[cfg(feature = "upstream-association-runtime")]
 pub(crate) trait UpstreamUdpHandlerProvider: Send + Sync {
     fn upstream_association_handler(&self) -> Box<dyn UpstreamAssociationHandler>;
 }
@@ -138,12 +150,7 @@ pub(crate) trait ManagedUdpHandlerProvider: Send + Sync {
         None
     }
 
-    #[cfg(any(
-        feature = "vless",
-        feature = "vmess",
-        feature = "trojan",
-        feature = "mieru"
-    ))]
+    #[cfg(feature = "managed-stream-runtime")]
     fn managed_stream_udp_handlers(&self) -> Option<ManagedStreamHandlerPair> {
         None
     }

@@ -11,13 +11,13 @@ use crate::runtime::udp_delivery::{
     record_chain_udp_response_parts, record_direct_udp_response_parts, write_chain_response,
     write_direct_response,
 };
-#[cfg(feature = "socks5")]
+#[cfg(feature = "upstream-association-runtime")]
 use crate::runtime::udp_delivery::{
     record_upstream_udp_response_received, write_upstream_response,
 };
 use crate::runtime::udp_dispatch::UdpDispatch;
 use crate::runtime::udp_flow::packet_path::ChainTask;
-#[cfg(feature = "socks5")]
+#[cfg(feature = "upstream-association-runtime")]
 use crate::runtime::udp_flow::response::UpstreamUdpResponse;
 
 pub(super) type ChainUdpResponseResult = Result<ChainTask, tokio::task::JoinError>;
@@ -57,7 +57,7 @@ where
     Ok(())
 }
 
-#[cfg(feature = "socks5")]
+#[cfg(feature = "upstream-association-runtime")]
 pub(super) async fn handle_upstream_response<H>(
     context: &PacketSessionUdpLoopContext<'_>,
     handler: &mut H,

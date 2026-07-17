@@ -5,7 +5,9 @@ use zero_config::RuntimeConfig;
 use zero_engine::{EngineError, ResolvedLeafOutbound};
 
 use super::{ProtocolRegistry, RegisteredProtocolEntry};
-use crate::protocol_registry::{ClaimedTcpOutboundLeaf, OutboundLeafClaim, OutboundLeafRuntime};
+use crate::protocol_registry::{
+    ClaimedTcpOutboundLeaf, OutboundLeafClaim, OutboundLeafInput, OutboundLeafRuntime,
+};
 #[cfg(feature = "udp-runtime")]
 use crate::protocol_registry::{ClaimedUdpFlowLeaf, ClaimedUdpPacketPathLeaf};
 use crate::runtime::tcp_dispatch::operation::{
@@ -142,19 +144,25 @@ impl<'a> ClaimedOutboundLeaf<'a> {
 
 fn claim_outbound_hooks<'a>(
     entry: &RegisteredProtocolEntry,
-    protocol: Option<&'a zero_config::OutboundProtocolConfig>,
-    leaf: ResolvedLeafOutbound<'a>,
+    input: OutboundLeafInput<'a>,
 ) -> Result<ClaimedOutboundLeaf<'a>, EngineError> {
     let Some(OutboundLeafClaim {
-        runtime,
+        tcp_path,
         tcp,
         #[cfg(feature = "udp-runtime")]
         udp,
         #[cfg(feature = "udp-runtime")]
         packet_path,
-    }) = entry.outbound.claim_outbound_leaf(protocol, leaf.clone())
+    }) = entry.outbound.claim_outbound_leaf(input)
     else {
-        return Err(missing_claimed_outbound_leaf(entry.support.name(), &leaf));
+        return Err(missing_claimed_outbound_leaf(entry.support.name()));
+    };
+    let runtime = match input {
+        OutboundLeafInput::Direct { tag } => OutboundLeafRuntime::direct(tag),
+        OutboundLeafInput::Proxy {
+            outbound,
+            endpoint: (server, port),
+        } => OutboundLeafRuntime::proxy(outbound.tag(), server, port, tcp_path),
     };
     let tcp = ClaimedTcpHooks {
         capability: Some(Arc::from(tcp) as Arc<dyn ClaimedTcpOutboundLeaf<'a> + 'a>),
@@ -188,41 +196,41 @@ impl ProtocolRegistry {
         config: &'a RuntimeConfig,
         leaf: ResolvedLeafOutbound<'a>,
     ) -> Result<ClaimedOutboundLeaf<'a>, EngineError> {
-        if let ResolvedLeafOutbound::Block { tag } = leaf.clone() {
-            #[cfg(feature = "udp-runtime")]
-            let udp = ClaimedUdpHooks::default();
-            return Ok(ClaimedOutboundLeaf::new(
-                OutboundLeafRuntime::block(tag),
-                ClaimedTcpHooks::default(),
+        match leaf {
+            ResolvedLeafOutbound::Block { tag } => {
                 #[cfg(feature = "udp-runtime")]
-                udp,
-            ));
+                let udp = ClaimedUdpHooks::default();
+                Ok(ClaimedOutboundLeaf::new(
+                    OutboundLeafRuntime::block(tag),
+                    ClaimedTcpHooks::default(),
+                    #[cfg(feature = "udp-runtime")]
+                    udp,
+                ))
+            }
+            ResolvedLeafOutbound::Direct { tag } => {
+                let entry = self
+                    .outbound_protocol_entry("direct")
+                    .ok_or_else(|| unsupported_outbound_leaf("direct"))?;
+                claim_outbound_hooks(entry, OutboundLeafInput::Direct { tag })
+            }
+            ResolvedLeafOutbound::Proxy { identity } => {
+                let outbound_index = identity.config_index();
+                let outbound = config.outbounds.get(outbound_index).ok_or_else(|| {
+                    EngineError::Io(std::io::Error::other(format!(
+                        "resolved outbound index {outbound_index} is outside the active config",
+                    )))
+                })?;
+                let protocol = outbound.protocol.protocol_name();
+                let entry = self
+                    .outbound_protocol_entry(protocol)
+                    .ok_or_else(|| unsupported_outbound_leaf(protocol))?;
+                let endpoint = outbound
+                    .protocol
+                    .endpoint()
+                    .ok_or_else(|| missing_proxy_endpoint(entry.support.name()))?;
+                claim_outbound_hooks(entry, OutboundLeafInput::Proxy { outbound, endpoint })
+            }
         }
-
-        let protocol = leaf.protocol_name();
-        let entry = self
-            .outbound_protocol_entry(protocol)
-            .ok_or_else(|| unsupported_outbound_leaf(protocol))?;
-        if matches!(leaf, ResolvedLeafOutbound::Direct { .. }) {
-            return claim_outbound_hooks(entry, None, leaf);
-        }
-        let outbound_index = leaf.outbound_index().ok_or_else(|| {
-            EngineError::Io(std::io::Error::other(
-                "configured proxy leaf is missing its outbound index",
-            ))
-        })?;
-        let outbound = config.outbounds.get(outbound_index).ok_or_else(|| {
-            EngineError::Io(std::io::Error::other(format!(
-                "resolved outbound index {outbound_index} is outside the active config",
-            )))
-        })?;
-        if outbound.protocol.protocol_name() != protocol {
-            return Err(EngineError::Io(std::io::Error::other(format!(
-                "resolved outbound protocol `{protocol}` does not match active config protocol `{}`",
-                outbound.protocol.protocol_name()
-            ))));
-        }
-        claim_outbound_hooks(entry, Some(&outbound.protocol), leaf)
     }
 }
 
@@ -246,9 +254,14 @@ fn missing_udp_relay_capability() -> crate::runtime::udp_dispatch::FlowFailure {
     }
 }
 
-fn missing_claimed_outbound_leaf(protocol: &str, leaf: &ResolvedLeafOutbound<'_>) -> EngineError {
+fn missing_claimed_outbound_leaf(protocol: &str) -> EngineError {
     EngineError::Io(std::io::Error::other(format!(
-        "{protocol} adapter owns outbound leaf `{}` but did not provide a claimed outbound leaf",
-        leaf.protocol_name()
+        "{protocol} adapter owns the outbound leaf but did not provide a claimed outbound leaf",
+    )))
+}
+
+fn missing_proxy_endpoint(protocol: &str) -> EngineError {
+    EngineError::Io(std::io::Error::other(format!(
+        "configured proxy protocol `{protocol}` did not provide an outbound endpoint",
     )))
 }

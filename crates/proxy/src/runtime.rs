@@ -12,22 +12,24 @@ use zero_engine::{Engine, EngineError};
 use crate::inventory::ProtocolInventory;
 use crate::protocol_registry::TcpRuntimeServices;
 
-#[cfg(any(feature = "shadowsocks", feature = "hysteria2"))]
+#[cfg(feature = "managed-datagram-runtime")]
 pub(crate) mod datagram_udp;
 mod handle;
-#[cfg(feature = "http")]
 pub(crate) mod http_redirect;
-#[cfg(feature = "vless")]
 pub(crate) mod inbound_fallback;
+pub(crate) use inbound_fallback::{
+    prepare_inbound_route_accept, InboundFallbackTarget, PreparedInboundFallback,
+    PreparedInboundRouteAccept,
+};
 pub(crate) mod inbound_operation;
 pub(crate) mod inbound_route;
 pub(crate) mod listener_loop;
 mod listeners;
-#[cfg(any(feature = "vless", feature = "vmess"))]
+#[cfg(feature = "managed-stream-runtime")]
 pub(crate) mod mux_session;
-#[cfg(any(feature = "vless", feature = "vmess"))]
+#[cfg(feature = "managed-stream-runtime")]
 pub(crate) mod mux_tcp;
-#[cfg(any(feature = "vless", feature = "vmess"))]
+#[cfg(feature = "managed-stream-runtime")]
 pub(crate) mod mux_udp;
 pub(crate) mod orchestration;
 #[cfg(feature = "managed-stream-runtime")]
@@ -41,7 +43,13 @@ mod running;
 pub(crate) mod stream_udp;
 pub(crate) mod tcp_dispatch;
 pub(crate) mod tcp_ingress;
-#[cfg(feature = "socks5")]
+#[cfg(any(
+    feature = "tcp-tunnel-runtime",
+    feature = "tcp-session-runtime",
+    feature = "managed-stream-runtime"
+))]
+pub(crate) mod transport_leaf;
+#[cfg(feature = "upstream-association-runtime")]
 pub(crate) mod udp_association;
 #[cfg(feature = "udp-runtime")]
 pub(crate) mod udp_delivery;

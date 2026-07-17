@@ -2,7 +2,6 @@ use std::future::Future;
 use std::path::{Path, PathBuf};
 
 use zero_platform_tokio::TokioSocket;
-use zero_transport::transport_plan::ProfiledTcpStreamTransportPlan;
 use zero_transport::RuntimeError;
 use zero_transport::TcpRelayStream;
 
@@ -69,30 +68,6 @@ impl OwnedTrojanOutboundTlsPlan {
             tls_profile,
         )
         .await
-    }
-}
-
-impl ProfiledTcpStreamTransportPlan<crate::outbound::OwnedTrojanResolvedTlsProfile>
-    for OwnedTrojanOutboundTlsPlan
-{
-    fn open_direct_stream_with_profile<'a, OpenSocket, OpenSocketFut>(
-        &'a self,
-        open_socket: OpenSocket,
-        profile: crate::outbound::OwnedTrojanResolvedTlsProfile,
-    ) -> zero_transport::transport_plan::TransportOpenFuture<'a>
-    where
-        OpenSocket: FnOnce(&str, u16) -> OpenSocketFut + Send + 'a,
-        OpenSocketFut: Future<Output = Result<TokioSocket, RuntimeError>> + Send + 'a,
-    {
-        Box::pin(async move { self.open_direct_with_profile(open_socket, profile).await })
-    }
-
-    fn open_relay_stream_with_profile<'a>(
-        &'a self,
-        stream: TcpRelayStream,
-        profile: crate::outbound::OwnedTrojanResolvedTlsProfile,
-    ) -> zero_transport::transport_plan::TransportOpenFuture<'a> {
-        Box::pin(async move { self.open_relay_with_profile(stream, profile).await })
     }
 }
 

@@ -1,14 +1,13 @@
 use std::path::Path;
 
 use zero_engine::EngineError;
-use zero_transport::outbound_leaf::{
-    PreparedTransportLeaf, ProtocolTcpTransportLeafMetadata, ProtocolTcpTransportLeafOps,
-    ProtocolTcpTransportOpenResult, ProtocolTransportLeaf,
-};
 
 use super::super::ClaimedTcpOutboundLeaf;
 use crate::runtime::tcp_dispatch::operation::{
     PreparedTcpConnectOperation, PreparedTcpRelayOperation,
+};
+use crate::runtime::transport_leaf::{
+    PreparedTransportLeaf, ProxyTransportLeaf, ProxyTransportTcpLeaf,
 };
 use crate::transport::TcpOutboundFailure;
 
@@ -17,13 +16,7 @@ pub(crate) fn claim_transport_tcp_leaf<'a, TLeaf, F, E>(
     prepare_leaf: F,
 ) -> Box<dyn ClaimedTcpOutboundLeaf<'a> + 'a>
 where
-    TLeaf: ProtocolTransportLeaf
-        + ProtocolTcpTransportLeafMetadata
-        + ProtocolTcpTransportLeafOps
-        + Send
-        + Sync
-        + 'a,
-    TLeaf::Opened: ProtocolTcpTransportOpenResult,
+    TLeaf: ProxyTransportLeaf + ProxyTransportTcpLeaf + Send + Sync + 'a,
     F: Fn(Option<&Path>) -> Result<TLeaf, E> + Send + Sync + 'a,
     E: std::fmt::Display,
 {
@@ -40,13 +33,7 @@ struct ClaimedTransportTcpLeaf<'a, F> {
 
 impl<'a, TLeaf, F, E> ClaimedTcpOutboundLeaf<'a> for ClaimedTransportTcpLeaf<'a, F>
 where
-    TLeaf: ProtocolTransportLeaf
-        + ProtocolTcpTransportLeafMetadata
-        + ProtocolTcpTransportLeafOps
-        + Send
-        + Sync
-        + 'a,
-    TLeaf::Opened: ProtocolTcpTransportOpenResult,
+    TLeaf: ProxyTransportLeaf + ProxyTransportTcpLeaf + Send + Sync + 'a,
     F: Fn(Option<&Path>) -> Result<TLeaf, E> + Send + Sync + 'a,
     E: std::fmt::Display,
 {
@@ -73,30 +60,20 @@ where
     }
 }
 
-#[cfg(feature = "udp-runtime")]
-
 pub(crate) fn prepare_transport_tcp_connect<'a, TLeaf>(
     prepared: PreparedTransportLeaf<TLeaf>,
 ) -> Box<dyn crate::runtime::tcp_dispatch::operation::PreparedTcpConnectOperation + 'a>
 where
-    TLeaf: ProtocolTransportLeaf
-        + ProtocolTcpTransportLeafMetadata
-        + ProtocolTcpTransportLeafOps
-        + Send
-        + Sync
-        + 'a,
-    TLeaf::Opened: ProtocolTcpTransportOpenResult,
+    TLeaf: ProxyTransportLeaf + ProxyTransportTcpLeaf + Send + Sync + 'a,
 {
     Box::new(crate::runtime::tcp_dispatch::operation::TransportLeafTcpConnectOperation { prepared })
 }
-
-#[cfg(feature = "udp-runtime")]
 
 pub(crate) fn prepare_transport_tcp_relay<'a, TLeaf>(
     prepared: PreparedTransportLeaf<TLeaf>,
 ) -> Box<dyn crate::runtime::tcp_dispatch::operation::PreparedTcpRelayOperation + 'a>
 where
-    TLeaf: ProtocolTcpTransportLeafOps + Send + Sync + 'a,
+    TLeaf: ProxyTransportTcpLeaf + Send + Sync + 'a,
 {
     Box::new(crate::runtime::tcp_dispatch::operation::TransportLeafTcpRelayOperation { prepared })
 }
@@ -106,7 +83,7 @@ fn transport_tcp_connect_claim_prepare_failure<TLeaf, E>(
     error: E,
 ) -> TcpOutboundFailure
 where
-    TLeaf: ProtocolTcpTransportLeafMetadata,
+    TLeaf: ProxyTransportTcpLeaf,
     E: std::fmt::Display,
 {
     TcpOutboundFailure {
@@ -118,7 +95,7 @@ where
 
 fn transport_tcp_relay_claim_prepare_error<TLeaf, E>(error: E) -> EngineError
 where
-    TLeaf: ProtocolTcpTransportLeafMetadata,
+    TLeaf: ProxyTransportTcpLeaf,
     E: std::fmt::Display,
 {
     invalid_input(TLeaf::TCP_INVALID_RELAY_CONFIG, error)

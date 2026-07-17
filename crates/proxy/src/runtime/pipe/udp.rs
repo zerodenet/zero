@@ -12,12 +12,11 @@ pub(crate) struct UdpPipeInput<'a> {
     pub(crate) payload: &'a [u8],
     pub(crate) protocol: ProtocolType,
     pub(crate) auth: Option<&'a SessionAuth>,
-    /// Per-client-session isolation key (SIP022 3.2.4).
+    /// Optional protocol-supplied client-session isolation key.
     ///
-    /// When `Some`, flows that would collide on `(target, port)` alone are
-    /// treated as independent relay sessions. The Shadowsocks 2022 inbound
-    /// passes the client's SIP022 session id here; all other protocols pass
-    /// `None`.
+    /// When present, flows that would collide on `(target, port)` alone are
+    /// treated as independent relay sessions. Generic runtime preserves this
+    /// opaque identity without interpreting its protocol-specific meaning.
     pub(crate) client_session_id: Option<u64>,
 }
 

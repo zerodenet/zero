@@ -1,19 +1,13 @@
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[cfg(any(
-    feature = "vless",
-    feature = "vmess",
-    feature = "trojan",
-    feature = "mieru",
-    feature = "hysteria2"
+    feature = "managed-stream-runtime",
+    feature = "managed-datagram-runtime"
 ))]
 pub(super) struct ManagedUdpConnectionCacheKey(String);
 
 #[cfg(any(
-    feature = "vless",
-    feature = "vmess",
-    feature = "trojan",
-    feature = "mieru",
-    feature = "hysteria2"
+    feature = "managed-stream-runtime",
+    feature = "managed-datagram-runtime"
 ))]
 impl ManagedUdpConnectionCacheKey {
     pub(super) fn new(value: impl Into<String>) -> Self {
@@ -22,10 +16,10 @@ impl ManagedUdpConnectionCacheKey {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-#[cfg(feature = "shadowsocks")]
+#[cfg(feature = "managed-datagram-runtime")]
 pub(super) struct ManagedDatagramConnectionCacheKey(String);
 
-#[cfg(feature = "shadowsocks")]
+#[cfg(feature = "managed-datagram-runtime")]
 impl ManagedDatagramConnectionCacheKey {
     pub(super) fn new(value: impl Into<String>) -> Self {
         Self(value.into())

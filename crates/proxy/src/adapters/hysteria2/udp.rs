@@ -2,11 +2,15 @@ use zero_engine::EngineError;
 
 use crate::adapters::hysteria2::Hysteria2Adapter;
 use crate::protocol_registry::{ClaimedUdpFlowLeaf, ClaimedUdpPacketPathLeaf};
+use crate::runtime::udp_dispatch::operation::ManagedDatagramStartPlan;
 use crate::runtime::udp_dispatch::operation::PreparedUdpFlowOperation;
 use crate::runtime::udp_dispatch::packet_path_operation::PreparedUdpPacketPathOperation;
 use crate::runtime::udp_dispatch::FlowFailure;
 use crate::runtime::udp_flow::managed::{
-    datagram_manager::managed_datagram_handler_box, ManagedDatagramFlowHandler,
+    datagram_manager::{
+        managed_datagram_handler_box, ManagedDatagramConnectorFlow, ManagedDatagramResumeConnector,
+    },
+    ManagedDatagramFlowHandler, ManagedTupleUdpFlowConnection,
 };
 use crate::runtime::udp_flow::packet_path::{
     packet_path_carrier_descriptor_from_build, DatagramCodec, PacketPathCarrier,
@@ -15,6 +19,68 @@ use crate::runtime::udp_flow::packet_path::{
 use ::hysteria2::transport::{
     Hysteria2ManagedUdpPacketPathCarrierDescriptor, Hysteria2ManagedUdpPacketPathPlan,
 };
+
+#[async_trait::async_trait]
+impl ManagedDatagramResumeConnector for ::hysteria2::transport::Hysteria2ManagedDatagramFlowResume {
+    type Connection = ::hysteria2::udp::Hysteria2UdpFlowConnection;
+
+    const ESTABLISH_STAGE: &'static str = "h2_establish";
+    const MISMATCH_STAGE: &'static str = "udp_hysteria2_resume";
+    const MISMATCH_MESSAGE: &'static str = "expected Hysteria2 UDP flow resume";
+
+    fn connector_flow(
+        &self,
+        endpoint: crate::runtime::path::OutboundEndpoint,
+    ) -> ManagedDatagramConnectorFlow {
+        let flow = ::hysteria2::transport::managed_datagram_connector_flow_from_resume(
+            self,
+            &endpoint.server,
+            endpoint.port,
+        );
+        ManagedDatagramConnectorFlow::new(flow.into_cache_key())
+    }
+
+    async fn open_connection(
+        self,
+        endpoint: crate::runtime::path::OutboundEndpoint,
+        initial_packet: crate::runtime::udp_flow::packet_path::UdpPacketRef<'_>,
+    ) -> Result<Self::Connection, EngineError> {
+        ::hysteria2::transport::establish_hysteria2_udp_flow_connection(
+            &endpoint.server,
+            endpoint.port,
+            initial_packet.target,
+            initial_packet.port,
+            initial_packet.payload,
+            self,
+        )
+        .await
+        .map_err(EngineError::from)
+    }
+}
+
+#[async_trait::async_trait]
+impl ManagedTupleUdpFlowConnection for ::hysteria2::udp::Hysteria2UdpFlowConnection {
+    async fn send(
+        &self,
+        target: &zero_core::Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<usize, EngineError> {
+        ::hysteria2::udp::Hysteria2UdpFlowConnection::send(self, target, port, payload)
+            .await
+            .map_err(|error| EngineError::Io(std::io::Error::other(error.to_string())))
+    }
+
+    fn subscribe_responses(
+        &self,
+    ) -> tokio::sync::broadcast::Receiver<(zero_core::Address, u16, Vec<u8>)> {
+        ::hysteria2::udp::Hysteria2UdpFlowConnection::subscribe_responses(self)
+    }
+
+    fn closed_message(&self) -> &'static str {
+        "h2 upstream closed"
+    }
+}
 
 impl PacketPathCarrierDescriptorBuild for Hysteria2ManagedUdpPacketPathCarrierDescriptor {
     fn into_parts(self) -> (String, String, u16) {
@@ -62,7 +128,9 @@ impl<'a> ClaimedUdpFlowLeaf<'a> for ClaimedHysteria2UdpLeaf {
     ) -> Result<Box<dyn PreparedUdpFlowOperation + 'a>, FlowFailure> {
         Ok(Box::new(
             crate::runtime::udp_dispatch::operation::ManagedDatagramUdpOperation {
-                plan: self.leaf.clone().udp_flow_plan().into_start_plan(),
+                plan: ManagedDatagramStartPlan::from_parts(
+                    self.leaf.clone().udp_flow_plan().into_parts(),
+                ),
                 needs_proxy: false,
             },
         ))

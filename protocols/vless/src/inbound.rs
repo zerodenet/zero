@@ -489,6 +489,24 @@ impl<S> VlessFallbackReplay<S> {
     }
 }
 
+impl<S> zero_core::InboundFallbackReplay for VlessFallbackReplay<S>
+where
+    S: Send,
+{
+    type Stream = S;
+
+    fn replay_to<'a, W>(
+        self,
+        upstream: &'a mut W,
+    ) -> impl core::future::Future<Output = Result<Self::Stream, W::Error>> + Send + 'a
+    where
+        Self: 'a,
+        W: AsyncSocket + Send + 'a,
+    {
+        async move { self.replay_to_upstream(upstream).await }
+    }
+}
+
 impl<S> VlessFallbackAlpnDecision<S> {
     fn replay(replay: VlessFallbackReplay<S>) -> Self {
         Self {
@@ -649,7 +667,7 @@ impl IntoVlessInboundUserConfig for crate::transport::VlessInboundUserRef<'_> {
 
 impl VlessInbound {
     pub fn protocol(&self) -> ProtocolType {
-        ProtocolType::Vless
+        ProtocolType::new("vless")
     }
 
     #[cfg(feature = "reality")]
@@ -953,7 +971,7 @@ where
             Address::Domain(String::new()),
             0,
             Network::Tcp,
-            ProtocolType::Vless,
+            ProtocolType::new("vless"),
         ),
         id,
     ))
@@ -969,11 +987,11 @@ fn command_to_session(
 ) -> Result<(Session, [u8; 16]), Error> {
     match command {
         CMD_TCP => Ok((
-            Session::new(0, target, port, Network::Tcp, ProtocolType::Vless),
+            Session::new(0, target, port, Network::Tcp, ProtocolType::new("vless")),
             id,
         )),
         CMD_UDP => Ok((
-            Session::new(0, target, port, Network::Udp, ProtocolType::Vless),
+            Session::new(0, target, port, Network::Udp, ProtocolType::new("vless")),
             id,
         )),
         CMD_MUX => Ok((
@@ -982,7 +1000,7 @@ fn command_to_session(
                 Address::Domain(String::new()),
                 0,
                 Network::Tcp,
-                ProtocolType::Vless,
+                ProtocolType::new("vless"),
             ),
             id,
         )),

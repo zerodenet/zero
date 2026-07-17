@@ -2,8 +2,8 @@ mod lifecycle;
 mod model;
 mod start;
 
-#[cfg(feature = "socks5")]
+#[cfg(feature = "upstream-association-runtime")]
 pub(crate) use model::ClosedRegisteredUpstreamAssociation;
-#[cfg(feature = "socks5")]
+#[cfg(feature = "upstream-association-runtime")]
 pub(crate) use model::RegisteredUpstreamAssociationView;
 pub(crate) use model::{RegisteredUdpHandlers, RegisteredUdpState};

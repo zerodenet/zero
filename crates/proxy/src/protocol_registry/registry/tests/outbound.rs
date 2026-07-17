@@ -1,24 +1,42 @@
-use zero_engine::ResolvedLeafOutbound;
+use zero_engine::{OutboundIdentity, ResolvedLeafOutbound};
 
 use crate::runtime::path::TcpPathCategory;
 
 use super::fixtures::{compiled_in_outbound_leaves, outbound_leaf_name};
+
+fn test_protocol_descriptor(
+    protocol: &'static str,
+    feature: &'static str,
+) -> zero_traits::ProtocolCapabilityDescriptor {
+    let unsupported = zero_traits::ProtocolCapabilityState::unsupported(&[]);
+    zero_traits::ProtocolCapabilityDescriptor {
+        protocol,
+        feature,
+        status: zero_traits::ProtocolCapabilityLevel::Experimental,
+        compatibility_baseline: "test",
+        inbound: zero_traits::ProtocolNetworkCapability::new(unsupported, unsupported),
+        outbound: zero_traits::ProtocolNetworkCapability::new(unsupported, unsupported),
+        transports: &[],
+        mux: unsupported,
+        limitations: &[],
+    }
+}
 
 #[test]
 fn compiled_in_outbound_leaf_variants_have_expected_protocol_owners() {
     let registry = crate::register::protocol_registry();
 
     for (config, leaf, expected_owners) in compiled_in_outbound_leaves() {
+        let protocol = outbound_leaf_name(&config, &leaf);
         let owner_count = registry
             .entries
             .iter()
-            .filter(|entry| entry.support.name() == leaf.protocol_name())
+            .filter(|entry| entry.support.name() == protocol)
             .count();
         assert_eq!(
-            owner_count,
-            expected_owners,
+            owner_count, expected_owners,
             "{} outbound leaf should have {expected_owners} registered protocol owner(s)",
-            outbound_leaf_name(&leaf)
+            protocol
         );
 
         let claimed = registry.claim_outbound_leaf(&config, leaf.clone());
@@ -26,7 +44,7 @@ fn compiled_in_outbound_leaf_variants_have_expected_protocol_owners() {
             claimed.as_ref().map(|claim| claim.has_tcp_capability()).ok(),
             Some(expected_owners == 1),
             "{} claimed outbound lookup should expose runtime facts and optional adapter with the same ownership policy",
-            outbound_leaf_name(&leaf)
+            protocol
         );
     }
 }
@@ -45,7 +63,7 @@ fn block_outbound_leaf_is_kernel_fact_not_adapter_protocol() {
     let owner_count = registry
         .entries
         .iter()
-        .filter(|entry| entry.support.name() == leaf.protocol_name())
+        .filter(|entry| entry.support.name() == "block")
         .count();
     assert_eq!(
         owner_count, 0,
@@ -72,6 +90,7 @@ fn udp_outbound_leaf_lookup_matches_tcp_claim_policy() {
     let registry = crate::register::protocol_registry();
 
     for (config, leaf, expected_claims) in compiled_in_outbound_leaves() {
+        let protocol = outbound_leaf_name(&config, &leaf);
         let claimed = registry.claim_outbound_leaf(&config, leaf.clone());
         assert_eq!(
             claimed
@@ -80,7 +99,7 @@ fn udp_outbound_leaf_lookup_matches_tcp_claim_policy() {
                 .ok(),
             Some(expected_claims == 1),
             "{} claimed udp-flow lookup should follow the same claim policy as tcp outbound lookup",
-            outbound_leaf_name(&leaf)
+            protocol
         );
     }
 }
@@ -91,8 +110,8 @@ fn packet_path_leaf_lookup_matches_claim_time_packet_path_projection() {
     let registry = crate::register::protocol_registry();
 
     for (config, leaf, _) in compiled_in_outbound_leaves() {
-        let expected_packet_path =
-            matches!(leaf.protocol_name(), "socks5" | "hysteria2" | "shadowsocks");
+        let protocol = outbound_leaf_name(&config, &leaf);
+        let expected_packet_path = matches!(protocol, "socks5" | "hysteria2" | "shadowsocks");
         let claimed = registry.claim_outbound_leaf(&config, leaf.clone());
         assert_eq!(
             claimed
@@ -101,7 +120,7 @@ fn packet_path_leaf_lookup_matches_claim_time_packet_path_projection() {
                 .ok(),
             Some(expected_packet_path),
             "{} claimed packet-path lookup should only expose adapters with packet-path claim-time projection",
-            outbound_leaf_name(&leaf)
+            protocol
         );
     }
 }
@@ -118,11 +137,10 @@ fn registry_executes_adapter_claimed_tcp_leaf_operations() {
     use zero_engine::EngineError;
     use zero_traits::{ProtocolCapabilityDescriptor, ProtocolMetadata};
 
-    use crate::protocol_catalog::protocol_descriptor;
     use crate::protocol_registry::TcpRuntimeServices;
     use crate::protocol_registry::{
         ClaimedTcpOutboundLeaf, ClaimedUdpFlowLeaf, InboundListenerCapability, OutboundLeafClaim,
-        OutboundLeafRuntime, ProtocolSupportCapability, TcpOutboundCapability, UdpFlowCapability,
+        OutboundLeafInput, ProtocolSupportCapability, TcpOutboundCapability, UdpFlowCapability,
         UdpPacketPathCapability,
     };
     use crate::runtime::tcp_dispatch::operation::{
@@ -189,7 +207,7 @@ fn registry_executes_adapter_claimed_tcp_leaf_operations() {
 
     impl ProtocolMetadata for FakeClaimedAdapter {
         fn descriptor(&self) -> ProtocolCapabilityDescriptor {
-            protocol_descriptor("socks5", "test")
+            test_protocol_descriptor("socks5", "test")
         }
     }
 
@@ -224,17 +242,17 @@ fn registry_executes_adapter_claimed_tcp_leaf_operations() {
     impl FakeClaimedAdapter {
         fn claim_outbound_leaf_impl<'a>(
             &self,
-            protocol: Option<&'a OutboundProtocolConfig>,
-            leaf: ResolvedLeafOutbound<'a>,
+            input: OutboundLeafInput<'a>,
         ) -> Option<OutboundLeafClaim<'a>> {
-            let OutboundProtocolConfig::Socks5 { server, port, .. } = protocol? else {
+            let OutboundLeafInput::Proxy { outbound, .. } = input else {
                 return None;
             };
-            let runtime =
-                OutboundLeafRuntime::proxy(leaf.tag()?, server, *port, TcpPathCategory::Tunnel);
+            let OutboundProtocolConfig::Socks5 { .. } = &outbound.protocol else {
+                return None;
+            };
             let tcp: Box<dyn ClaimedTcpOutboundLeaf<'a> + 'a> = Box::new(FakeClaimedLeaf);
             Some(OutboundLeafClaim {
-                runtime,
+                tcp_path: TcpPathCategory::Tunnel,
                 tcp,
                 udp: Some(Box::new(FakeClaimedUdpLeaf)),
                 packet_path: None,
@@ -279,10 +297,9 @@ fn registry_executes_adapter_claimed_udp_leaf_operations() {
     use zero_core::Session;
     use zero_traits::{ProtocolCapabilityDescriptor, ProtocolMetadata};
 
-    use crate::protocol_catalog::protocol_descriptor;
     use crate::protocol_registry::{
         ClaimedTcpOutboundLeaf, ClaimedUdpFlowLeaf, InboundListenerCapability, OutboundLeafClaim,
-        OutboundLeafRuntime, ProtocolSupportCapability, TcpOutboundCapability, UdpFlowCapability,
+        OutboundLeafInput, ProtocolSupportCapability, TcpOutboundCapability, UdpFlowCapability,
         UdpPacketPathCapability,
     };
     use crate::runtime::tcp_dispatch::operation::{
@@ -359,7 +376,7 @@ fn registry_executes_adapter_claimed_udp_leaf_operations() {
 
     impl ProtocolMetadata for FakeClaimedUdpAdapter {
         fn descriptor(&self) -> ProtocolCapabilityDescriptor {
-            protocol_descriptor("socks5", "test")
+            test_protocol_descriptor("socks5", "test")
         }
     }
 
@@ -394,17 +411,17 @@ fn registry_executes_adapter_claimed_udp_leaf_operations() {
     impl FakeClaimedUdpAdapter {
         fn claim_outbound_leaf_impl<'a>(
             &self,
-            protocol: Option<&'a OutboundProtocolConfig>,
-            leaf: ResolvedLeafOutbound<'a>,
+            input: OutboundLeafInput<'a>,
         ) -> Option<OutboundLeafClaim<'a>> {
-            let OutboundProtocolConfig::Socks5 { server, port, .. } = protocol? else {
+            let OutboundLeafInput::Proxy { outbound, .. } = input else {
                 return None;
             };
-            let runtime =
-                OutboundLeafRuntime::proxy(leaf.tag()?, server, *port, TcpPathCategory::Tunnel);
+            let OutboundProtocolConfig::Socks5 { .. } = &outbound.protocol else {
+                return None;
+            };
             let tcp: Box<dyn ClaimedTcpOutboundLeaf<'a> + 'a> = Box::new(FakeClaimedTcpLeaf);
             Some(OutboundLeafClaim {
-                runtime,
+                tcp_path: TcpPathCategory::Tunnel,
                 tcp,
                 udp: Some(Box::new(FakeClaimedUdpLeaf)),
                 packet_path: None,
@@ -457,12 +474,10 @@ fn registry_executes_adapter_claimed_udp_packet_path_operations() {
     use zero_config::{InboundProtocolConfig, OutboundProtocolConfig};
     use zero_traits::{ProtocolCapabilityDescriptor, ProtocolMetadata};
 
-    use crate::protocol_catalog::protocol_descriptor;
     use crate::protocol_registry::{
         ClaimedTcpOutboundLeaf, ClaimedUdpFlowLeaf, ClaimedUdpPacketPathLeaf,
-        InboundListenerCapability, OutboundLeafClaim, OutboundLeafRuntime,
-        ProtocolSupportCapability, TcpOutboundCapability, UdpFlowCapability,
-        UdpPacketPathCapability,
+        InboundListenerCapability, OutboundLeafClaim, OutboundLeafInput, ProtocolSupportCapability,
+        TcpOutboundCapability, UdpFlowCapability, UdpPacketPathCapability,
     };
     use crate::runtime::tcp_dispatch::operation::{
         DirectTcpConnectOperation, PreparedTcpConnectOperation,
@@ -558,7 +573,7 @@ fn registry_executes_adapter_claimed_udp_packet_path_operations() {
 
     impl ProtocolMetadata for FakeClaimedUdpPacketPathAdapter {
         fn descriptor(&self) -> ProtocolCapabilityDescriptor {
-            protocol_descriptor("socks5", "test")
+            test_protocol_descriptor("socks5", "test")
         }
     }
 
@@ -593,17 +608,17 @@ fn registry_executes_adapter_claimed_udp_packet_path_operations() {
     impl FakeClaimedUdpPacketPathAdapter {
         fn claim_outbound_leaf_impl<'a>(
             &self,
-            protocol: Option<&'a OutboundProtocolConfig>,
-            leaf: ResolvedLeafOutbound<'a>,
+            input: OutboundLeafInput<'a>,
         ) -> Option<OutboundLeafClaim<'a>> {
-            let OutboundProtocolConfig::Socks5 { server, port, .. } = protocol? else {
+            let OutboundLeafInput::Proxy { outbound, .. } = input else {
                 return None;
             };
-            let runtime =
-                OutboundLeafRuntime::proxy(leaf.tag()?, server, *port, TcpPathCategory::Tunnel);
+            let OutboundProtocolConfig::Socks5 { .. } = &outbound.protocol else {
+                return None;
+            };
             let tcp: Box<dyn ClaimedTcpOutboundLeaf<'a> + 'a> = Box::new(FakeClaimedTcpLeaf);
             Some(OutboundLeafClaim {
-                runtime,
+                tcp_path: TcpPathCategory::Tunnel,
                 tcp,
                 udp: Some(Box::new(FakeClaimedUdpLeaf)),
                 packet_path: Some(Box::new(FakeClaimedUdpPacketPathLeaf)),
@@ -654,10 +669,8 @@ fn socks5_test_config(tag: &str) -> zero_config::RuntimeConfig {
 
 #[cfg(feature = "socks5")]
 fn proxy_test_leaf(tag: &'static str) -> ResolvedLeafOutbound<'static> {
+    let _ = tag;
     ResolvedLeafOutbound::Proxy {
-        tag,
-        outbound_index: 0,
-        protocol: "socks5",
-        endpoint: Some(("127.0.0.1", 1080)),
+        identity: OutboundIdentity::from_config_index(0),
     }
 }

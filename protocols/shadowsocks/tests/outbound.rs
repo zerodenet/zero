@@ -160,7 +160,7 @@ async fn outbound_writes_salt_and_first_chunk_in_one_write() {
         Address::Domain("www.gstatic.com".to_owned()),
         80,
         Network::Tcp,
-        ProtocolType::Shadowsocks,
+        ProtocolType::new("shadowsocks"),
     );
     let mut socket = RecordingSocket::default();
 
@@ -365,7 +365,7 @@ async fn accepted_inbound_stream_constructor_owns_response_key_derivation() {
         Address::Domain("example.com".to_owned()),
         443,
         Network::Tcp,
-        ProtocolType::Shadowsocks,
+        ProtocolType::new("shadowsocks"),
     );
     let accept = ShadowsocksAccept {
         session,
@@ -732,7 +732,7 @@ async fn ss_2022_tcp_request_and_accept_roundtrip_all_blake3_ciphers() {
             Address::Domain("example.com".to_owned()),
             443,
             Network::Tcp,
-            ProtocolType::Shadowsocks,
+            ProtocolType::new("shadowsocks"),
         );
 
         // Client writes: salt + fixed header (nonce 0) + var header (nonce 1).
@@ -777,7 +777,7 @@ async fn ss_2022_tcp_full_relay_roundtrips_all_blake3_ciphers() {
             Address::Domain("example.com".to_owned()),
             443,
             Network::Tcp,
-            ProtocolType::Shadowsocks,
+            ProtocolType::new("shadowsocks"),
         );
 
         // send_request / accept_request borrow the transports; afterwards we
@@ -831,7 +831,7 @@ async fn ss_2022_tcp_relay_large_payload_spans_multiple_chunks() {
         Address::Ipv4([93, 184, 216, 34]),
         80,
         Network::Tcp,
-        ProtocolType::Shadowsocks,
+        ProtocolType::new("shadowsocks"),
     );
 
     let outbound_session = ShadowsocksOutbound

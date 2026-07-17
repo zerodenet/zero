@@ -5,19 +5,9 @@ impl ManagedUdpState {
         Self {
             #[cfg(feature = "managed-datagram-runtime")]
             datagram: super::super::datagram::ManagedDatagramState::new(handlers.datagram),
-            #[cfg(any(
-                feature = "vless",
-                feature = "vmess",
-                feature = "trojan",
-                feature = "mieru"
-            ))]
+            #[cfg(feature = "managed-stream-runtime")]
             stream: super::super::stream::ManagedStreamState::new(
-                #[cfg(any(
-                    feature = "vless",
-                    feature = "vmess",
-                    feature = "trojan",
-                    feature = "mieru"
-                ))]
+                #[cfg(feature = "managed-stream-runtime")]
                 handlers.stream_packet,
                 handlers.relay,
             ),

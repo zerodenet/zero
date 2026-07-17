@@ -57,7 +57,6 @@ impl<'a> ClaimedInventoryLeaf<'a> {
     }
 
     #[cfg(feature = "udp-runtime")]
-    #[cfg(feature = "udp-runtime")]
     pub(crate) fn prepare_udp_packet_path(
         &self,
     ) -> Option<

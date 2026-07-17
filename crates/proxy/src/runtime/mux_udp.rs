@@ -8,7 +8,7 @@ mod handler;
 mod relay;
 mod task;
 
-#[cfg(feature = "vmess")]
+#[cfg(feature = "managed-stream-runtime")]
 pub(crate) use task::run_protocol_mux_udp_task;
-#[cfg(feature = "vless")]
+#[cfg(feature = "managed-stream-runtime")]
 pub(crate) use task::run_protocol_mux_udp_task_with_accept_log;

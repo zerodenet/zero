@@ -1,11 +1,9 @@
-use alloc::boxed::Box;
 use alloc::string::String;
 
 use std::future::Future;
 
 use zero_core::Session;
 use zero_platform_tokio::TokioSocket;
-use zero_transport::outbound_leaf::{ProtocolSocketTcpHandshake, ProtocolTransportLeaf};
 use zero_transport::RuntimeError;
 use zero_transport::{MeteredStream, StreamTraffic, TcpRelayStream};
 
@@ -15,54 +13,6 @@ use super::{
     Socks5ManagedUdpPacketPathCarrierDescriptor, Socks5ManagedUdpPacketPathPlan,
     Socks5OutboundOptionsRef, Socks5TransportLeaf,
 };
-
-impl ProtocolTransportLeaf for Socks5TransportLeaf {
-    fn tag(&self) -> &str {
-        self.tag()
-    }
-    fn server(&self) -> &str {
-        self.server()
-    }
-    fn port(&self) -> u16 {
-        self.port()
-    }
-}
-
-#[async_trait::async_trait]
-impl ProtocolSocketTcpHandshake for Socks5TransportLeaf {
-    fn connect_stage(&self) -> &'static str {
-        "connect_upstream_socks5"
-    }
-
-    async fn handshake_socket(
-        &self,
-        socket: TokioSocket,
-        session: &Session,
-    ) -> Result<(TcpRelayStream, StreamTraffic), RuntimeError> {
-        let metered = MeteredStream::new(TcpRelayStream::from(socket));
-        establish_socks5_tcp_connect(
-            metered,
-            session,
-            self.username.as_deref(),
-            self.password.as_deref(),
-        )
-        .await
-    }
-
-    async fn handshake_relay(
-        &self,
-        stream: TcpRelayStream,
-        session: &Session,
-    ) -> Result<TcpRelayStream, RuntimeError> {
-        apply_socks5_tcp_relay_hop(
-            stream,
-            session,
-            self.username.as_deref(),
-            self.password.as_deref(),
-        )
-        .await
-    }
-}
 
 impl Socks5TransportLeaf {
     pub fn from_options_refs(

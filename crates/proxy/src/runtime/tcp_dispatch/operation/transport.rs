@@ -3,14 +3,12 @@ use std::pin::Pin;
 
 use zero_core::Session;
 use zero_engine::EngineError;
-use zero_transport::outbound_leaf::{
-    open_prepared_tcp_transport_leaf_relay_hop, open_prepared_tcp_transport_leaf_stream,
-    PreparedTransportLeaf, ProtocolTcpTransportLeafMetadata, ProtocolTcpTransportLeafOps,
-    ProtocolTcpTransportOpenResult, ProtocolTransportLeaf,
-};
 
 use super::contract::{PreparedTcpConnectOperation, PreparedTcpRelayOperation};
 use crate::protocol_registry::TcpRuntimeServices;
+use crate::runtime::transport_leaf::{
+    PreparedTransportLeaf, ProxyTransportLeaf, ProxyTransportTcpLeaf,
+};
 use crate::transport::{EstablishedTcpOutbound, TcpOutboundFailure, TcpRelayStream};
 
 pub(crate) struct TransportLeafTcpConnectOperation<TLeaf> {
@@ -19,12 +17,7 @@ pub(crate) struct TransportLeafTcpConnectOperation<TLeaf> {
 
 impl<TLeaf> PreparedTcpConnectOperation for TransportLeafTcpConnectOperation<TLeaf>
 where
-    TLeaf: ProtocolTransportLeaf
-        + ProtocolTcpTransportLeafMetadata
-        + ProtocolTcpTransportLeafOps
-        + Send
-        + Sync,
-    TLeaf::Opened: ProtocolTcpTransportOpenResult,
+    TLeaf: ProxyTransportLeaf + ProxyTransportTcpLeaf + Send + Sync,
 {
     fn execute<'a>(
         self: Box<Self>,
@@ -39,23 +32,15 @@ where
             let tag = endpoint.tag.to_owned();
             let server = endpoint.server.to_owned();
             let port = endpoint.port;
-            let dial_services = services.clone();
-            let opened = open_prepared_tcp_transport_leaf_stream(
-                session,
-                &self.prepared,
-                move |server, port| {
-                    let services = dial_services.clone();
-                    let server = server.to_owned();
-                    async move { services.connect_upstream_owned(server, port).await }
-                },
-            )
-            .await
-            .map_err(|error| TcpOutboundFailure {
-                stage: TLeaf::TCP_CONNECT_STAGE,
-                error: error.into(),
-                upstream_endpoint: Some((server.clone(), port)),
-            })?;
-            let (stream, traffic) = opened.into_proxied_stream_parts();
+            let (stream, traffic) = self
+                .prepared
+                .open_tcp_stream(services.clone(), session)
+                .await
+                .map_err(|error| TcpOutboundFailure {
+                    stage: TLeaf::TCP_CONNECT_STAGE,
+                    error: error.into(),
+                    upstream_endpoint: Some((server.clone(), port)),
+                })?;
             if !traffic.is_empty() {
                 services.record_control_traffic(session.id, traffic);
             }
@@ -70,7 +55,7 @@ pub(crate) struct TransportLeafTcpRelayOperation<TLeaf> {
 
 impl<TLeaf> PreparedTcpRelayOperation for TransportLeafTcpRelayOperation<TLeaf>
 where
-    TLeaf: ProtocolTcpTransportLeafOps + Send + Sync,
+    TLeaf: ProxyTransportTcpLeaf + Send + Sync,
 {
     fn execute<'a>(
         self: Box<Self>,
@@ -82,7 +67,8 @@ where
         Self: 'a,
     {
         Box::pin(async move {
-            open_prepared_tcp_transport_leaf_relay_hop(stream, session, &self.prepared)
+            self.prepared
+                .open_tcp_relay_hop(stream, session)
                 .await
                 .map_err(Into::into)
         })

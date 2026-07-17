@@ -12,7 +12,7 @@ pub(crate) struct UpstreamAssociationSend<'a> {
     pub(crate) payload: &'a [u8],
 }
 
-#[cfg(feature = "socks5")]
+#[cfg(feature = "upstream-association-runtime")]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum UpstreamAssociationCloseReason {
     Closed,
@@ -20,7 +20,7 @@ pub(crate) enum UpstreamAssociationCloseReason {
     Dropped,
 }
 
-#[cfg(feature = "socks5")]
+#[cfg(feature = "upstream-association-runtime")]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct UpstreamAssociationStages {
     pub(crate) proxy_stage: &'static str,
@@ -28,7 +28,7 @@ pub(crate) struct UpstreamAssociationStages {
     pub(crate) resume_message: &'static str,
 }
 
-#[cfg(feature = "socks5")]
+#[cfg(feature = "upstream-association-runtime")]
 impl UpstreamAssociationStages {
     pub(crate) const fn new(
         proxy_stage: &'static str,

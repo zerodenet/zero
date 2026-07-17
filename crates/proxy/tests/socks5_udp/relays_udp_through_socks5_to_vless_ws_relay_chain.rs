@@ -202,7 +202,7 @@ async fn relays_udp_through_socks5_to_vless_ws_relay_chain() {
                 .map(|session| {
                     session.network == zero_core::Network::Udp
                         && session.outbound_tag.as_deref() == Some("final-vless-ws")
-                        && session.protocol == zero_core::ProtocolType::Socks5
+                        && session.protocol == zero_core::ProtocolType::new("socks5")
                         && session.bytes_up > 0
                         && session.bytes_down > 0
                 })

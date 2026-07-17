@@ -13,8 +13,7 @@
 //! - [`crate::runtime::udp_flow::registered`]: protocol handlers assembled by
 //!   `register.rs` and their neutral runtime state
 //! - [`crate::runtime::udp_flow::packet_path_chain`][]: generic
-//!   datagram-over-packet-path manager for
-//!   relay chains (Shadowsocks -> Shadowsocks, SOCKS5 -> Shadowsocks, etc.)
+//!   datagram-over-packet-path manager for heterogeneous relay chains
 //!
 //! # UDP relay chain model
 //!
@@ -67,7 +66,7 @@ mod outbound;
 #[cfg(feature = "udp-runtime")]
 mod packet_path;
 pub(crate) use crate::runtime::udp_flow::result::{FlowFailure, FlowStartResult};
-#[cfg(feature = "socks5")]
+#[cfg(feature = "upstream-association-runtime")]
 pub(crate) use managed::UpstreamTrackedStart;
 #[cfg(feature = "udp-runtime")]
 pub(crate) use model::UdpDispatch;

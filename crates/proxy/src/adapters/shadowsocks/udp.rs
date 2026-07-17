@@ -2,11 +2,15 @@ use zero_engine::EngineError;
 
 use crate::adapters::shadowsocks::ShadowsocksAdapter;
 use crate::protocol_registry::{ClaimedUdpFlowLeaf, ClaimedUdpPacketPathLeaf};
-use crate::runtime::udp_dispatch::operation::PreparedUdpFlowOperation;
+use crate::runtime::udp_dispatch::operation::{ManagedDatagramStartPlan, PreparedUdpFlowOperation};
 use crate::runtime::udp_dispatch::packet_path_operation::PreparedUdpPacketPathOperation;
 use crate::runtime::udp_dispatch::FlowFailure;
 use crate::runtime::udp_flow::managed::{
-    datagram_manager::managed_datagram_socket_handler_box, ManagedDatagramFlowHandler,
+    datagram_manager::{
+        managed_datagram_socket_handler_box, ManagedDatagramSocketConnectorFlow,
+        ManagedDatagramSocketResumeConnector,
+    },
+    ManagedDatagramFlowConnection, ManagedDatagramFlowHandler,
 };
 use crate::runtime::udp_flow::packet_path::{
     packet_path_carrier_descriptor_from_build, udp_datagram_source_from_build, PacketPathCarrier,
@@ -16,6 +20,62 @@ use ::shadowsocks::transport::{
     ShadowsocksManagedUdpPacketPathCarrierDescriptor,
     ShadowsocksManagedUdpPacketPathDatagramSourceBuild, ShadowsocksManagedUdpPacketPathPlan,
 };
+
+#[async_trait::async_trait]
+impl ManagedDatagramSocketResumeConnector
+    for ::shadowsocks::transport::ShadowsocksManagedDatagramFlowResume
+{
+    type Connection = ::shadowsocks::transport::ShadowsocksUdpSocketFlow;
+
+    const ESTABLISH_STAGE: &'static str = "ss_establish";
+    const SEND_STAGE: &'static str = "ss_send";
+    const MISMATCH_STAGE: &'static str = "udp_shadowsocks_resume";
+    const MISMATCH_MESSAGE: &'static str = "expected Shadowsocks UDP flow resume";
+    const RESOLVE_UPSTREAM_MESSAGE: &'static str = "failed to resolve shadowsocks udp upstream";
+
+    fn connector_flow(
+        &self,
+        _endpoint: crate::runtime::path::OutboundEndpoint,
+    ) -> ManagedDatagramSocketConnectorFlow {
+        let spec = ::shadowsocks::transport::managed_socket_flow_from_resume(self);
+        ManagedDatagramSocketConnectorFlow::new(spec.into_cache_key())
+    }
+
+    async fn open_connection(
+        self,
+        endpoint: std::net::SocketAddr,
+    ) -> Result<Self::Connection, EngineError> {
+        ::shadowsocks::transport::establish_shadowsocks_udp_socket_flow_with_resume(endpoint, self)
+            .await
+            .map_err(EngineError::from)
+    }
+}
+
+#[async_trait::async_trait]
+impl ManagedDatagramFlowConnection for ::shadowsocks::transport::ShadowsocksUdpSocketFlow {
+    async fn send_datagram(
+        &self,
+        target: &zero_core::Address,
+        port: u16,
+        payload: &[u8],
+    ) -> Result<(), EngineError> {
+        ::shadowsocks::transport::ShadowsocksUdpSocketFlow::send_datagram(
+            self, target, port, payload,
+        )
+        .await
+        .map_err(EngineError::from)
+    }
+
+    fn subscribe_responses(
+        &self,
+    ) -> tokio::sync::broadcast::Receiver<(zero_core::Address, u16, Vec<u8>)> {
+        ::shadowsocks::transport::ShadowsocksUdpSocketFlow::subscribe(self)
+    }
+
+    fn closed_message(&self) -> &'static str {
+        "ss upstream closed"
+    }
+}
 
 impl crate::runtime::udp_flow::packet_path::UdpDatagramSourceBuild
     for ShadowsocksManagedUdpPacketPathDatagramSourceBuild
@@ -90,7 +150,7 @@ impl<'a> ClaimedUdpFlowLeaf<'a> for ClaimedShadowsocksUdpLeaf {
             })?;
         Ok(Box::new(
             crate::runtime::udp_dispatch::operation::ManagedDatagramUdpOperation {
-                plan: plan.into_start_plan(),
+                plan: ManagedDatagramStartPlan::from_parts(plan.into_parts()),
                 needs_proxy: true,
             },
         ))

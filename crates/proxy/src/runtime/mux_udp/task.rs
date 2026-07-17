@@ -4,7 +4,7 @@ use zero_core::InboundMuxUdpRelay;
 use super::relay::run_protocol_mux_udp_relay;
 use crate::runtime::route_runtime::MuxSubstreamRuntime;
 
-#[cfg(feature = "vmess")]
+#[cfg(feature = "managed-stream-runtime")]
 pub(crate) async fn run_protocol_mux_udp_task<R>(
     runtime: MuxSubstreamRuntime,
     relay: R,
@@ -21,7 +21,7 @@ pub(crate) async fn run_protocol_mux_udp_task<R>(
     .await;
 }
 
-#[cfg(feature = "vless")]
+#[cfg(feature = "managed-stream-runtime")]
 pub(crate) async fn run_protocol_mux_udp_task_with_accept_log<R>(
     runtime: MuxSubstreamRuntime,
     relay: R,

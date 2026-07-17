@@ -16,18 +16,18 @@ pub(crate) struct OutboundLeafRuntime {
     pub(crate) udp_policy_tag: Option<String>,
 }
 
-#[cfg(feature = "udp-runtime")]
-
 impl OutboundLeafRuntime {
     pub(crate) fn proxy(tag: &str, server: &str, port: u16, tcp_path: TcpPathCategory) -> Self {
         Self {
             tcp_path,
+            #[cfg(feature = "udp-runtime")]
             health_tag: Some(tag.to_owned()),
             endpoint: Some(OutboundEndpoint {
                 server: server.to_owned(),
                 port,
             }),
             kernel_tag: None,
+            #[cfg(feature = "udp-runtime")]
             udp_policy_tag: Some(tag.to_owned()),
         }
     }

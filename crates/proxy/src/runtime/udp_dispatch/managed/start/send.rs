@@ -1,31 +1,19 @@
 #[cfg(any(
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
+    feature = "managed-stream-runtime",
+    feature = "managed-datagram-runtime"
 ))]
 use crate::runtime::udp_dispatch::managed::model::ManagedUdpSend;
 use crate::runtime::udp_dispatch::{FlowFailure, UdpDispatch};
 #[cfg(any(
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
+    feature = "managed-stream-runtime",
+    feature = "managed-datagram-runtime"
 ))]
 use crate::runtime::udp_flow::managed::ManagedUdpFlowRequest;
 
 impl UdpDispatch {
     #[cfg(any(
-        feature = "vless",
-        feature = "hysteria2",
-        feature = "shadowsocks",
-        feature = "trojan",
-        feature = "vmess",
-        feature = "mieru"
+        feature = "managed-stream-runtime",
+        feature = "managed-datagram-runtime"
     ))]
     pub(in crate::runtime::udp_dispatch::managed) async fn send_managed_udp(
         &mut self,
@@ -36,19 +24,9 @@ impl UdpDispatch {
             services: request.services,
             kind: request.kind,
             session: request.session,
-            #[cfg(any(
-                feature = "vless",
-                feature = "vmess",
-                feature = "trojan",
-                feature = "mieru"
-            ))]
+            #[cfg(feature = "managed-stream-runtime")]
             carrier: request.carrier,
-            #[cfg(any(
-                feature = "vless",
-                feature = "vmess",
-                feature = "trojan",
-                feature = "mieru"
-            ))]
+            #[cfg(feature = "managed-stream-runtime")]
             tls_server_name: request.tls_server_name,
             server: request.server,
             port: request.port,

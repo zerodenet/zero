@@ -215,7 +215,7 @@ async fn relays_udp_through_socks5_to_trojan_relay_chain_with_tls_fingerprint() 
                 .map(|session| {
                     session.network == zero_core::Network::Udp
                         && session.outbound_tag.as_deref() == Some("final-trojan")
-                        && session.protocol == zero_core::ProtocolType::Socks5
+                        && session.protocol == zero_core::ProtocolType::new("socks5")
                         && session.bytes_up > 0
                         && session.bytes_down > 0
                 })

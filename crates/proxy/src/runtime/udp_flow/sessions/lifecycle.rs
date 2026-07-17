@@ -22,7 +22,7 @@ impl UdpSessionFlows {
     ///
     /// Used for chain-outbound response metering where the outbound tag
     /// may not be known at the call site.
-    #[cfg(feature = "socks5")]
+    #[cfg(feature = "upstream-association-runtime")]
     pub(crate) fn session_id_by_target(
         &self,
         target: &Address,

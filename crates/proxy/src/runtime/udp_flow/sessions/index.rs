@@ -15,7 +15,7 @@ impl UdpSessionFlows {
             .or_else(|| self.single_direct_flow_session_id())
     }
 
-    #[cfg(feature = "socks5")]
+    #[cfg(feature = "upstream-association-runtime")]
     pub(crate) fn upstream_response_session_id(
         &self,
         outbound_tag: &str,
@@ -68,7 +68,7 @@ impl UdpSessionFlows {
         direct_flows.next().is_none().then_some(flow.session.id)
     }
 
-    #[cfg(feature = "socks5")]
+    #[cfg(feature = "upstream-association-runtime")]
     fn single_tagged_upstream_flow_session_id(&self, outbound_tag: &str) -> Option<u64> {
         let mut upstream_flows = self
             .flows

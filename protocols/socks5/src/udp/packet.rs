@@ -105,7 +105,7 @@ impl Socks5InboundUdpProtocolOverhead {
 
 impl Socks5InboundUdpDispatchParts {
     pub fn protocol(&self) -> ProtocolType {
-        ProtocolType::Socks5
+        ProtocolType::new("socks5")
     }
 
     pub fn pipe_parts(&self) -> (&Address, u16, &[u8], Option<u64>) {
@@ -124,7 +124,7 @@ impl Socks5InboundUdpDispatchParts {
     pub fn into_inbound_dispatch(self) -> InboundUdpDispatch {
         let (target, port, payload, client_session_id) = self.into_parts();
         InboundUdpDispatch::new(
-            ProtocolType::Socks5,
+            ProtocolType::new("socks5"),
             target,
             port,
             payload,

@@ -2,14 +2,14 @@ use ::socks5::transport::{
     Socks5InboundAcceptor, Socks5InboundUserRef, Socks5OutboundOptionsRef, Socks5TransportLeaf,
 };
 use zero_config::{InboundConfig, InboundProtocolConfig, OutboundProtocolConfig};
-use zero_engine::{EngineError, ResolvedLeafOutbound};
+use zero_engine::EngineError;
 use zero_traits::{ProtocolCapabilityDescriptor, ProtocolMetadata};
 
 use crate::adapters::identity::{
     named_protocol_supports_inbound, named_protocol_supports_outbound, NamedProtocolAdapter,
 };
 use crate::protocol_registry::{
-    InboundListenerCapability, OutboundLeafClaim, OutboundLeafRuntime, ProtocolSupportCapability,
+    InboundListenerCapability, OutboundLeafClaim, OutboundLeafInput, ProtocolSupportCapability,
     TcpOutboundCapability, UdpFlowCapability, UdpPacketPathCapability, UpstreamUdpHandlerProvider,
 };
 use crate::runtime::path::TcpPathCategory;
@@ -57,19 +57,15 @@ impl NamedProtocolAdapter for Socks5Adapter {
 impl Socks5Adapter {
     pub(crate) fn claim_outbound_leaf_impl<'a>(
         &self,
-        protocol: Option<&'a OutboundProtocolConfig>,
-        leaf: ResolvedLeafOutbound<'a>,
+        input: OutboundLeafInput<'a>,
     ) -> Option<OutboundLeafClaim<'a>> {
-        let leaf = transport_leaf(leaf.tag()?, protocol?)?;
-        let runtime = OutboundLeafRuntime::proxy(
-            leaf.tag(),
-            leaf.server(),
-            leaf.port(),
-            TcpPathCategory::Tunnel,
-        );
+        let OutboundLeafInput::Proxy { outbound, .. } = input else {
+            return None;
+        };
+        let leaf = transport_leaf(outbound.tag(), &outbound.protocol)?;
         let tcp = self.claim_tcp_outbound_leaf_impl(leaf.clone());
         Some(OutboundLeafClaim {
-            runtime,
+            tcp_path: TcpPathCategory::Tunnel,
             tcp,
             udp: Some(self.claim_udp_flow_leaf_impl(leaf.clone())),
             packet_path: self.claim_udp_packet_path_leaf_impl(leaf),

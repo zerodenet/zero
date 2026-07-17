@@ -1,35 +1,22 @@
 use std::path::Path;
 
-use zero_engine::EngineError;
-#[cfg(any(feature = "vless", feature = "vmess", feature = "trojan"))]
-use zero_transport::managed_udp::ProtocolManagedStreamUdpLeafOps;
-#[cfg(feature = "vless")]
-use zero_transport::managed_udp::ProtocolRelayTwoStreamManagedUdpLeafOps;
-use zero_transport::outbound_leaf::PreparedTransportLeaf;
-#[cfg(feature = "vless")]
-use zero_transport::outbound_leaf::{
-    prepared_udp_relay_needs_two_streams, ProtocolRelayTwoStreamTransportLeaf,
-    ProtocolRelayTwoStreamUdpTransportLeafMetadata,
-};
-#[cfg(any(feature = "vless", feature = "vmess", feature = "trojan"))]
-use zero_transport::outbound_leaf::{ProtocolTransportLeaf, ProtocolUdpTransportLeafMetadata};
-
 use super::super::ClaimedUdpFlowLeaf;
+use crate::runtime::transport_leaf::{
+    PreparedTransportLeaf, ProxyRelayTwoStreamTransportLeaf, ProxyTransportLeaf,
+    ProxyTransportUdpLeaf,
+};
 use crate::runtime::udp_dispatch::operation::PreparedUdpFlowOperation;
 use crate::runtime::udp_dispatch::relay::PreparedUdpRelayOperation;
 use crate::runtime::udp_dispatch::FlowFailure;
 use crate::transport::RelayCarrier;
+use zero_engine::EngineError;
 
 pub(crate) fn claim_transport_udp_leaf<'a, TLeaf, F, E>(
     upstream: Option<(&'a str, u16)>,
     prepare_leaf: F,
 ) -> Box<dyn ClaimedUdpFlowLeaf<'a> + 'a>
 where
-    TLeaf: ProtocolTransportLeaf
-        + ProtocolUdpTransportLeafMetadata
-        + ProtocolManagedStreamUdpLeafOps
-        + Send
-        + 'a,
+    TLeaf: ProxyTransportLeaf + ProxyTransportUdpLeaf + Send + 'a,
     F: Fn(Option<&Path>) -> Result<TLeaf, E> + Send + Sync + 'a,
     E: std::fmt::Display,
 {
@@ -39,19 +26,12 @@ where
     })
 }
 
-#[cfg(feature = "vless")]
 pub(crate) fn claim_relay_two_stream_transport_udp_leaf<'a, TLeaf, F, E>(
     upstream: Option<(&'a str, u16)>,
     prepare_leaf: F,
 ) -> Box<dyn ClaimedUdpFlowLeaf<'a> + 'a>
 where
-    TLeaf: ProtocolRelayTwoStreamTransportLeaf
-        + ProtocolRelayTwoStreamUdpTransportLeafMetadata
-        + ProtocolManagedStreamUdpLeafOps
-        + ProtocolRelayTwoStreamManagedUdpLeafOps
-        + Send
-        + Sync
-        + 'a,
+    TLeaf: ProxyRelayTwoStreamTransportLeaf + Send + Sync + 'a,
     F: Fn(Option<&Path>) -> Result<TLeaf, E> + Send + Sync + 'a,
     E: std::fmt::Display,
 {
@@ -65,7 +45,6 @@ struct PreparedTransportUdpRelay<TLeaf> {
     prepared: PreparedTransportLeaf<TLeaf>,
 }
 
-#[cfg(feature = "vless")]
 struct PreparedTwoStreamTransportUdpRelay<TLeaf> {
     prepared: PreparedTransportLeaf<TLeaf>,
     two_stream: bool,
@@ -76,32 +55,23 @@ struct ClaimedTransportUdpLeaf<'a, F> {
     prepare_leaf: F,
 }
 
-#[cfg(feature = "vless")]
 struct ClaimedRelayTwoStreamTransportUdpLeaf<'a, F> {
     upstream: Option<(&'a str, u16)>,
     prepare_leaf: F,
 }
 
-#[cfg(feature = "vless")]
 pub(crate) fn transport_udp_relay_needs_two_streams<TLeaf>(
     prepared: &PreparedTransportLeaf<TLeaf>,
 ) -> bool
 where
-    TLeaf: ProtocolRelayTwoStreamTransportLeaf
-        + ProtocolRelayTwoStreamUdpTransportLeafMetadata
-        + ProtocolRelayTwoStreamManagedUdpLeafOps,
+    TLeaf: ProxyRelayTwoStreamTransportLeaf,
 {
-    prepared_udp_relay_needs_two_streams(prepared)
+    prepared.udp_relay_needs_two_streams()
 }
 
-#[cfg(any(feature = "vless", feature = "vmess", feature = "trojan"))]
 impl<'a, TLeaf, F, E> ClaimedUdpFlowLeaf<'a> for ClaimedTransportUdpLeaf<'a, F>
 where
-    TLeaf: ProtocolTransportLeaf
-        + ProtocolUdpTransportLeafMetadata
-        + ProtocolManagedStreamUdpLeafOps
-        + Send
-        + 'a,
+    TLeaf: ProxyTransportLeaf + ProxyTransportUdpLeaf + Send + 'a,
     F: Fn(Option<&Path>) -> Result<TLeaf, E> + Send + Sync + 'a,
     E: std::fmt::Display,
 {
@@ -134,16 +104,9 @@ where
     }
 }
 
-#[cfg(feature = "vless")]
 impl<'a, TLeaf, F, E> ClaimedUdpFlowLeaf<'a> for ClaimedRelayTwoStreamTransportUdpLeaf<'a, F>
 where
-    TLeaf: ProtocolRelayTwoStreamTransportLeaf
-        + ProtocolRelayTwoStreamUdpTransportLeafMetadata
-        + ProtocolManagedStreamUdpLeafOps
-        + ProtocolRelayTwoStreamManagedUdpLeafOps
-        + Send
-        + Sync
-        + 'a,
+    TLeaf: ProxyRelayTwoStreamTransportLeaf + Send + Sync + 'a,
     F: Fn(Option<&Path>) -> Result<TLeaf, E> + Send + Sync + 'a,
     E: std::fmt::Display,
 {
@@ -180,14 +143,9 @@ where
     }
 }
 
-#[cfg(any(feature = "vless", feature = "vmess", feature = "trojan"))]
 impl<'a, TLeaf> PreparedUdpRelayOperation<'a> for PreparedTransportUdpRelay<TLeaf>
 where
-    TLeaf: ProtocolTransportLeaf
-        + ProtocolUdpTransportLeafMetadata
-        + ProtocolManagedStreamUdpLeafOps
-        + Send
-        + 'a,
+    TLeaf: ProxyTransportLeaf + ProxyTransportUdpLeaf + Send + 'a,
 {
     fn bind_final_hop(
         self: Box<Self>,
@@ -200,16 +158,9 @@ where
     }
 }
 
-#[cfg(feature = "vless")]
 impl<'a, TLeaf> PreparedUdpRelayOperation<'a> for PreparedTwoStreamTransportUdpRelay<TLeaf>
 where
-    TLeaf: ProtocolRelayTwoStreamTransportLeaf
-        + ProtocolRelayTwoStreamUdpTransportLeafMetadata
-        + ProtocolManagedStreamUdpLeafOps
-        + ProtocolRelayTwoStreamManagedUdpLeafOps
-        + Send
-        + Sync
-        + 'a,
+    TLeaf: ProxyRelayTwoStreamTransportLeaf + Send + Sync + 'a,
 {
     fn needs_two_streams(&self) -> bool {
         self.two_stream
@@ -243,7 +194,7 @@ fn transport_udp_direct_claim_prepare_failure<TLeaf, E>(
     error: E,
 ) -> FlowFailure
 where
-    TLeaf: ProtocolUdpTransportLeafMetadata,
+    TLeaf: ProxyTransportUdpLeaf,
     E: std::fmt::Display,
 {
     transport_udp_claim_prepare_failure::<TLeaf, E>(upstream, error, TLeaf::UDP_DIRECT_STAGE)
@@ -254,7 +205,7 @@ fn transport_udp_relay_final_claim_prepare_failure<TLeaf, E>(
     error: E,
 ) -> FlowFailure
 where
-    TLeaf: ProtocolUdpTransportLeafMetadata,
+    TLeaf: ProxyTransportUdpLeaf,
     E: std::fmt::Display,
 {
     transport_udp_claim_prepare_failure::<TLeaf, E>(upstream, error, TLeaf::UDP_RELAY_FINAL_STAGE)
@@ -266,7 +217,7 @@ fn transport_udp_claim_prepare_failure<TLeaf, E>(
     stage: &'static str,
 ) -> FlowFailure
 where
-    TLeaf: ProtocolUdpTransportLeafMetadata,
+    TLeaf: ProxyTransportUdpLeaf,
     E: std::fmt::Display,
 {
     FlowFailure {

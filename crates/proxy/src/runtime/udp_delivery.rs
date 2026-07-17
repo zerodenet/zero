@@ -37,7 +37,7 @@ where
     Ok(written)
 }
 
-#[cfg(feature = "socks5")]
+#[cfg(feature = "upstream-association-runtime")]
 pub(crate) async fn write_upstream_response<F, Fut, E>(
     response: &UdpUpstreamResponseParts,
     write: F,
@@ -52,8 +52,11 @@ where
 }
 
 #[cfg(all(
-    feature = "socks5",
-    any(feature = "hysteria2", feature = "shadowsocks")
+    feature = "upstream-association-runtime",
+    any(
+        feature = "managed-datagram-runtime",
+        feature = "managed-datagram-runtime"
+    )
 ))]
 pub(crate) async fn write_optional_upstream_response<F, Fut, E>(
     response: &UdpUpstreamResponseParts,

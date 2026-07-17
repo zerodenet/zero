@@ -12,7 +12,6 @@ use zero_transport::profile::{
     OwnedSplitHttpProfile, OwnedWebSocketProfile,
 };
 use zero_transport::split_http;
-use zero_transport::transport_plan::TcpStreamTransportPlan;
 use zero_transport::RuntimeError;
 
 use super::super::profile::{VlessQuicClientProfile, VlessRealityClientProfile};
@@ -302,26 +301,6 @@ impl OwnedVlessOutboundTransportPlan {
     ) -> Result<TcpRelayStream, RuntimeError> {
         build_vless_split_http_over_relay(post_stream, get_stream, self.transport(), self.server())
             .await
-    }
-}
-
-impl TcpStreamTransportPlan for OwnedVlessOutboundTransportPlan {
-    fn open_direct_stream<'a, OpenSocket, OpenSocketFut>(
-        &'a self,
-        open_socket: OpenSocket,
-    ) -> zero_transport::transport_plan::TransportOpenFuture<'a>
-    where
-        OpenSocket: FnOnce(&str, u16) -> OpenSocketFut + Send + 'a,
-        OpenSocketFut: Future<Output = Result<TokioSocket, RuntimeError>> + Send + 'a,
-    {
-        Box::pin(async move { self.open_direct(open_socket).await })
-    }
-
-    fn open_relay_stream<'a>(
-        &'a self,
-        stream: TcpRelayStream,
-    ) -> zero_transport::transport_plan::TransportOpenFuture<'a> {
-        Box::pin(async move { self.open_relay(stream).await })
     }
 }
 

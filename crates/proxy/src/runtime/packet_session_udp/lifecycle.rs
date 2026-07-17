@@ -8,9 +8,9 @@ mod failure;
 mod read;
 mod relay;
 mod response;
-#[cfg(feature = "socks5")]
+#[cfg(feature = "upstream-association-runtime")]
 mod with_upstream;
-#[cfg(not(feature = "socks5"))]
+#[cfg(not(feature = "upstream-association-runtime"))]
 mod without_upstream;
 
 pub(crate) use relay::run_packet_session_udp_relay;

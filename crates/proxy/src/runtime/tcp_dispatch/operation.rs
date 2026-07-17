@@ -5,18 +5,18 @@
 
 mod contract;
 mod direct;
-#[cfg(feature = "udp-runtime")]
+#[cfg(feature = "tcp-transport-session-runtime")]
 mod session;
-#[cfg(feature = "udp-runtime")]
+#[cfg(any(feature = "tcp-tunnel-runtime", feature = "tcp-session-runtime"))]
 mod socket;
-#[cfg(feature = "udp-runtime")]
+#[cfg(any(feature = "tcp-tunnel-runtime", feature = "tcp-session-runtime"))]
 mod transport;
 
 pub(crate) use contract::{PreparedTcpConnectOperation, PreparedTcpRelayOperation};
 pub(crate) use direct::DirectTcpConnectOperation;
-#[cfg(feature = "udp-runtime")]
-pub(crate) use session::SessionTcpConnectOperation;
-#[cfg(feature = "udp-runtime")]
-pub(crate) use socket::{SocketTcpConnectOperation, SocketTcpRelayOperation};
-#[cfg(feature = "udp-runtime")]
+#[cfg(feature = "tcp-transport-session-runtime")]
+pub(crate) use session::{SessionTcpConnectOperation, SessionTcpHandshake};
+#[cfg(any(feature = "tcp-tunnel-runtime", feature = "tcp-session-runtime"))]
+pub(crate) use socket::{SocketTcpConnectOperation, SocketTcpHandshake, SocketTcpRelayOperation};
+#[cfg(any(feature = "tcp-tunnel-runtime", feature = "tcp-session-runtime"))]
 pub(crate) use transport::{TransportLeafTcpConnectOperation, TransportLeafTcpRelayOperation};

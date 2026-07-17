@@ -12,21 +12,13 @@ impl UdpFlowOutbound {
             #[cfg(feature = "udp-runtime")]
             Self::PacketPathDatagram { tag, .. } => tag,
             #[cfg(any(
-                feature = "socks5",
-                feature = "vless",
-                feature = "vmess",
-                feature = "trojan",
-                feature = "mieru"
+                feature = "upstream-association-runtime",
+                feature = "managed-stream-runtime"
             ))]
             Self::Relay { tag, .. } => tag,
             #[cfg(feature = "managed-datagram-runtime")]
             Self::Datagram { tag, .. } => tag,
-            #[cfg(any(
-                feature = "vless",
-                feature = "vmess",
-                feature = "trojan",
-                feature = "mieru"
-            ))]
+            #[cfg(feature = "managed-stream-runtime")]
             Self::StreamPacket { tag, .. } => tag,
         }
     }
@@ -35,21 +27,13 @@ impl UdpFlowOutbound {
         match self {
             Self::Direct { .. } => UdpPathCategory::Direct,
             #[cfg(any(
-                feature = "socks5",
-                feature = "vless",
-                feature = "vmess",
-                feature = "trojan",
-                feature = "mieru"
+                feature = "upstream-association-runtime",
+                feature = "managed-stream-runtime"
             ))]
             Self::Relay { .. } => UdpPathCategory::Relay,
             #[cfg(feature = "managed-datagram-runtime")]
             Self::Datagram { .. } => UdpPathCategory::Datagram,
-            #[cfg(any(
-                feature = "vless",
-                feature = "vmess",
-                feature = "trojan",
-                feature = "mieru"
-            ))]
+            #[cfg(feature = "managed-stream-runtime")]
             Self::StreamPacket { .. } => UdpPathCategory::StreamPacket,
             #[cfg(feature = "udp-runtime")]
             Self::PacketPathDatagram { .. } => UdpPathCategory::PacketPathDatagram,
@@ -62,21 +46,13 @@ impl UdpFlowOutbound {
             #[cfg(feature = "udp-runtime")]
             Self::PacketPathDatagram { .. } => None,
             #[cfg(any(
-                feature = "socks5",
-                feature = "vless",
-                feature = "vmess",
-                feature = "trojan",
-                feature = "mieru"
+                feature = "upstream-association-runtime",
+                feature = "managed-stream-runtime"
             ))]
             Self::Relay { .. } => None,
             #[cfg(feature = "managed-datagram-runtime")]
             Self::Datagram { .. } => None,
-            #[cfg(any(
-                feature = "vless",
-                feature = "vmess",
-                feature = "trojan",
-                feature = "mieru"
-            ))]
+            #[cfg(feature = "managed-stream-runtime")]
             Self::StreamPacket { .. } => None,
         }
     }

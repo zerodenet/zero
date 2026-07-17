@@ -23,3 +23,20 @@ pub trait InboundFallbackCapture {
 
     fn into_fallback_replay_parts(self) -> (Self::Stream, Vec<u8>);
 }
+
+pub trait InboundFallbackReplay: Send + Sized {
+    type Stream;
+
+    fn replay_to<'a, W>(
+        self,
+        upstream: &'a mut W,
+    ) -> impl Future<Output = Result<Self::Stream, W::Error>> + Send + 'a
+    where
+        Self: 'a,
+        W: AsyncSocket + Send + 'a;
+}
+
+pub enum InboundRouteAccept<R, F> {
+    Route(R),
+    Fallback(F),
+}

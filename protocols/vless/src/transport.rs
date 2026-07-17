@@ -14,6 +14,7 @@ mod runtime;
 
 pub use inbound::{VlessInboundBindPlan, VlessInboundListenerRequest};
 pub use leaf::VlessOutboundLeaf;
+pub use managed_udp::{VlessManagedUdpConnectorFlow, VlessManagedUdpFlowResume};
 pub use options::{
     VlessInboundOptionsRef, VlessInboundUserRef, VlessOutboundBuildOptionsRef,
     VlessOutboundOptionsRef, VlessQuicBindOptionsRef, VlessQuicClientOptionsRef,

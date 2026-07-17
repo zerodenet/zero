@@ -12,21 +12,13 @@ impl UdpFlowOutbound {
             #[cfg(feature = "udp-runtime")]
             Self::PacketPathDatagram { server, port, .. } => Some((server.clone(), *port)),
             #[cfg(any(
-                feature = "socks5",
-                feature = "vless",
-                feature = "vmess",
-                feature = "trojan",
-                feature = "mieru"
+                feature = "upstream-association-runtime",
+                feature = "managed-stream-runtime"
             ))]
             Self::Relay { server, port, .. } => Some((server.clone(), *port)),
             #[cfg(feature = "managed-datagram-runtime")]
             Self::Datagram { server, port, .. } => Some((server.clone(), *port)),
-            #[cfg(any(
-                feature = "vless",
-                feature = "vmess",
-                feature = "trojan",
-                feature = "mieru"
-            ))]
+            #[cfg(feature = "managed-stream-runtime")]
             Self::StreamPacket { server, port, .. } => Some((server.clone(), *port)),
         }
     }
@@ -37,21 +29,13 @@ impl UdpFlowOutbound {
             #[cfg(feature = "udp-runtime")]
             Self::PacketPathDatagram { .. } => SessionOutcome::ChainedRelayed,
             #[cfg(any(
-                feature = "socks5",
-                feature = "vless",
-                feature = "vmess",
-                feature = "trojan",
-                feature = "mieru"
+                feature = "upstream-association-runtime",
+                feature = "managed-stream-runtime"
             ))]
             Self::Relay { .. } => SessionOutcome::ChainedRelayed,
             #[cfg(feature = "managed-datagram-runtime")]
             Self::Datagram { .. } => SessionOutcome::ChainedRelayed,
-            #[cfg(any(
-                feature = "vless",
-                feature = "vmess",
-                feature = "trojan",
-                feature = "mieru"
-            ))]
+            #[cfg(feature = "managed-stream-runtime")]
             Self::StreamPacket { .. } => SessionOutcome::ChainedRelayed,
         }
     }

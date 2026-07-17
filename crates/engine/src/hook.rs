@@ -225,15 +225,5 @@ fn network_str(net: Network) -> &'static str {
 }
 
 fn protocol_str(proto: ProtocolType) -> &'static str {
-    match proto {
-        ProtocolType::Socks5 => "socks5",
-        ProtocolType::HttpConnect => "http",
-        ProtocolType::Vless => "vless",
-        ProtocolType::Hysteria2 => "hysteria2",
-        ProtocolType::Shadowsocks => "shadowsocks",
-        ProtocolType::Trojan => "trojan",
-        ProtocolType::Vmess => "vmess",
-        ProtocolType::Mieru => "mieru",
-        ProtocolType::Unknown => "unknown",
-    }
+    proto.as_str()
 }

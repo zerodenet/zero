@@ -1,6 +1,5 @@
-use zero_core::{InboundMuxServer, InboundMuxStreamRoute, Session};
+use zero_core::{InboundFallbackReplay, InboundMuxServer, InboundMuxStreamRoute, Session};
 use zero_engine::EngineError;
-use zero_transport::protocol_inbound_route::{FallbackReplayToUpstream, RouteAcceptResult};
 
 use crate::runtime::inbound_route::recorded::dispatch::{
     dispatch_optional_recorded_protocol_mux_route_accept_result,
@@ -9,6 +8,7 @@ use crate::runtime::inbound_route::recorded::dispatch::{
 use crate::runtime::inbound_route::recorded::model::RecordedProtocolMuxDispatch;
 use crate::runtime::route_runtime::MuxSubstreamRuntime;
 use crate::runtime::tcp_ingress::InboundProtocol;
+use crate::runtime::PreparedInboundRouteAccept;
 use crate::transport::{ClientStream, MeteredStream, RecordingStream, TcpRelayStream};
 
 pub(crate) async fn dispatch_recorded_protocol_mux_tcp_request_result<
@@ -21,7 +21,7 @@ pub(crate) async fn dispatch_recorded_protocol_mux_tcp_request_result<
     FUdp,
     FUdpFut,
 >(
-    accept_result: Result<Option<RouteAcceptResult<R, FR>>, EngineError>,
+    accept_result: Result<Option<PreparedInboundRouteAccept<R, FR>>, EngineError>,
     request: RecordedProtocolMuxDispatch<P>,
     spawn_tcp: FTcp,
     spawn_udp: FUdp,
@@ -38,7 +38,8 @@ where
         zero_core::StreamUdpResponder<MeteredStream<S>>,
     R::MuxReader: Send,
     P: InboundProtocol<ClientStream = TcpRelayStream> + 'static,
-    FR: FallbackReplayToUpstream + 'static,
+    FR: InboundFallbackReplay + 'static,
+    FR::Stream: ClientStream,
     FTcp: FnMut(
             MuxSubstreamRuntime,
             Session,
@@ -72,7 +73,7 @@ pub(crate) async fn dispatch_recorded_protocol_mux_stream_request_result<
     FUdp,
     FUdpFut,
 >(
-    accept_result: Result<RouteAcceptResult<R, FR>, EngineError>,
+    accept_result: Result<PreparedInboundRouteAccept<R, FR>, EngineError>,
     request: RecordedProtocolMuxDispatch<P>,
     spawn_tcp: FTcp,
     spawn_udp: FUdp,
@@ -89,7 +90,8 @@ where
         zero_core::StreamUdpResponder<MeteredStream<S>>,
     R::MuxReader: Send,
     P: InboundProtocol<ClientStream = TcpRelayStream> + 'static,
-    FR: FallbackReplayToUpstream + 'static,
+    FR: InboundFallbackReplay + 'static,
+    FR::Stream: ClientStream,
     FTcp: FnMut(
             MuxSubstreamRuntime,
             Session,

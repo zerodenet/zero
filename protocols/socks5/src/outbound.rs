@@ -178,7 +178,7 @@ fn outbound_auth<'a>(
 
 impl Socks5Outbound {
     pub fn protocol(&self) -> ProtocolType {
-        ProtocolType::Socks5
+        ProtocolType::new("socks5")
     }
 
     pub async fn establish_tunnel<S>(&self, stream: &mut S, session: &Session) -> Result<(), Error>

@@ -1,7 +1,21 @@
 use std::sync::Arc;
 
-use crate::adapters::DirectAdapter;
+use crate::adapters::direct::DirectAdapter;
 use crate::protocol_registry::ProtocolRegistry;
+
+#[test]
+#[should_panic(expected = "protocol capability `direct` registered more than once")]
+fn duplicate_protocol_registration_is_rejected_at_the_registry_boundary() {
+    let mut registry = ProtocolRegistry::default();
+    registry.register_capability(
+        Arc::new(DirectAdapter),
+        DirectAdapter::claim_outbound_leaf_impl,
+    );
+    registry.register_capability(
+        Arc::new(DirectAdapter),
+        DirectAdapter::claim_outbound_leaf_impl,
+    );
+}
 
 #[test]
 fn focused_capability_views_share_one_adapter_instance() {
@@ -28,12 +42,12 @@ fn focused_capability_views_share_one_adapter_instance() {
 #[cfg(feature = "hysteria2")]
 #[test]
 fn managed_handler_provider_shares_the_registered_adapter_instance() {
-    let adapter = Arc::new(crate::adapters::Hysteria2Adapter);
+    let adapter = Arc::new(crate::adapters::hysteria2::Hysteria2Adapter);
     let expected = Arc::as_ptr(&adapter) as *const ();
     let mut registry = ProtocolRegistry::default();
     registry.register_managed_capability(
         adapter,
-        crate::adapters::Hysteria2Adapter::claim_outbound_leaf_impl,
+        crate::adapters::hysteria2::Hysteria2Adapter::claim_outbound_leaf_impl,
     );
 
     let entry = registry
@@ -55,12 +69,12 @@ fn managed_handler_provider_shares_the_registered_adapter_instance() {
 #[cfg(feature = "socks5")]
 #[test]
 fn upstream_handler_provider_shares_the_registered_adapter_instance() {
-    let adapter = Arc::new(crate::adapters::Socks5Adapter);
+    let adapter = Arc::new(crate::adapters::socks5::Socks5Adapter);
     let expected = Arc::as_ptr(&adapter) as *const ();
     let mut registry = ProtocolRegistry::default();
     registry.register_upstream_capability(
         adapter,
-        crate::adapters::Socks5Adapter::claim_outbound_leaf_impl,
+        crate::adapters::socks5::Socks5Adapter::claim_outbound_leaf_impl,
     );
 
     let entry = registry.entries.first().expect("registered adapter entry");

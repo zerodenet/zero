@@ -13,6 +13,28 @@ use crate::runtime::udp_flow::managed::bridge::{
 use crate::runtime::udp_flow::result::{FlowFailure, FlowStartResult};
 use crate::transport::RelayCarrier;
 
+#[derive(Debug, Clone)]
+pub(crate) struct ManagedStreamPacketBridgePlan<T> {
+    tag: String,
+    server: String,
+    port: u16,
+    resume: T,
+    relay_chain: bool,
+}
+
+impl<T> ManagedStreamPacketBridgePlan<T> {
+    pub(crate) fn from_parts(parts: (String, String, u16, T), relay_chain: bool) -> Self {
+        let (tag, server, port, resume) = parts;
+        Self {
+            tag,
+            server,
+            port,
+            resume,
+            relay_chain,
+        }
+    }
+}
+
 pub(crate) struct ManagedStreamPacketUdpOperation<T> {
     pub(crate) operation: PreparedManagedStreamPacketOperation<T>,
     pub(crate) needs_proxy: bool,
@@ -48,10 +70,10 @@ where
 
 pub(crate) enum PreparedManagedStreamPacketOperation<T> {
     Direct {
-        plan: zero_transport::managed_udp::ManagedStreamPacketBridgePlan<T>,
+        plan: ManagedStreamPacketBridgePlan<T>,
     },
     RelayFinalHop {
-        plan: zero_transport::managed_udp::ManagedStreamPacketBridgePlan<T>,
+        plan: ManagedStreamPacketBridgePlan<T>,
         carrier: RelayCarrier,
     },
 }

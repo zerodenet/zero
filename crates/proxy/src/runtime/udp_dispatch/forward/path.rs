@@ -38,11 +38,8 @@ impl UdpDispatch {
             }
 
             #[cfg(any(
-                feature = "socks5",
-                feature = "vless",
-                feature = "vmess",
-                feature = "trojan",
-                feature = "mieru"
+                feature = "upstream-association-runtime",
+                feature = "managed-stream-runtime"
             ))]
             UdpPathCategory::Relay => {
                 let Some(managed) = flow.outbound.relay_managed_flow() else {
@@ -71,12 +68,7 @@ impl UdpDispatch {
                 self.record_or_fail(flow, &services, started_at, result)?;
             }
 
-            #[cfg(any(
-                feature = "vless",
-                feature = "vmess",
-                feature = "trojan",
-                feature = "mieru"
-            ))]
+            #[cfg(feature = "managed-stream-runtime")]
             UdpPathCategory::StreamPacket => {
                 let result = self
                     .flow_state

@@ -12,19 +12,9 @@ pub(crate) struct ManagedUdpFlowRequest<'a> {
     pub(crate) services: Option<UdpRuntimeServices>,
     pub(crate) kind: ManagedUdpFlowKind,
     pub(crate) session: &'a Session,
-    #[cfg(any(
-        feature = "vless",
-        feature = "vmess",
-        feature = "trojan",
-        feature = "mieru"
-    ))]
+    #[cfg(feature = "managed-stream-runtime")]
     pub(crate) carrier: Option<crate::transport::RelayCarrier>,
-    #[cfg(any(
-        feature = "vless",
-        feature = "vmess",
-        feature = "trojan",
-        feature = "mieru"
-    ))]
+    #[cfg(feature = "managed-stream-runtime")]
     pub(crate) tls_server_name: Option<&'a str>,
     pub(crate) server: &'a str,
     pub(crate) port: u16,
@@ -36,18 +26,8 @@ pub(crate) struct ManagedUdpFlowRequest<'a> {
 pub(crate) enum ManagedUdpFlowKind {
     #[cfg(feature = "managed-datagram-runtime")]
     Datagram,
-    #[cfg(any(
-        feature = "vless",
-        feature = "vmess",
-        feature = "trojan",
-        feature = "mieru"
-    ))]
+    #[cfg(feature = "managed-stream-runtime")]
     StreamPacket,
-    #[cfg(any(
-        feature = "vless",
-        feature = "vmess",
-        feature = "trojan",
-        feature = "mieru"
-    ))]
+    #[cfg(feature = "managed-stream-runtime")]
     RelayStream,
 }

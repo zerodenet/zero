@@ -9,5 +9,9 @@ mod serve;
 
 pub(crate) use rate_limit::apply_kernel_rate_limits_from_config;
 pub(crate) use serve::serve_inbound;
-#[cfg(any(feature = "socks5", feature = "hysteria2", feature = "mieru"))]
+#[cfg(any(
+    feature = "upstream-association-runtime",
+    feature = "managed-datagram-runtime",
+    feature = "managed-stream-runtime"
+))]
 pub(crate) use serve::serve_inbound_with_client_response;

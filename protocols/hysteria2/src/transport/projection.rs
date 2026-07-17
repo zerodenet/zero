@@ -1,5 +1,4 @@
 use zero_core::Session;
-use zero_transport::outbound_leaf::{ProtocolSessionTcpHandshake, ProtocolTransportLeaf};
 use zero_transport::RuntimeError;
 
 use super::{
@@ -165,32 +164,6 @@ impl Hysteria2TransportLeaf {
     }
 }
 
-impl ProtocolTransportLeaf for Hysteria2TransportLeaf {
-    fn tag(&self) -> &str {
-        self.tag()
-    }
-    fn server(&self) -> &str {
-        self.server()
-    }
-    fn port(&self) -> u16 {
-        self.port()
-    }
-}
-
-#[async_trait::async_trait]
-impl ProtocolSessionTcpHandshake for Hysteria2TransportLeaf {
-    fn connect_stage(&self) -> &'static str {
-        "connect_upstream_hysteria2"
-    }
-
-    async fn connect_session_stream(
-        &self,
-        session: &Session,
-    ) -> Result<zero_transport::TcpRelayStream, RuntimeError> {
-        self.open_tcp_stream(session).await
-    }
-}
-
 impl Hysteria2ManagedDatagramFlowResume {
     fn new(protocol: crate::udp::Hysteria2UdpFlowResume) -> Self {
         Self { protocol }
@@ -238,18 +211,6 @@ impl Hysteria2ManagedUdpFlowPlan {
 
     pub fn into_parts(self) -> (String, String, u16, Hysteria2ManagedDatagramFlowResume) {
         (self.tag, self.server, self.port, self.resume)
-    }
-
-    pub fn into_start_plan(
-        self,
-    ) -> zero_transport::managed_udp::ManagedDatagramStartPlan<Hysteria2ManagedDatagramFlowResume>
-    {
-        zero_transport::managed_udp::ManagedDatagramStartPlan::new(
-            self.tag,
-            self.server,
-            self.port,
-            self.resume,
-        )
     }
 
     pub fn into_resume(self) -> Hysteria2ManagedDatagramFlowResume {

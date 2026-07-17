@@ -23,11 +23,8 @@ pub(crate) enum UdpFlowOutbound {
         target_addr: SocketAddr,
     },
     #[cfg(any(
-        feature = "socks5",
-        feature = "vless",
-        feature = "vmess",
-        feature = "trojan",
-        feature = "mieru"
+        feature = "upstream-association-runtime",
+        feature = "managed-stream-runtime"
     ))]
     Relay {
         tag: String,
@@ -42,12 +39,7 @@ pub(crate) enum UdpFlowOutbound {
         port: u16,
         managed: ManagedUdpFlowRef,
     },
-    #[cfg(any(
-        feature = "vless",
-        feature = "vmess",
-        feature = "trojan",
-        feature = "mieru"
-    ))]
+    #[cfg(feature = "managed-stream-runtime")]
     StreamPacket {
         tag: String,
         server: String,
