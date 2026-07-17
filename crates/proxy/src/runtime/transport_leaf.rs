@@ -5,7 +5,7 @@ use zero_transport::StreamTraffic;
 use zero_transport::{RuntimeError, TcpRelayStream};
 
 #[cfg(any(feature = "tcp-tunnel-runtime", feature = "tcp-session-runtime"))]
-use crate::protocol_registry::TcpRuntimeServices;
+use crate::protocol_registry::UpstreamConnectServices;
 
 pub(crate) trait ProxyTransportLeaf {
     fn tag(&self) -> &str;
@@ -20,6 +20,31 @@ pub(crate) trait ProxyTransportLeaf {
     }
 }
 
+impl<T> ProxyTransportLeaf for T
+where
+    T: zero_traits::ProtocolOutboundLeaf,
+{
+    fn tag(&self) -> &str {
+        zero_traits::ProtocolOutboundLeaf::tag(self)
+    }
+
+    fn server(&self) -> &str {
+        zero_traits::ProtocolOutboundLeaf::server(self)
+    }
+
+    fn port(&self) -> u16 {
+        zero_traits::ProtocolOutboundLeaf::port(self)
+    }
+
+    #[cfg(feature = "managed-stream-runtime")]
+    fn validate_udp_relay_final_hop(&self) -> Result<(), RuntimeError> {
+        match zero_traits::ProtocolOutboundLeaf::udp_relay_final_hop_error(self) {
+            Some(message) => Err(zero_core::Error::Unsupported(message).into()),
+            None => Ok(()),
+        }
+    }
+}
+
 #[cfg(any(feature = "tcp-tunnel-runtime", feature = "tcp-session-runtime"))]
 #[async_trait::async_trait]
 pub(crate) trait ProxyTransportTcpLeaf: ProxyTransportLeaf + Send + Sync {
@@ -29,7 +54,7 @@ pub(crate) trait ProxyTransportTcpLeaf: ProxyTransportLeaf + Send + Sync {
 
     async fn open_tcp_stream(
         &self,
-        services: TcpRuntimeServices,
+        services: UpstreamConnectServices,
         session: &Session,
     ) -> Result<(TcpRelayStream, StreamTraffic), RuntimeError>;
 
@@ -113,7 +138,7 @@ where
 {
     pub(crate) async fn open_tcp_stream(
         &self,
-        services: TcpRuntimeServices,
+        services: UpstreamConnectServices,
         session: &Session,
     ) -> Result<(TcpRelayStream, StreamTraffic), RuntimeError> {
         self.leaf.open_tcp_stream(services, session).await

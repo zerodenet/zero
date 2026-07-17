@@ -6,11 +6,11 @@ use zero_engine::EngineError;
 use zero_traits::DatagramCodec;
 use zero_transport::udp_packet_path::UdpSocketPacketPath;
 
-use crate::protocol_registry::UdpRuntimeServices;
+use crate::protocol_registry::UdpNetworkServices;
 use crate::runtime::udp_flow::packet_path::PacketPathCarrier;
 
 pub(crate) async fn build(
-    services: &UdpRuntimeServices,
+    services: &UdpNetworkServices,
     server: &str,
     port: u16,
     codec: Arc<dyn DatagramCodec<Address, Error = zero_core::Error>>,

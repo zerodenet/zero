@@ -152,7 +152,7 @@ impl PreparedUdpPacketPathOperation for Hysteria2PacketPathOperation {
 
     fn build_carrier<'a>(
         self: Box<Self>,
-        _ctx: crate::protocol_registry::UdpAdapterContext<'a>,
+        _services: crate::protocol_registry::UdpNetworkServices,
     ) -> std::pin::Pin<
         Box<
             dyn std::future::Future<

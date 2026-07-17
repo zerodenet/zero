@@ -5,12 +5,10 @@ use zero_config::{InboundConfig, InboundProtocolConfig, OutboundProtocolConfig};
 use zero_engine::EngineError;
 use zero_traits::{ProtocolCapabilityDescriptor, ProtocolMetadata};
 
-use crate::adapters::identity::{
-    named_protocol_supports_inbound, named_protocol_supports_outbound, NamedProtocolAdapter,
-};
+use crate::adapters::identity::NamedProtocolAdapter;
 use crate::protocol_registry::{
-    InboundListenerCapability, OutboundLeafClaim, OutboundLeafInput, ProtocolSupportCapability,
-    TcpOutboundCapability, UdpFlowCapability, UdpPacketPathCapability, UpstreamUdpHandlerProvider,
+    InboundListenerCapability, OutboundLeafClaim, OutboundLeafInput, TcpOutboundCapability,
+    UdpFlowCapability, UdpPacketPathCapability, UpstreamUdpHandlerProvider,
 };
 use crate::runtime::path::TcpPathCategory;
 use crate::runtime::udp_flow::registered::UpstreamAssociationHandler;
@@ -121,33 +119,6 @@ impl InboundListenerCapability for Socks5Adapter {
 
 #[cfg(feature = "socks5")]
 impl TcpOutboundCapability for Socks5Adapter {}
-
-#[cfg(feature = "socks5")]
-impl ProtocolSupportCapability for Socks5Adapter {
-    fn name(&self) -> &'static str {
-        <Self as NamedProtocolAdapter>::PROTOCOL_NAME
-    }
-
-    fn feature_name(&self) -> &'static str {
-        <Self as NamedProtocolAdapter>::FEATURE_NAME
-    }
-
-    fn has_inbound(&self) -> bool {
-        <Self as NamedProtocolAdapter>::HAS_INBOUND
-    }
-
-    fn has_outbound(&self) -> bool {
-        <Self as NamedProtocolAdapter>::HAS_OUTBOUND
-    }
-
-    fn supports_inbound(&self, c: &InboundProtocolConfig) -> bool {
-        named_protocol_supports_inbound::<Self>(c)
-    }
-
-    fn supports_outbound(&self, c: &OutboundProtocolConfig) -> bool {
-        named_protocol_supports_outbound::<Self>(c)
-    }
-}
 
 #[cfg(feature = "socks5")]
 impl ProtocolMetadata for Socks5Adapter {

@@ -5,8 +5,8 @@ use zero_core::Session;
 use zero_platform_tokio::{TcpRelayStream, TokioSocket};
 use zero_traits::{
     ClientTlsProfile, GrpcTransportProfile, H2TransportProfile, HttpUpgradeTransportProfile,
-    ProtocolRelayTwoStreamUdpFlowLeaf, ProtocolUdpFlowLeaf, SplitHttpTransportProfile,
-    WebSocketTransportProfile,
+    ProtocolOutboundLeaf, ProtocolRelayTwoStreamUdpFlowLeaf, ProtocolUdpFlowLeaf,
+    SplitHttpTransportProfile, WebSocketTransportProfile,
 };
 use zero_transport::RuntimeError;
 
@@ -161,14 +161,11 @@ impl VlessOutboundLeaf {
         self.port
     }
 
-    pub fn validate_udp_relay_final_hop(&self) -> Result<(), RuntimeError> {
+    fn udp_relay_final_hop_error(&self) -> Option<&'static str> {
         if self.owned_transport_plan().uses_quic() {
-            return Err(zero_core::Error::Unsupported(
-                "VLESS QUIC final hop over TCP relay chain is not supported",
-            )
-            .into());
+            return Some("VLESS QUIC final hop over TCP relay chain is not supported");
         }
-        Ok(())
+        None
     }
 
     pub fn relay_needs_two_streams(&self) -> bool {
@@ -256,6 +253,24 @@ impl VlessOutboundLeaf {
             self.protocol.udp_relay_final_hop_plan(),
             self.owned_transport_plan(),
         )
+    }
+}
+
+impl ProtocolOutboundLeaf for VlessOutboundLeaf {
+    fn tag(&self) -> &str {
+        VlessOutboundLeaf::tag(self)
+    }
+
+    fn server(&self) -> &str {
+        VlessOutboundLeaf::server(self)
+    }
+
+    fn port(&self) -> u16 {
+        VlessOutboundLeaf::port(self)
+    }
+
+    fn udp_relay_final_hop_error(&self) -> Option<&'static str> {
+        VlessOutboundLeaf::udp_relay_final_hop_error(self)
     }
 }
 

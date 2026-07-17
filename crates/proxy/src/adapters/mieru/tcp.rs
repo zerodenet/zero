@@ -22,7 +22,7 @@ impl SocketTcpHandshake for ::mieru::transport::MieruTransportLeaf {
 
     async fn open_tcp_stream(
         &self,
-        services: crate::protocol_registry::TcpRuntimeServices,
+        services: crate::protocol_registry::UpstreamConnectServices,
         session: &zero_core::Session,
     ) -> Result<
         (

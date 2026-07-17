@@ -12,18 +12,14 @@ use zero_config::{InboundProtocolConfig, OutboundProtocolConfig};
 use zero_engine::EngineError;
 use zero_traits::{ProtocolCapabilityDescriptor, ProtocolMetadata, ProtocolUdpFlowLeaf};
 
-use crate::adapters::identity::{
-    named_protocol_supports_inbound, named_protocol_supports_outbound, NamedProtocolAdapter,
-};
+use crate::adapters::identity::NamedProtocolAdapter;
 use crate::protocol_registry::{
     claim_transport_tcp_leaf, claim_transport_udp_leaf, InboundListenerCapability,
-    ManagedUdpHandlerProvider, OutboundLeafClaim, OutboundLeafInput, ProtocolSupportCapability,
-    TcpOutboundCapability, UdpFlowCapability, UdpPacketPathCapability,
+    ManagedUdpHandlerProvider, OutboundLeafClaim, OutboundLeafInput, TcpOutboundCapability,
+    UdpFlowCapability, UdpPacketPathCapability,
 };
 use crate::runtime::path::TcpPathCategory;
-use crate::runtime::transport_leaf::{
-    ProxyTransportLeaf, ProxyTransportTcpLeaf, ProxyTransportUdpLeaf,
-};
+use crate::runtime::transport_leaf::{ProxyTransportTcpLeaf, ProxyTransportUdpLeaf};
 #[cfg(feature = "vmess")]
 use crate::runtime::udp_flow::managed::{
     bridge::managed_stream_udp_handler_for_resume, ManagedStreamConnectorParts,
@@ -38,21 +34,6 @@ pub(crate) struct VmessAdapter {
 }
 
 #[cfg(feature = "vmess")]
-impl ProxyTransportLeaf for VmessOutboundLeaf {
-    fn tag(&self) -> &str {
-        self.tag()
-    }
-
-    fn server(&self) -> &str {
-        self.server()
-    }
-
-    fn port(&self) -> u16 {
-        self.port()
-    }
-}
-
-#[cfg(feature = "vmess")]
 #[async_trait::async_trait]
 impl ProxyTransportTcpLeaf for VmessOutboundLeaf {
     const TCP_CONNECT_STAGE: &'static str = "connect_upstream_vmess";
@@ -61,7 +42,7 @@ impl ProxyTransportTcpLeaf for VmessOutboundLeaf {
 
     async fn open_tcp_stream(
         &self,
-        services: crate::protocol_registry::TcpRuntimeServices,
+        services: crate::protocol_registry::UpstreamConnectServices,
         session: &zero_core::Session,
     ) -> Result<
         (
@@ -73,12 +54,7 @@ impl ProxyTransportTcpLeaf for VmessOutboundLeaf {
         let opened = VmessOutboundLeaf::open_tcp_stream(self, session, move |server, port| {
             let services = services.clone();
             let server = server.to_owned();
-            async move {
-                services
-                    .connect_upstream_owned(server, port)
-                    .await
-                    .map_err(zero_transport::RuntimeError::from)
-            }
+            async move { services.connect_upstream_owned(server, port).await }
         })
         .await?;
         let (stream, handshake_bytes) = opened.into_parts();
@@ -181,7 +157,7 @@ impl ManagedTupleUdpResumeConnector for ::vmess::transport::VmessManagedUdpFlowR
 
     async fn open_direct(
         &self,
-        services: crate::protocol_registry::UdpRuntimeServices,
+        services: crate::protocol_registry::UpstreamConnectServices,
         session: &zero_core::Session,
     ) -> Result<Self::Connection, EngineError> {
         self.open_direct_connection(session, move |server, port| {
@@ -267,28 +243,6 @@ impl VmessAdapter {
 impl NamedProtocolAdapter for VmessAdapter {
     const PROTOCOL_NAME: &'static str = "vmess";
     const FEATURE_NAME: &'static str = "vmess";
-}
-
-#[cfg(feature = "vmess")]
-impl ProtocolSupportCapability for VmessAdapter {
-    fn name(&self) -> &'static str {
-        <Self as NamedProtocolAdapter>::PROTOCOL_NAME
-    }
-    fn feature_name(&self) -> &'static str {
-        <Self as NamedProtocolAdapter>::FEATURE_NAME
-    }
-    fn has_inbound(&self) -> bool {
-        <Self as NamedProtocolAdapter>::HAS_INBOUND
-    }
-    fn has_outbound(&self) -> bool {
-        <Self as NamedProtocolAdapter>::HAS_OUTBOUND
-    }
-    fn supports_inbound(&self, c: &InboundProtocolConfig) -> bool {
-        named_protocol_supports_inbound::<Self>(c)
-    }
-    fn supports_outbound(&self, c: &OutboundProtocolConfig) -> bool {
-        named_protocol_supports_outbound::<Self>(c)
-    }
 
     fn on_config_reloaded(&self) {
         self.runtime.on_config_reloaded();

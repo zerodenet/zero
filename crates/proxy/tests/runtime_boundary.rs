@@ -661,7 +661,7 @@ fn listener_and_task_lifecycle_are_runtime_owned() {
 #[test]
 fn capability_surface_is_split_and_context_is_narrow() {
     let capability = read(&proxy_src().join("protocol_registry/capability.rs"));
-    let context = read(&proxy_src().join("protocol_registry/context.rs"));
+    let context = read_module(&proxy_src().join("protocol_registry/context.rs"));
     for capability_name in [
         "ProtocolSupportCapability",
         "InboundListenerCapability",
@@ -734,7 +734,7 @@ fn transport_bridge_helpers_drop_raw_leaf_resolution_paths() {
 #[test]
 fn tcp_prepared_operations_do_not_borrow_inventory_or_runtime_services() {
     let tcp_leaf = read(&proxy_src().join("inventory/tcp/leaf.rs"));
-    let context = read(&proxy_src().join("protocol_registry/context.rs"));
+    let context = read_module(&proxy_src().join("protocol_registry/context.rs"));
     assert!(tcp_leaf.contains("fn prepare_claimed_tcp_candidate<'a>(\n        &self,"));
     assert!(tcp_leaf.contains("fn prepare_claimed_tcp_relay_hop<'a>(\n        &self,"));
     assert!(context.contains("pub(crate) fn prepare_tcp_outbound<'a>(\n        &'a self,"));
@@ -818,7 +818,7 @@ fn runtime_owns_post_accept_route_execution() {
 
 #[test]
 fn adapter_runtime_service_access_does_not_expose_proxy() {
-    let context = read(&proxy_src().join("protocol_registry/context.rs"));
+    let context = read_module(&proxy_src().join("protocol_registry/context.rs"));
     assert!(context.contains("struct TcpRuntimeServices"));
     assert!(context.contains("struct UdpRuntimeServices"));
     assert!(context.contains("fn runtime_services"));
@@ -2364,7 +2364,7 @@ fn udp_socket_helpers_use_runtime_services_instead_of_proxy() {
     let carrier = read(
         &proxy_src().join("runtime/udp_flow/packet_path_chain/carriers/udp_socket_carrier.rs"),
     );
-    assert!(carrier.contains("UdpRuntimeServices"));
+    assert!(carrier.contains("UdpNetworkServices"));
 }
 
 #[test]
@@ -4889,6 +4889,68 @@ fn proxy_owns_transport_leaf_execution_contracts_and_stages() {
             !source.contains("pub use bridge::"),
             "{relative} must not re-export standalone transport bridge types"
         );
+    }
+}
+
+#[test]
+fn adapters_receive_narrow_runtime_services_only() {
+    for path in rust_sources(&proxy_src().join("adapters")) {
+        let source = read(&path);
+        for forbidden in [
+            "TcpRuntimeServices",
+            "UdpRuntimeServices",
+            "UdpAdapterContext",
+        ] {
+            assert!(
+                !source.contains(forbidden),
+                "{} must not receive broad runtime service `{forbidden}`",
+                path.display()
+            );
+        }
+    }
+
+    let transport_leaf = read(&proxy_src().join("runtime/transport_leaf.rs"));
+    assert!(transport_leaf.contains("services: UpstreamConnectServices"));
+    let packet_path = read(&proxy_src().join("runtime/udp_dispatch/packet_path_operation.rs"));
+    assert!(packet_path.contains("_services: UdpNetworkServices"));
+}
+
+#[test]
+fn adapter_support_and_endpoint_projection_have_one_shared_implementation() {
+    let identity = read(&proxy_src().join("adapters/identity.rs"));
+    assert!(identity.contains("impl<T> ProtocolSupportCapability for T"));
+
+    for path in rust_sources(&proxy_src().join("adapters")) {
+        let source = read(&path);
+        if path.ends_with("identity.rs") {
+            continue;
+        }
+        assert!(
+            !source.contains("impl ProtocolSupportCapability for"),
+            "{} must use the shared named adapter capability implementation",
+            path.display()
+        );
+        assert!(
+            !source.contains("impl ProxyTransportLeaf for"),
+            "{} must use protocol-owned ProtocolOutboundLeaf endpoint facts",
+            path.display()
+        );
+    }
+}
+
+#[test]
+fn protocol_registry_context_root_stays_a_facade() {
+    let root = read(&proxy_src().join("protocol_registry/context.rs"));
+    for module in ["mod adapter;", "mod tcp;", "mod upstream;", "mod udp;"] {
+        assert!(root.contains(module));
+    }
+    for forbidden in [
+        "struct TcpRuntimeServices",
+        "struct UdpRuntimeServices",
+        "struct UpstreamConnectServices",
+        "struct UdpNetworkServices",
+    ] {
+        assert!(!root.contains(forbidden));
     }
 }
 

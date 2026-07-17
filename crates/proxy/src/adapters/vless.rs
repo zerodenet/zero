@@ -16,19 +16,16 @@ use zero_config::{InboundProtocolConfig, OutboundProtocolConfig};
 use zero_engine::EngineError;
 use zero_traits::{ProtocolCapabilityDescriptor, ProtocolMetadata, ProtocolUdpFlowLeaf};
 
-use crate::adapters::identity::{
-    named_protocol_supports_inbound, named_protocol_supports_outbound, NamedProtocolAdapter,
-};
+use crate::adapters::identity::NamedProtocolAdapter;
 use crate::protocol_registry::{
     bind_tcp_inbound, claim_relay_two_stream_transport_udp_leaf, claim_transport_tcp_leaf,
     inbound_listen_addr, BoundInbound, InboundListenerCapability, ManagedUdpHandlerProvider,
-    OutboundLeafClaim, OutboundLeafInput, ProtocolSupportCapability, TcpOutboundCapability,
-    UdpFlowCapability, UdpPacketPathCapability,
+    OutboundLeafClaim, OutboundLeafInput, TcpOutboundCapability, UdpFlowCapability,
+    UdpPacketPathCapability,
 };
 use crate::runtime::path::TcpPathCategory;
 use crate::runtime::transport_leaf::{
-    ProxyRelayTwoStreamTransportLeaf, ProxyTransportLeaf, ProxyTransportTcpLeaf,
-    ProxyTransportUdpLeaf,
+    ProxyRelayTwoStreamTransportLeaf, ProxyTransportTcpLeaf, ProxyTransportUdpLeaf,
 };
 #[cfg(feature = "vless")]
 use crate::runtime::udp_flow::managed::{
@@ -111,24 +108,6 @@ fn outbound_options<'a>(
 const TCP_PATH: TcpPathCategory = TcpPathCategory::Tunnel;
 
 #[cfg(feature = "vless")]
-impl ProxyTransportLeaf for VlessOutboundLeaf {
-    fn tag(&self) -> &str {
-        self.tag()
-    }
-
-    fn server(&self) -> &str {
-        self.server()
-    }
-
-    fn port(&self) -> u16 {
-        self.port()
-    }
-
-    fn validate_udp_relay_final_hop(&self) -> Result<(), zero_transport::RuntimeError> {
-        VlessOutboundLeaf::validate_udp_relay_final_hop(self)
-    }
-}
-
 #[cfg(feature = "vless")]
 #[async_trait::async_trait]
 impl ProxyTransportTcpLeaf for VlessOutboundLeaf {
@@ -138,7 +117,7 @@ impl ProxyTransportTcpLeaf for VlessOutboundLeaf {
 
     async fn open_tcp_stream(
         &self,
-        services: crate::protocol_registry::TcpRuntimeServices,
+        services: crate::protocol_registry::UpstreamConnectServices,
         session: &zero_core::Session,
     ) -> Result<
         (
@@ -150,12 +129,7 @@ impl ProxyTransportTcpLeaf for VlessOutboundLeaf {
         let opened = VlessOutboundLeaf::open_tcp_stream(self, session, move |server, port| {
             let services = services.clone();
             let server = server.to_owned();
-            async move {
-                services
-                    .connect_upstream_owned(server, port)
-                    .await
-                    .map_err(zero_transport::RuntimeError::from)
-            }
+            async move { services.connect_upstream_owned(server, port).await }
         })
         .await?;
         let (stream, handshake_written_bytes, handshake_read_bytes) = opened.into_parts();
@@ -239,7 +213,7 @@ impl ManagedTupleUdpResumeConnector for ::vless::transport::VlessManagedUdpFlowR
 
     async fn open_direct(
         &self,
-        services: crate::protocol_registry::UdpRuntimeServices,
+        services: crate::protocol_registry::UpstreamConnectServices,
         session: &zero_core::Session,
     ) -> Result<Self::Connection, EngineError> {
         self.open_direct_connection(session, move |server, port| {
@@ -328,28 +302,6 @@ impl VlessAdapter {
 impl NamedProtocolAdapter for VlessAdapter {
     const PROTOCOL_NAME: &'static str = "vless";
     const FEATURE_NAME: &'static str = "vless";
-}
-
-#[cfg(feature = "vless")]
-impl ProtocolSupportCapability for VlessAdapter {
-    fn name(&self) -> &'static str {
-        <Self as NamedProtocolAdapter>::PROTOCOL_NAME
-    }
-    fn feature_name(&self) -> &'static str {
-        <Self as NamedProtocolAdapter>::FEATURE_NAME
-    }
-    fn has_inbound(&self) -> bool {
-        <Self as NamedProtocolAdapter>::HAS_INBOUND
-    }
-    fn has_outbound(&self) -> bool {
-        <Self as NamedProtocolAdapter>::HAS_OUTBOUND
-    }
-    fn supports_inbound(&self, c: &InboundProtocolConfig) -> bool {
-        named_protocol_supports_inbound::<Self>(c)
-    }
-    fn supports_outbound(&self, c: &OutboundProtocolConfig) -> bool {
-        named_protocol_supports_outbound::<Self>(c)
-    }
 
     fn on_config_reloaded(&self) {
         self.runtime.on_config_reloaded();

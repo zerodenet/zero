@@ -37,9 +37,11 @@ pub(crate) use capability::{
 pub(crate) use claim::claim_session_tcp_leaf;
 #[cfg(any(feature = "tcp-tunnel-runtime", feature = "tcp-session-runtime"))]
 pub(crate) use claim::claim_socket_tcp_leaf;
-pub(crate) use context::{OutboundAdapterContext, TcpRuntimeServices};
+pub(crate) use context::{OutboundAdapterContext, TcpRuntimeServices, UpstreamConnectServices};
 #[cfg(feature = "udp-runtime")]
-pub(crate) use context::{UdpAdapterContext, UdpAssociationCloseKind, UdpRuntimeServices};
+pub(crate) use context::{
+    UdpAdapterContext, UdpAssociationCloseKind, UdpNetworkServices, UdpRuntimeServices,
+};
 pub(crate) use defaults::{bind_tcp_inbound, inbound_listen_addr};
 pub(crate) use model::{BoundInbound, OutboundLeafRuntime};
 #[cfg(test)]

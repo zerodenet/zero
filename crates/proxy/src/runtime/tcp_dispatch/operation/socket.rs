@@ -6,7 +6,7 @@ use zero_engine::EngineError;
 use zero_transport::{RuntimeError, StreamTraffic};
 
 use super::contract::{PreparedTcpConnectOperation, PreparedTcpRelayOperation};
-use crate::protocol_registry::TcpRuntimeServices;
+use crate::protocol_registry::{TcpRuntimeServices, UpstreamConnectServices};
 use crate::transport::{EstablishedTcpOutbound, TcpOutboundFailure, TcpRelayStream};
 
 #[async_trait::async_trait]
@@ -21,7 +21,7 @@ pub(crate) trait SocketTcpHandshake: Send + Sync {
 
     async fn open_tcp_stream(
         &self,
-        services: TcpRuntimeServices,
+        services: UpstreamConnectServices,
         session: &Session,
     ) -> Result<(TcpRelayStream, StreamTraffic), RuntimeError>;
 
@@ -106,7 +106,7 @@ where
     let handshake = operation.handshake;
     let endpoint = (handshake.server().to_owned(), handshake.port());
     let (stream, traffic) = handshake
-        .open_tcp_stream(services.clone(), session)
+        .open_tcp_stream(services.upstream(), session)
         .await
         .map_err(|error| TcpOutboundFailure {
             stage: handshake.connect_stage(),

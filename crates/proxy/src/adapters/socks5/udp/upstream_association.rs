@@ -10,15 +10,15 @@ use zero_core::Address;
 use zero_engine::EngineError;
 use zero_transport::RuntimeError;
 
-use crate::protocol_registry::{UdpAssociationCloseKind, UdpRuntimeServices};
+use crate::protocol_registry::{UdpAssociationCloseKind, UdpNetworkServices};
 
 #[derive(Clone)]
 struct ProxySocks5UdpAssociationRuntime {
-    services: UdpRuntimeServices,
+    services: UdpNetworkServices,
 }
 
 impl ProxySocks5UdpAssociationRuntime {
-    fn new(services: UdpRuntimeServices) -> Self {
+    fn new(services: UdpNetworkServices) -> Self {
         Self { services }
     }
 }
@@ -81,7 +81,7 @@ impl Socks5UdpAssociationRuntime for ProxySocks5UdpAssociationRuntime {
 }
 
 pub(super) async fn establish_packet_path_association(
-    services: UdpRuntimeServices,
+    services: UdpNetworkServices,
     build: Socks5ManagedUdpPacketPathCarrierBuild,
 ) -> Result<Socks5UpstreamUdpAssociation, EngineError> {
     establish_packet_path_udp_association(ProxySocks5UdpAssociationRuntime::new(services), build, 0)
@@ -117,7 +117,7 @@ impl
     > for Socks5UpstreamUdpAssociation
 {
     async fn establish(
-        services: UdpRuntimeServices,
+        services: UdpNetworkServices,
         target: Socks5ManagedUdpAssociationTarget,
         session_id: u64,
     ) -> Result<Self, EngineError> {

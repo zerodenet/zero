@@ -74,7 +74,7 @@ where
             self.idle_deadline = None;
         }
 
-        match A::establish(services.clone(), association.clone(), session_id).await {
+        match A::establish(services.network(), association.clone(), session_id).await {
             Ok(a) => {
                 services.record_udp_upstream_association_created();
                 self.idle_deadline =

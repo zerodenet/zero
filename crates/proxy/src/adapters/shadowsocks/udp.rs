@@ -110,7 +110,7 @@ fn packet_path_carrier_descriptor(
 }
 
 async fn build_packet_path(
-    services: crate::protocol_registry::UdpRuntimeServices,
+    services: crate::protocol_registry::UdpNetworkServices,
     plan: ShadowsocksManagedUdpPacketPathPlan,
 ) -> Result<std::sync::Arc<dyn PacketPathCarrier>, EngineError> {
     services
@@ -176,7 +176,7 @@ impl PreparedUdpPacketPathOperation for ShadowsocksPacketPathOperation {
 
     fn build_carrier<'a>(
         self: Box<Self>,
-        ctx: crate::protocol_registry::UdpAdapterContext<'a>,
+        services: crate::protocol_registry::UdpNetworkServices,
     ) -> std::pin::Pin<
         Box<
             dyn std::future::Future<
@@ -188,7 +188,7 @@ impl PreparedUdpPacketPathOperation for ShadowsocksPacketPathOperation {
     where
         Self: 'a,
     {
-        Box::pin(async move { build_packet_path(ctx.runtime_services(), self.plan).await })
+        Box::pin(async move { build_packet_path(services, self.plan).await })
     }
 }
 

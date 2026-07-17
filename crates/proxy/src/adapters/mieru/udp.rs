@@ -30,7 +30,7 @@ impl ManagedTupleUdpResumeConnector for ::mieru::transport::MieruManagedUdpFlowR
 
     async fn open_direct(
         &self,
-        services: crate::protocol_registry::UdpRuntimeServices,
+        services: crate::protocol_registry::UpstreamConnectServices,
         _session: &zero_core::Session,
     ) -> Result<Self::Connection, zero_engine::EngineError> {
         self.open_direct_connection(move |server, port| {

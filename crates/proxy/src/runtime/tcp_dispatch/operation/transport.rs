@@ -34,7 +34,7 @@ where
             let port = endpoint.port;
             let (stream, traffic) = self
                 .prepared
-                .open_tcp_stream(services.clone(), session)
+                .open_tcp_stream(services.upstream(), session)
                 .await
                 .map_err(|error| TcpOutboundFailure {
                     stage: TLeaf::TCP_CONNECT_STAGE,

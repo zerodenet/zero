@@ -11,18 +11,14 @@ use zero_config::{InboundProtocolConfig, OutboundProtocolConfig};
 use zero_engine::EngineError;
 use zero_traits::{ProtocolCapabilityDescriptor, ProtocolMetadata, ProtocolUdpFlowLeaf};
 
-use crate::adapters::identity::{
-    named_protocol_supports_inbound, named_protocol_supports_outbound, NamedProtocolAdapter,
-};
+use crate::adapters::identity::NamedProtocolAdapter;
 use crate::protocol_registry::{
     claim_transport_tcp_leaf, claim_transport_udp_leaf, InboundListenerCapability,
-    ManagedUdpHandlerProvider, OutboundLeafClaim, OutboundLeafInput, ProtocolSupportCapability,
-    TcpOutboundCapability, UdpFlowCapability, UdpPacketPathCapability,
+    ManagedUdpHandlerProvider, OutboundLeafClaim, OutboundLeafInput, TcpOutboundCapability,
+    UdpFlowCapability, UdpPacketPathCapability,
 };
 use crate::runtime::path::TcpPathCategory;
-use crate::runtime::transport_leaf::{
-    ProxyTransportLeaf, ProxyTransportTcpLeaf, ProxyTransportUdpLeaf,
-};
+use crate::runtime::transport_leaf::{ProxyTransportTcpLeaf, ProxyTransportUdpLeaf};
 #[cfg(feature = "trojan")]
 use crate::runtime::udp_flow::managed::{
     bridge::managed_stream_udp_handler_for_resume, ManagedPacketUdpFlowConnection,
@@ -35,21 +31,6 @@ use crate::runtime::udp_flow::managed::{
 pub(crate) struct TrojanAdapter;
 
 #[cfg(feature = "trojan")]
-impl ProxyTransportLeaf for TrojanOutboundLeaf {
-    fn tag(&self) -> &str {
-        self.tag()
-    }
-
-    fn server(&self) -> &str {
-        self.server()
-    }
-
-    fn port(&self) -> u16 {
-        self.port()
-    }
-}
-
-#[cfg(feature = "trojan")]
 #[async_trait::async_trait]
 impl ProxyTransportTcpLeaf for TrojanOutboundLeaf {
     const TCP_CONNECT_STAGE: &'static str = "connect_upstream_trojan";
@@ -58,7 +39,7 @@ impl ProxyTransportTcpLeaf for TrojanOutboundLeaf {
 
     async fn open_tcp_stream(
         &self,
-        services: crate::protocol_registry::TcpRuntimeServices,
+        services: crate::protocol_registry::UpstreamConnectServices,
         session: &zero_core::Session,
     ) -> Result<
         (
@@ -70,12 +51,7 @@ impl ProxyTransportTcpLeaf for TrojanOutboundLeaf {
         let opened = TrojanOutboundLeaf::open_tcp_stream(self, session, move |server, port| {
             let services = services.clone();
             let server = server.to_owned();
-            async move {
-                services
-                    .connect_upstream_owned(server, port)
-                    .await
-                    .map_err(zero_transport::RuntimeError::from)
-            }
+            async move { services.connect_upstream_owned(server, port).await }
         })
         .await?;
         let (stream, handshake_written_bytes) = opened.into_parts();
@@ -167,7 +143,7 @@ impl ManagedPacketUdpResumeConnector for ::trojan::transport::TrojanManagedUdpFl
 
     async fn open_direct(
         &self,
-        services: crate::protocol_registry::UdpRuntimeServices,
+        services: crate::protocol_registry::UpstreamConnectServices,
         session: &zero_core::Session,
     ) -> Result<Self::Connection, EngineError> {
         self.open_direct_connection(session, move |server, port| {
@@ -253,28 +229,6 @@ impl TrojanAdapter {
 impl NamedProtocolAdapter for TrojanAdapter {
     const PROTOCOL_NAME: &'static str = "trojan";
     const FEATURE_NAME: &'static str = "trojan";
-}
-
-#[cfg(feature = "trojan")]
-impl ProtocolSupportCapability for TrojanAdapter {
-    fn name(&self) -> &'static str {
-        <Self as NamedProtocolAdapter>::PROTOCOL_NAME
-    }
-    fn feature_name(&self) -> &'static str {
-        <Self as NamedProtocolAdapter>::FEATURE_NAME
-    }
-    fn has_inbound(&self) -> bool {
-        <Self as NamedProtocolAdapter>::HAS_INBOUND
-    }
-    fn has_outbound(&self) -> bool {
-        <Self as NamedProtocolAdapter>::HAS_OUTBOUND
-    }
-    fn supports_inbound(&self, c: &InboundProtocolConfig) -> bool {
-        named_protocol_supports_inbound::<Self>(c)
-    }
-    fn supports_outbound(&self, c: &OutboundProtocolConfig) -> bool {
-        named_protocol_supports_outbound::<Self>(c)
-    }
 }
 
 #[cfg(feature = "trojan")]

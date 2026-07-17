@@ -29,7 +29,9 @@ pub(super) async fn build_entry(
     candidate: EntryCandidate,
 ) -> Result<Entry, EngineError> {
     log_candidate(&candidate);
-    let path = build_operation.build_carrier(ctx).await?;
+    let path = build_operation
+        .build_carrier(ctx.network_services())
+        .await?;
     let codec = candidate.datagram.codec.clone();
     let datagram_desc = candidate.datagram.descriptor();
     let waiters = Arc::new(Mutex::new(VecDeque::new()));

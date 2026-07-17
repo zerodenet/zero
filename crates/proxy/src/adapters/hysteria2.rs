@@ -8,13 +8,11 @@ use zero_config::{InboundConfig, InboundProtocolConfig, OutboundProtocolConfig};
 use zero_engine::EngineError;
 use zero_traits::{ProtocolCapabilityDescriptor, ProtocolMetadata};
 
-use crate::adapters::identity::{
-    named_protocol_supports_inbound, named_protocol_supports_outbound, NamedProtocolAdapter,
-};
+use crate::adapters::identity::NamedProtocolAdapter;
 use crate::protocol_registry::{
     inbound_listen_addr, BoundInbound, InboundListenerCapability, ManagedUdpHandlerProvider,
-    OutboundLeafClaim, OutboundLeafInput, ProtocolSupportCapability, TcpOutboundCapability,
-    UdpFlowCapability, UdpPacketPathCapability,
+    OutboundLeafClaim, OutboundLeafInput, TcpOutboundCapability, UdpFlowCapability,
+    UdpPacketPathCapability,
 };
 use crate::runtime::path::TcpPathCategory;
 use crate::runtime::udp_flow::managed::ManagedDatagramFlowHandler;
@@ -150,28 +148,6 @@ impl InboundListenerCapability for Hysteria2Adapter {
 
 #[cfg(feature = "hysteria2")]
 impl TcpOutboundCapability for Hysteria2Adapter {}
-
-#[cfg(feature = "hysteria2")]
-impl ProtocolSupportCapability for Hysteria2Adapter {
-    fn name(&self) -> &'static str {
-        <Self as NamedProtocolAdapter>::PROTOCOL_NAME
-    }
-    fn feature_name(&self) -> &'static str {
-        <Self as NamedProtocolAdapter>::FEATURE_NAME
-    }
-    fn has_inbound(&self) -> bool {
-        <Self as NamedProtocolAdapter>::HAS_INBOUND
-    }
-    fn has_outbound(&self) -> bool {
-        <Self as NamedProtocolAdapter>::HAS_OUTBOUND
-    }
-    fn supports_inbound(&self, c: &InboundProtocolConfig) -> bool {
-        named_protocol_supports_inbound::<Self>(c)
-    }
-    fn supports_outbound(&self, c: &OutboundProtocolConfig) -> bool {
-        named_protocol_supports_outbound::<Self>(c)
-    }
-}
 
 #[cfg(feature = "hysteria2")]
 impl ProtocolMetadata for Hysteria2Adapter {

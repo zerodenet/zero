@@ -58,7 +58,7 @@ impl PreparedUdpPacketPathOperation for Socks5PacketPathOperation {
 
     fn build_carrier<'a>(
         self: Box<Self>,
-        ctx: crate::protocol_registry::UdpAdapterContext<'a>,
+        services: crate::protocol_registry::UdpNetworkServices,
     ) -> std::pin::Pin<
         Box<
             dyn std::future::Future<
@@ -75,7 +75,7 @@ impl PreparedUdpPacketPathOperation for Socks5PacketPathOperation {
     where
         Self: 'a,
     {
-        Box::pin(async move { packet_path::build(ctx.runtime_services(), self.plan).await })
+        Box::pin(async move { packet_path::build(services, self.plan).await })
     }
 }
 

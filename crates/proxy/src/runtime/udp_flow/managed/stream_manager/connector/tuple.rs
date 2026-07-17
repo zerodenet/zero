@@ -6,7 +6,7 @@ use super::flow::{
     ManagedStreamConnectorParts, ManagedStreamFlowConnector,
 };
 use super::ManagedTupleUdpResume;
-use crate::protocol_registry::UdpRuntimeServices;
+use crate::protocol_registry::{UdpRuntimeServices, UpstreamConnectServices};
 use crate::runtime::path::OutboundEndpoint;
 use crate::transport::TcpRelayStream;
 use async_trait::async_trait;
@@ -31,7 +31,7 @@ pub(crate) trait ManagedTupleUdpResumeConnector:
 
     async fn open_direct(
         &self,
-        services: UdpRuntimeServices,
+        services: UpstreamConnectServices,
         session: &Session,
     ) -> Result<Self::Connection, EngineError>;
 
@@ -66,7 +66,7 @@ where
         session: &Session,
         _endpoint: OutboundEndpoint,
     ) -> Result<SharedManagedUdpConnection, EngineError> {
-        let connection = self.0.open_direct(services, session).await?;
+        let connection = self.0.open_direct(services.upstream(), session).await?;
         Ok(managed_tuple_udp_connection_from_flow(connection))
     }
 

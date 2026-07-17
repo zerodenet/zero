@@ -90,7 +90,7 @@ impl DummyAssociation {
 #[async_trait::async_trait]
 impl UpstreamAssociationTransport<DummyTarget> for DummyAssociation {
     async fn establish(
-        _services: crate::protocol_registry::UdpRuntimeServices,
+        _services: crate::protocol_registry::UdpNetworkServices,
         _target: DummyTarget,
         _session_id: u64,
     ) -> Result<Self, EngineError> {

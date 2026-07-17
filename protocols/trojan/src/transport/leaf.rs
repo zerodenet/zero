@@ -3,7 +3,7 @@ use std::path::Path;
 
 use zero_core::Session;
 use zero_platform_tokio::TokioSocket;
-use zero_traits::ProtocolUdpFlowLeaf;
+use zero_traits::{ProtocolOutboundLeaf, ProtocolUdpFlowLeaf};
 use zero_transport::RuntimeError;
 use zero_transport::TcpRelayStream;
 
@@ -149,6 +149,20 @@ impl TrojanOutboundLeaf {
             self.owned_transport_plan(),
             self.protocol.udp_relay_flow_plan(),
         )
+    }
+}
+
+impl ProtocolOutboundLeaf for TrojanOutboundLeaf {
+    fn tag(&self) -> &str {
+        TrojanOutboundLeaf::tag(self)
+    }
+
+    fn server(&self) -> &str {
+        TrojanOutboundLeaf::server(self)
+    }
+
+    fn port(&self) -> u16 {
+        TrojanOutboundLeaf::port(self)
     }
 }
 

@@ -585,7 +585,7 @@ impl PreparedUdpPacketPathOperation for FakePacketPathOperation {
 
     fn build_carrier<'a>(
         self: Box<Self>,
-        _: crate::protocol_registry::UdpAdapterContext<'a>,
+        _: crate::protocol_registry::UdpNetworkServices,
     ) -> std::pin::Pin<
         Box<
             dyn std::future::Future<

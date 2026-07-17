@@ -23,7 +23,7 @@ pub(super) fn carrier_descriptor(
 }
 
 pub(super) async fn build(
-    services: crate::protocol_registry::UdpRuntimeServices,
+    services: crate::protocol_registry::UdpNetworkServices,
     plan: Socks5ManagedUdpPacketPathPlan,
 ) -> Result<std::sync::Arc<dyn crate::runtime::udp_flow::packet_path::PacketPathCarrier>, EngineError>
 {

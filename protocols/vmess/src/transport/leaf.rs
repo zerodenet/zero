@@ -4,7 +4,8 @@ use std::path::Path;
 use zero_core::Session;
 use zero_platform_tokio::{TcpRelayStream, TokioSocket};
 use zero_traits::{
-    ClientTlsProfile, GrpcTransportProfile, ProtocolUdpFlowLeaf, WebSocketTransportProfile,
+    ClientTlsProfile, GrpcTransportProfile, ProtocolOutboundLeaf, ProtocolUdpFlowLeaf,
+    WebSocketTransportProfile,
 };
 use zero_transport::RuntimeError;
 
@@ -174,6 +175,20 @@ impl VmessOutboundLeaf {
             self.protocol.udp_relay_flow_plan(),
             self.owned_transport_plan(),
         )
+    }
+}
+
+impl ProtocolOutboundLeaf for VmessOutboundLeaf {
+    fn tag(&self) -> &str {
+        VmessOutboundLeaf::tag(self)
+    }
+
+    fn server(&self) -> &str {
+        VmessOutboundLeaf::server(self)
+    }
+
+    fn port(&self) -> u16 {
+        VmessOutboundLeaf::port(self)
     }
 }
 

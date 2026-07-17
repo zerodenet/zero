@@ -3,9 +3,11 @@
 
 extern crate alloc;
 
+pub mod outbound_leaf;
 pub mod protocol;
 pub mod udp_flow;
 
+pub use outbound_leaf::ProtocolOutboundLeaf;
 pub use udp_flow::{ProtocolRelayTwoStreamUdpFlowLeaf, ProtocolUdpFlowLeaf};
 
 use alloc::vec::Vec;

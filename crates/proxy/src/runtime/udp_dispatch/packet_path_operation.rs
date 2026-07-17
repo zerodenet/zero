@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use zero_engine::EngineError;
 
-use crate::protocol_registry::UdpAdapterContext;
+use crate::protocol_registry::UdpNetworkServices;
 use crate::runtime::udp_flow::packet_path::{
     PacketPathCarrier, PacketPathCarrierDescriptor, UdpDatagramSource,
 };
@@ -23,7 +23,7 @@ pub(crate) trait PreparedUdpPacketPathOperation: Send {
 
     fn build_carrier<'a>(
         self: Box<Self>,
-        _ctx: UdpAdapterContext<'a>,
+        _services: UdpNetworkServices,
     ) -> PacketPathCarrierFuture<'a>
     where
         Self: 'a,
