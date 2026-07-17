@@ -129,8 +129,9 @@ pub struct DiagnosticsProbeOutboundCommand {
     /// Tag of the outbound (leaf or fallback group) to probe.
     #[serde(default)]
     pub target_tag: String,
-    /// `http://` URL to fetch through the outbound. Defaults to
-    /// `http://www.gstatic.com/generate_204` when omitted.
+    /// Legacy command-level URL override. `runtime.latency_test_url` takes
+    /// precedence when configured; otherwise this value is used before the
+    /// built-in default.
     #[serde(default)]
     pub url: Option<String>,
 }
@@ -193,8 +194,10 @@ pub struct TunStartCommand {
     pub name: Option<String>,
     #[serde(default)]
     pub addr: String,
-    #[serde(default = "default_tun_mtu")]
-    pub mtu: u16,
+    /// Optional command-level override. When omitted, the runtime uses
+    /// `runtime.network.mtu` from the active configuration.
+    #[serde(default)]
+    pub mtu: Option<u16>,
     #[serde(default = "default_tun_mask")]
     pub mask: String,
     #[serde(default)]
@@ -206,16 +209,13 @@ impl Default for TunStartCommand {
         Self {
             name: None,
             addr: String::new(),
-            mtu: default_tun_mtu(),
+            mtu: None,
             mask: default_tun_mask(),
             tag: String::new(),
         }
     }
 }
 
-fn default_tun_mtu() -> u16 {
-    1500
-}
 fn default_tun_mask() -> String {
     "255.255.255.0".to_owned()
 }

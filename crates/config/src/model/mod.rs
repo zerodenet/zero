@@ -75,6 +75,11 @@ impl RuntimeConfig {
 pub struct RuntimeOptionsConfig {
     #[serde(default = "default_udp_upstream_idle_timeout_seconds")]
     pub udp_upstream_idle_timeout_seconds: u64,
+    /// Global URL used by end-to-end outbound latency probes.
+    #[serde(default)]
+    pub latency_test_url: Option<String>,
+    #[serde(default)]
+    pub network: NetworkOptionsConfig,
     #[serde(default)]
     pub udp: UdpPolicyConfig,
     #[serde(default)]
@@ -88,11 +93,48 @@ impl Default for RuntimeOptionsConfig {
     fn default() -> Self {
         Self {
             udp_upstream_idle_timeout_seconds: default_udp_upstream_idle_timeout_seconds(),
+            latency_test_url: None,
+            network: NetworkOptionsConfig::default(),
             udp: UdpPolicyConfig::default(),
             log: LogConfig::default(),
             dns: None,
         }
     }
+}
+
+pub const DEFAULT_LATENCY_TEST_URL: &str = "http://www.gstatic.com/generate_204";
+
+impl RuntimeOptionsConfig {
+    pub fn effective_latency_test_url(&self) -> &str {
+        self.latency_test_url_or(None)
+    }
+
+    pub fn latency_test_url_or<'a>(&'a self, fallback: Option<&'a str>) -> &'a str {
+        self.latency_test_url
+            .as_deref()
+            .or(fallback)
+            .unwrap_or(DEFAULT_LATENCY_TEST_URL)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct NetworkOptionsConfig {
+    /// MTU requested from the TUN backend and used by its user-space stack.
+    #[serde(default = "default_network_mtu")]
+    pub mtu: u16,
+}
+
+impl Default for NetworkOptionsConfig {
+    fn default() -> Self {
+        Self {
+            mtu: default_network_mtu(),
+        }
+    }
+}
+
+const fn default_network_mtu() -> u16 {
+    1500
 }
 
 const fn default_udp_upstream_idle_timeout_seconds() -> u64 {

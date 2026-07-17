@@ -85,7 +85,7 @@
 | `tun.start` | `name?`, `addr`, `mask?`, `mtu?`, `tag` | 启动 TUN |
 | `tun.stop` | — | 停止 TUN |
 | `diagnostics.probe_target` | `target_tag` | 直连 TCP 可达性（不走代理，仅本机→server:port RTT） |
-| `diagnostics.probe_outbound` | `target_tag`, `url?` | 同步经代理单节点延迟（默认 url = `http://www.gstatic.com/generate_204`） |
+| `diagnostics.probe_outbound` | `target_tag`, `url?` | 同步经代理单节点延迟；全局 `runtime.latency_test_url` 优先 |
 | `diagnostics.dns_lookup` | `hostname` | DNS 查询 |
 | `diagnostics.trace_route` | `target`, `port`, `protocol?`, `inbound_tag?` | 路由追踪 |
 

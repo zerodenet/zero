@@ -20,6 +20,7 @@ impl zero_api::QueryService for ProxyHandle {
                     running: true,
                     name: Some(tun.name.clone()),
                     addr: Some(tun.addr.clone()),
+                    mtu: Some(tun.mtu),
                     tag: Some(tun.tag.clone()),
                 },
                 None => zero_api::TunStatusSnapshot::default(),

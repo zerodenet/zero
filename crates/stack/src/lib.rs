@@ -83,6 +83,12 @@ impl UserNetworkStack {
     }
 }
 
+/// Convert an interface MTU to a TCP MSS that is safe for both IPv4 and IPv6.
+pub fn tcp_mss_for_mtu(mtu: u16) -> u16 {
+    // IPv6 header (40 bytes) + TCP header without options (20 bytes).
+    mtu.saturating_sub(60)
+}
+
 impl NetworkStack for UserNetworkStack {
     type Tcp = UserTcpStack;
     type Udp = UserUdpStack;

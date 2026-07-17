@@ -87,7 +87,9 @@ impl EnginePlan {
                                     ),
                                 })?,
                         )?,
-                        url: url.clone(),
+                        url: url.clone().unwrap_or_else(|| {
+                            config.runtime.effective_latency_test_url().to_owned()
+                        }),
                         interval: Duration::from_secs(*interval_seconds),
                     })
                 }

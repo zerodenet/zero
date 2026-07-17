@@ -120,6 +120,44 @@ fn builds_engine_plan_for_nested_groups() {
 }
 
 #[test]
+fn urltest_plan_prefers_own_url_and_otherwise_inherits_global_url() {
+    let config = RuntimeConfig::parse(
+        r#"{
+            "runtime": { "latency_test_url": "http://global.example/" },
+            "outbounds": [{ "tag": "direct", "protocol": { "type": "direct" } }],
+            "outbound_groups": [
+                {
+                    "tag": "inherited",
+                    "type": "url_test",
+                    "outbounds": ["direct"]
+                },
+                {
+                    "tag": "overridden",
+                    "type": "url_test",
+                    "outbounds": ["direct"],
+                    "url": "http://group.example/"
+                }
+            ],
+            "route": { "rules": [], "final": { "type": "direct" } }
+        }"#,
+    )
+    .expect("parse config");
+
+    let plan = EnginePlan::build(&config).expect("build engine plan");
+    let inherited = plan
+        .target(plan.target_id("inherited").expect("inherited target"))
+        .and_then(|target| target.as_urltest())
+        .expect("inherited urltest");
+    let overridden = plan
+        .target(plan.target_id("overridden").expect("overridden target"))
+        .and_then(|target| target.as_urltest())
+        .expect("overridden urltest");
+
+    assert_eq!(inherited.url(), "http://global.example/");
+    assert_eq!(overridden.url(), "http://group.example/");
+}
+
+#[test]
 fn engine_exposes_compiled_plan() {
     let config = RuntimeConfig::parse(
         r#"{

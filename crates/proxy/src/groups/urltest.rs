@@ -16,12 +16,6 @@ use zero_engine::{
 
 use super::super::logging::log_urltest_group_target_changed;
 
-/// Default probe URL for single-outbound diagnostics (`diagnostics.probe_outbound`).
-/// Plain HTTP so the measured latency excludes a TLS handshake, and a 204
-/// response so there is no body to download; the de-facto standard also used
-/// by Clash/sing-box.
-pub const DEFAULT_PROBE_URL: &str = "http://www.gstatic.com/generate_204";
-
 #[derive(Clone)]
 pub(crate) struct UrlTestRuntime {
     services: TcpRuntimeServices,

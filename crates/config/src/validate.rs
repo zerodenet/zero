@@ -116,10 +116,34 @@ fn validate_runtime(runtime: &RuntimeOptionsConfig) -> Result<(), ConfigError> {
         ));
     }
 
+    if let Some(url) = &runtime.latency_test_url {
+        validate_latency_test_url("`runtime.latency_test_url`", url)?;
+    }
+
+    if runtime.network.mtu < 576 {
+        return Err(ConfigError::InvalidRuntime(
+            "`runtime.network.mtu` must be at least 576".to_owned(),
+        ));
+    }
+
     if let Some(dns) = &runtime.dns {
         validate_dns_config(dns)?;
     }
 
+    Ok(())
+}
+
+pub(crate) fn validate_latency_test_url(scope: &str, url: &str) -> Result<(), ConfigError> {
+    if url.trim().is_empty() {
+        return Err(ConfigError::InvalidRuntime(format!(
+            "{scope} must not be empty"
+        )));
+    }
+    if !url.starts_with("http://") {
+        return Err(ConfigError::InvalidRuntime(format!(
+            "{scope} currently only supports `http://` URLs"
+        )));
+    }
     Ok(())
 }
 

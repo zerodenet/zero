@@ -207,8 +207,8 @@ impl Proxy {
         &self,
         name: Option<&str>,
         addr: &str,
-        _mask: &str,
-        _mtu: u16,
+        mask: &str,
+        mtu: u16,
         tag: &str,
     ) -> Result<(), EngineError> {
         {
@@ -221,9 +221,31 @@ impl Proxy {
             }
         }
 
+        let addr_ip = addr.parse().map_err(|error| {
+            EngineError::Io(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("invalid TUN address `{addr}`: {error}"),
+            ))
+        })?;
+        let mask_ip = mask.parse().map_err(|error| {
+            EngineError::Io(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("invalid TUN mask `{mask}`: {error}"),
+            ))
+        })?;
+        if mtu < 576 {
+            return Err(EngineError::Io(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "TUN MTU must be at least 576",
+            )));
+        }
+
         let device = zero_tun::create(name).map_err(EngineError::Io)?;
+        device
+            .configure(addr_ip, mask_ip, mtu)
+            .map_err(EngineError::Io)?;
         let dn = device.name().to_owned();
-        info!(inbound_tag = tag, name = %dn, addr = %addr, "tun device created");
+        info!(inbound_tag = tag, name = %dn, addr = %addr, mtu, "tun device created");
 
         let device = Arc::new(Mutex::new(device));
 
@@ -242,13 +264,14 @@ impl Proxy {
             }
         });
 
-        let stack = UserNetworkStack::new(outbound_tx, 1500);
+        let stack = UserNetworkStack::new(outbound_tx, zero_stack::tcp_mss_for_mtu(mtu));
 
         let (shutdown_tx, shutdown_rx) = watch::channel(false);
         *self.tun_shutdown.lock().unwrap() = Some(shutdown_tx);
         *self.tun_info.lock().unwrap() = Some(TunInfo {
             name: dn,
             addr: addr.to_owned(),
+            mtu,
             tag: tag.to_owned(),
         });
 

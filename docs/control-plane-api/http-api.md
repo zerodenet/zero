@@ -418,7 +418,7 @@ Response：
 
 启动 TUN 虚拟网卡。
 
-Params：`name` (string, 可选), `addr` (string), `mask` (string, 可选, 默认 `"255.255.255.0"`), `mtu` (number, 可选, 默认 1500), `tag` (string)
+Params：`name` (string, 可选), `addr` (string), `mask` (string, 可选, 默认 `"255.255.255.0"`), `mtu` (number, 可选；省略时使用 `runtime.network.mtu`，其默认值为 1500), `tag` (string)
 
 Response：
 ```json
@@ -481,7 +481,9 @@ Response：
 
 实现复用 `url_test` 的探测逻辑：经出站建立连接（含 TLS + 协议握手）→ 发 `HEAD {url}` → 读首字节，返回 `elapsed` 毫秒。单成员 ≤5s 超时，故可同步阻塞返回，适合 GUI"点一个节点测速"。仅支持 `http://` URL（明文，延迟不含 TLS 握手，与 `url_test` 一致）。
 
-Params：`target_tag` (string)、`url` (string, 可选，默认 `http://www.gstatic.com/generate_204`)
+Params：`target_tag` (string)、`url` (string, 兼容性可选参数)。配置了
+`runtime.latency_test_url` 时始终使用全局地址；否则使用命令中的 `url`，两者都未提供时默认
+`http://www.gstatic.com/generate_204`。
 
 Response（成功）：
 ```json

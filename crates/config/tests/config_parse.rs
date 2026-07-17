@@ -1144,6 +1144,49 @@ fn rejects_zero_udp_upstream_idle_timeout() {
 }
 
 #[test]
+fn parses_global_latency_url_and_network_mtu() {
+    let config = RuntimeConfig::parse(
+        r#"{
+            "runtime": {
+                "latency_test_url": "http://probe.example/generate_204",
+                "network": { "mtu": 1400 }
+            },
+            "route": { "rules": [], "final": { "type": "direct" } }
+        }"#,
+    )
+    .expect("config should parse");
+
+    assert_eq!(
+        config.runtime.effective_latency_test_url(),
+        "http://probe.example/generate_204"
+    );
+    assert_eq!(
+        config
+            .runtime
+            .latency_test_url_or(Some("http://command.example/")),
+        "http://probe.example/generate_204"
+    );
+    assert_eq!(config.runtime.network.mtu, 1400);
+}
+
+#[test]
+fn rejects_invalid_global_latency_url_and_network_mtu() {
+    for runtime in [
+        r#"{ "latency_test_url": "https://probe.example/" }"#,
+        r#"{ "network": { "mtu": 575 } }"#,
+    ] {
+        let raw = format!(
+            r#"{{
+                "runtime": {runtime},
+                "route": {{ "rules": [], "final": {{ "type": "direct" }} }}
+            }}"#
+        );
+        let error = RuntimeConfig::parse(&raw).expect_err("config should fail");
+        assert!(matches!(error, zero_config::ConfigError::InvalidRuntime(_)));
+    }
+}
+
+#[test]
 fn rejects_undefined_outbound_reference() {
     let error = RuntimeConfig::parse(
         r#"{
@@ -1582,6 +1625,31 @@ fn accepts_urltest_group_type() {
         config.outbound_groups[0].group,
         OutboundGroupKind::UrlTest { .. }
     ));
+}
+
+#[test]
+fn accepts_urltest_without_own_url() {
+    let config = RuntimeConfig::parse(
+        r#"{
+            "outbounds": [
+                { "tag": "direct", "protocol": { "type": "direct" } }
+            ],
+            "outbound_groups": [
+                {
+                    "tag": "proxy",
+                    "type": "url_test",
+                    "outbounds": ["direct"]
+                }
+            ],
+            "route": { "rules": [], "final": { "type": "direct" } }
+        }"#,
+    )
+    .expect("config should parse");
+
+    let OutboundGroupKind::UrlTest { url, .. } = &config.outbound_groups[0].group else {
+        panic!("expected url_test group");
+    };
+    assert!(url.is_none());
 }
 
 #[test]

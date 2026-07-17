@@ -195,7 +195,9 @@
   },
 
   "runtime": {
-    "udp_upstream_idle_timeout_seconds": 30
+    "udp_upstream_idle_timeout_seconds": 30,
+    "latency_test_url": "http://www.gstatic.com/generate_204",
+    "network": { "mtu": 1500 }
   },
 
   "api": {

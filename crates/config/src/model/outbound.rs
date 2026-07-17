@@ -289,7 +289,8 @@ pub enum OutboundGroupKind {
     #[serde(rename = "url_test")]
     UrlTest {
         outbounds: Vec<String>,
-        url: String,
+        #[serde(default)]
+        url: Option<String>,
         #[serde(default = "default_urltest_interval_seconds")]
         interval_seconds: u64,
     },

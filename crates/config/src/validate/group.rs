@@ -32,16 +32,19 @@ impl OutboundGroupConfig {
             } => {
                 validate_group_outbounds("url_test", outbounds, target_tags)?;
 
-                if url.trim().is_empty() {
-                    return Err(ConfigError::InvalidOutboundGroup(
-                        "`url_test` group requires a non-empty `url`".to_owned(),
-                    ));
-                }
+                if let Some(url) = url {
+                    if url.trim().is_empty() {
+                        return Err(ConfigError::InvalidOutboundGroup(
+                            "`url_test.url` must not be empty when set".to_owned(),
+                        ));
+                    }
 
-                if !url.starts_with("http://") {
-                    return Err(ConfigError::InvalidOutboundGroup(
-                        "`url_test` group currently only supports `http://` probe urls".to_owned(),
-                    ));
+                    if !url.starts_with("http://") {
+                        return Err(ConfigError::InvalidOutboundGroup(
+                            "`url_test` group currently only supports `http://` probe urls"
+                                .to_owned(),
+                        ));
+                    }
                 }
 
                 if *interval_seconds == 0 {

@@ -79,6 +79,7 @@ pub struct Proxy {
 pub(crate) struct TunInfo {
     pub name: String,
     pub addr: String,
+    pub mtu: u16,
     pub tag: String,
 }
 

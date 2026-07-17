@@ -9,7 +9,9 @@ pub(super) fn execute_tun_start(
     let name = cmd.name.clone();
     let addr = cmd.addr.clone();
     let mask = cmd.mask.clone();
-    let mtu = cmd.mtu;
+    let mtu = cmd
+        .mtu
+        .unwrap_or_else(|| proxy.engine().config().runtime.network.mtu);
     let tag = cmd.tag.clone();
 
     with_current_runtime("no tokio runtime available for TUN command", |rt| {

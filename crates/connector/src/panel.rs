@@ -330,7 +330,9 @@ async fn execute_panel_command(service: &impl CommandService, cmd: &serde_json::
             CommandRequest::TunStart(TunStartCommand {
                 name: params["name"].as_str().map(|s| s.to_owned()),
                 addr,
-                mtu: params["mtu"].as_u64().unwrap_or(1500) as u16,
+                mtu: params["mtu"]
+                    .as_u64()
+                    .and_then(|value| u16::try_from(value).ok()),
                 mask: params["mask"]
                     .as_str()
                     .unwrap_or("255.255.255.0")

@@ -20,7 +20,7 @@ pub fn execute(command: Command) -> Result<(), Box<dyn Error>> {
                     "name": name,
                     "addr": addr,
                     "mask": mask.unwrap_or_else(|| "255.255.255.0".to_owned()),
-                    "mtu": mtu.unwrap_or(1500),
+                    "mtu": mtu,
                     "tag": tag,
                 }),
             };
@@ -55,9 +55,14 @@ pub fn execute(command: Command) -> Result<(), Box<dyn Error>> {
                 serde_json::from_value(response.result.unwrap_or_default())?;
             if status.running {
                 println!(
-                    "tun: running, name={}, addr={}, tag={}",
+                    "tun: running, name={}, addr={}, mtu={}, tag={}",
                     status.name.as_deref().unwrap_or("-"),
                     status.addr.as_deref().unwrap_or("-"),
+                    status
+                        .mtu
+                        .map(|mtu| mtu.to_string())
+                        .as_deref()
+                        .unwrap_or("-"),
                     status.tag.as_deref().unwrap_or("-")
                 );
             } else {

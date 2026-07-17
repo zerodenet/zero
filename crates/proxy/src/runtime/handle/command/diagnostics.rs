@@ -1,4 +1,4 @@
-use crate::groups::{UrlTestRuntime, DEFAULT_PROBE_URL};
+use crate::groups::UrlTestRuntime;
 use zero_traits::{DnsResolver, IpAddress};
 
 use super::super::util::parse_ip_address;
@@ -143,10 +143,11 @@ pub(super) fn execute_diagnostics_probe_outbound(
 ) -> zero_api::ApiResult<zero_api::CommandResponse> {
     let proxy = handle.proxy.clone();
     let target_tag = cmd.target_tag.clone();
-    let url = cmd
-        .url
-        .clone()
-        .unwrap_or_else(|| DEFAULT_PROBE_URL.to_owned());
+    let config = handle.proxy.engine().config();
+    let url = config
+        .runtime
+        .latency_test_url_or(cmd.url.as_deref())
+        .to_owned();
 
     with_current_runtime(
         "no tokio runtime available for probe_outbound command",

@@ -286,5 +286,7 @@ pub struct TunStatusSnapshot {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub addr: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mtu: Option<u16>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tag: Option<String>,
 }
