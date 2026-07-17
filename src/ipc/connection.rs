@@ -131,17 +131,35 @@ where
                         let resp = ipc_api_error(id, &error);
                         write_ipc_response(&mut *writer.lock().await, &resp).await?;
                     }
-                    Ok(cmd) => match handle.execute(cmd) {
-                        Ok(cmd_resp) => {
-                            let value = serde_json::to_value(cmd_resp).map_err(io::Error::other)?;
-                            let resp = ipc_ok(id, value);
-                            write_ipc_response(&mut *writer.lock().await, &resp).await?;
+                    Ok(cmd) => {
+                        // CommandService is synchronous, while some commands bridge to async
+                        // runtime services with Handle::block_on. Running it on this async IPC
+                        // task would nest block_on inside a Tokio worker and panic. Keep that
+                        // blocking bridge off the reactor; the blocking worker still has access
+                        // to the current runtime handle.
+                        let command_handle = handle.clone();
+                        match tokio::task::spawn_blocking(move || command_handle.execute(cmd)).await
+                        {
+                            Ok(Ok(cmd_resp)) => {
+                                let value =
+                                    serde_json::to_value(cmd_resp).map_err(io::Error::other)?;
+                                let resp = ipc_ok(id, value);
+                                write_ipc_response(&mut *writer.lock().await, &resp).await?;
+                            }
+                            Ok(Err(error)) => {
+                                let resp = ipc_api_error(id, &error);
+                                write_ipc_response(&mut *writer.lock().await, &resp).await?;
+                            }
+                            Err(error) => {
+                                let resp = ipc_error(
+                                    id,
+                                    "internal",
+                                    format!("IPC command task failed: {error}"),
+                                );
+                                write_ipc_response(&mut *writer.lock().await, &resp).await?;
+                            }
                         }
-                        Err(error) => {
-                            let resp = ipc_api_error(id, &error);
-                            write_ipc_response(&mut *writer.lock().await, &resp).await?;
-                        }
-                    },
+                    }
                     Err(error) => {
                         let resp = error.with_id(id);
                         write_ipc_response(&mut *writer.lock().await, &resp).await?;
