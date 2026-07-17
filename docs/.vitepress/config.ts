@@ -1,43 +1,137 @@
+import { existsSync, readFileSync, readdirSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+import path from 'node:path'
 import { defineConfig } from 'vitepress'
+
+const docsRoot = path.resolve(fileURLToPath(new URL('..', import.meta.url)))
+const README_FILE = 'README.md'
+
+type SidebarItem = {
+  text: string
+  items?: SidebarItem[]
+  link?: string
+}
+
+function toTitleCase(text: string): string {
+  return text
+    .replace(/\.md$/, '')
+    .split(/[-_]/g)
+    .filter(Boolean)
+    .map((part) => `${part[0].toUpperCase()}${part.slice(1)}`)
+    .join(' ')
+}
+
+function sidebarTextFromFile(filePath: string, fallback: string): string {
+  const text = readFileSync(filePath, 'utf8')
+
+  const frontMatterMatch = text.match(/^---\r?\n([\s\S]*?)\r?\n---/)
+  if (frontMatterMatch) {
+    const titleMatch = frontMatterMatch[1].match(/^\s*title:\s*(.+)\s*$/m)
+    if (titleMatch?.[1]) {
+      return titleMatch[1].trim().replace(/^["']|["']$/g, '')
+    }
+  }
+
+  const headingMatch = text.match(/^\s*#\s+(.+)$/m)
+  if (headingMatch?.[1]) {
+    return headingMatch[1].trim()
+  }
+
+  return fallback
+}
+
+function sidebarFromDirectory(
+  dirName: string,
+  baseRoute: string,
+): SidebarItem[] {
+  const dirPath = path.join(docsRoot, dirName)
+  const entries = readdirSync(dirPath, { withFileTypes: true })
+  const folders = entries
+    .filter((entry) => entry.isDirectory() && !entry.name.startsWith('.'))
+    .sort((a, b) => a.name.localeCompare(b.name))
+  const pages = entries
+    .filter((entry) => entry.isFile() && entry.name.endsWith('.md'))
+    .sort((a, b) => a.name.localeCompare(b.name))
+
+  const items: SidebarItem[] = []
+
+  for (const page of pages) {
+    if (page.name.toLowerCase() === README_FILE.toLowerCase()) {
+      continue
+    }
+
+    const filePath = path.join(dirPath, page.name)
+    items.push({
+      text: sidebarTextFromFile(filePath, toTitleCase(page.name)),
+      link: `${baseRoute}/${page.name.replace(/\.md$/, '')}`,
+    })
+  }
+
+  for (const folder of folders) {
+    const subItems = sidebarFromDirectory(
+      path.join(dirName, folder.name),
+      `${baseRoute}/${folder.name}`,
+    )
+    if (subItems.length > 0) {
+      items.push({
+        text: toTitleCase(folder.name),
+        items: subItems,
+      })
+    }
+  }
+
+  const hasReadme = existsSync(path.join(dirPath, README_FILE))
+
+  if (hasReadme) {
+    items.unshift({
+      text: 'Overview',
+      link: `${baseRoute}/`,
+    })
+  }
+
+  return items
+}
 
 export default defineConfig({
   title: 'Zero',
-  description: 'Zero - 模块化网络代理内核（Rust）',
+  description: 'Zero - Rust modular proxy toolkit',
   lang: 'zh-CN',
   lastUpdated: true,
 
   themeConfig: {
     nav: [
-      { text: '指南', link: '/guides/quickstart' },
-      { text: '配置', link: '/project/config' },
-      { text: '协议', link: '/protocols/' },
-      { text: '控制面', link: '/control-plane-api/' },
-      { text: '项目', link: '/project/architecture' },
+      { text: 'Guides', link: '/guides/quickstart' },
+      { text: 'Config', link: '/project/config' },
+      { text: 'Protocols', link: '/protocols/' },
+      { text: 'Control API', link: '/control-plane-api/' },
+      { text: 'Control Plane', link: '/control-plane/' },
+      { text: 'Project', link: '/project/architecture' },
+      { text: 'Testing', link: '/testing/tun-e2e' },
     ],
 
     sidebar: {
       '/guides/': [
         {
-          text: '指南',
+          text: 'Guides',
           items: [
-            { text: '快速上手', link: '/guides/quickstart' },
-            { text: 'GUI 对接', link: '/guides/gui-integration' },
-            { text: '配置失败示例', link: '/guides/config-failure-examples' },
+            { text: 'Quickstart', link: '/guides/quickstart' },
+            { text: 'GUI Integration', link: '/guides/gui-integration' },
+            { text: 'Config Failure Examples', link: '/guides/config-failure-examples' },
           ],
         },
       ],
 
       '/protocols/': [
         {
-          text: '协议追踪',
+          text: 'Protocols Overview',
           items: [
-            { text: '概览', link: '/protocols/' },
-            { text: '配置速查', link: '/protocols/configuration' },
-            { text: '未完成项', link: '/protocols/incomplete' },
+            { text: 'Overview', link: '/protocols/' },
+            { text: 'Configuration', link: '/protocols/configuration' },
+            { text: 'Incomplete', link: '/protocols/incomplete' },
           ],
         },
         {
-          text: '协议详情',
+          text: 'Protocol Details',
           items: [
             { text: 'SOCKS5', link: '/protocols/socks5/' },
             { text: 'HTTP CONNECT', link: '/protocols/http/' },
@@ -52,44 +146,21 @@ export default defineConfig({
         },
       ],
 
-      '/project/': [
-        {
-          text: '配置与运行时',
-          items: [
-            { text: '配置规范', link: '/project/config' },
-            { text: '模式与分组', link: '/project/modes-and-groups' },
-            { text: '引擎计划', link: '/project/engine-plan' },
-            { text: 'API 类型', link: '/project/api' },
-          ],
-        },
-        {
-          text: '架构设计',
-          items: [
-            { text: '架构', link: '/project/architecture' },
-            { text: '构建特性', link: '/project/features' },
-            { text: '日志', link: '/project/logging' },
-            { text: '生命周期', link: '/project/lifecycle' },
-            { text: '控制面', link: '/project/control-plane' },
-            { text: '项目定位', link: '/project/positioning' },
-            { text: '项目目标', link: '/project/goals' },
-            { text: '工程规则', link: '/project/tooling' },
-            { text: '面板连接器', link: '/project/panel-node-connector' },
-            { text: '协议能力', link: '/project/protocol-capabilities' },
-          ],
-        },
-      ],
+      '/project/': sidebarFromDirectory('project', '/project'),
+      '/control-plane/': sidebarFromDirectory('control-plane', '/control-plane'),
+      '/testing/': sidebarFromDirectory('testing', '/testing'),
 
       '/control-plane-api/': [
         {
-          text: '控制面 API',
+          text: 'Control API',
           items: [
-            { text: '概览', link: '/control-plane-api/' },
-            { text: '配置模型', link: '/control-plane-api/configuration' },
+            { text: 'Overview', link: '/control-plane-api/' },
+            { text: 'Configuration', link: '/control-plane-api/configuration' },
             { text: 'HTTP API', link: '/control-plane-api/http-api' },
-            { text: 'IPC 协议', link: '/control-plane-api/ipc-protocol' },
-            { text: '事件', link: '/control-plane-api/events' },
-            { text: '流钩子', link: '/control-plane-api/hooks' },
-            { text: '推送连接器', link: '/control-plane-api/push-connector' },
+            { text: 'IPC Protocol', link: '/control-plane-api/ipc-protocol' },
+            { text: 'Events', link: '/control-plane-api/events' },
+            { text: 'Hooks', link: '/control-plane-api/hooks' },
+            { text: 'Push Connector', link: '/control-plane-api/push-connector' },
             { text: 'CLI', link: '/control-plane-api/cli' },
           ],
         },
@@ -106,16 +177,16 @@ export default defineConfig({
 
     outline: {
       level: [2, 3],
-      label: '本页目录',
+      label: 'On this page',
     },
 
     docFooter: {
-      prev: '上一篇',
-      next: '下一篇',
+      prev: 'Prev',
+      next: 'Next',
     },
 
     lastUpdated: {
-      text: '最后更新',
+      text: 'Last Updated',
     },
   },
 })
