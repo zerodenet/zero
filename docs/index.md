@@ -6,88 +6,35 @@ titleTemplate: 模块化网络代理内核
 hero:
   name: Zero
   text: 模块化网络代理内核
-  tagline: Rust 编写 · 模块化协议 · JSON 配置 · 多通道控制面
+  tagline: 从首次运行、配置与协议，到控制面集成的工程文档
   actions:
     - theme: brand
-      text: 快速上手
+      text: 快速开始
       link: /guides/quickstart
     - theme: alt
       text: 配置参考
       link: /project/config
 
 features:
-  - icon: 🔌
-    title: 多协议支持
-    details: 支持 SOCKS5、HTTP CONNECT、VLESS、Hysteria2、Shadowsocks、Trojan、VMess 和 Mieru；具体完成度以协议能力矩阵为准。
-  - icon: 🧭
-    title: 智能路由
-    details: 域名、关键词、正则、IP CIDR、GEOIP、SNI、规则集、AND/OR 组合规则，支持远程规则集热加载。
-  - icon: ⚖️
-    title: 出站组
-    details: Selector 手动切换、Fallback 自动降级、UrlTest 延迟选优、Relay 链式代理、LoadBalance 负载均衡，组间嵌套。
-  - icon: 🔐
-    title: 传输安全
-    details: 提供 TLS、REALITY、WebSocket、HTTP/2、gRPC、XHTTP、QUIC 和多种协议加密能力。
-  - icon: 🖥
-    title: 多通道控制面
-    details: 提供 HTTP JSON API、本地 IPC、SSE 事件流、Webhook、CLI，以及可选的 gRPC 适配器。
-  - icon: 🪶
-    title: 轻量高效
-    details: 单二进制交付，无 GC 停顿；通过 Cargo feature 按需裁剪协议和控制面能力。
-  - icon: 🌐
-    title: DNS 子系统
-    details: 内置 DNS 解析：System / UDP / DoH / DoT，域名路由，TTL 缓存，Fake IP 透明代理。
-  - icon: 📡
-    title: TUN 虚拟网卡
-    details: 提供用户态网络栈和跨平台 TUN 抽象；平台能力与验证范围见 TUN 文档。
+  - title: 部署与运行
+    details: 从构建、最小配置和启动命令开始，再进入路由、出站组与热重载。
+    link: /guides/quickstart
+  - title: 协议能力
+    details: 按协议查看入站、出站、TCP、UDP 与已知限制，不从文件数量推断完成度。
+    link: /protocols/
+  - title: 控制与集成
+    details: 查阅 HTTP JSON API、本地 IPC、CLI、事件和 GUI 接入契约。
+    link: /control-plane-api/
+  - title: 架构与规范
+    details: 了解 crate 责任边界、请求生命周期、协议能力模型和 ZRS 格式。
+    link: /project/architecture
 ---
 
-## 一分钟跑起来
+## 阅读路径
 
-```bash
-# 构建
-cargo build --release
-
-# 运行
-./target/release/zero run config.json
-
-# 管理
-./target/release/zero status
-./target/release/zero select proxy trojan-node
-./target/release/zero mode global proxy
-./target/release/zero validate config.json
-```
-
-## 架构
-
-```
-应用层 (浏览器 / curl / 系统代理)
-  │
-  ▼
-┌───────────────────────────────────────┐
-│ Inbound                               │
-│ socks5 · http · mixed · vless │
-│ hysteria2 · shadowsocks · trojan      │
-│ vmess · mieru · direct · tun          │
-├───────────────────────────────────────┤
-│ Router                                │
-│ domain · ip · geoip · sni · keyword   │
-│ regex · rule_set · and · or           │
-├───────────────────────────────────────┤
-│ Outbound Group                        │
-│ selector · fallback · url_test        │
-│ relay · load_balance                  │
-├───────────────────────────────────────┤
-│ Outbound                              │
-│ direct · block · socks5 · vless       │
-│ hysteria2 · shadowsocks · trojan      │
-│ vmess · mieru                         │
-└───────────────────────────────────────┘
-  │                                      │
-  ▼                                      ▼
-┌───────────────┐   ┌──────────────────┐
-│ Control API   │   │ Event Sinks      │
-│ HTTP · gRPC   │   │ jsonl · webhook  │
-│ IPC · CLI     │   │ push connector   │
-└───────────────┘   └──────────────────┘
-```
+| 目标 | 起点 | 后续文档 |
+| --- | --- | --- |
+| 本地运行 Zero | [快速开始](/guides/quickstart) | [配置参考](/project/config) |
+| 配置代理协议 | [协议概览](/protocols/) | [协议配置速查](/protocols/configuration) |
+| 开发 GUI 或面板 | [控制与集成](/control-plane-api/) | [GUI 接入](/guides/gui-integration) |
+| 修改内核 | [总体架构](/project/architecture) | [工程规则](/project/tooling) |

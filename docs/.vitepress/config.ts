@@ -1,432 +1,170 @@
-import { existsSync, readdirSync, readFileSync } from 'node:fs'
-import { fileURLToPath } from 'node:url'
-import path from 'node:path'
 import { defineConfig } from 'vitepress'
-
-const docsRoot = path.resolve(fileURLToPath(new URL('..', import.meta.url)))
-const README_FILE = 'README.md'
-const INDEX_FILE = 'index.md'
 
 type SidebarItem = {
   text: string
-  items?: SidebarItem[]
   link?: string
+  items?: SidebarItem[]
+  collapsed?: boolean
 }
 
-const GUIDE_ORDER = ['quickstart', 'gui-integration', 'config-failure-examples']
+const group = (text: string, items: SidebarItem[], collapsed = true): SidebarItem => ({
+  text,
+  items,
+  collapsed,
+})
 
-const PROTOCOL_ROOT_ORDER = ['index', 'configuration', 'incomplete']
-const PROTOCOL_DETAIL_DIRS = ['socks5', 'http', 'mixed', 'vless', 'shadowsocks', 'trojan', 'hysteria2', 'mieru', 'vmess']
+const page = (text: string, link: string): SidebarItem => ({ text, link })
 
-const EN_CN_TITLE_REPLACEMENTS: Array<[string, string]> = [
-  ['inbound', '\u5165\u7ad9'],
-  ['outbound', '\u51fa\u7ad9'],
-  ['metadata', '\u5143\u6570\u636e'],
-  ['shared', '\u5171\u4eab'],
-  ['stream', '\u6d41'],
-  ['crypto', '\u52a0\u5bc6'],
-  ['udp', 'UDP'],
-  ['connect', '\u8fde\u63a5'],
-  ['configuration', '\u914d\u7f6e'],
-  ['config', '\u914d\u7f6e'],
-  ['connector', '\u8fde\u63a5\u5668'],
-  ['roadmap', '\u8def\u7ebf\u56fe'],
-  ['auth', '\u8ba4\u8bc1'],
-  ['events', '\u4e8b\u4ef6'],
-  ['event', '\u4e8b\u4ef6'],
-  ['hooks', '\u94a9\u5b50'],
-  ['service', '\u670d\u52a1'],
-  ['provider', '\u63d0\u4f9b\u8005'],
-  ['node', '\u8282\u70b9'],
-  ['heartbeat', '\u5fc3\u8df3'],
-  ['push', '\u63a8\u9001'],
-  ['performance', '\u6027\u80fd'],
-  ['limiting', '\u9650\u6d41'],
-  ['rule', '\u89c4\u5219'],
-  ['plan', '\u8ba1\u5212'],
-  ['zero', 'Zero'],
-  ['rule', '\u89c4\u5219'],
-  ['failure', '\u6545\u969c'],
-  ['examples', '\u793a\u4f8b'],
-  ['lifecycle', '\u751f\u547d\u5468\u671f'],
+const protocol = (
+  text: string,
+  route: string,
+  details: Array<[string, string]>,
+): SidebarItem => group(text, [
+  page('概览', `/protocols/${route}/`),
+  ...details.map(([label, name]) => page(label, `/protocols/${route}/${name}`)),
+])
+
+const guideSidebar: SidebarItem[] = [
+  page('快速开始', '/guides/quickstart'),
+  group('应用集成', [
+    page('GUI 接入', '/guides/gui-integration'),
+    page('配置错误处理', '/guides/config-failure-examples'),
+  ]),
 ]
 
-const PROJECT_GROUPS: Record<string, string[]> = {
-  '\u914d\u7f6e\u4e0e\u8fd0\u884c\u65f6': [
-    'config',
-    'modes-and-groups',
-    'engine-plan',
-    'api',
-    'zero-rule-ir-v1',
-  ],
-  '\u67b6\u6784\u4e0e\u5b9e\u8df5': [
-    'architecture',
-    'features',
-    'logging',
-    'lifecycle',
-    'control-plane',
-    'positioning',
-    'goals',
-    'tooling',
-    'panel-node-connector',
-    'protocol-capabilities',
-    'release-boundary',
-    'zrs-0.1',
-    'zrs-0.1-golden',
-  ],
-}
-
-const CONTROL_PLANE_ORDER = [
-  'index',
-  '01-control-plane-roadmap',
-  '02-api-endpoints',
-  '03-http-adapter-design',
-  '04-event-system',
-  '05-auth-and-permissions',
-  '06-service-provider-integration',
-  '07-node-heartbeat-and-push',
-  '08-performance-and-rate-limiting',
+const projectSidebar: SidebarItem[] = [
+  page('项目概览', '/project/'),
+  group('使用与配置', [
+    page('配置参考', '/project/config'),
+    page('运行模式与出站组', '/project/modes-and-groups'),
+    page('构建特性', '/project/features'),
+  ], false),
+  group('架构', [
+    page('总体架构', '/project/architecture'),
+    page('请求生命周期', '/project/lifecycle'),
+    page('引擎计划', '/project/engine-plan'),
+    page('协议能力模型', '/project/protocol-capabilities'),
+  ]),
+  group('格式与规范', [
+    page('Zero 规则 IR v1', '/project/zero-rule-ir-v1'),
+    page('ZRS 0.1 二进制格式', '/project/zrs-0.1'),
+    page('ZRS 0.1 Golden Vector', '/project/zrs-0.1-golden'),
+  ]),
+  group('工程实践', [
+    page('日志', '/project/logging'),
+    page('工程规则', '/project/tooling'),
+    page('发布边界', '/project/release-boundary'),
+  ]),
+  group('内部设计', [
+    page('API 能力模型', '/project/api'),
+    page('控制面规范', '/project/control-plane'),
+    page('面板与节点连接器', '/project/panel-node-connector'),
+  ]),
+  group('项目背景', [
+    page('项目定位', '/project/positioning'),
+    page('项目目标', '/project/goals'),
+  ]),
 ]
 
-const CONTROL_PLANE_API_ORDER = [
-  'index',
-  'configuration',
-  'http-api',
-  'ipc-protocol',
-  'events',
-  'hooks',
-  'push-connector',
-  'cli',
-  'contract',
+const protocolSidebar: SidebarItem[] = [
+  page('协议概览', '/protocols/'),
+  page('配置速查', '/protocols/configuration'),
+  page('已知缺口', '/protocols/incomplete'),
+  protocol('SOCKS5', 'socks5', [['入站', 'inbound'], ['出站', 'outbound'], ['公共编解码', 'shared']]),
+  page('HTTP CONNECT', '/protocols/http/'),
+  protocol('Mixed', 'mixed', [['入站', 'inbound'], ['实现边界', 'architecture']]),
+  protocol('VLESS', 'vless', [['入站', 'inbound'], ['出站', 'outbound'], ['公共约定', 'shared']]),
+  protocol('Hysteria2', 'hysteria2', [['入站', 'inbound'], ['出站', 'outbound'], ['公共约定', 'shared']]),
+  protocol('Shadowsocks', 'shadowsocks', [['入站', 'inbound'], ['出站', 'outbound'], ['公共编解码', 'shared'], ['流加密', 'stream'], ['能力元数据', 'metadata']]),
+  protocol('Trojan', 'trojan', [['入站', 'inbound'], ['出站', 'outbound'], ['公共编解码', 'shared'], ['能力元数据', 'metadata']]),
+  protocol('Mieru', 'mieru', [['入站', 'inbound'], ['出站', 'outbound'], ['会话流程', 'flow']]),
+  protocol('VMess', 'vmess', [['入站', 'inbound'], ['出站', 'outbound'], ['公共编解码', 'shared'], ['加密', 'crypto'], ['流封装', 'stream'], ['MUX', 'mux'], ['UDP', 'udp'], ['能力元数据', 'metadata']]),
 ]
 
-const TESTING_ORDER = ['tun-e2e']
+const controlSidebar: SidebarItem[] = [
+  page('控制与集成', '/control-plane-api/'),
+  group('配置与命令', [
+    page('控制面配置', '/control-plane-api/configuration'),
+    page('CLI 命令', '/control-plane-api/cli'),
+  ], false),
+  group('接口契约', [
+    page('HTTP JSON API', '/control-plane-api/http-api'),
+    page('本地 IPC 协议', '/control-plane-api/ipc-protocol'),
+    page('通用契约', '/control-plane-api/contract'),
+  ], false),
+  group('事件与扩展', [
+    page('事件目录', '/control-plane-api/events'),
+    page('FlowHook', '/control-plane-api/hooks'),
+    page('节点主动上报', '/control-plane-api/push-connector'),
+  ]),
+  group('集成指南', [
+    page('GUI 接入', '/guides/gui-integration'),
+    page('历史设计档案', '/control-plane/'),
+  ]),
+]
 
-function isChineseText(text: string): boolean {
-  return /[\u4e00-\u9fff]/.test(text)
-}
-
-function escapeRegExp(text: string): string {
-  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-}
-
-function localizeEnglishTitle(rawTitle: string): string {
-  if (isChineseText(rawTitle)) {
-    return rawTitle.trim()
-  }
-
-  let title = rawTitle.trim()
-  for (const [en, zh] of EN_CN_TITLE_REPLACEMENTS) {
-    const rule = new RegExp(`\\b${escapeRegExp(en)}\\b`, 'gi')
-    title = title.replace(rule, zh)
-  }
-
-  return title
-}
-
-function toTitleCase(text: string): string {
-  return text
-    .replace(/\.md$/, '')
-    .replace(/([a-z])([A-Z])/g, '$1 $2')
-    .split(/[-_]/g)
-    .filter(Boolean)
-    .map((part) => `${part[0].toUpperCase()}${part.slice(1)}`)
-    .join(' ')
-    .trim()
-}
-
-function sidebarTextFromFile(filePath: string, fallback: string): string {
-  const text = readFileSync(filePath, 'utf8')
-
-  const frontMatterMatch = text.match(/^---\r?\n([\s\S]*?)\r?\n---/)
-  if (frontMatterMatch) {
-    const titleMatch = frontMatterMatch[1].match(/^\s*title:\s*(.+)\s*$/m)
-    if (titleMatch?.[1]) {
-      return titleMatch[1].trim().replace(/^["']|["']$/g, '')
-    }
-  }
-
-  const headingMatch = text.match(/^\s*#\s+(.+)$/m)
-  if (headingMatch?.[1]) {
-    return localizeEnglishTitle(headingMatch[1].trim())
-  }
-
-  return localizeEnglishTitle(fallback)
-}
-
-function sidebarOverviewTextFromDirectory(dirPath: string, fallback: string): string | undefined {
-  const readmePath = path.join(dirPath, README_FILE)
-  if (existsSync(readmePath)) {
-    return localizeEnglishTitle(sidebarTextFromFile(readmePath, fallback))
-  }
-
-  const indexPath = path.join(dirPath, INDEX_FILE)
-  if (existsSync(indexPath)) {
-    return localizeEnglishTitle(sidebarTextFromFile(indexPath, fallback))
-  }
-
-  return undefined
-}
-
-function entryNameFromLower(dirPath: string, lowerName: string): string | null {
-  const found = readdirSync(dirPath).find((name) => name.toLowerCase() === lowerName)
-  return found ?? null
-}
-
-function sidebarItemsFromOrderedFiles(
-  dirName: string,
-  baseRoute: string,
-  orderedBasenames: string[],
-  includeRemaining: boolean,
-  used: Set<string> = new Set<string>(),
-): SidebarItem[] {
-  const dirPath = path.join(docsRoot, dirName)
-  const fileNames = readdirSync(dirPath, { withFileTypes: true })
-    .filter((entry) => entry.isFile() && entry.name.endsWith('.md'))
-    .map((entry) => entry.name.toLowerCase())
-
-  const items: SidebarItem[] = []
-
-  const pushFile = (basename: string) => {
-    const lower = `${basename.toLowerCase()}.md`
-    if (used.has(lower)) {
-      return
-    }
-    if (!fileNames.includes(lower)) {
-      return
-    }
-    if (lower === README_FILE.toLowerCase() || lower === INDEX_FILE.toLowerCase()) {
-      return
-    }
-
-    const actual = entryNameFromLower(dirPath, lower)
-    if (!actual) {
-      return
-    }
-    const filePath = path.join(dirPath, actual)
-    items.push({
-      text: sidebarTextFromFile(filePath, toTitleCase(actual)),
-      link: `${baseRoute}/${actual.replace(/\.md$/, '')}`,
-    })
-    used.add(lower)
-  }
-
-  for (const basename of orderedBasenames) {
-    pushFile(basename)
-  }
-
-  if (includeRemaining) {
-    const remaining = fileNames
-      .filter((name) => name !== README_FILE.toLowerCase() && name !== INDEX_FILE.toLowerCase())
-      .filter((name) => !used.has(name))
-      .sort((a, b) => a.localeCompare(b))
-
-    for (const remainingName of remaining) {
-      const filePath = path.join(dirPath, remainingName)
-      items.push({
-        text: sidebarTextFromFile(filePath, toTitleCase(remainingName)),
-        link: `${baseRoute}/${remainingName.replace(/\.md$/, '')}`,
-      })
-      used.add(remainingName)
-    }
-  }
-
-  const overview = sidebarOverviewTextFromDirectory(dirPath, toTitleCase(path.basename(dirName)))
-  if (overview) {
-    items.unshift({
-      text: overview,
-      link: `${baseRoute}/`,
-    })
-  }
-
-  return items
-}
-
-function sidebarFromDirectory(dirName: string, baseRoute: string): SidebarItem[] {
-  const dirPath = path.join(docsRoot, dirName)
-  const entries = readdirSync(dirPath, { withFileTypes: true })
-  const folders = entries
-    .filter((entry) => entry.isDirectory() && !entry.name.startsWith('.'))
-    .sort((a, b) => a.name.localeCompare(b.name))
-  const pages = entries
-    .filter((entry) => entry.isFile() && entry.name.endsWith('.md'))
-    .sort((a, b) => a.name.localeCompare(b.name))
-
-  const items: SidebarItem[] = []
-
-  for (const page of pages) {
-    const fileName = page.name.toLowerCase()
-    if (fileName === README_FILE.toLowerCase() || fileName === INDEX_FILE.toLowerCase()) {
-      continue
-    }
-
-    const filePath = path.join(dirPath, page.name)
-    items.push({
-      text: sidebarTextFromFile(filePath, toTitleCase(page.name)),
-      link: `${baseRoute}/${page.name.replace(/\.md$/, '')}`,
-    })
-  }
-
-  for (const folder of folders) {
-    const subItems = sidebarFromDirectory(
-      path.join(dirName, folder.name),
-      `${baseRoute}/${folder.name}`,
-    )
-    if (subItems.length > 0) {
-      items.push({
-        text:
-          sidebarOverviewTextFromDirectory(path.join(dirPath, folder.name), toTitleCase(folder.name))
-          ?? toTitleCase(folder.name),
-        items: subItems,
-      })
-    }
-  }
-
-  const hasReadme = existsSync(path.join(dirPath, README_FILE))
-  const hasIndex = existsSync(path.join(dirPath, INDEX_FILE))
-  const hasOverview = hasReadme || hasIndex
-  if (hasOverview) {
-    const overview = sidebarOverviewTextFromDirectory(dirPath, toTitleCase(path.basename(dirName)))
-    if (overview) {
-      items.unshift({
-        text: overview,
-        link: `${baseRoute}/`,
-      })
-    }
-  }
-
-  return items
-}
-
-function sidebarFromDirectories(
-  dirName: string,
-  baseRoute: string,
-  preferredDirOrder: string[] = [],
-): SidebarItem[] {
-  const dirPath = path.join(docsRoot, dirName)
-  const folderEntries = readdirSync(dirPath, { withFileTypes: true })
-    .filter((entry) => entry.isDirectory() && !entry.name.startsWith('.'))
-
-  const folderNames = folderEntries.map((entry) => entry.name)
-  const ordered = preferredDirOrder.filter((name) => folderNames.includes(name))
-  const used = new Set(ordered)
-  const rest = folderNames.filter((name) => !used.has(name)).sort((a, b) => a.localeCompare(b))
-  const result: SidebarItem[] = []
-
-  for (const folder of [...ordered, ...rest]) {
-    const subItems = sidebarFromDirectory(
-      path.join(dirName, folder),
-      `${baseRoute}/${folder}`,
-    )
-    if (subItems.length > 0) {
-      result.push({
-        text:
-          sidebarOverviewTextFromDirectory(path.join(dirPath, folder), toTitleCase(folder))
-          ?? toTitleCase(folder),
-        items: subItems,
-      })
-    }
-  }
-
-  return result
-}
-
-function sidebarProjectGroups(): SidebarItem[] {
-  const used = new Set<string>()
-  const items: SidebarItem[] = []
-
-  for (const [groupText, files] of Object.entries(PROJECT_GROUPS)) {
-    const groupItems = sidebarItemsFromOrderedFiles('project', '/project', files, true, used)
-    if (groupItems.length > 0) {
-      items.push({ text: groupText, items: groupItems })
-    }
-  }
-
-  const otherItems = sidebarItemsFromOrderedFiles('project', '/project', [], true, used)
-  if (otherItems.length > 0) {
-    items.push({ text: '\u5176\u4ed6', items: otherItems })
-  }
-
-  return items
-}
+const controlArchiveSidebar: SidebarItem[] = [
+  page('返回控制与集成', '/control-plane-api/'),
+  page('设计档案说明', '/control-plane/'),
+  group('历史方案', [
+    page('实现路线图', '/control-plane/01-control-plane-roadmap'),
+    page('API 端点草案', '/control-plane/02-api-endpoints'),
+    page('HTTP 适配器设计', '/control-plane/03-http-adapter-design'),
+    page('事件系统设计', '/control-plane/04-event-system'),
+    page('认证与权限设计', '/control-plane/05-auth-and-permissions'),
+    page('服务提供者集成', '/control-plane/06-service-provider-integration'),
+    page('节点心跳与上报', '/control-plane/07-node-heartbeat-and-push'),
+    page('性能与限流设计', '/control-plane/08-performance-and-rate-limiting'),
+  ]),
+]
 
 export default defineConfig({
   title: 'Zero',
-  description: 'Zero - Rust modular proxy toolkit',
+  description: 'Zero 模块化网络代理内核文档',
   lang: 'zh-CN',
   lastUpdated: true,
 
   themeConfig: {
     nav: [
-      { text: '\u6307\u5357', link: '/guides/quickstart' },
-      { text: '\u914d\u7f6e', link: '/project/config' },
-      { text: '\u534f\u8bae', link: '/protocols/' },
-      { text: '\u63a7\u5236\u5e73\u9762 API', link: '/control-plane-api/' },
-      { text: '\u63a7\u5236\u5e73\u9762', link: '/control-plane/' },
-      { text: '\u9879\u76ee', link: '/project/architecture' },
-      { text: '\u6d4b\u8bd5', link: '/testing/tun-e2e' },
+      { text: '快速开始', link: '/guides/quickstart' },
+      { text: '配置', link: '/project/config' },
+      { text: '协议', link: '/protocols/' },
+      {
+        text: '控制与集成',
+        items: [
+          { text: '概览', link: '/control-plane-api/' },
+          { text: 'HTTP JSON API', link: '/control-plane-api/http-api' },
+          { text: '本地 IPC', link: '/control-plane-api/ipc-protocol' },
+          { text: 'GUI 接入', link: '/guides/gui-integration' },
+        ],
+      },
+      {
+        text: '项目架构',
+        items: [
+          { text: '总体架构', link: '/project/architecture' },
+          { text: '协议能力模型', link: '/project/protocol-capabilities' },
+          { text: '工程规则', link: '/project/tooling' },
+          { text: '格式与规范', link: '/project/zero-rule-ir-v1' },
+        ],
+      },
     ],
 
     sidebar: {
-      '/guides/': [
-        {
-          text: '\u6307\u5357',
-          items: sidebarItemsFromOrderedFiles('guides', '/guides', GUIDE_ORDER, true),
-        },
-      ],
-
-      '/protocols/': [
-        {
-          text: '\u534f\u8bae\u603b\u89c8',
-          items: sidebarItemsFromOrderedFiles('protocols', '/protocols', PROTOCOL_ROOT_ORDER, true),
-        },
-        {
-          text: '\u534f\u8bae\u8be6\u7ec6',
-          items: sidebarFromDirectories('protocols', '/protocols', PROTOCOL_DETAIL_DIRS),
-        },
-      ],
-
-      '/project/': sidebarProjectGroups(),
-      '/control-plane/': [
-        {
-          text: '\u63a7\u5236\u9762',
-          items: sidebarItemsFromOrderedFiles('control-plane', '/control-plane', CONTROL_PLANE_ORDER, true),
-        },
-      ],
-
-      '/control-plane-api/': [
-        {
-          text: '\u63a7\u5236\u5e73\u9762 API',
-          items: sidebarItemsFromOrderedFiles('control-plane-api', '/control-plane-api', CONTROL_PLANE_API_ORDER, true),
-        },
-      ],
-
-      '/testing/': [
-        {
-          text: '\u6d4b\u8bd5',
-          items: sidebarItemsFromOrderedFiles('testing', '/testing', TESTING_ORDER, true),
-        },
-      ],
+      '/guides/': guideSidebar,
+      '/project/': projectSidebar,
+      '/protocols/': protocolSidebar,
+      '/control-plane-api/': controlSidebar,
+      '/control-plane/': controlArchiveSidebar,
+      '/testing/': [page('TUN 端到端测试', '/testing/tun-e2e')],
     },
 
     socialLinks: [{ icon: 'github', link: 'https://github.com/zerodenet/zero' }],
-
-    search: {
-      provider: 'local',
-    },
-
-    outline: {
-      level: [2, 3],
-      label: '\u672c\u9875\u5927\u7eb2',
-    },
-
-    docFooter: {
-      prev: '\u4e0a\u4e00\u9875',
-      next: '\u4e0b\u4e00\u9875',
-    },
-
-    lastUpdated: {
-      text: '\u6700\u540e\u66f4\u65b0',
-    },
+    search: { provider: 'local' },
+    outline: { level: [2, 3], label: '本页目录' },
+    docFooter: { prev: '上一页', next: '下一页' },
+    lastUpdated: { text: '最后更新' },
+    returnToTopLabel: '返回顶部',
+    sidebarMenuLabel: '文档导航',
+    darkModeSwitchLabel: '外观',
   },
 })

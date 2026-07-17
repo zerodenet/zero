@@ -1,15 +1,17 @@
 # Mixed
 
-`mixed` 是内核入站多路复用器，不是外部代理协议。
+`mixed` 是 Zero 的入站复用器，在同一个监听端点上接收 SOCKS5 和 HTTP CONNECT。它不定义新的线上协议，也没有对应的出站类型。
 
-## 当前能力
+## 能力
 
 | 能力 | 状态 | 说明 |
-|------|------|------|
-| TCP 入站 | `supported` | 自动识别 SOCKS5 CONNECT 和 HTTP CONNECT |
-| UDP 入站 | `supported` | 使用 SOCKS5 UDP ASSOCIATE 路径 |
-| 出站 | `unsupported` | `mixed` 不是出站协议 |
+| --- | --- | --- |
+| SOCKS5 CONNECT | `supported` | 进入 SOCKS5 TCP 入站处理 |
+| SOCKS5 UDP ASSOCIATE | `supported` | 进入 SOCKS5 UDP 关联处理 |
+| HTTP CONNECT | `supported` | 进入 HTTP TCP 隧道处理 |
+| 独立出站 | `unsupported` | 路由结果仍指向具体出站或出站组 |
 
-## 边界说明
+## 文档
 
-GUI 客户端可将 `mixed` 作为默认本地入口暴露。检测完成后流量进入正常的 TCP 或 UDP pipe。Mixed 内部使用 SOCKS5 TCP CONNECT 和 UDP ASSOCIATE 运行时路径，HTTP CONNECT 使用 HTTP TCP 运行时路径。
+- [入站行为](./inbound.md)
+- [实现边界](./architecture.md)

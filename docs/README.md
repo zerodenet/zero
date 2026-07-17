@@ -1,17 +1,17 @@
-# 文档
+﻿---
+title: Zero 文档
+author: Zero 团队
+---
 
-仓库文档分层：
+# Zero 文档
 
-- `project/`：长期约定，记录项目定位、分层和工程规则。
-- `control-plane-api/`：外部控制面、事件、IPC、HTTP 和 CLI 接口参考。
-- `control-plane/`：历史设计与方案背景，不作为当前 API 契约。
-- `protocols/`：协议能力、配置速查和协议实现说明。
-- `guides/`：面向使用者和 GUI 对接者的操作指南。
-- `testing/`：需要特定平台或权限的验证方案。
+文档站按读者任务组织，不根据文件夹名称自动生成菜单：
 
-维护时按这个规则来：
+- `guides/`：快速开始、GUI 集成和配置错误处理。
+- `project/`：配置参考、架构、格式规范和工程边界。
+- `protocols/`：协议能力矩阵及各协议的入站、出站和编解码说明。
+- `control-plane-api/`：当前有效的控制面配置、接口、事件和 IPC 契约。
+- `control-plane/`：历史设计与方案背景，不作为当前对外契约。
+- `testing/`：专项测试和验证记录。
 
-- 改长期定位或分层，先改 `project/`
-- 改对外接口、配置形态或事件结构，同步更新 `control-plane-api/` 和相关指南
-- 改协议能力，同步更新 `protocols/` 和 `project/protocol-capabilities.md`
-- 修改后在 `docs/` 目录运行 `npm run check`
+公开导航在 `.vitepress/config.ts` 中显式维护。新增页面时必须同时指定所属分组，并运行 `npm run check`；完整站点构建使用 `npm run check:build`。

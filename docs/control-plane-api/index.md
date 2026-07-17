@@ -1,6 +1,10 @@
-# Zero 控制面 API
+# 控制与集成
 
-Zero 内核提供标准化的控制面，支持本地管理、远程上报和外部业务系统集成。所有能力通过四种通道暴露：**HTTP**、**gRPC**、**Unix Domain Socket / Windows Named Pipe**、**CLI**。
+Zero 通过 HTTP JSON API、gRPC、Unix Domain Socket / Windows Named Pipe、CLI 和事件 Sink 提供统一的查询、命令、事件与诊断能力。本节是 GUI、CLI、面板和外部服务对接 Zero 的正式契约入口。
+
+::: info 历史设计
+`control-plane/` 下的路线图和方案已归档为 [控制面设计档案](../control-plane/)，不与本节并列作为对外规范。
+:::
 
 ## 快速导航
 
@@ -80,7 +84,7 @@ Zero 内核提供标准化的控制面，支持本地管理、远程上报和外
 }
 ```
 
-启动后即可通过 HTTP 或 IPC 访问控制面：
+启动后即可通过 HTTP 或 IPC 访问控制平面：
 
 ```bash
 # HTTP

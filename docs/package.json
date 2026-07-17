@@ -6,9 +6,10 @@
     "dev": "vitepress dev . --host=0.0.0.0",
     "build": "vitepress build .",
     "preview": "vitepress preview .",
-    "check": "npm run build && node scripts/check-docs.mjs"
+    "check": "node scripts/check-docs.mjs",
+    "check:build": "vitepress build . && node scripts/check-docs.mjs --dist"
   },
   "devDependencies": {
-    "vitepress": "^1.0.0"
+    "vitepress": "1.6.4"
   }
 }
