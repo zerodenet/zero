@@ -5,12 +5,7 @@
 //! bucket.
 
 mod establish;
-#[cfg(any(feature = "hysteria2", feature = "shadowsocks"))]
+#[cfg(feature = "managed-datagram-runtime")]
 mod pre_sent;
-#[cfg(any(
-    feature = "vless",
-    feature = "vmess",
-    feature = "trojan",
-    feature = "mieru"
-))]
+#[cfg(feature = "managed-stream-runtime")]
 mod relay;

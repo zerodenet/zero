@@ -20,15 +20,7 @@ pub(crate) use carrier::{
 pub(crate) use carrier::{packet_path_payload_carrier, PacketPathPayloadTransport};
 #[allow(unused_imports)]
 pub(crate) use carrier::{PacketPathCarrier, PacketPathCarrierDescriptor};
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
-))]
+#[cfg(feature = "udp-runtime")]
 #[allow(unused_imports)]
 pub(crate) use context::{ChainTask, UdpFlowContext, UdpPacketRef};
 #[cfg(feature = "shadowsocks")]
@@ -38,25 +30,9 @@ pub(crate) use datagram::{
 };
 #[allow(unused_imports)]
 pub(crate) use datagram::{DatagramCodec, UdpDatagramDescriptor, UdpDatagramSource};
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
-))]
+#[cfg(feature = "udp-runtime")]
 #[allow(unused_imports)]
 pub(crate) use datagram::{UdpDatagramEndpoint, UdpDatagramKey};
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
-))]
+#[cfg(feature = "udp-runtime")]
 #[allow(unused_imports)]
 pub(crate) use snapshot::{PacketPathFlowBinding, PacketPathFlowSnapshot, PacketPathLookupKey};

@@ -31,25 +31,9 @@ pub(crate) use zero_transport::MeteredStream;
 pub(crate) use zero_transport::PrefixedSocket;
 #[cfg(feature = "vless")]
 pub(crate) use zero_transport::RecordingStream;
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
-))]
+#[cfg(feature = "udp-runtime")]
 pub(crate) use zero_transport::RelayCarrier;
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
-))]
+#[cfg(feature = "udp-runtime")]
 pub(crate) use zero_transport::StreamTraffic;
 pub(crate) use zero_transport::TcpRelayStream;
 

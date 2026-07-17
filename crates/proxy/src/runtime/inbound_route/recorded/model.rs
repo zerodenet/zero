@@ -15,10 +15,10 @@ pub(crate) struct RecordedProtocolMuxRouteDefaults {
     pub(crate) udp_accept_log_message: Option<&'static str>,
 }
 
-impl From<zero_transport::inbound_route::RecordedMuxRouteDefaults>
+impl From<zero_transport::protocol_inbound_route::RecordedMuxRouteDefaults>
     for RecordedProtocolMuxRouteDefaults
 {
-    fn from(defaults: zero_transport::inbound_route::RecordedMuxRouteDefaults) -> Self {
+    fn from(defaults: zero_transport::protocol_inbound_route::RecordedMuxRouteDefaults) -> Self {
         Self {
             udp_protocol: defaults.udp_protocol,
             mux_protocol: defaults.mux_protocol,

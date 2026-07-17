@@ -26,14 +26,13 @@ pub(crate) mod udp;
 #[derive(Debug)]
 pub(crate) struct Socks5Adapter;
 
-fn transport_leaf(leaf: &ResolvedLeafOutbound<'_>) -> Option<Socks5TransportLeaf> {
-    let ResolvedLeafOutbound::Socks5 {
-        tag,
+fn transport_leaf(tag: &str, protocol: &OutboundProtocolConfig) -> Option<Socks5TransportLeaf> {
+    let OutboundProtocolConfig::Socks5 {
         server,
         port,
         username,
         password,
-    } = leaf
+    } = protocol
     else {
         return None;
     };
@@ -58,9 +57,10 @@ impl NamedProtocolAdapter for Socks5Adapter {
 impl Socks5Adapter {
     pub(crate) fn claim_outbound_leaf_impl<'a>(
         &self,
+        protocol: Option<&'a OutboundProtocolConfig>,
         leaf: ResolvedLeafOutbound<'a>,
     ) -> Option<OutboundLeafClaim<'a>> {
-        let leaf = transport_leaf(&leaf)?;
+        let leaf = transport_leaf(leaf.tag()?, protocol?)?;
         let runtime = OutboundLeafRuntime::proxy(
             leaf.tag(),
             leaf.server(),

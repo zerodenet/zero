@@ -9,9 +9,7 @@ use zero_api::{
     ListenerSnapshot, ModeSnapshot, OutboundTargetSnapshot, PolicyMemberSnapshot, PolicySnapshot,
     RuntimeSnapshot, StatusSnapshot,
 };
-use zero_config::{
-    InboundConfig, InboundProtocolConfig, ModeConfig, OutboundConfig, OutboundProtocolConfig,
-};
+use zero_config::{InboundConfig, ModeConfig, OutboundConfig};
 
 use super::completed_sessions::CompletedSessionRecord;
 use super::groups::OutboundGroupStateStore;
@@ -167,7 +165,7 @@ pub(crate) fn auth_to_snapshot(auth: &zero_core::SessionAuth) -> AuthSnapshot {
 fn inbound_to_listener(inbound: &InboundConfig) -> ListenerSnapshot {
     ListenerSnapshot {
         tag: inbound.tag.clone(),
-        protocol: inbound_protocol_name(&inbound.protocol).to_owned(),
+        protocol: inbound.protocol.protocol_name().to_owned(),
         listen_address: inbound.listen.address.clone(),
         listen_port: inbound.listen.port,
         udp_enabled: inbound.udp.enabled,
@@ -175,70 +173,13 @@ fn inbound_to_listener(inbound: &InboundConfig) -> ListenerSnapshot {
 }
 
 fn outbound_to_snapshot(outbound: &OutboundConfig) -> OutboundTargetSnapshot {
-    match &outbound.protocol {
-        OutboundProtocolConfig::Direct => OutboundTargetSnapshot {
-            tag: outbound.tag.clone(),
-            protocol: "direct".to_owned(),
-            server: None,
-            port: None,
-            udp_enabled: outbound.udp.enabled,
-        },
-        OutboundProtocolConfig::Block => OutboundTargetSnapshot {
-            tag: outbound.tag.clone(),
-            protocol: "block".to_owned(),
-            server: None,
-            port: None,
-            udp_enabled: outbound.udp.enabled,
-        },
-        OutboundProtocolConfig::Socks5 { server, port, .. } => OutboundTargetSnapshot {
-            tag: outbound.tag.clone(),
-            protocol: "socks5".to_owned(),
-            server: Some(server.clone()),
-            port: Some(*port),
-            udp_enabled: outbound.udp.enabled,
-        },
-        OutboundProtocolConfig::Vless { server, port, .. } => OutboundTargetSnapshot {
-            tag: outbound.tag.clone(),
-            protocol: "vless".to_owned(),
-            server: Some(server.clone()),
-            port: Some(*port),
-            udp_enabled: outbound.udp.enabled,
-        },
-        OutboundProtocolConfig::Hysteria2 { server, port, .. } => OutboundTargetSnapshot {
-            tag: outbound.tag.clone(),
-            protocol: "hysteria2".to_owned(),
-            server: Some(server.clone()),
-            port: Some(*port),
-            udp_enabled: outbound.udp.enabled,
-        },
-        OutboundProtocolConfig::Shadowsocks { server, port, .. } => OutboundTargetSnapshot {
-            tag: outbound.tag.clone(),
-            protocol: "shadowsocks".to_owned(),
-            server: Some(server.clone()),
-            port: Some(*port),
-            udp_enabled: outbound.udp.enabled,
-        },
-        OutboundProtocolConfig::Trojan { server, port, .. } => OutboundTargetSnapshot {
-            tag: outbound.tag.clone(),
-            protocol: "trojan".to_owned(),
-            server: Some(server.clone()),
-            port: Some(*port),
-            udp_enabled: outbound.udp.enabled,
-        },
-        OutboundProtocolConfig::Vmess { server, port, .. } => OutboundTargetSnapshot {
-            tag: outbound.tag.clone(),
-            protocol: "vmess".to_owned(),
-            server: Some(server.clone()),
-            port: Some(*port),
-            udp_enabled: outbound.udp.enabled,
-        },
-        OutboundProtocolConfig::Mieru { server, port, .. } => OutboundTargetSnapshot {
-            tag: outbound.tag.clone(),
-            protocol: "mieru".to_owned(),
-            server: Some(server.clone()),
-            port: Some(*port),
-            udp_enabled: outbound.udp.enabled,
-        },
+    let endpoint = outbound.protocol.endpoint();
+    OutboundTargetSnapshot {
+        tag: outbound.tag.clone(),
+        protocol: outbound.protocol.protocol_name().to_owned(),
+        server: endpoint.map(|(server, _)| server.to_owned()),
+        port: endpoint.map(|(_, port)| port),
+        udp_enabled: outbound.udp.enabled,
     }
 }
 
@@ -368,21 +309,6 @@ fn build_policy_member_snapshot(
 }
 
 // ── Name helpers ────────────────────────────────────────────────────
-
-fn inbound_protocol_name(protocol: &InboundProtocolConfig) -> &'static str {
-    match protocol {
-        InboundProtocolConfig::Socks5 { .. } => "socks5",
-        InboundProtocolConfig::HttpConnect => "http",
-        InboundProtocolConfig::Mixed { .. } => "mixed",
-        InboundProtocolConfig::Vless { .. } => "vless",
-        InboundProtocolConfig::Hysteria2 { .. } => "hysteria2",
-        InboundProtocolConfig::Shadowsocks { .. } => "shadowsocks",
-        InboundProtocolConfig::Trojan { .. } => "trojan",
-        InboundProtocolConfig::Vmess { .. } => "vmess",
-        InboundProtocolConfig::Direct { .. } => "direct",
-        InboundProtocolConfig::Mieru { .. } => "mieru",
-    }
-}
 
 fn protocol_name(protocol: ProtocolType) -> &'static str {
     match protocol {

@@ -8,7 +8,7 @@ impl ManagedUdpState {
         request: ManagedUdpFlowRequest<'_>,
     ) -> Result<Option<usize>, FlowFailure> {
         match request.kind {
-            #[cfg(any(feature = "hysteria2", feature = "shadowsocks"))]
+            #[cfg(feature = "managed-datagram-runtime")]
             ManagedUdpFlowKind::Datagram => self.start_datagram_request(request).await,
             #[cfg(any(
                 feature = "vless",

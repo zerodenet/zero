@@ -3,20 +3,10 @@
 //! The root stays as a facade so request-kind selection, datagram extraction,
 //! and stream extraction do not collapse back into one implementation bucket.
 
-#[cfg(any(feature = "hysteria2", feature = "shadowsocks"))]
+#[cfg(feature = "managed-datagram-runtime")]
 mod datagram;
-#[cfg(any(
-    feature = "vless",
-    feature = "vmess",
-    feature = "trojan",
-    feature = "mieru"
-))]
+#[cfg(feature = "managed-stream-runtime")]
 mod relay;
 mod request;
-#[cfg(any(
-    feature = "vless",
-    feature = "vmess",
-    feature = "trojan",
-    feature = "mieru"
-))]
+#[cfg(feature = "managed-stream-runtime")]
 mod stream;

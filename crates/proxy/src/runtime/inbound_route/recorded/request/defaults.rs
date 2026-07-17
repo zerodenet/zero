@@ -1,6 +1,6 @@
 use zero_core::{InboundMuxServer, InboundMuxStreamRoute, InboundMuxTcpRelay, InboundMuxUdpRelay};
 use zero_engine::EngineError;
-use zero_transport::inbound_route::{FallbackReplayToUpstream, RouteAcceptResult};
+use zero_transport::protocol_inbound_route::{FallbackReplayToUpstream, RouteAcceptResult};
 
 use super::result::{
     dispatch_recorded_protocol_mux_stream_request_result,

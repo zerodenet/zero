@@ -1,14 +1,6 @@
 use zero_engine::EngineError;
 
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
-))]
+#[cfg(feature = "udp-runtime")]
 use crate::runtime::udp_dispatch::FlowFailure;
 
 fn unsupported_io(message: &'static str) -> EngineError {
@@ -22,15 +14,8 @@ pub(in crate::protocol_registry) fn relay_hop_unsupported() -> EngineError {
     unsupported_io("this adapter does not support relay hop")
 }
 
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
-))]
+#[cfg(feature = "udp-runtime")]
+
 pub(in crate::protocol_registry) fn udp_relay_final_hop_unsupported() -> FlowFailure {
     udp_flow_unsupported(
         "no_udp_relay_final_hop",
@@ -38,15 +23,8 @@ pub(in crate::protocol_registry) fn udp_relay_final_hop_unsupported() -> FlowFai
     )
 }
 
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
-))]
+#[cfg(feature = "udp-runtime")]
+
 fn udp_flow_unsupported(stage: &'static str, message: &'static str) -> FlowFailure {
     FlowFailure {
         stage,

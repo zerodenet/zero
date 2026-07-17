@@ -2,9 +2,9 @@ use super::super::mismatch::managed_mismatch;
 use super::super::model::{ManagedStreamFlowManager, ManagedStreamRelayRequest};
 use crate::runtime::path::OutboundEndpoint;
 use crate::runtime::udp_flow::managed::model::ManagedRelayExistingSend;
+use crate::runtime::udp_flow::managed::stream_manager::ManagedStreamFlowConnector;
 use crate::runtime::udp_flow::packet_path::{UdpFlowContext, UdpPacketRef};
 use crate::runtime::udp_flow::result::FlowFailure;
-use crate::runtime::udp_flow::managed::stream_manager::ManagedStreamFlowConnector;
 
 impl<T> ManagedStreamFlowManager<T>
 where

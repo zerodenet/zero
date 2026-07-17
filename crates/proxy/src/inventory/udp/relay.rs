@@ -54,7 +54,7 @@ impl ProtocolInventory {
 
         let final_hop = claimed_chain.final_hop().clone().into_claimed();
         let operation = final_hop.prepare_udp_relay(ctx.source_dir())?;
-        let outbound_ctx = OutboundAdapterContext::new(ctx.source_dir());
+        let outbound_ctx = OutboundAdapterContext::new(ctx.config());
 
         if operation.needs_two_streams() {
             let post_prepared = self

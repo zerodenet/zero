@@ -1,20 +1,10 @@
 use super::super::model::ManagedRelayExistingSend;
-#[cfg(any(
-    feature = "vless",
-    feature = "vmess",
-    feature = "trojan",
-    feature = "mieru"
-))]
+#[cfg(feature = "managed-stream-runtime")]
 use super::super::model::ManagedStreamExistingSend;
 use super::super::state::flow_mismatch;
 use super::model::ManagedStreamState;
 use crate::runtime::udp_flow::managed::flow::ManagedRelayStreamFlow;
-#[cfg(any(
-    feature = "vless",
-    feature = "vmess",
-    feature = "trojan",
-    feature = "mieru"
-))]
+#[cfg(feature = "managed-stream-runtime")]
 use crate::runtime::udp_flow::managed::flow::ManagedStreamPacketFlow;
 use crate::runtime::udp_flow::result::FlowFailure;
 

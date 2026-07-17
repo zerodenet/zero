@@ -258,12 +258,12 @@ fn capability_surface_is_split_and_context_is_narrow() {
     assert!(!capability.contains("fn claims_outbound_leaf("));
     assert!(!capability.contains("fn outbound_leaf_runtime("));
     assert!(context.contains(
-        "pub(crate) struct OutboundAdapterContext {\n    source_dir: Option<std::path::PathBuf>,"
+        "pub(crate) struct OutboundAdapterContext<'a> {\n    config: &'a RuntimeConfig,"
     ));
     assert!(
         !context.contains("pub(crate) struct OutboundAdapterContext<'a> {\n    proxy: &'a Proxy,")
     );
-    assert!(context.contains("pub(crate) struct UdpAdapterContext<'a> {\n    source_dir: Option<&'a std::path::Path>,\n    services: UdpRuntimeServices,"));
+    assert!(context.contains("pub(crate) struct UdpAdapterContext<'a> {\n    config: &'a RuntimeConfig,\n    services: UdpRuntimeServices,"));
     assert!(!context.contains("pub(crate) struct UdpAdapterContext<'a> {\n    proxy: &'a Proxy,"));
     let tcp_leaf = read(&proxy_src().join("inventory/tcp/leaf.rs"));
     let tcp_operation = read_module(&proxy_src().join("runtime/tcp_dispatch/operation.rs"));
@@ -312,7 +312,7 @@ fn tcp_prepared_operations_do_not_borrow_inventory_or_runtime_services() {
     let context = read(&proxy_src().join("protocol_registry/context.rs"));
     assert!(tcp_leaf.contains("fn prepare_claimed_tcp_candidate<'a>(\n        &self,"));
     assert!(tcp_leaf.contains("fn prepare_claimed_tcp_relay_hop<'a>(\n        &self,"));
-    assert!(context.contains("pub(crate) fn prepare_tcp_outbound<'a>(\n        &self,"));
+    assert!(context.contains("pub(crate) fn prepare_tcp_outbound<'a>(\n        &'a self,"));
     assert!(!context.contains("pub(crate) fn prepare_tcp_candidate<'a>(\n        &self,"));
     assert!(!context.contains("pub(crate) fn prepare_tcp_relay_chain<'a>(\n        &self,"));
     assert!(!context.contains("pub(crate) fn prepare_tcp_relay_hop<'a>(\n        &self,"));
@@ -1587,23 +1587,23 @@ fn trojan_inbound_projection_happens_at_adapter_boundary() {
 
 #[test]
 fn heavy_transport_bridge_adapters_centralize_outbound_projection() {
-    for (relative, helper, variant, build_options) in [
+    for (relative, helper, config_variant, build_options) in [
         (
             "adapters/vless.rs",
             "VlessOutboundProjection",
-            "ResolvedLeafOutbound::Vless {",
+            "OutboundProtocolConfig::Vless {",
             "VlessOutboundBuildOptionsRef {",
         ),
         (
             "adapters/vmess.rs",
             "VmessOutboundProjection",
-            "ResolvedLeafOutbound::Vmess {",
+            "OutboundProtocolConfig::Vmess {",
             "VmessOutboundBuildOptionsRef {",
         ),
         (
             "adapters/trojan.rs",
             "TrojanOutboundProjection",
-            "ResolvedLeafOutbound::Trojan {",
+            "OutboundProtocolConfig::Trojan {",
             "TrojanOutboundBuildOptionsRef {",
         ),
     ] {
@@ -1613,8 +1613,8 @@ fn heavy_transport_bridge_adapters_centralize_outbound_projection() {
             "{relative} should keep one named outbound projection helper `{helper}`"
         );
         assert!(
-            source.contains("fn from_leaf("),
-            "{relative} should centralize outbound leaf matching behind `from_leaf`"
+            source.contains("fn from_config("),
+            "{relative} should centralize typed config materialization behind `from_config`"
         );
         assert!(
             source.contains("fn build_options("),
@@ -1625,9 +1625,9 @@ fn heavy_transport_bridge_adapters_centralize_outbound_projection() {
             "{relative} should expose one claim-time outbound helper that reuses the shared projection"
         );
         assert_eq!(
-            source.matches(variant).count(),
+            source.matches(config_variant).count(),
             1,
-            "{relative} should match its heavy outbound leaf variant in one projection helper"
+            "{relative} should match its protocol config variant in one projection helper"
         );
         assert_eq!(
             source.matches(build_options).count(),
@@ -4168,7 +4168,7 @@ fn inventory_runtime_delegates_leaf_claim_logic_to_registry() {
     assert!(!runtime.contains("fn claim_udp_outbound"));
     assert!(!runtime.contains("fn claim_tcp_relay_chain"));
     assert!(!runtime.contains("fn claim_udp_relay_chain"));
-    assert!(runtime.contains("self.registry.claim_outbound_leaf(leaf)"));
+    assert!(runtime.contains("self.registry.claim_outbound_leaf(config, leaf)"));
     assert!(!runtime.contains("claimed_tcp_outbound_leaf"));
     assert!(!runtime.contains("claimed_udp_flow_leaf"));
     assert!(!runtime.contains("claimed_udp_packet_path_leaf"));
@@ -4224,7 +4224,7 @@ fn claimed_outbound_leaf_owns_capability_preparation() {
     assert!(!capability.contains("trait OutboundLeafClaimCapability"));
     assert!(registry_mod.contains("trait OutboundLeafClaimer"));
     assert!(build.contains("type OutboundLeafClaimFn"));
-    assert!(outbound.contains("entry.outbound.claim_outbound_leaf(leaf.clone())"));
+    assert!(outbound.contains(".claim_outbound_leaf(protocol, leaf.clone())"));
     assert!(outbound.contains("fn claim_outbound_hooks<'a>("));
     assert!(!outbound.contains("claim_tcp_outbound_leaf(leaf.clone())"));
     assert!(!outbound.contains("claim_udp_flow_leaf(leaf.clone())"));
@@ -4317,12 +4317,12 @@ fn transport_bridge_adapters_offer_claim_time_udp_projection() {
 
 #[test]
 fn managed_stream_udp_handlers_key_off_resume_metadata_not_bridge_types() {
-    let transport_managed_udp = read(&workspace_root().join("crates/transport/src/managed_udp.rs"));
+    let managed_udp = read(&workspace_root().join("crates/transport/src/managed_udp.rs"));
     let handler =
         read(&proxy_src().join("runtime/udp_flow/managed/bridge/stream_packet/handler.rs"));
-    assert!(!transport_managed_udp.contains("ProtocolManagedStreamUdpBridgeHandlerMetadata"));
-    assert!(transport_managed_udp.contains("ProtocolManagedStreamUdpLeafOps"));
-    assert!(transport_managed_udp.contains("ProtocolRelayTwoStreamManagedUdpLeafOps"));
+    assert!(!managed_udp.contains("ProtocolManagedStreamUdpBridgeHandlerMetadata"));
+    assert!(managed_udp.contains("ProtocolManagedStreamUdpLeafOps"));
+    assert!(managed_udp.contains("ProtocolRelayTwoStreamManagedUdpLeafOps"));
     assert!(handler.contains("managed_stream_udp_handler_for_resume"));
     assert!(!handler.contains("managed_stream_udp_handler_for_bridge"));
 

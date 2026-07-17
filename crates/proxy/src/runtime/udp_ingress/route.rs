@@ -42,7 +42,7 @@ impl UdpIngressRuntime {
     ) -> Result<FlowStartResult, FlowFailure> {
         crate::runtime::udp_dispatch::start_udp_resolved_outbound(
             dispatch,
-            UdpAdapterContext::new(self.source_dir(), self.runtime_services()),
+            UdpAdapterContext::new(self.tcp_services.config(), self.runtime_services()),
             session,
             resolved,
             payload,

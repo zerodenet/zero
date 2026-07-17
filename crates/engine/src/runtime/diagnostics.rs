@@ -108,16 +108,7 @@ impl Engine {
 }
 
 fn extract_target_addr(leaf: &ResolvedLeafOutbound<'_>) -> (Option<String>, Option<u16>) {
-    match leaf {
-        ResolvedLeafOutbound::Direct { .. } | ResolvedLeafOutbound::Block { .. } => (None, None),
-        ResolvedLeafOutbound::Socks5 { server, port, .. }
-        | ResolvedLeafOutbound::Vless { server, port, .. }
-        | ResolvedLeafOutbound::Hysteria2 { server, port, .. }
-        | ResolvedLeafOutbound::Shadowsocks { server, port, .. }
-        | ResolvedLeafOutbound::Trojan { server, port, .. }
-        | ResolvedLeafOutbound::Vmess { server, port, .. }
-        | ResolvedLeafOutbound::Mieru { server, port, .. } => {
-            (Some(server.to_string()), Some(*port))
-        }
-    }
+    leaf.proxy_endpoint()
+        .map(|(server, port)| (Some(server.to_owned()), Some(port)))
+        .unwrap_or((None, None))
 }

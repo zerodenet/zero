@@ -6,18 +6,7 @@ use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 use zero_traits::AsyncSocket;
 
 use crate::stream::{ClientStream, RecordingStream};
-
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
-pub struct StreamTraffic {
-    pub read_bytes: u64,
-    pub written_bytes: u64,
-}
-
-impl StreamTraffic {
-    pub fn is_empty(self) -> bool {
-        self.read_bytes == 0 && self.written_bytes == 0
-    }
-}
+use crate::StreamTraffic;
 
 #[derive(Debug)]
 pub struct MeteredStream<S> {

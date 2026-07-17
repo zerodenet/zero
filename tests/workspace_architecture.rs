@@ -161,25 +161,60 @@ fn protocol_projection_is_confined_to_proxy_adapters() {
 }
 
 #[test]
-fn simple_proxy_adapters_project_each_outbound_leaf_once() {
+fn engine_outbound_leaves_are_protocol_neutral() {
+    let engine = workspace_root().join("crates/engine/src");
+    for path in rust_sources(&engine) {
+        let source = read(&path);
+        for protocol in [
+            "Hysteria2",
+            "Mieru",
+            "Shadowsocks",
+            "Socks5",
+            "Trojan",
+            "Vless",
+            "Vmess",
+        ] {
+            assert!(
+                !source.contains(&format!("ResolvedLeafOutbound::{protocol}")),
+                "{} must not expose a concrete protocol leaf `{protocol}`",
+                path.display()
+            );
+            assert!(
+                !source.contains(&format!("OutboundTarget::{protocol}")),
+                "{} must not expose a concrete protocol target `{protocol}`",
+                path.display()
+            );
+        }
+    }
+}
+
+#[test]
+fn proxy_adapters_materialize_protocol_config_once() {
     let adapters = workspace_root().join("crates/proxy/src/adapters");
-    for protocol in ["direct", "socks5", "hysteria2", "shadowsocks", "mieru"] {
+    for (protocol, config_variant) in [
+        ("socks5", "Socks5"),
+        ("hysteria2", "Hysteria2"),
+        ("shadowsocks", "Shadowsocks"),
+        ("mieru", "Mieru"),
+        ("vless", "Vless"),
+        ("vmess", "Vmess"),
+        ("trojan", "Trojan"),
+    ] {
         let root = adapters.join(format!("{protocol}.rs"));
-        let variant = format!(
-            "ResolvedLeafOutbound::{}",
-            match protocol {
-                "direct" => "Direct",
-                "socks5" => "Socks5",
-                "hysteria2" => "Hysteria2",
-                "shadowsocks" => "Shadowsocks",
-                "mieru" => "Mieru",
-                _ => unreachable!(),
-            }
+        let source = read(&root);
+        assert!(
+            source.contains("fn claim_outbound_leaf_impl"),
+            "{} must own the protocol materialization boundary",
+            root.display()
         );
-        assert_eq!(
-            read(&root).matches(&variant).count(),
-            1,
-            "{} must project its engine leaf exactly once",
+        assert!(
+            source.contains(&format!("OutboundProtocolConfig::{config_variant}")),
+            "{} must materialize its typed protocol config",
+            root.display()
+        );
+        assert!(
+            !source.contains(&format!("ResolvedLeafOutbound::{config_variant}")),
+            "{} must consume the neutral engine leaf",
             root.display()
         );
 
@@ -189,6 +224,44 @@ fn simple_proxy_adapters_project_each_outbound_leaf_once() {
                 "{} must consume the protocol-owned projected leaf",
                 path.display()
             );
+        }
+    }
+}
+
+#[test]
+fn generic_proxy_modules_do_not_repeat_the_complete_protocol_feature_set() {
+    let proxy = workspace_root().join("crates/proxy/src");
+    let protocols = [
+        "socks5",
+        "vless",
+        "vmess",
+        "trojan",
+        "mieru",
+        "hysteria2",
+        "shadowsocks",
+    ];
+    for relative in ["inventory", "runtime", "protocol_registry"] {
+        for path in rust_sources(&proxy.join(relative)) {
+            if path
+                .components()
+                .any(|component| component.as_os_str() == "tests")
+            {
+                continue;
+            }
+            let source = read(&path);
+            for attribute in source.split("#[cfg(").skip(1) {
+                let attribute = attribute.split(")]").next().unwrap_or(attribute);
+                let enumerated = protocols
+                    .iter()
+                    .filter(|protocol| attribute.contains(&format!("feature = \"{protocol}\"")))
+                    .count();
+                assert_ne!(
+                    enumerated,
+                    protocols.len(),
+                    "{} must use a capability/runtime feature instead of repeating the complete protocol list in one cfg",
+                    path.display()
+                );
+            }
         }
     }
 }

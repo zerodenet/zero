@@ -50,15 +50,7 @@ impl EstablishedTcpOutbound {
         }
     }
 
-    #[cfg(any(
-        feature = "socks5",
-        feature = "vless",
-        feature = "hysteria2",
-        feature = "shadowsocks",
-        feature = "trojan",
-        feature = "vmess",
-        feature = "mieru"
-    ))]
+    #[cfg(feature = "udp-runtime")]
     pub(crate) fn proxied(
         tag: impl Into<String>,
         server: impl Into<String>,

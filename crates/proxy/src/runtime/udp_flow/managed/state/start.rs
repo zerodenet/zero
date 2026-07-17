@@ -1,10 +1,5 @@
-#[cfg(any(feature = "hysteria2", feature = "shadowsocks"))]
+#[cfg(feature = "managed-datagram-runtime")]
 mod datagram;
 mod dispatch;
-#[cfg(any(
-    feature = "vless",
-    feature = "vmess",
-    feature = "trojan",
-    feature = "mieru"
-))]
+#[cfg(feature = "managed-stream-runtime")]
 mod stream;

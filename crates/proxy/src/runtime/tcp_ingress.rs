@@ -23,14 +23,6 @@ pub(crate) use contract::InboundProtocol;
 #[cfg(any(feature = "vmess", feature = "trojan"))]
 pub(crate) use contract::NoClientResponseInboundProtocol;
 pub(crate) use contract::NoClientResponseStreamProtocol;
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
-))]
+#[cfg(feature = "udp-runtime")]
 pub(crate) use lifecycle::apply_kernel_rate_limits_from_config;
 pub(crate) use runtime::TcpIngressRuntime;

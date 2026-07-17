@@ -6,13 +6,7 @@ mod helpers;
 
 pub(crate) use helpers::*;
 
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "vmess",
-    feature = "trojan",
-    feature = "mieru"
-))]
+#[cfg(feature = "udp-response-runtime")]
 pub(crate) async fn write_direct_response<F, Fut, E>(
     response: &UdpDirectResponseParts<'_>,
     write: F,
@@ -26,7 +20,8 @@ where
     Ok(written)
 }
 
-#[cfg(any(feature = "hysteria2", feature = "shadowsocks"))]
+#[cfg(feature = "managed-datagram-runtime")]
+
 pub(crate) async fn write_optional_direct_response<F, Fut, E>(
     response: &UdpDirectResponseParts<'_>,
     write: F,
@@ -75,13 +70,7 @@ where
     Ok(written)
 }
 
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "vmess",
-    feature = "trojan",
-    feature = "mieru"
-))]
+#[cfg(feature = "udp-response-runtime")]
 pub(crate) async fn write_chain_response<F, Fut, E>(
     response: &UdpChainResponseParts,
     write: F,
@@ -95,7 +84,8 @@ where
     Ok(written)
 }
 
-#[cfg(any(feature = "hysteria2", feature = "shadowsocks"))]
+#[cfg(feature = "managed-datagram-runtime")]
+
 pub(crate) async fn write_optional_chain_response<F, Fut, E>(
     response: &UdpChainResponseParts,
     write: F,

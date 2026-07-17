@@ -14,7 +14,7 @@ impl ManagedUdpState {
         resume: ManagedUdpFlowResume,
     ) -> Result<Option<usize>, FlowFailure> {
         let (flow, payload) = request;
-        #[cfg(any(feature = "hysteria2", feature = "shadowsocks"))]
+        #[cfg(feature = "managed-datagram-runtime")]
         if let Some(result) = self
             .datagram
             .forward_existing_flow(chain_tasks, services.clone(), flow, &resume, payload)

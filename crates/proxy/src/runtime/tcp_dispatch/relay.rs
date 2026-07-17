@@ -2,15 +2,7 @@ use zero_core::Session;
 
 use crate::inventory::PreparedTcpRelayChain;
 use crate::protocol_registry::TcpRuntimeServices;
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
-))]
+#[cfg(feature = "udp-runtime")]
 use crate::transport::RelayCarrier;
 use crate::transport::{EstablishedTcpOutbound, TcpOutboundFailure};
 
@@ -40,15 +32,8 @@ pub(crate) async fn dispatch_prepared_tcp_relay_hop(
     prepared.operation.execute(services, stream, session).await
 }
 
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
-))]
+#[cfg(feature = "udp-runtime")]
+
 pub(crate) async fn dispatch_prepared_tcp_relay_carrier(
     services: TcpRuntimeServices,
     prepared: PreparedTcpRelayChain<'_>,

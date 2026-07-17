@@ -174,16 +174,6 @@ impl Engine {
             .outbounds
             .iter()
             .find(|outbound| outbound.tag == tag)
-            .map(|outbound| match outbound.protocol {
-                zero_config::OutboundProtocolConfig::Direct => "direct",
-                zero_config::OutboundProtocolConfig::Block => "block",
-                zero_config::OutboundProtocolConfig::Socks5 { .. } => "socks5",
-                zero_config::OutboundProtocolConfig::Vless { .. } => "vless",
-                zero_config::OutboundProtocolConfig::Hysteria2 { .. } => "hysteria2",
-                zero_config::OutboundProtocolConfig::Shadowsocks { .. } => "shadowsocks",
-                zero_config::OutboundProtocolConfig::Trojan { .. } => "trojan",
-                zero_config::OutboundProtocolConfig::Vmess { .. } => "vmess",
-                zero_config::OutboundProtocolConfig::Mieru { .. } => "mieru",
-            })
+            .map(|outbound| outbound.protocol.protocol_name())
     }
 }

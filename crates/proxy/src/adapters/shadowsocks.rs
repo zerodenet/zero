@@ -27,14 +27,16 @@ pub(crate) mod udp;
 #[derive(Debug)]
 pub(crate) struct ShadowsocksAdapter;
 
-fn transport_leaf(leaf: &ResolvedLeafOutbound<'_>) -> Option<ShadowsocksTransportLeaf> {
-    let ResolvedLeafOutbound::Shadowsocks {
-        tag,
+fn transport_leaf(
+    tag: &str,
+    protocol: &OutboundProtocolConfig,
+) -> Option<ShadowsocksTransportLeaf> {
+    let OutboundProtocolConfig::Shadowsocks {
         server,
         port,
         password,
         cipher,
-    } = leaf
+    } = protocol
     else {
         return None;
     };
@@ -56,9 +58,10 @@ impl NamedProtocolAdapter for ShadowsocksAdapter {
 impl ShadowsocksAdapter {
     pub(crate) fn claim_outbound_leaf_impl<'a>(
         &self,
+        protocol: Option<&'a OutboundProtocolConfig>,
         leaf: ResolvedLeafOutbound<'a>,
     ) -> Option<OutboundLeafClaim<'a>> {
-        let leaf = transport_leaf(&leaf)?;
+        let leaf = transport_leaf(leaf.tag()?, protocol?)?;
         let runtime = OutboundLeafRuntime::proxy(
             leaf.tag(),
             leaf.server(),

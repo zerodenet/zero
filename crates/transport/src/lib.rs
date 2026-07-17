@@ -26,6 +26,7 @@ pub mod outbound_leaf;
 ))]
 pub mod outbound_stack;
 pub mod profile;
+pub mod protocol_inbound_route;
 #[cfg(feature = "quic")]
 pub mod quic;
 #[cfg(feature = "split_http")]
@@ -38,6 +39,46 @@ pub mod udp_packet_path;
 #[cfg(feature = "ws")]
 pub mod ws;
 
-pub use metered::{MeteredStream, StreamTraffic};
+pub use metered::MeteredStream;
 pub use stream::{ClientStream, PrefixedSocket, RecordingStream, RelayCarrier, TcpRelayStream};
 pub use zero_error::RuntimeError;
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct StreamTraffic {
+    pub read_bytes: u64,
+    pub written_bytes: u64,
+}
+
+impl StreamTraffic {
+    pub fn is_empty(self) -> bool {
+        self.read_bytes == 0 && self.written_bytes == 0
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OwnedInboundFallbackProfile {
+    pub server: String,
+    pub port: u16,
+    pub alpn: Option<String>,
+}
+
+impl OwnedInboundFallbackProfile {
+    pub fn from_profile(profile: &(impl zero_traits::InboundFallbackProfile + ?Sized)) -> Self {
+        Self {
+            server: profile.server().to_owned(),
+            port: profile.port(),
+            alpn: profile.alpn().map(str::to_owned),
+        }
+    }
+}
+
+impl zero_traits::InboundFallbackProfile for OwnedInboundFallbackProfile {
+    fn server(&self) -> &str {
+        &self.server
+    }
+    fn port(&self) -> u16 {
+        self.port
+    }
+    fn alpn(&self) -> Option<&str> {
+        self.alpn.as_deref()
+    }
+}

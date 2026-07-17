@@ -1,38 +1,15 @@
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
-))]
+#[cfg(feature = "udp-runtime")]
 use crate::runtime::path::UdpPathCategory;
 
 use crate::runtime::udp_flow::outbound::model::UdpFlowOutbound;
 
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
-))]
+#[cfg(feature = "udp-runtime")]
+
 impl UdpFlowOutbound {
     pub(crate) fn tag(&self) -> &str {
         match self {
             Self::Direct { tag, .. } => tag,
-            #[cfg(any(
-                feature = "socks5",
-                feature = "vless",
-                feature = "hysteria2",
-                feature = "shadowsocks",
-                feature = "trojan",
-                feature = "vmess",
-                feature = "mieru"
-            ))]
+            #[cfg(feature = "udp-runtime")]
             Self::PacketPathDatagram { tag, .. } => tag,
             #[cfg(any(
                 feature = "socks5",
@@ -42,7 +19,7 @@ impl UdpFlowOutbound {
                 feature = "mieru"
             ))]
             Self::Relay { tag, .. } => tag,
-            #[cfg(any(feature = "hysteria2", feature = "shadowsocks"))]
+            #[cfg(feature = "managed-datagram-runtime")]
             Self::Datagram { tag, .. } => tag,
             #[cfg(any(
                 feature = "vless",
@@ -65,7 +42,7 @@ impl UdpFlowOutbound {
                 feature = "mieru"
             ))]
             Self::Relay { .. } => UdpPathCategory::Relay,
-            #[cfg(any(feature = "hysteria2", feature = "shadowsocks"))]
+            #[cfg(feature = "managed-datagram-runtime")]
             Self::Datagram { .. } => UdpPathCategory::Datagram,
             #[cfg(any(
                 feature = "vless",
@@ -74,15 +51,7 @@ impl UdpFlowOutbound {
                 feature = "mieru"
             ))]
             Self::StreamPacket { .. } => UdpPathCategory::StreamPacket,
-            #[cfg(any(
-                feature = "socks5",
-                feature = "vless",
-                feature = "hysteria2",
-                feature = "shadowsocks",
-                feature = "trojan",
-                feature = "vmess",
-                feature = "mieru"
-            ))]
+            #[cfg(feature = "udp-runtime")]
             Self::PacketPathDatagram { .. } => UdpPathCategory::PacketPathDatagram,
         }
     }
@@ -90,15 +59,7 @@ impl UdpFlowOutbound {
     pub(crate) fn direct_target_addr(&self) -> Option<std::net::SocketAddr> {
         match self {
             Self::Direct { target_addr, .. } => Some(*target_addr),
-            #[cfg(any(
-                feature = "socks5",
-                feature = "vless",
-                feature = "hysteria2",
-                feature = "shadowsocks",
-                feature = "trojan",
-                feature = "vmess",
-                feature = "mieru"
-            ))]
+            #[cfg(feature = "udp-runtime")]
             Self::PacketPathDatagram { .. } => None,
             #[cfg(any(
                 feature = "socks5",
@@ -108,7 +69,7 @@ impl UdpFlowOutbound {
                 feature = "mieru"
             ))]
             Self::Relay { .. } => None,
-            #[cfg(any(feature = "hysteria2", feature = "shadowsocks"))]
+            #[cfg(feature = "managed-datagram-runtime")]
             Self::Datagram { .. } => None,
             #[cfg(any(
                 feature = "vless",

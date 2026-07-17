@@ -3,7 +3,7 @@ use super::model::{ManagedUdpHandlers, ManagedUdpState};
 impl ManagedUdpState {
     pub(crate) fn new(handlers: ManagedUdpHandlers) -> Self {
         Self {
-            #[cfg(any(feature = "hysteria2", feature = "shadowsocks"))]
+            #[cfg(feature = "managed-datagram-runtime")]
             datagram: super::super::datagram::ManagedDatagramState::new(handlers.datagram),
             #[cfg(any(
                 feature = "vless",

@@ -1,15 +1,7 @@
 use std::net::SocketAddr;
 
 use crate::runtime::tcp_ingress::TcpIngressRuntime;
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
-))]
+#[cfg(feature = "udp-runtime")]
 use crate::runtime::udp_ingress::UdpIngressRuntime;
 
 use super::super::SharedIngressRuntimeServices;
@@ -17,15 +9,7 @@ use super::super::SharedIngressRuntimeServices;
 #[derive(Clone)]
 pub(crate) struct InboundRouteRuntime {
     pub(super) tcp_runtime: TcpIngressRuntime,
-    #[cfg(any(
-        feature = "socks5",
-        feature = "vless",
-        feature = "hysteria2",
-        feature = "shadowsocks",
-        feature = "trojan",
-        feature = "vmess",
-        feature = "mieru"
-    ))]
+    #[cfg(feature = "udp-runtime")]
     pub(super) udp_runtime: UdpIngressRuntime,
 }
 
@@ -37,15 +21,7 @@ impl InboundRouteRuntime {
     ) -> Self {
         let tcp_runtime = shared.tcp_runtime(inbound_tag, source_addr);
         Self {
-            #[cfg(any(
-                feature = "socks5",
-                feature = "vless",
-                feature = "hysteria2",
-                feature = "shadowsocks",
-                feature = "trojan",
-                feature = "vmess",
-                feature = "mieru"
-            ))]
+            #[cfg(feature = "udp-runtime")]
             udp_runtime: shared.udp_runtime(),
             tcp_runtime,
         }

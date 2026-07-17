@@ -2,7 +2,7 @@ use core::future::Future;
 
 use zero_core::{InboundMuxServer, InboundMuxStreamRoute, Session, StreamUdpResponder};
 use zero_engine::EngineError;
-use zero_transport::inbound_route::{FallbackReplayToUpstream, RouteAcceptResult};
+use zero_transport::protocol_inbound_route::{FallbackReplayToUpstream, RouteAcceptResult};
 
 use super::route::dispatch_recorded_protocol_mux_route_with_udp_logger;
 use crate::runtime::route_runtime::MuxSubstreamRuntime;

@@ -1,14 +1,7 @@
 use super::super::model::{UdpFlowIndexKeys, UdpFlowOutbound};
 
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
-))]
+#[cfg(feature = "udp-runtime")]
+
 impl UdpFlowOutbound {
     pub(in crate::runtime::udp_flow) fn index_keys(&self) -> UdpFlowIndexKeys<'_> {
         UdpFlowIndexKeys {
@@ -20,15 +13,7 @@ impl UdpFlowOutbound {
     fn upstream_response_tag(&self) -> Option<&str> {
         match self {
             Self::Direct { .. } => None,
-            #[cfg(any(
-                feature = "socks5",
-                feature = "vless",
-                feature = "hysteria2",
-                feature = "shadowsocks",
-                feature = "trojan",
-                feature = "vmess",
-                feature = "mieru"
-            ))]
+            #[cfg(feature = "udp-runtime")]
             Self::PacketPathDatagram { tag, .. } => Some(tag),
             #[cfg(any(
                 feature = "socks5",
@@ -38,7 +23,7 @@ impl UdpFlowOutbound {
                 feature = "mieru"
             ))]
             Self::Relay { tag, .. } => Some(tag),
-            #[cfg(any(feature = "hysteria2", feature = "shadowsocks"))]
+            #[cfg(feature = "managed-datagram-runtime")]
             Self::Datagram { tag, .. } => Some(tag),
             #[cfg(any(
                 feature = "vless",

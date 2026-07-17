@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use zero_config::RuntimeConfig;
-use zero_engine::{Engine, EnginePlan, OutboundTarget, TargetId, TargetKind};
+use zero_engine::{Engine, EnginePlan, TargetId, TargetKind};
 
 #[test]
 fn builds_engine_plan_for_nested_groups() {
@@ -64,7 +64,8 @@ fn builds_engine_plan_for_nested_groups() {
     assert_eq!(direct.tag(), "direct");
     assert!(matches!(
         direct.kind(),
-        TargetKind::Outbound(outbound) if matches!(outbound.as_ref(), OutboundTarget::Direct)
+        TargetKind::Outbound(outbound)
+            if outbound.runtime_kind() == zero_config::OutboundRuntimeKind::Direct
     ));
 
     let fallback = plan.target(fallback_id).expect("resolve fallback target");
@@ -216,12 +217,14 @@ fn mieru_outbound_defaults_username_to_password_in_plan() {
     let TargetKind::Outbound(outbound) = target.kind() else {
         panic!("mieru-node should compile as an outbound");
     };
-    let OutboundTarget::Mieru {
+    assert_eq!(outbound.protocol(), "mieru");
+    let zero_config::OutboundProtocolConfig::Mieru {
         username, password, ..
-    } = outbound.as_ref()
+    } = &config.outbounds[0].protocol
     else {
-        panic!("expected mieru outbound");
+        panic!("expected normalized mieru config");
     };
+    let username = username.as_deref().expect("normalized username");
     assert_eq!(username, password);
     assert_eq!(username, "318149df-2bab-4a35-9de1-870f3e410598");
 }

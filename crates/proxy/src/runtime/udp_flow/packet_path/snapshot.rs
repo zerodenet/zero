@@ -1,40 +1,17 @@
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
-))]
+#[cfg(feature = "udp-runtime")]
 use super::{
     PacketPathCarrierDescriptor, UdpDatagramDescriptor, UdpDatagramKey, UdpDatagramSource,
 };
 
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
-))]
+#[cfg(feature = "udp-runtime")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct PacketPathLookupKey {
     carrier_cache_key: String,
     datagram: UdpDatagramKey,
 }
 
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
-))]
+#[cfg(feature = "udp-runtime")]
+
 impl PacketPathLookupKey {
     pub(crate) fn from_parts(
         carrier: &PacketPathCarrierDescriptor,
@@ -55,30 +32,15 @@ impl PacketPathLookupKey {
     }
 }
 
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
-))]
+#[cfg(feature = "udp-runtime")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct PacketPathFlowSnapshot {
     carrier_cache_key: String,
     datagram: UdpDatagramKey,
 }
 
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
-))]
+#[cfg(feature = "udp-runtime")]
+
 impl PacketPathFlowSnapshot {
     fn from_parts(datagram: &UdpDatagramDescriptor, carrier: &PacketPathCarrierDescriptor) -> Self {
         Self {
@@ -95,29 +57,15 @@ impl PacketPathFlowSnapshot {
     }
 }
 
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
-))]
+#[cfg(feature = "udp-runtime")]
+
 pub(crate) struct PacketPathFlowBinding {
     datagram: UdpDatagramSource,
     flow_snapshot: PacketPathFlowSnapshot,
 }
 
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
-))]
+#[cfg(feature = "udp-runtime")]
+
 impl PacketPathFlowBinding {
     pub(crate) fn new(
         datagram: UdpDatagramSource,

@@ -1,11 +1,6 @@
 use super::super::model::ManagedUdpState;
 use crate::runtime::udp_flow::managed::flow::ManagedRelayStreamFlow;
-#[cfg(any(
-    feature = "vless",
-    feature = "vmess",
-    feature = "trojan",
-    feature = "mieru"
-))]
+#[cfg(feature = "managed-stream-runtime")]
 use crate::runtime::udp_flow::managed::flow::ManagedStreamPacketFlow;
 use crate::runtime::udp_flow::result::FlowFailure;
 

@@ -3,8 +3,8 @@ use std::pin::Pin;
 
 use zero_engine::EngineError;
 use zero_platform_tokio::TokioSocket;
-use zero_transport::inbound_route::FallbackReplayToUpstream;
-use zero_transport::profile::OwnedInboundFallbackProfile;
+use zero_transport::protocol_inbound_route::FallbackReplayToUpstream;
+use zero_transport::OwnedInboundFallbackProfile;
 
 use crate::protocol_registry::TcpRuntimeServices;
 use crate::transport::{relay_bidirectional_metered, ClientStream, MeteredStream};

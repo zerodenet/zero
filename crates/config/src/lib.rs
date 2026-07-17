@@ -13,8 +13,8 @@ pub use model::{
     HookConfig, HttpUpgradeConfig, InboundConfig, InboundProtocolConfig, InboundRealityConfig,
     ListenConfig, LoadBalanceStrategy, LogConfig, LogFileConfig, LogRateLimit, MieruUserConfig,
     ModeConfig, OutboundConfig, OutboundGroupConfig, OutboundGroupKind, OutboundProtocolConfig,
-    PushConfig, QuicConfig, RealityConfig, RouteActionConfig, RouteConfig, RouteRuleConfig,
-    RouteRuleSetConfig, RuleConditionConfig, RuleSetFormatConfig, RuleSetSourceType, RuntimeConfig,
-    RuntimeOptionsConfig, Socks5UserConfig, SplitHttpConfig, TlsConfig, UrlRewriteRule,
-    VlessUserConfig, VmessUserConfig, WebSocketConfig,
+    OutboundRuntimeKind, PushConfig, QuicConfig, RealityConfig, RouteActionConfig, RouteConfig,
+    RouteRuleConfig, RouteRuleSetConfig, RuleConditionConfig, RuleSetFormatConfig,
+    RuleSetSourceType, RuntimeConfig, RuntimeOptionsConfig, Socks5UserConfig, SplitHttpConfig,
+    TlsConfig, UrlRewriteRule, VlessUserConfig, VmessUserConfig, WebSocketConfig,
 };

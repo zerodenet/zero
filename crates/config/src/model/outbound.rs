@@ -133,6 +133,27 @@ impl OutboundProtocolConfig {
         }
     }
 
+    pub fn runtime_kind(&self) -> OutboundRuntimeKind {
+        match self {
+            Self::Direct => OutboundRuntimeKind::Direct,
+            Self::Block => OutboundRuntimeKind::Block,
+            _ => OutboundRuntimeKind::Proxy,
+        }
+    }
+
+    pub fn endpoint(&self) -> Option<(&str, u16)> {
+        match self {
+            Self::Socks5 { server, port, .. }
+            | Self::Vless { server, port, .. }
+            | Self::Hysteria2 { server, port, .. }
+            | Self::Shadowsocks { server, port, .. }
+            | Self::Trojan { server, port, .. }
+            | Self::Vmess { server, port, .. }
+            | Self::Mieru { server, port, .. } => Some((server, *port)),
+            Self::Direct | Self::Block => None,
+        }
+    }
+
     /// Authentication contract declared by this outbound protocol.
     pub fn auth_requirement(&self) -> crate::auth::AuthRequirement {
         use crate::auth::AuthRequirement::*;
@@ -175,6 +196,13 @@ impl OutboundProtocolConfig {
             | Self::Trojan { .. } => {}
         }
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OutboundRuntimeKind {
+    Direct,
+    Block,
+    Proxy,
 }
 
 pub(super) fn normalize_vmess_cipher_name(cipher: &str) -> String {

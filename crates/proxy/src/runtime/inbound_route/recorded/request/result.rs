@@ -1,6 +1,6 @@
 use zero_core::{InboundMuxServer, InboundMuxStreamRoute, Session};
 use zero_engine::EngineError;
-use zero_transport::inbound_route::{FallbackReplayToUpstream, RouteAcceptResult};
+use zero_transport::protocol_inbound_route::{FallbackReplayToUpstream, RouteAcceptResult};
 
 use crate::runtime::inbound_route::recorded::dispatch::{
     dispatch_optional_recorded_protocol_mux_route_accept_result,

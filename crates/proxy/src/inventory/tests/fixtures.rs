@@ -195,18 +195,19 @@ impl crate::runtime::udp_flow::registered::UpstreamAssociationHandler for FakeUp
     fn close_all_upstreams(&mut self) {}
 }
 
-#[cfg(any(feature = "hysteria2", feature = "shadowsocks"))]
+#[cfg(feature = "managed-datagram-runtime")]
 #[derive(Debug)]
 pub(super) struct FakeProviderResume {
     pub(super) generation: usize,
 }
 
-#[cfg(any(feature = "hysteria2", feature = "shadowsocks"))]
+#[cfg(feature = "managed-datagram-runtime")]
+
 struct FakeProviderDatagramHandler {
     calls: Arc<TcpCapabilityCalls>,
 }
 
-#[cfg(any(feature = "hysteria2", feature = "shadowsocks"))]
+#[cfg(feature = "managed-datagram-runtime")]
 #[async_trait]
 impl crate::runtime::udp_flow::managed::ManagedDatagramFlowHandler for FakeProviderDatagramHandler {
     fn supports_managed_existing(
@@ -348,7 +349,8 @@ impl crate::protocol_registry::UpstreamUdpHandlerProvider for FakeTcpCapability 
     feature = "mieru"
 ))]
 impl crate::protocol_registry::ManagedUdpHandlerProvider for FakeTcpCapability {
-    #[cfg(any(feature = "hysteria2", feature = "shadowsocks"))]
+    #[cfg(feature = "managed-datagram-runtime")]
+
     fn managed_datagram_udp_handler(
         &self,
     ) -> Option<Box<dyn crate::runtime::udp_flow::managed::ManagedDatagramFlowHandler>> {
@@ -680,6 +682,7 @@ impl PreparedTcpRelayOperation for FakeTcpRelayOperation {
 impl FakeTcpCapability {
     pub(crate) fn claim_outbound_leaf_impl<'a>(
         &self,
+        _protocol: Option<&'a OutboundProtocolConfig>,
         leaf: ResolvedLeafOutbound<'a>,
     ) -> Option<OutboundLeafClaim<'a>> {
         let ResolvedLeafOutbound::Direct { tag } = leaf else {
@@ -687,30 +690,14 @@ impl FakeTcpCapability {
         };
         let runtime = OutboundLeafRuntime {
             tcp_path: TcpPathCategory::Direct,
-            #[cfg(any(
-                feature = "socks5",
-                feature = "vless",
-                feature = "hysteria2",
-                feature = "shadowsocks",
-                feature = "trojan",
-                feature = "vmess",
-                feature = "mieru"
-            ))]
+            #[cfg(feature = "udp-runtime")]
             health_tag: None,
             endpoint: Some(OutboundEndpoint {
                 server: "fake-tcp.test".to_owned(),
                 port: 8443,
             }),
             kernel_tag: tag.map(str::to_owned),
-            #[cfg(any(
-                feature = "socks5",
-                feature = "vless",
-                feature = "hysteria2",
-                feature = "shadowsocks",
-                feature = "trojan",
-                feature = "vmess",
-                feature = "mieru"
-            ))]
+            #[cfg(feature = "udp-runtime")]
             udp_policy_tag: tag.map(str::to_owned),
         };
         let tcp: Box<dyn ClaimedTcpOutboundLeaf<'a> + 'a> = Box::new(FakeClaimedTcpLeaf {
@@ -719,27 +706,11 @@ impl FakeTcpCapability {
         Some(OutboundLeafClaim {
             runtime,
             tcp,
-            #[cfg(any(
-                feature = "socks5",
-                feature = "vless",
-                feature = "hysteria2",
-                feature = "shadowsocks",
-                feature = "trojan",
-                feature = "vmess",
-                feature = "mieru"
-            ))]
+            #[cfg(feature = "udp-runtime")]
             udp: Some(Box::new(FakeClaimedUdpLeaf {
                 calls: self.calls.clone(),
             })),
-            #[cfg(any(
-                feature = "socks5",
-                feature = "vless",
-                feature = "hysteria2",
-                feature = "shadowsocks",
-                feature = "trojan",
-                feature = "vmess",
-                feature = "mieru"
-            ))]
+            #[cfg(feature = "udp-runtime")]
             packet_path: Some(Box::new(FakeClaimedUdpPacketPathLeaf {
                 calls: self.calls.clone(),
             })),

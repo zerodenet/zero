@@ -7,13 +7,14 @@ use zero_traits::{
     ServerTlsProfile, SplitHttpTransportProfile, WebSocketTransportProfile,
 };
 
-use zero_transport::inbound_route::{
+use zero_transport::profile::{
+    OwnedGrpcProfile, OwnedH2Profile, OwnedHttpUpgradeProfile, OwnedSplitHttpProfile,
+    OwnedWebSocketProfile,
+};
+use zero_transport::protocol_inbound_route::{
     InboundFallback, OpaqueFallbackReplay, OpaqueMuxRoute, RouteAcceptResult,
 };
-use zero_transport::profile::{
-    OwnedGrpcProfile, OwnedH2Profile, OwnedHttpUpgradeProfile, OwnedInboundFallbackProfile,
-    OwnedSplitHttpProfile, OwnedWebSocketProfile,
-};
+use zero_transport::OwnedInboundFallbackProfile;
 use zero_transport::{split_http, tls, RuntimeError};
 
 use super::carrier::{

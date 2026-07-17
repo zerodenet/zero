@@ -1,15 +1,8 @@
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
-))]
+#[cfg(feature = "udp-runtime")]
 use std::iter;
 use std::path::Path;
 
+use zero_config::RuntimeConfig;
 use zero_engine::{EngineError, ResolvedLeafOutbound};
 
 use super::ProtocolInventory;
@@ -17,15 +10,7 @@ use crate::protocol_registry::{ClaimedOutboundLeaf, OutboundLeafRuntime};
 use crate::runtime::tcp_dispatch::operation::{
     PreparedTcpConnectOperation, PreparedTcpRelayOperation,
 };
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
-))]
+#[cfg(feature = "udp-runtime")]
 use crate::runtime::udp_dispatch::operation::PreparedUdpFlowOperation;
 
 #[derive(Clone)]
@@ -42,15 +27,7 @@ impl<'a> ClaimedInventoryLeaf<'a> {
         self.claimed.runtime.clone()
     }
 
-    #[cfg(any(
-        feature = "socks5",
-        feature = "vless",
-        feature = "hysteria2",
-        feature = "shadowsocks",
-        feature = "trojan",
-        feature = "vmess",
-        feature = "mieru"
-    ))]
+    #[cfg(feature = "udp-runtime")]
     pub(crate) fn into_claimed(self) -> ClaimedOutboundLeaf<'a> {
         self.claimed
     }
@@ -70,15 +47,7 @@ impl<'a> ClaimedInventoryLeaf<'a> {
         self.claimed.prepare_tcp_relay_hop(source_dir)
     }
 
-    #[cfg(any(
-        feature = "socks5",
-        feature = "vless",
-        feature = "hysteria2",
-        feature = "shadowsocks",
-        feature = "trojan",
-        feature = "vmess",
-        feature = "mieru"
-    ))]
+    #[cfg(feature = "udp-runtime")]
     pub(crate) fn prepare_udp_flow(
         &self,
         source_dir: Option<&Path>,
@@ -87,24 +56,8 @@ impl<'a> ClaimedInventoryLeaf<'a> {
         self.claimed.prepare_udp_flow(source_dir)
     }
 
-    #[cfg(any(
-        feature = "socks5",
-        feature = "vless",
-        feature = "hysteria2",
-        feature = "shadowsocks",
-        feature = "trojan",
-        feature = "vmess",
-        feature = "mieru"
-    ))]
-    #[cfg(any(
-        feature = "socks5",
-        feature = "vless",
-        feature = "hysteria2",
-        feature = "shadowsocks",
-        feature = "trojan",
-        feature = "vmess",
-        feature = "mieru"
-    ))]
+    #[cfg(feature = "udp-runtime")]
+    #[cfg(feature = "udp-runtime")]
     pub(crate) fn prepare_udp_packet_path(
         &self,
     ) -> Option<
@@ -139,43 +92,19 @@ impl<'a> ClaimedRelayChain<'a> {
         &self.relay_hops
     }
 
-    #[cfg(any(
-        feature = "socks5",
-        feature = "vless",
-        feature = "hysteria2",
-        feature = "shadowsocks",
-        feature = "trojan",
-        feature = "vmess",
-        feature = "mieru"
-    ))]
+    #[cfg(feature = "udp-runtime")]
     pub(crate) fn len(&self) -> usize {
         1 + self.relay_hops.len()
     }
 
-    #[cfg(any(
-        feature = "socks5",
-        feature = "vless",
-        feature = "hysteria2",
-        feature = "shadowsocks",
-        feature = "trojan",
-        feature = "vmess",
-        feature = "mieru"
-    ))]
+    #[cfg(feature = "udp-runtime")]
     pub(crate) fn final_hop(&self) -> &ClaimedInventoryLeaf<'a> {
         self.relay_hops
             .last()
             .expect("relay chain must have at least 2 hops")
     }
 
-    #[cfg(any(
-        feature = "socks5",
-        feature = "vless",
-        feature = "hysteria2",
-        feature = "shadowsocks",
-        feature = "trojan",
-        feature = "vmess",
-        feature = "mieru"
-    ))]
+    #[cfg(feature = "udp-runtime")]
     pub(crate) fn leaves(&self) -> impl Iterator<Item = &ClaimedInventoryLeaf<'a>> {
         iter::once(&self.first).chain(self.relay_hops.iter())
     }
@@ -188,14 +117,16 @@ impl ProtocolInventory {
 
     pub(crate) fn claim_outbound_leaf<'a>(
         &self,
+        config: &'a RuntimeConfig,
         leaf: ResolvedLeafOutbound<'a>,
     ) -> Result<ClaimedInventoryLeaf<'a>, EngineError> {
-        let claimed = self.registry.claim_outbound_leaf(leaf)?;
+        let claimed = self.registry.claim_outbound_leaf(config, leaf)?;
         Ok(ClaimedInventoryLeaf::new(claimed))
     }
 
     pub(in crate::inventory) fn claim_relay_chain<'a, E, F, G>(
         &self,
+        config: &'a RuntimeConfig,
         chain: impl IntoIterator<Item = ResolvedLeafOutbound<'a>>,
         map_first_error: F,
         map_relay_error: G,
@@ -208,11 +139,16 @@ impl ProtocolInventory {
         let first = chain.next().expect("relay chain must have at least 2 hops");
         let second = chain.next().expect("relay chain must have at least 2 hops");
 
-        let first = self.claim_outbound_leaf(first).map_err(map_first_error)?;
+        let first = self
+            .claim_outbound_leaf(config, first)
+            .map_err(map_first_error)?;
         let map_relay_error = &map_relay_error;
         let relay_hops = std::iter::once(second)
             .chain(chain)
-            .map(|leaf| self.claim_outbound_leaf(leaf).map_err(map_relay_error))
+            .map(|leaf| {
+                self.claim_outbound_leaf(config, leaf)
+                    .map_err(map_relay_error)
+            })
             .collect::<Result<Vec<_>, _>>()?;
         Ok(ClaimedRelayChain::new(first, relay_hops))
     }

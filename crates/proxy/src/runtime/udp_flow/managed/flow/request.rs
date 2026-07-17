@@ -3,7 +3,7 @@
 //! The root stays as a facade so datagram flow inputs, stream flow inputs, and
 //! shared request envelopes do not regrow into one implementation bucket.
 
-#[cfg(any(feature = "hysteria2", feature = "shadowsocks"))]
+#[cfg(feature = "managed-datagram-runtime")]
 mod datagram;
 #[cfg(any(
     feature = "vless",
@@ -14,15 +14,10 @@ mod datagram;
     feature = "mieru"
 ))]
 mod envelope;
-#[cfg(any(
-    feature = "vless",
-    feature = "vmess",
-    feature = "trojan",
-    feature = "mieru"
-))]
+#[cfg(feature = "managed-stream-runtime")]
 mod stream;
 
-#[cfg(any(feature = "hysteria2", feature = "shadowsocks"))]
+#[cfg(feature = "managed-datagram-runtime")]
 pub(crate) use datagram::ManagedDatagramFlow;
 #[cfg(any(
     feature = "vless",
@@ -33,10 +28,5 @@ pub(crate) use datagram::ManagedDatagramFlow;
     feature = "mieru"
 ))]
 pub(crate) use envelope::{ManagedExistingFlowForward, ManagedUdpFlowKind, ManagedUdpFlowRequest};
-#[cfg(any(
-    feature = "vless",
-    feature = "vmess",
-    feature = "trojan",
-    feature = "mieru"
-))]
+#[cfg(feature = "managed-stream-runtime")]
 pub(crate) use stream::{ManagedRelayStreamFlow, ManagedStreamPacketFlow};

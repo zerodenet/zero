@@ -1,7 +1,7 @@
 mod request;
 mod resume;
 
-#[cfg(any(feature = "hysteria2", feature = "shadowsocks"))]
+#[cfg(feature = "managed-datagram-runtime")]
 pub(crate) use request::ManagedDatagramFlow;
 #[cfg(any(
     feature = "vless",
@@ -12,19 +12,9 @@ pub(crate) use request::ManagedDatagramFlow;
     feature = "mieru"
 ))]
 pub(crate) use request::ManagedExistingFlowForward;
-#[cfg(any(
-    feature = "vless",
-    feature = "vmess",
-    feature = "trojan",
-    feature = "mieru"
-))]
+#[cfg(feature = "managed-stream-runtime")]
 pub(crate) use request::ManagedRelayStreamFlow;
-#[cfg(any(
-    feature = "vless",
-    feature = "vmess",
-    feature = "trojan",
-    feature = "mieru"
-))]
+#[cfg(feature = "managed-stream-runtime")]
 pub(crate) use request::ManagedStreamPacketFlow;
 #[cfg(any(
     feature = "vless",

@@ -1,24 +1,14 @@
-#[cfg(any(feature = "hysteria2", feature = "shadowsocks"))]
+#[cfg(feature = "managed-datagram-runtime")]
 use super::super::datagram::ManagedDatagramState;
-#[cfg(any(feature = "hysteria2", feature = "shadowsocks"))]
+#[cfg(feature = "managed-datagram-runtime")]
 use super::super::model::ManagedDatagramFlowHandler;
-#[cfg(any(
-    feature = "vless",
-    feature = "vmess",
-    feature = "trojan",
-    feature = "mieru"
-))]
+#[cfg(feature = "managed-stream-runtime")]
 use super::super::model::{ManagedRelayFlowHandler, ManagedStreamPacketFlowHandler};
-#[cfg(any(
-    feature = "vless",
-    feature = "vmess",
-    feature = "trojan",
-    feature = "mieru"
-))]
+#[cfg(feature = "managed-stream-runtime")]
 use super::super::stream::ManagedStreamState;
 
 pub(crate) struct ManagedUdpHandlers {
-    #[cfg(any(feature = "hysteria2", feature = "shadowsocks"))]
+    #[cfg(feature = "managed-datagram-runtime")]
     pub(crate) datagram: Vec<Box<dyn ManagedDatagramFlowHandler>>,
     #[cfg(any(
         feature = "vless",
@@ -37,7 +27,7 @@ pub(crate) struct ManagedUdpHandlers {
 }
 
 pub(crate) struct ManagedUdpState {
-    #[cfg(any(feature = "hysteria2", feature = "shadowsocks"))]
+    #[cfg(feature = "managed-datagram-runtime")]
     pub(super) datagram: ManagedDatagramState,
     #[cfg(any(
         feature = "vless",

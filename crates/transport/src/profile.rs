@@ -1,6 +1,6 @@
 use zero_traits::{
     ClientTlsProfile, GrpcTransportProfile, H2TransportProfile, HttpUpgradeTransportProfile,
-    InboundFallbackProfile, ServerTlsProfile, SplitHttpTransportProfile, WebSocketTransportProfile,
+    ServerTlsProfile, SplitHttpTransportProfile, WebSocketTransportProfile,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -211,36 +211,5 @@ impl SplitHttpTransportProfile for OwnedSplitHttpProfile {
 
     fn mode(&self) -> &str {
         &self.mode
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct OwnedInboundFallbackProfile {
-    pub server: String,
-    pub port: u16,
-    pub alpn: Option<String>,
-}
-
-impl OwnedInboundFallbackProfile {
-    pub fn from_profile(profile: &(impl InboundFallbackProfile + ?Sized)) -> Self {
-        Self {
-            server: profile.server().to_owned(),
-            port: profile.port(),
-            alpn: profile.alpn().map(str::to_owned),
-        }
-    }
-}
-
-impl InboundFallbackProfile for OwnedInboundFallbackProfile {
-    fn server(&self) -> &str {
-        &self.server
-    }
-
-    fn port(&self) -> u16 {
-        self.port
-    }
-
-    fn alpn(&self) -> Option<&str> {
-        self.alpn.as_deref()
     }
 }

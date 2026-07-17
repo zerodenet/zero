@@ -27,14 +27,13 @@ pub(crate) mod udp;
 #[derive(Debug)]
 pub(crate) struct MieruAdapter;
 
-fn transport_leaf(leaf: &ResolvedLeafOutbound<'_>) -> Option<MieruTransportLeaf> {
-    let ResolvedLeafOutbound::Mieru {
-        tag,
+fn transport_leaf(tag: &str, protocol: &OutboundProtocolConfig) -> Option<MieruTransportLeaf> {
+    let OutboundProtocolConfig::Mieru {
         server,
         port,
         username,
         password,
-    } = leaf
+    } = protocol
     else {
         return None;
     };
@@ -42,7 +41,10 @@ fn transport_leaf(leaf: &ResolvedLeafOutbound<'_>) -> Option<MieruTransportLeaf>
         tag,
         server,
         *port,
-        MieruOutboundOptionsRef { username, password },
+        MieruOutboundOptionsRef {
+            username: username.as_deref().unwrap_or(password),
+            password,
+        },
     ))
 }
 
@@ -56,9 +58,10 @@ impl NamedProtocolAdapter for MieruAdapter {
 impl MieruAdapter {
     pub(crate) fn claim_outbound_leaf_impl<'a>(
         &self,
+        protocol: Option<&'a OutboundProtocolConfig>,
         leaf: ResolvedLeafOutbound<'a>,
     ) -> Option<OutboundLeafClaim<'a>> {
-        let leaf = transport_leaf(&leaf)?;
+        let leaf = transport_leaf(leaf.tag()?, protocol?)?;
         let runtime = OutboundLeafRuntime::proxy(
             leaf.tag(),
             leaf.server(),

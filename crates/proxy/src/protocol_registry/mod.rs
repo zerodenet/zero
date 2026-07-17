@@ -13,12 +13,8 @@ mod registry;
 mod transport_leaf;
 
 #[cfg(any(
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "vless",
-    feature = "vmess",
-    feature = "trojan",
-    feature = "mieru"
+    feature = "managed-datagram-runtime",
+    feature = "managed-stream-runtime"
 ))]
 pub(crate) use capability::ManagedUdpHandlerProvider;
 #[cfg(feature = "socks5")]
@@ -27,28 +23,12 @@ pub(crate) use capability::{
     ClaimedTcpOutboundLeaf, InboundListenerCapability, OutboundLeafClaim,
     ProtocolSupportCapability, TcpOutboundCapability,
 };
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
-))]
+#[cfg(feature = "udp-runtime")]
 pub(crate) use capability::{
     ClaimedUdpFlowLeaf, ClaimedUdpPacketPathLeaf, UdpFlowCapability, UdpPacketPathCapability,
 };
 pub(crate) use context::{OutboundAdapterContext, TcpRuntimeServices};
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
-))]
+#[cfg(feature = "udp-runtime")]
 pub(crate) use context::{UdpAdapterContext, UdpAssociationCloseKind, UdpRuntimeServices};
 #[cfg(feature = "transport_quic")]
 pub(crate) use defaults::bind_transport_inbound;

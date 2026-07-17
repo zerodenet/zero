@@ -45,27 +45,26 @@ struct TrojanOutboundProjection<'a> {
 
 #[cfg(feature = "trojan")]
 impl<'a> TrojanOutboundProjection<'a> {
-    fn from_leaf(leaf: ResolvedLeafOutbound<'a>) -> Option<Self> {
-        let ResolvedLeafOutbound::Trojan {
-            tag,
+    fn from_config(tag: &'a str, protocol: &'a OutboundProtocolConfig) -> Option<Self> {
+        let OutboundProtocolConfig::Trojan {
             server,
             port,
             password,
             sni,
             insecure,
             client_fingerprint,
-        } = leaf
+        } = protocol
         else {
             return None;
         };
         Some(Self {
             tag,
             server,
-            port,
+            port: *port,
             password,
-            sni,
-            insecure,
-            client_fingerprint,
+            sni: sni.as_deref(),
+            insecure: *insecure,
+            client_fingerprint: client_fingerprint.as_deref(),
         })
     }
 
@@ -95,9 +94,10 @@ const TCP_PATH: TcpPathCategory = TcpPathCategory::Tunnel;
 impl TrojanAdapter {
     pub(crate) fn claim_outbound_leaf_impl<'a>(
         &self,
+        protocol: Option<&'a OutboundProtocolConfig>,
         leaf: ResolvedLeafOutbound<'a>,
     ) -> Option<OutboundLeafClaim<'a>> {
-        let projection = TrojanOutboundProjection::from_leaf(leaf)?;
+        let projection = TrojanOutboundProjection::from_config(leaf.tag()?, protocol?)?;
         let runtime = OutboundLeafRuntime::proxy(
             projection.tag,
             projection.server,

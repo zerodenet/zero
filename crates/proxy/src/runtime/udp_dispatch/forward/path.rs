@@ -62,7 +62,7 @@ impl UdpDispatch {
                 }
             }
 
-            #[cfg(any(feature = "hysteria2", feature = "shadowsocks"))]
+            #[cfg(feature = "managed-datagram-runtime")]
             UdpPathCategory::Datagram => {
                 let result = self
                     .flow_state
@@ -85,15 +85,7 @@ impl UdpDispatch {
                 self.record_or_fail(flow, &services, started_at, result)?;
             }
 
-            #[cfg(any(
-                feature = "socks5",
-                feature = "vless",
-                feature = "hysteria2",
-                feature = "shadowsocks",
-                feature = "trojan",
-                feature = "vmess",
-                feature = "mieru"
-            ))]
+            #[cfg(feature = "udp-runtime")]
             UdpPathCategory::PacketPathDatagram => {
                 let result = self
                     .flow_state

@@ -34,7 +34,7 @@ pub(crate) struct ManagedUdpFlowRequest<'a> {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ManagedUdpFlowKind {
-    #[cfg(any(feature = "hysteria2", feature = "shadowsocks"))]
+    #[cfg(feature = "managed-datagram-runtime")]
     Datagram,
     #[cfg(any(
         feature = "vless",

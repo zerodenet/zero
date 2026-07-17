@@ -8,39 +8,16 @@ use crate::runtime::path::{OutboundEndpoint, TcpPathCategory};
 #[derive(Debug, Clone)]
 pub(crate) struct OutboundLeafRuntime {
     pub(crate) tcp_path: TcpPathCategory,
-    #[cfg(any(
-        feature = "socks5",
-        feature = "vless",
-        feature = "hysteria2",
-        feature = "shadowsocks",
-        feature = "trojan",
-        feature = "vmess",
-        feature = "mieru"
-    ))]
+    #[cfg(feature = "udp-runtime")]
     pub(crate) health_tag: Option<String>,
     pub(crate) endpoint: Option<OutboundEndpoint>,
     pub(crate) kernel_tag: Option<String>,
-    #[cfg(any(
-        feature = "socks5",
-        feature = "vless",
-        feature = "hysteria2",
-        feature = "shadowsocks",
-        feature = "trojan",
-        feature = "vmess",
-        feature = "mieru"
-    ))]
+    #[cfg(feature = "udp-runtime")]
     pub(crate) udp_policy_tag: Option<String>,
 }
 
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
-))]
+#[cfg(feature = "udp-runtime")]
+
 impl OutboundLeafRuntime {
     pub(crate) fn proxy(tag: &str, server: &str, port: u16, tcp_path: TcpPathCategory) -> Self {
         Self {
@@ -60,27 +37,11 @@ impl OutboundLeafRuntime {
     pub(crate) fn direct(tag: Option<&str>) -> Self {
         Self {
             tcp_path: TcpPathCategory::Direct,
-            #[cfg(any(
-                feature = "socks5",
-                feature = "vless",
-                feature = "hysteria2",
-                feature = "shadowsocks",
-                feature = "trojan",
-                feature = "vmess",
-                feature = "mieru"
-            ))]
+            #[cfg(feature = "udp-runtime")]
             health_tag: None,
             endpoint: None,
             kernel_tag: tag.map(str::to_owned),
-            #[cfg(any(
-                feature = "socks5",
-                feature = "vless",
-                feature = "hysteria2",
-                feature = "shadowsocks",
-                feature = "trojan",
-                feature = "vmess",
-                feature = "mieru"
-            ))]
+            #[cfg(feature = "udp-runtime")]
             udp_policy_tag: tag.map(str::to_owned),
         }
     }
@@ -88,27 +49,11 @@ impl OutboundLeafRuntime {
     pub(crate) fn block(tag: Option<&str>) -> Self {
         Self {
             tcp_path: TcpPathCategory::Block,
-            #[cfg(any(
-                feature = "socks5",
-                feature = "vless",
-                feature = "hysteria2",
-                feature = "shadowsocks",
-                feature = "trojan",
-                feature = "vmess",
-                feature = "mieru"
-            ))]
+            #[cfg(feature = "udp-runtime")]
             health_tag: None,
             endpoint: None,
             kernel_tag: tag.map(str::to_owned),
-            #[cfg(any(
-                feature = "socks5",
-                feature = "vless",
-                feature = "hysteria2",
-                feature = "shadowsocks",
-                feature = "trojan",
-                feature = "vmess",
-                feature = "mieru"
-            ))]
+            #[cfg(feature = "udp-runtime")]
             udp_policy_tag: tag.map(str::to_owned),
         }
     }

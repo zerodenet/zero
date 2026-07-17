@@ -37,10 +37,12 @@ fn local_status_listener_exposes_live_runtime_view() {
     );
     let config_path = write_temp_config(&config, "live-status");
 
+    let (ready_tx, ready_rx) = mpsc::channel();
     let (accepted_tx, accepted_rx) = mpsc::channel();
     let (release_tx, release_rx) = mpsc::channel();
     let echo_thread = thread::spawn(move || {
         let listener = TcpListener::bind(("127.0.0.1", echo_port)).expect("bind echo");
+        ready_tx.send(()).expect("notify echo ready");
         let (mut stream, _) = listener.accept().expect("accept echo");
         accepted_tx.send(()).expect("notify echo accepted");
         let _ = release_rx.recv();
@@ -48,6 +50,7 @@ fn local_status_listener_exposes_live_runtime_view() {
         stream.read_exact(&mut buf).expect("read echo");
         stream.write_all(&buf).expect("write echo");
     });
+    ready_rx.recv().expect("wait for echo listener");
 
     let mut child = Command::new(env!("CARGO_BIN_EXE_zero"))
         .args([
@@ -200,13 +203,16 @@ fn local_status_listener_can_switch_selector_group() {
     );
     let config_path = write_temp_config(&config, "selector-control");
 
+    let (ready_tx, ready_rx) = mpsc::channel();
     let echo_thread = thread::spawn(move || {
         let listener = TcpListener::bind(("127.0.0.1", echo_port)).expect("bind echo");
+        ready_tx.send(()).expect("notify echo ready");
         let (mut stream, _) = listener.accept().expect("accept echo");
         let mut buf = [0_u8; 4];
         stream.read_exact(&mut buf).expect("read echo");
         stream.write_all(&buf).expect("write echo");
     });
+    ready_rx.recv().expect("wait for echo listener");
 
     let mut child = Command::new(env!("CARGO_BIN_EXE_zero"))
         .args([

@@ -3,9 +3,9 @@ use std::path::Path;
 
 use zero_platform_tokio::{TcpRelayStream, TokioSocket};
 use zero_traits::{GrpcTransportProfile, ServerTlsProfile, WebSocketTransportProfile};
-use zero_transport::inbound_route::{NoClientMuxRouteDefaults, OpaqueMuxRoute};
 use zero_transport::inbound_stack::InboundStreamStack;
 use zero_transport::profile::{OwnedGrpcProfile, OwnedH2Profile, OwnedWebSocketProfile};
+use zero_transport::protocol_inbound_route::{NoClientMuxRouteDefaults, OpaqueMuxRoute};
 use zero_transport::tls;
 use zero_transport::RuntimeError;
 

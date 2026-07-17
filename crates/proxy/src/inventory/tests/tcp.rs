@@ -61,10 +61,10 @@ async fn inventory_invokes_fake_tcp_leaf_and_relay_capabilities() {
     let calls = Arc::new(TcpCapabilityCalls::default());
     let proxy = proxy_with_fake_tcp(calls.clone());
     let leaf = fake_direct_leaf();
-    let ctx = OutboundAdapterContext::new(proxy.config.source_dir());
+    let ctx = OutboundAdapterContext::new(&proxy.config);
     let claimed = proxy
         .protocols
-        .claim_outbound_leaf(leaf.clone())
+        .claim_outbound_leaf(&proxy.config, leaf.clone())
         .expect("fake leaf claim");
 
     let prepared = match proxy
@@ -110,10 +110,10 @@ async fn inventory_preserves_tcp_and_relay_capability_failures() {
     calls.set_fail_tcp(true);
     let proxy = proxy_with_fake_tcp(calls.clone());
     let leaf = fake_direct_leaf();
-    let ctx = OutboundAdapterContext::new(proxy.config.source_dir());
+    let ctx = OutboundAdapterContext::new(&proxy.config);
     let claimed = proxy
         .protocols
-        .claim_outbound_leaf(leaf.clone())
+        .claim_outbound_leaf(&proxy.config, leaf.clone())
         .expect("fake leaf claim");
 
     let prepared = match proxy

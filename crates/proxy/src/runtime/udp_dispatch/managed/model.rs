@@ -1,49 +1,18 @@
-#[cfg(any(
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
-))]
+#[cfg(feature = "managed-udp-runtime")]
 use crate::protocol_registry::UdpRuntimeServices;
-#[cfg(any(
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
-))]
+#[cfg(feature = "managed-udp-runtime")]
 use crate::runtime::udp_flow::managed::{ManagedUdpFlowKind, ManagedUdpFlowResume};
 use zero_core::Session;
 
-#[cfg(any(
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
-))]
+#[cfg(feature = "managed-udp-runtime")]
 pub(super) struct ManagedUdpSend<'a> {
     pub(super) services: Option<UdpRuntimeServices>,
-    #[cfg(any(feature = "hysteria2", feature = "shadowsocks"))]
+    #[cfg(feature = "managed-datagram-runtime")]
     pub(super) tag: &'a str,
     pub(super) session: &'a Session,
-    #[cfg(any(
-        feature = "vless",
-        feature = "vmess",
-        feature = "trojan",
-        feature = "mieru"
-    ))]
+    #[cfg(feature = "managed-stream-runtime")]
     pub(super) carrier: Option<crate::transport::RelayCarrier>,
-    #[cfg(any(
-        feature = "vless",
-        feature = "vmess",
-        feature = "trojan",
-        feature = "mieru"
-    ))]
+    #[cfg(feature = "managed-stream-runtime")]
     pub(super) tls_server_name: Option<&'a str>,
     pub(super) server: &'a str,
     pub(super) port: u16,
@@ -52,7 +21,8 @@ pub(super) struct ManagedUdpSend<'a> {
     pub(super) kind: ManagedUdpFlowKind,
 }
 
-#[cfg(any(feature = "hysteria2", feature = "shadowsocks"))]
+#[cfg(feature = "managed-datagram-runtime")]
+
 pub(crate) struct ManagedDatagramStart<'a, T> {
     pub(crate) services: Option<UdpRuntimeServices>,
     pub(crate) tag: &'a str,
@@ -63,7 +33,7 @@ pub(crate) struct ManagedDatagramStart<'a, T> {
     pub(crate) payload: &'a [u8],
 }
 
-#[cfg(feature = "socks5")]
+#[cfg(feature = "upstream-association-runtime")]
 pub(crate) struct UpstreamTrackedStart<'a, T> {
     pub(crate) services: Option<crate::protocol_registry::UdpRuntimeServices>,
     pub(crate) tag: &'a str,

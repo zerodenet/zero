@@ -19,8 +19,10 @@ pub(crate) struct NoClientMuxRouteDefaults {
 }
 
 #[cfg(feature = "vmess")]
-impl From<zero_transport::inbound_route::NoClientMuxRouteDefaults> for NoClientMuxRouteDefaults {
-    fn from(defaults: zero_transport::inbound_route::NoClientMuxRouteDefaults) -> Self {
+impl From<zero_transport::protocol_inbound_route::NoClientMuxRouteDefaults>
+    for NoClientMuxRouteDefaults
+{
+    fn from(defaults: zero_transport::protocol_inbound_route::NoClientMuxRouteDefaults) -> Self {
         Self {
             udp_protocol: defaults.udp_protocol,
             mux_protocol: defaults.mux_protocol,

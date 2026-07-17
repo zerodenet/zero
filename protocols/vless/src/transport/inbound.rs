@@ -6,8 +6,10 @@ use zero_traits::{
     ServerTlsProfile, SplitHttpTransportProfile, WebSocketTransportProfile,
 };
 
-use zero_transport::inbound_route::{OpaqueFallbackReplay, OpaqueMuxRoute, RouteAcceptResult};
-use zero_transport::profile::OwnedInboundFallbackProfile;
+use zero_transport::protocol_inbound_route::{
+    OpaqueFallbackReplay, OpaqueMuxRoute, RouteAcceptResult,
+};
+use zero_transport::OwnedInboundFallbackProfile;
 use zero_transport::RuntimeError;
 
 mod bind;
@@ -147,8 +149,8 @@ impl VlessInboundListenerRequest {
 
     pub fn recorded_mux_route_defaults(
         &self,
-    ) -> zero_transport::inbound_route::RecordedMuxRouteDefaults {
-        zero_transport::inbound_route::RecordedMuxRouteDefaults {
+    ) -> zero_transport::protocol_inbound_route::RecordedMuxRouteDefaults {
+        zero_transport::protocol_inbound_route::RecordedMuxRouteDefaults {
             udp_protocol: Self::UDP_PROTOCOL,
             mux_protocol: Self::MUX_PROTOCOL,
             panic_message: Self::PANIC_MESSAGE,

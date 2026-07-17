@@ -5,7 +5,7 @@ impl InboundConnectionContext {
     pub(crate) async fn dispatch_recorded_mux_tcp_route<R, P, S, FR>(
         self,
         accept_result: Result<
-            Option<zero_transport::inbound_route::RouteAcceptResult<R, FR>>,
+            Option<zero_transport::protocol_inbound_route::RouteAcceptResult<R, FR>>,
             zero_engine::EngineError,
         >,
         protocol: P,
@@ -27,7 +27,7 @@ impl InboundConnectionContext {
         P: crate::runtime::tcp_ingress::InboundProtocol<
                 ClientStream = crate::transport::TcpRelayStream,
             > + 'static,
-        FR: zero_transport::inbound_route::FallbackReplayToUpstream + 'static,
+        FR: zero_transport::protocol_inbound_route::FallbackReplayToUpstream + 'static,
         <R::MuxServer as zero_core::InboundMuxServer<crate::transport::MeteredStream<S>>>::TcpRelay:
             zero_core::InboundMuxTcpRelay + 'static,
         <R::MuxServer as zero_core::InboundMuxServer<crate::transport::MeteredStream<S>>>::UdpRelay:
@@ -46,7 +46,7 @@ impl InboundConnectionContext {
     pub(crate) async fn dispatch_recorded_mux_stream_route<R, P, S, FR>(
         self,
         accept_result: Result<
-            zero_transport::inbound_route::RouteAcceptResult<R, FR>,
+            zero_transport::protocol_inbound_route::RouteAcceptResult<R, FR>,
             zero_engine::EngineError,
         >,
         protocol: P,
@@ -68,7 +68,7 @@ impl InboundConnectionContext {
         P: crate::runtime::tcp_ingress::InboundProtocol<
                 ClientStream = crate::transport::TcpRelayStream,
             > + 'static,
-        FR: zero_transport::inbound_route::FallbackReplayToUpstream + 'static,
+        FR: zero_transport::protocol_inbound_route::FallbackReplayToUpstream + 'static,
         <R::MuxServer as zero_core::InboundMuxServer<crate::transport::MeteredStream<S>>>::TcpRelay:
             zero_core::InboundMuxTcpRelay + 'static,
         <R::MuxServer as zero_core::InboundMuxServer<crate::transport::MeteredStream<S>>>::UdpRelay:

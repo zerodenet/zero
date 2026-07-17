@@ -1,10 +1,5 @@
 use super::super::model::ManagedRelayFlowHandler;
-#[cfg(any(
-    feature = "vless",
-    feature = "vmess",
-    feature = "trojan",
-    feature = "mieru"
-))]
+#[cfg(feature = "managed-stream-runtime")]
 use super::super::model::ManagedStreamPacketFlowHandler;
 
 pub(in crate::runtime::udp_flow::managed) struct ManagedStreamState {

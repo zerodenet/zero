@@ -36,15 +36,7 @@ impl PreparedTcpRelayHop<'_> {
         )
     }
 
-    #[cfg(any(
-        feature = "socks5",
-        feature = "vless",
-        feature = "hysteria2",
-        feature = "shadowsocks",
-        feature = "trojan",
-        feature = "vmess",
-        feature = "mieru"
-    ))]
+    #[cfg(feature = "udp-runtime")]
     pub(crate) fn upstream(&self) -> (String, u16) {
         (self.server.clone(), self.port)
     }
@@ -89,11 +81,11 @@ impl ProtocolInventory {
 fn health_tag(runtime: &crate::protocol_registry::OutboundLeafRuntime) -> Option<&str> {
     match runtime.tcp_path {
         TcpPathCategory::Direct | TcpPathCategory::Block => None,
-        #[cfg(any(feature = "socks5", feature = "vless", feature = "trojan"))]
+        #[cfg(feature = "tcp-tunnel-runtime")]
         TcpPathCategory::Tunnel => runtime.health_tag.as_deref(),
-        #[cfg(any(feature = "shadowsocks", feature = "vmess", feature = "mieru"))]
+        #[cfg(feature = "tcp-session-runtime")]
         TcpPathCategory::Session => runtime.health_tag.as_deref(),
-        #[cfg(feature = "hysteria2")]
+        #[cfg(feature = "tcp-transport-session-runtime")]
         TcpPathCategory::TransportSession => runtime.health_tag.as_deref(),
     }
 }

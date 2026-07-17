@@ -1,5 +1,5 @@
 use rand::Rng;
-use zero_config::{ClientTlsConfig, RealityConfig, WebSocketConfig};
+use zero_config::OutboundRuntimeKind;
 
 use super::groups::OutboundGroupStateStore;
 use super::plan::{EnginePlan, OutboundTarget, TargetId, TargetKind};
@@ -12,72 +12,11 @@ pub enum ResolvedLeafOutbound<'a> {
     Block {
         tag: Option<&'a str>,
     },
-    Socks5 {
+    Proxy {
         tag: &'a str,
-        server: &'a str,
-        port: u16,
-        username: Option<&'a str>,
-        password: Option<&'a str>,
-    },
-    Vless {
-        tag: &'a str,
-        server: &'a str,
-        port: u16,
-        id: &'a str,
-        flow: Option<&'a str>,
-        mux_concurrency: Option<u32>,
-        mux_idle_timeout_secs: Option<u64>,
-        tls: Option<&'a ClientTlsConfig>,
-        reality: Option<&'a RealityConfig>,
-        ws: Option<&'a WebSocketConfig>,
-        grpc: Option<&'a zero_config::GrpcConfig>,
-        h2: Option<&'a zero_config::H2Config>,
-        http_upgrade: Option<&'a zero_config::HttpUpgradeConfig>,
-        split_http: Option<&'a zero_config::SplitHttpConfig>,
-        quic: Option<&'a zero_config::QuicConfig>,
-    },
-    Hysteria2 {
-        tag: &'a str,
-        server: &'a str,
-        port: u16,
-        password: &'a str,
-        insecure: bool,
-        client_fingerprint: Option<&'a str>,
-    },
-    Shadowsocks {
-        tag: &'a str,
-        server: &'a str,
-        port: u16,
-        password: &'a str,
-        cipher: &'a str,
-    },
-    Trojan {
-        tag: &'a str,
-        server: &'a str,
-        port: u16,
-        password: &'a str,
-        sni: Option<&'a str>,
-        insecure: bool,
-        client_fingerprint: Option<&'a str>,
-    },
-    Vmess {
-        tag: &'a str,
-        server: &'a str,
-        port: u16,
-        id: &'a str,
-        cipher: &'a str,
-        mux_concurrency: Option<u32>,
-        mux_idle_timeout_secs: Option<u64>,
-        tls: Option<&'a ClientTlsConfig>,
-        ws: Option<&'a zero_config::WebSocketConfig>,
-        grpc: Option<&'a zero_config::GrpcConfig>,
-    },
-    Mieru {
-        tag: &'a str,
-        server: &'a str,
-        port: u16,
-        username: &'a str,
-        password: &'a str,
+        outbound_index: usize,
+        protocol: &'static str,
+        endpoint: Option<(&'a str, u16)>,
     },
 }
 
@@ -86,38 +25,27 @@ impl<'a> ResolvedLeafOutbound<'a> {
         match self {
             Self::Direct { .. } => "direct",
             Self::Block { .. } => "block",
-            Self::Socks5 { .. } => "socks5",
-            Self::Vless { .. } => "vless",
-            Self::Hysteria2 { .. } => "hysteria2",
-            Self::Shadowsocks { .. } => "shadowsocks",
-            Self::Trojan { .. } => "trojan",
-            Self::Vmess { .. } => "vmess",
-            Self::Mieru { .. } => "mieru",
+            Self::Proxy { protocol, .. } => protocol,
         }
     }
 
     pub fn tag(&self) -> Option<&'a str> {
         match self {
             Self::Direct { tag } | Self::Block { tag } => *tag,
-            Self::Socks5 { tag, .. }
-            | Self::Vless { tag, .. }
-            | Self::Hysteria2 { tag, .. }
-            | Self::Shadowsocks { tag, .. }
-            | Self::Trojan { tag, .. }
-            | Self::Vmess { tag, .. }
-            | Self::Mieru { tag, .. } => Some(*tag),
+            Self::Proxy { tag, .. } => Some(*tag),
         }
     }
 
     pub fn proxy_endpoint(&self) -> Option<(&'a str, u16)> {
         match self {
-            Self::Socks5 { server, port, .. }
-            | Self::Vless { server, port, .. }
-            | Self::Hysteria2 { server, port, .. }
-            | Self::Shadowsocks { server, port, .. }
-            | Self::Trojan { server, port, .. }
-            | Self::Vmess { server, port, .. }
-            | Self::Mieru { server, port, .. } => Some((*server, *port)),
+            Self::Proxy { endpoint, .. } => *endpoint,
+            Self::Direct { .. } | Self::Block { .. } => None,
+        }
+    }
+
+    pub fn outbound_index(&self) -> Option<usize> {
+        match self {
+            Self::Proxy { outbound_index, .. } => Some(*outbound_index),
             Self::Direct { .. } | Self::Block { .. } => None,
         }
     }
@@ -243,128 +171,14 @@ fn resolve_leaf_outbound<'a>(
     tag: &'a str,
     outbound: &'a OutboundTarget,
 ) -> ResolvedLeafOutbound<'a> {
-    match outbound {
-        OutboundTarget::Direct => ResolvedLeafOutbound::Direct { tag: Some(tag) },
-        OutboundTarget::Block => ResolvedLeafOutbound::Block { tag: Some(tag) },
-        OutboundTarget::Socks5 {
-            server,
-            port,
-            username,
-            password,
-        } => ResolvedLeafOutbound::Socks5 {
+    match outbound.runtime_kind() {
+        OutboundRuntimeKind::Direct => ResolvedLeafOutbound::Direct { tag: Some(tag) },
+        OutboundRuntimeKind::Block => ResolvedLeafOutbound::Block { tag: Some(tag) },
+        OutboundRuntimeKind::Proxy => ResolvedLeafOutbound::Proxy {
             tag,
-            server,
-            port: *port,
-            username: username.as_deref(),
-            password: password.as_deref(),
-        },
-        OutboundTarget::Vless {
-            server,
-            port,
-            id,
-            flow,
-            mux_concurrency,
-            mux_idle_timeout_secs,
-            tls,
-            reality,
-            ws,
-            grpc,
-            h2,
-            http_upgrade,
-            split_http,
-            quic,
-        } => ResolvedLeafOutbound::Vless {
-            tag,
-            server,
-            port: *port,
-            id,
-            flow: flow.as_deref(),
-            mux_concurrency: *mux_concurrency,
-            mux_idle_timeout_secs: *mux_idle_timeout_secs,
-            tls: tls.as_deref(),
-            reality: reality.as_deref(),
-            ws: ws.as_deref(),
-            grpc: grpc.as_deref(),
-            h2: h2.as_deref(),
-            http_upgrade: http_upgrade.as_deref(),
-            split_http: split_http.as_deref(),
-            quic: quic.as_deref(),
-        },
-        OutboundTarget::Hysteria2 {
-            server,
-            port,
-            password,
-            insecure,
-            client_fingerprint,
-        } => ResolvedLeafOutbound::Hysteria2 {
-            tag,
-            server,
-            port: *port,
-            password,
-            insecure: *insecure,
-            client_fingerprint: client_fingerprint.as_deref(),
-        },
-        OutboundTarget::Shadowsocks {
-            server,
-            port,
-            password,
-            cipher,
-        } => ResolvedLeafOutbound::Shadowsocks {
-            tag,
-            server,
-            port: *port,
-            password,
-            cipher,
-        },
-        OutboundTarget::Trojan {
-            server,
-            port,
-            password,
-            sni,
-            insecure,
-            client_fingerprint,
-        } => ResolvedLeafOutbound::Trojan {
-            tag,
-            server,
-            port: *port,
-            password,
-            sni: sni.as_deref(),
-            insecure: *insecure,
-            client_fingerprint: client_fingerprint.as_deref(),
-        },
-        OutboundTarget::Vmess {
-            server,
-            port,
-            id,
-            cipher,
-            mux_concurrency,
-            mux_idle_timeout_secs,
-            tls,
-            ws,
-            grpc,
-        } => ResolvedLeafOutbound::Vmess {
-            tag,
-            server,
-            port: *port,
-            id,
-            cipher,
-            mux_concurrency: *mux_concurrency,
-            mux_idle_timeout_secs: *mux_idle_timeout_secs,
-            tls: tls.as_deref(),
-            ws: ws.as_deref(),
-            grpc: grpc.as_deref(),
-        },
-        OutboundTarget::Mieru {
-            server,
-            port,
-            username,
-            password,
-        } => ResolvedLeafOutbound::Mieru {
-            tag,
-            server,
-            port: *port,
-            username,
-            password,
+            outbound_index: outbound.outbound_index(),
+            protocol: outbound.protocol(),
+            endpoint: outbound.endpoint(),
         },
     }
 }

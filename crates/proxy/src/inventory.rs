@@ -7,15 +7,7 @@ mod runtime;
 mod tcp;
 #[cfg(test)]
 mod tests;
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
-))]
+#[cfg(feature = "udp-runtime")]
 mod udp;
 
 pub(crate) use runtime::{ClaimedInventoryLeaf, ClaimedRelayChain};
@@ -23,15 +15,7 @@ pub(crate) use tcp::PreparedTcpRelayChain;
 pub(crate) use tcp::{
     PreparedTcpCandidate, PreparedTcpCandidateExecution, PreparedTcpOutbound, PreparedTcpRelayHop,
 };
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
-))]
+#[cfg(feature = "udp-runtime")]
 pub(crate) use udp::{PreparedUdpLeafCandidate, PreparedUdpOutbound};
 
 #[derive(Debug, Clone)]
@@ -47,15 +31,8 @@ impl Default for ProtocolInventory {
     }
 }
 
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
-))]
+#[cfg(feature = "udp-runtime")]
+
 impl ProtocolInventory {
     pub(crate) fn registered_udp_handlers(
         &self,

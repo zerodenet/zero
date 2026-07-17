@@ -1,72 +1,36 @@
 use std::sync::Arc;
 
+use zero_config::OutboundProtocolConfig;
 use zero_engine::ResolvedLeafOutbound;
 
 use super::ProtocolRegistry;
-#[cfg(any(
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "vless",
-    feature = "vmess",
-    feature = "trojan",
-    feature = "mieru"
-))]
+#[cfg(feature = "managed-udp-runtime")]
 use crate::protocol_registry::ManagedUdpHandlerProvider;
-#[cfg(feature = "socks5")]
+#[cfg(feature = "upstream-association-runtime")]
 use crate::protocol_registry::UpstreamUdpHandlerProvider;
 use crate::protocol_registry::{
     InboundListenerCapability, OutboundLeafClaim, ProtocolSupportCapability, TcpOutboundCapability,
 };
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
-))]
+#[cfg(feature = "udp-runtime")]
 use crate::protocol_registry::{UdpFlowCapability, UdpPacketPathCapability};
 
-type OutboundLeafClaimFn<T> =
-    for<'a> fn(&T, ResolvedLeafOutbound<'a>) -> Option<OutboundLeafClaim<'a>>;
+type OutboundLeafClaimFn<T> = for<'a> fn(
+    &T,
+    Option<&'a OutboundProtocolConfig>,
+    ResolvedLeafOutbound<'a>,
+) -> Option<OutboundLeafClaim<'a>>;
 
-#[cfg(any(
-    not(any(
-        feature = "socks5",
-        feature = "vless",
-        feature = "hysteria2",
-        feature = "shadowsocks",
-        feature = "trojan",
-        feature = "vmess",
-        feature = "mieru"
-    )),
-    feature = "http",
-    feature = "mixed"
-))]
 struct NoOutboundClaimer<T> {
     adapter: Arc<T>,
 }
 
-#[cfg(any(
-    not(any(
-        feature = "socks5",
-        feature = "vless",
-        feature = "hysteria2",
-        feature = "shadowsocks",
-        feature = "trojan",
-        feature = "vmess",
-        feature = "mieru"
-    )),
-    feature = "http",
-    feature = "mixed"
-))]
 impl<T> super::OutboundLeafClaimer for NoOutboundClaimer<T>
 where
     T: TcpOutboundCapability + Send + Sync + 'static,
 {
     fn claim_outbound_leaf<'a>(
         &self,
+        _protocol: Option<&'a OutboundProtocolConfig>,
         _leaf: ResolvedLeafOutbound<'a>,
     ) -> Option<OutboundLeafClaim<'a>> {
         let _ = &self.adapter;
@@ -95,26 +59,14 @@ where
 {
     fn claim_outbound_leaf<'a>(
         &self,
+        protocol: Option<&'a OutboundProtocolConfig>,
         leaf: ResolvedLeafOutbound<'a>,
     ) -> Option<OutboundLeafClaim<'a>> {
-        (self.claim)(self.adapter.as_ref(), leaf)
+        (self.claim)(self.adapter.as_ref(), protocol, leaf)
     }
 }
 
 impl ProtocolRegistry {
-    #[cfg(any(
-        not(any(
-            feature = "socks5",
-            feature = "vless",
-            feature = "hysteria2",
-            feature = "shadowsocks",
-            feature = "trojan",
-            feature = "vmess",
-            feature = "mieru"
-        )),
-        feature = "http",
-        feature = "mixed"
-    ))]
     pub(crate) fn register_core_capability<T>(
         &mut self,
         adapter: Arc<T>,
@@ -136,55 +88,18 @@ impl ProtocolRegistry {
             },
             #[cfg(test)]
             tcp: adapter,
-            #[cfg(all(
-                test,
-                any(
-                    feature = "socks5",
-                    feature = "vless",
-                    feature = "hysteria2",
-                    feature = "shadowsocks",
-                    feature = "trojan",
-                    feature = "vmess",
-                    feature = "mieru"
-                )
-            ))]
+            #[cfg(all(test, feature = "udp-runtime"))]
             udp: None,
-            #[cfg(any(
-                feature = "hysteria2",
-                feature = "shadowsocks",
-                feature = "vless",
-                feature = "vmess",
-                feature = "trojan",
-                feature = "mieru"
-            ))]
+            #[cfg(feature = "managed-udp-runtime")]
             managed_udp_handlers: None,
-            #[cfg(feature = "socks5")]
+            #[cfg(feature = "upstream-association-runtime")]
             upstream_udp_handler: None,
-            #[cfg(all(
-                test,
-                any(
-                    feature = "socks5",
-                    feature = "vless",
-                    feature = "hysteria2",
-                    feature = "shadowsocks",
-                    feature = "trojan",
-                    feature = "vmess",
-                    feature = "mieru"
-                )
-            ))]
+            #[cfg(all(test, feature = "udp-runtime"))]
             packet_path: None,
         });
     }
 
-    #[cfg(any(
-        feature = "socks5",
-        feature = "vless",
-        feature = "hysteria2",
-        feature = "shadowsocks",
-        feature = "trojan",
-        feature = "vmess",
-        feature = "mieru"
-    ))]
+    #[cfg(feature = "udp-runtime")]
     pub(crate) fn register_capability<T>(&mut self, adapter: Arc<T>, claim: OutboundLeafClaimFn<T>)
     where
         T: ProtocolSupportCapability
@@ -203,47 +118,18 @@ impl ProtocolRegistry {
             }),
             #[cfg(test)]
             tcp: adapter.clone(),
-            #[cfg(all(
-                test,
-                any(
-                    feature = "socks5",
-                    feature = "vless",
-                    feature = "hysteria2",
-                    feature = "shadowsocks",
-                    feature = "trojan",
-                    feature = "vmess",
-                    feature = "mieru"
-                )
-            ))]
+            #[cfg(all(test, feature = "udp-runtime"))]
             udp: Some(adapter.clone()),
-            #[cfg(any(
-                feature = "hysteria2",
-                feature = "shadowsocks",
-                feature = "vless",
-                feature = "vmess",
-                feature = "trojan",
-                feature = "mieru"
-            ))]
+            #[cfg(feature = "managed-udp-runtime")]
             managed_udp_handlers: None,
-            #[cfg(feature = "socks5")]
+            #[cfg(feature = "upstream-association-runtime")]
             upstream_udp_handler: None,
-            #[cfg(all(
-                test,
-                any(
-                    feature = "socks5",
-                    feature = "vless",
-                    feature = "hysteria2",
-                    feature = "shadowsocks",
-                    feature = "trojan",
-                    feature = "vmess",
-                    feature = "mieru"
-                )
-            ))]
+            #[cfg(all(test, feature = "udp-runtime"))]
             packet_path: Some(adapter),
         });
     }
 
-    #[cfg(feature = "socks5")]
+    #[cfg(feature = "upstream-association-runtime")]
     pub(crate) fn register_upstream_capability<T>(
         &mut self,
         adapter: Arc<T>,
@@ -266,53 +152,17 @@ impl ProtocolRegistry {
             }),
             #[cfg(test)]
             tcp: adapter.clone(),
-            #[cfg(all(
-                test,
-                any(
-                    feature = "socks5",
-                    feature = "vless",
-                    feature = "hysteria2",
-                    feature = "shadowsocks",
-                    feature = "trojan",
-                    feature = "vmess",
-                    feature = "mieru"
-                )
-            ))]
+            #[cfg(all(test, feature = "udp-runtime"))]
             udp: Some(adapter.clone()),
-            #[cfg(any(
-                feature = "hysteria2",
-                feature = "shadowsocks",
-                feature = "vless",
-                feature = "vmess",
-                feature = "trojan",
-                feature = "mieru"
-            ))]
+            #[cfg(feature = "managed-udp-runtime")]
             managed_udp_handlers: None,
             upstream_udp_handler: Some(adapter.clone()),
-            #[cfg(all(
-                test,
-                any(
-                    feature = "socks5",
-                    feature = "vless",
-                    feature = "hysteria2",
-                    feature = "shadowsocks",
-                    feature = "trojan",
-                    feature = "vmess",
-                    feature = "mieru"
-                )
-            ))]
+            #[cfg(all(test, feature = "udp-runtime"))]
             packet_path: Some(adapter),
         });
     }
 
-    #[cfg(any(
-        feature = "hysteria2",
-        feature = "shadowsocks",
-        feature = "vless",
-        feature = "vmess",
-        feature = "trojan",
-        feature = "mieru"
-    ))]
+    #[cfg(feature = "managed-udp-runtime")]
     pub(crate) fn register_managed_capability<T>(
         &mut self,
         adapter: Arc<T>,
@@ -335,46 +185,17 @@ impl ProtocolRegistry {
             }),
             #[cfg(test)]
             tcp: adapter.clone(),
-            #[cfg(all(
-                test,
-                any(
-                    feature = "socks5",
-                    feature = "vless",
-                    feature = "hysteria2",
-                    feature = "shadowsocks",
-                    feature = "trojan",
-                    feature = "vmess",
-                    feature = "mieru"
-                )
-            ))]
+            #[cfg(all(test, feature = "udp-runtime"))]
             udp: Some(adapter.clone()),
             managed_udp_handlers: Some(adapter.clone()),
-            #[cfg(feature = "socks5")]
+            #[cfg(feature = "upstream-association-runtime")]
             upstream_udp_handler: None,
-            #[cfg(all(
-                test,
-                any(
-                    feature = "socks5",
-                    feature = "vless",
-                    feature = "hysteria2",
-                    feature = "shadowsocks",
-                    feature = "trojan",
-                    feature = "vmess",
-                    feature = "mieru"
-                )
-            ))]
+            #[cfg(all(test, feature = "udp-runtime"))]
             packet_path: Some(adapter),
         });
     }
 
-    #[cfg(any(
-        feature = "hysteria2",
-        feature = "shadowsocks",
-        feature = "vless",
-        feature = "vmess",
-        feature = "trojan",
-        feature = "mieru"
-    ))]
+    #[cfg(feature = "managed-udp-runtime")]
     pub(crate) fn managed_udp_handler_providers(
         &self,
     ) -> impl Iterator<Item = &Arc<dyn ManagedUdpHandlerProvider>> {
@@ -383,7 +204,7 @@ impl ProtocolRegistry {
             .filter_map(|entry| entry.managed_udp_handlers.as_ref())
     }
 
-    #[cfg(feature = "socks5")]
+    #[cfg(feature = "upstream-association-runtime")]
     pub(crate) fn upstream_udp_handler_providers(
         &self,
     ) -> impl Iterator<Item = &Arc<dyn UpstreamUdpHandlerProvider>> {

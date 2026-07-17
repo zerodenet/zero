@@ -1,15 +1,7 @@
 mod fixtures;
 mod inbound;
 mod outbound;
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
-))]
+#[cfg(feature = "udp-runtime")]
 mod registration;
 mod validation;
 

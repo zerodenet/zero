@@ -7,15 +7,7 @@ pub(crate) struct OutboundEndpoint {
 }
 
 impl OutboundEndpoint {
-    #[cfg(any(
-        feature = "socks5",
-        feature = "vless",
-        feature = "hysteria2",
-        feature = "shadowsocks",
-        feature = "trojan",
-        feature = "vmess",
-        feature = "mieru"
-    ))]
+    #[cfg(feature = "udp-runtime")]
     pub(crate) fn upstream(&self) -> (String, u16) {
         (self.server.clone(), self.port)
     }
@@ -25,15 +17,7 @@ impl OutboundEndpoint {
     }
 }
 
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
-))]
+#[cfg(feature = "udp-runtime")]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum UdpPathCategory {
     Direct,
@@ -52,7 +36,7 @@ pub(crate) enum UdpPathCategory {
         feature = "mieru"
     ))]
     StreamPacket,
-    #[cfg(any(feature = "hysteria2", feature = "shadowsocks"))]
+    #[cfg(feature = "managed-datagram-runtime")]
     Datagram,
     PacketPathDatagram,
 }
@@ -61,10 +45,10 @@ pub(crate) enum UdpPathCategory {
 pub(crate) enum TcpPathCategory {
     Direct,
     Block,
-    #[cfg(any(feature = "socks5", feature = "vless", feature = "trojan"))]
+    #[cfg(feature = "tcp-tunnel-runtime")]
     Tunnel,
-    #[cfg(any(feature = "shadowsocks", feature = "vmess", feature = "mieru"))]
+    #[cfg(feature = "tcp-session-runtime")]
     Session,
-    #[cfg(feature = "hysteria2")]
+    #[cfg(feature = "tcp-transport-session-runtime")]
     TransportSession,
 }

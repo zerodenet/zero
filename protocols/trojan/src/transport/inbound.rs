@@ -2,7 +2,7 @@ use std::path::Path;
 
 use zero_platform_tokio::TokioSocket;
 use zero_traits::ServerTlsProfile;
-use zero_transport::inbound_route::{NoClientStreamRouteDefaults, OpaqueStreamRoute};
+use zero_transport::protocol_inbound_route::{NoClientStreamRouteDefaults, OpaqueStreamRoute};
 use zero_transport::tls::{InboundTlsStream, TlsAcceptor};
 use zero_transport::RuntimeError;
 

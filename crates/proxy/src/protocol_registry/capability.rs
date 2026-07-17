@@ -8,34 +8,13 @@ use super::{BoundInbound, OutboundLeafRuntime};
 use crate::runtime::tcp_dispatch::operation::{
     PreparedTcpConnectOperation, PreparedTcpRelayOperation,
 };
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
-))]
+#[cfg(feature = "udp-runtime")]
 use crate::runtime::udp_dispatch::operation::PreparedUdpFlowOperation;
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
-))]
+#[cfg(feature = "udp-runtime")]
 use crate::runtime::udp_dispatch::relay::PreparedUdpRelayOperation;
-#[cfg(any(feature = "hysteria2", feature = "shadowsocks"))]
+#[cfg(feature = "managed-datagram-runtime")]
 use crate::runtime::udp_flow::managed::model::ManagedDatagramFlowHandler;
-#[cfg(any(
-    feature = "vless",
-    feature = "vmess",
-    feature = "trojan",
-    feature = "mieru"
-))]
+#[cfg(feature = "managed-stream-runtime")]
 use crate::runtime::udp_flow::managed::ManagedStreamHandlerPair;
 #[cfg(feature = "socks5")]
 use crate::runtime::udp_flow::registered::UpstreamAssociationHandler;
@@ -55,15 +34,8 @@ pub(crate) trait ClaimedTcpOutboundLeaf<'a>: Send + Sync {
     }
 }
 
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
-))]
+#[cfg(feature = "udp-runtime")]
+
 pub(crate) trait ClaimedUdpFlowLeaf<'a>: Send + Sync {
     fn prepare_udp_flow(
         &self,
@@ -81,15 +53,8 @@ pub(crate) trait ClaimedUdpFlowLeaf<'a>: Send + Sync {
     }
 }
 
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
-))]
+#[cfg(feature = "udp-runtime")]
+
 pub(crate) trait ClaimedUdpPacketPathLeaf<'a>: Send + Sync {
     fn prepare_udp_packet_path(
         &self,
@@ -104,25 +69,9 @@ pub(crate) trait ClaimedUdpPacketPathLeaf<'a>: Send + Sync {
 pub(crate) struct OutboundLeafClaim<'a> {
     pub(crate) runtime: OutboundLeafRuntime,
     pub(crate) tcp: Box<dyn ClaimedTcpOutboundLeaf<'a> + 'a>,
-    #[cfg(any(
-        feature = "socks5",
-        feature = "vless",
-        feature = "hysteria2",
-        feature = "shadowsocks",
-        feature = "trojan",
-        feature = "vmess",
-        feature = "mieru"
-    ))]
+    #[cfg(feature = "udp-runtime")]
     pub(crate) udp: Option<Box<dyn ClaimedUdpFlowLeaf<'a> + 'a>>,
-    #[cfg(any(
-        feature = "socks5",
-        feature = "vless",
-        feature = "hysteria2",
-        feature = "shadowsocks",
-        feature = "trojan",
-        feature = "vmess",
-        feature = "mieru"
-    ))]
+    #[cfg(feature = "udp-runtime")]
     pub(crate) packet_path: Option<Box<dyn ClaimedUdpPacketPathLeaf<'a> + 'a>>,
 }
 
@@ -168,15 +117,8 @@ pub(crate) trait InboundListenerCapability: Send + Sync {
 
 pub(crate) trait TcpOutboundCapability: Send + Sync {}
 
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
-))]
+#[cfg(feature = "udp-runtime")]
+
 pub(crate) trait UdpFlowCapability: Send + Sync {}
 
 #[cfg(feature = "socks5")]
@@ -185,15 +127,13 @@ pub(crate) trait UpstreamUdpHandlerProvider: Send + Sync {
 }
 
 #[cfg(any(
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "vless",
-    feature = "vmess",
-    feature = "trojan",
-    feature = "mieru"
+    feature = "managed-datagram-runtime",
+    feature = "managed-stream-runtime"
 ))]
+
 pub(crate) trait ManagedUdpHandlerProvider: Send + Sync {
-    #[cfg(any(feature = "hysteria2", feature = "shadowsocks"))]
+    #[cfg(feature = "managed-datagram-runtime")]
+
     fn managed_datagram_udp_handler(&self) -> Option<Box<dyn ManagedDatagramFlowHandler>> {
         None
     }
@@ -209,13 +149,6 @@ pub(crate) trait ManagedUdpHandlerProvider: Send + Sync {
     }
 }
 
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
-))]
+#[cfg(feature = "udp-runtime")]
+
 pub(crate) trait UdpPacketPathCapability: Send + Sync {}

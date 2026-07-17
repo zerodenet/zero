@@ -13,7 +13,7 @@ pub(crate) async fn dispatch_tcp_outbound(
     resolved: ResolvedOutbound<'static>,
 ) -> Result<EstablishedTcpOutbound, TcpOutboundFailure> {
     let prepared = services.prepare_tcp_outbound(&resolved)?;
-    execute_prepared_tcp_outbound(services, session, prepared).await
+    execute_prepared_tcp_outbound(services.clone(), session, prepared).await
 }
 
 async fn execute_prepared_tcp_outbound(

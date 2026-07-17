@@ -60,9 +60,8 @@ struct VlessOutboundProjection<'a> {
 
 #[cfg(feature = "vless")]
 impl<'a> VlessOutboundProjection<'a> {
-    fn from_leaf(leaf: ResolvedLeafOutbound<'a>) -> Option<Self> {
-        let ResolvedLeafOutbound::Vless {
-            tag,
+    fn from_config(tag: &'a str, protocol: &'a OutboundProtocolConfig) -> Option<Self> {
+        let OutboundProtocolConfig::Vless {
             server,
             port,
             id,
@@ -77,25 +76,25 @@ impl<'a> VlessOutboundProjection<'a> {
             split_http,
             quic,
             ..
-        } = leaf
+        } = protocol
         else {
             return None;
         };
         Some(Self {
             tag,
             server,
-            port,
+            port: *port,
             id,
-            flow,
-            mux_concurrency,
-            tls,
-            reality,
-            ws,
-            grpc,
-            h2,
-            http_upgrade,
-            split_http,
-            quic,
+            flow: flow.as_deref(),
+            mux_concurrency: *mux_concurrency,
+            tls: tls.as_deref(),
+            reality: reality.as_deref(),
+            ws: ws.as_deref(),
+            grpc: grpc.as_deref(),
+            h2: h2.as_deref(),
+            http_upgrade: http_upgrade.as_deref(),
+            split_http: split_http.as_deref(),
+            quic: quic.as_deref(),
         })
     }
 
@@ -151,9 +150,10 @@ const TCP_PATH: TcpPathCategory = TcpPathCategory::Tunnel;
 impl VlessAdapter {
     pub(crate) fn claim_outbound_leaf_impl<'a>(
         &self,
+        protocol: Option<&'a OutboundProtocolConfig>,
         leaf: ResolvedLeafOutbound<'a>,
     ) -> Option<OutboundLeafClaim<'a>> {
-        let projection = VlessOutboundProjection::from_leaf(leaf)?;
+        let projection = VlessOutboundProjection::from_config(leaf.tag()?, protocol?)?;
         let runtime = OutboundLeafRuntime::proxy(
             projection.tag,
             projection.server,

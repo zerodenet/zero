@@ -1,15 +1,16 @@
-#[cfg(any(feature = "hysteria2", feature = "shadowsocks"))]
+#[cfg(feature = "managed-datagram-runtime")]
 use crate::runtime::udp_dispatch::managed::model::{ManagedDatagramStart, ManagedUdpSend};
 #[cfg(any(feature = "socks5", feature = "hysteria2", feature = "shadowsocks"))]
 use crate::runtime::udp_dispatch::FlowStartResult;
 use crate::runtime::udp_dispatch::{FlowFailure, UdpDispatch};
-#[cfg(any(feature = "hysteria2", feature = "shadowsocks"))]
+#[cfg(feature = "managed-datagram-runtime")]
 use crate::runtime::udp_flow::managed::{ManagedUdpFlowKind, ManagedUdpFlowResume};
 #[cfg(any(feature = "socks5", feature = "hysteria2", feature = "shadowsocks"))]
 use crate::runtime::udp_flow::outbound::UdpFlowOutbound;
 
 impl UdpDispatch {
-    #[cfg(any(feature = "hysteria2", feature = "shadowsocks"))]
+    #[cfg(feature = "managed-datagram-runtime")]
+
     async fn start_tracked_managed_udp(
         &mut self,
         request: ManagedUdpSend<'_>,
@@ -32,7 +33,8 @@ impl UdpDispatch {
         })
     }
 
-    #[cfg(any(feature = "hysteria2", feature = "shadowsocks"))]
+    #[cfg(feature = "managed-datagram-runtime")]
+
     pub(crate) async fn start_transport_managed_datagram<T>(
         &mut self,
         services: Option<crate::protocol_registry::UdpRuntimeServices>,
@@ -61,7 +63,8 @@ impl UdpDispatch {
         .await
     }
 
-    #[cfg(any(feature = "hysteria2", feature = "shadowsocks"))]
+    #[cfg(feature = "managed-datagram-runtime")]
+
     pub(crate) async fn start_tracked_managed_datagram<T>(
         &mut self,
         request: ManagedDatagramStart<'_, T>,

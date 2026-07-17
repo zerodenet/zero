@@ -1,47 +1,24 @@
 use std::path::Path;
 use std::sync::Arc;
 
+use zero_config::RuntimeConfig;
 use zero_engine::{EngineError, ResolvedLeafOutbound};
 
 use super::{ProtocolRegistry, RegisteredProtocolEntry};
 use crate::protocol_registry::{ClaimedTcpOutboundLeaf, OutboundLeafClaim, OutboundLeafRuntime};
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
-))]
+#[cfg(feature = "udp-runtime")]
 use crate::protocol_registry::{ClaimedUdpFlowLeaf, ClaimedUdpPacketPathLeaf};
 use crate::runtime::tcp_dispatch::operation::{
     PreparedTcpConnectOperation, PreparedTcpRelayOperation,
 };
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
-))]
+#[cfg(feature = "udp-runtime")]
 use crate::runtime::udp_dispatch::operation::PreparedUdpFlowOperation;
 #[derive(Clone, Default)]
 struct ClaimedTcpHooks<'a> {
     capability: Option<Arc<dyn ClaimedTcpOutboundLeaf<'a> + 'a>>,
 }
 
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
-))]
+#[cfg(feature = "udp-runtime")]
 #[derive(Clone, Default)]
 struct ClaimedUdpHooks<'a> {
     capability: Option<Arc<dyn ClaimedUdpFlowLeaf<'a> + 'a>>,
@@ -52,15 +29,7 @@ struct ClaimedUdpHooks<'a> {
 pub(crate) struct ClaimedOutboundLeaf<'a> {
     pub(crate) runtime: OutboundLeafRuntime,
     tcp: ClaimedTcpHooks<'a>,
-    #[cfg(any(
-        feature = "socks5",
-        feature = "vless",
-        feature = "hysteria2",
-        feature = "shadowsocks",
-        feature = "trojan",
-        feature = "vmess",
-        feature = "mieru"
-    ))]
+    #[cfg(feature = "udp-runtime")]
     udp: ClaimedUdpHooks<'a>,
 }
 
@@ -68,29 +37,12 @@ impl<'a> ClaimedOutboundLeaf<'a> {
     fn new(
         runtime: OutboundLeafRuntime,
         tcp: ClaimedTcpHooks<'a>,
-        #[cfg(any(
-            feature = "socks5",
-            feature = "vless",
-            feature = "hysteria2",
-            feature = "shadowsocks",
-            feature = "trojan",
-            feature = "vmess",
-            feature = "mieru"
-        ))]
-        udp: ClaimedUdpHooks<'a>,
+        #[cfg(feature = "udp-runtime")] udp: ClaimedUdpHooks<'a>,
     ) -> Self {
         Self {
             runtime,
             tcp,
-            #[cfg(any(
-                feature = "socks5",
-                feature = "vless",
-                feature = "hysteria2",
-                feature = "shadowsocks",
-                feature = "trojan",
-                feature = "vmess",
-                feature = "mieru"
-            ))]
+            #[cfg(feature = "udp-runtime")]
             udp,
         }
     }
@@ -100,29 +52,13 @@ impl<'a> ClaimedOutboundLeaf<'a> {
         self.tcp.capability.is_some()
     }
 
-    #[cfg(any(
-        feature = "socks5",
-        feature = "vless",
-        feature = "hysteria2",
-        feature = "shadowsocks",
-        feature = "trojan",
-        feature = "vmess",
-        feature = "mieru"
-    ))]
+    #[cfg(feature = "udp-runtime")]
     #[cfg(test)]
     pub(crate) fn has_udp_flow_capability(&self) -> bool {
         self.udp.capability.is_some()
     }
 
-    #[cfg(any(
-        feature = "socks5",
-        feature = "vless",
-        feature = "hysteria2",
-        feature = "shadowsocks",
-        feature = "trojan",
-        feature = "vmess",
-        feature = "mieru"
-    ))]
+    #[cfg(feature = "udp-runtime")]
     #[cfg(test)]
     pub(crate) fn has_udp_packet_path_capability(&self) -> bool {
         self.udp.packet_path.is_some()
@@ -160,15 +96,7 @@ impl<'a> ClaimedOutboundLeaf<'a> {
         Ok((endpoint.server, endpoint.port, operation))
     }
 
-    #[cfg(any(
-        feature = "socks5",
-        feature = "vless",
-        feature = "hysteria2",
-        feature = "shadowsocks",
-        feature = "trojan",
-        feature = "vmess",
-        feature = "mieru"
-    ))]
+    #[cfg(feature = "udp-runtime")]
     pub(crate) fn prepare_udp_flow(
         &self,
         source_dir: Option<&Path>,
@@ -182,15 +110,7 @@ impl<'a> ClaimedOutboundLeaf<'a> {
         capability.prepare_udp_flow(source_dir)
     }
 
-    #[cfg(any(
-        feature = "socks5",
-        feature = "vless",
-        feature = "hysteria2",
-        feature = "shadowsocks",
-        feature = "trojan",
-        feature = "vmess",
-        feature = "mieru"
-    ))]
+    #[cfg(feature = "udp-runtime")]
     pub(crate) fn prepare_udp_relay(
         &self,
         source_dir: Option<&Path>,
@@ -206,15 +126,7 @@ impl<'a> ClaimedOutboundLeaf<'a> {
         capability.prepare_udp_relay(source_dir)
     }
 
-    #[cfg(any(
-        feature = "socks5",
-        feature = "vless",
-        feature = "hysteria2",
-        feature = "shadowsocks",
-        feature = "trojan",
-        feature = "vmess",
-        feature = "mieru"
-    ))]
+    #[cfg(feature = "udp-runtime")]
     pub(crate) fn prepare_udp_packet_path(
         &self,
     ) -> Option<
@@ -230,47 +142,24 @@ impl<'a> ClaimedOutboundLeaf<'a> {
 
 fn claim_outbound_hooks<'a>(
     entry: &RegisteredProtocolEntry,
+    protocol: Option<&'a zero_config::OutboundProtocolConfig>,
     leaf: ResolvedLeafOutbound<'a>,
 ) -> Result<ClaimedOutboundLeaf<'a>, EngineError> {
     let Some(OutboundLeafClaim {
         runtime,
         tcp,
-        #[cfg(any(
-            feature = "socks5",
-            feature = "vless",
-            feature = "hysteria2",
-            feature = "shadowsocks",
-            feature = "trojan",
-            feature = "vmess",
-            feature = "mieru"
-        ))]
+        #[cfg(feature = "udp-runtime")]
         udp,
-        #[cfg(any(
-            feature = "socks5",
-            feature = "vless",
-            feature = "hysteria2",
-            feature = "shadowsocks",
-            feature = "trojan",
-            feature = "vmess",
-            feature = "mieru"
-        ))]
+        #[cfg(feature = "udp-runtime")]
         packet_path,
-    }) = entry.outbound.claim_outbound_leaf(leaf.clone())
+    }) = entry.outbound.claim_outbound_leaf(protocol, leaf.clone())
     else {
         return Err(missing_claimed_outbound_leaf(entry.support.name(), &leaf));
     };
     let tcp = ClaimedTcpHooks {
         capability: Some(Arc::from(tcp) as Arc<dyn ClaimedTcpOutboundLeaf<'a> + 'a>),
     };
-    #[cfg(any(
-        feature = "socks5",
-        feature = "vless",
-        feature = "hysteria2",
-        feature = "shadowsocks",
-        feature = "trojan",
-        feature = "vmess",
-        feature = "mieru"
-    ))]
+    #[cfg(feature = "udp-runtime")]
     let udp = ClaimedUdpHooks {
         capability: udp.map(|claimed| Arc::from(claimed) as Arc<dyn ClaimedUdpFlowLeaf<'a> + 'a>),
         packet_path: packet_path
@@ -279,15 +168,7 @@ fn claim_outbound_hooks<'a>(
     Ok(ClaimedOutboundLeaf::new(
         runtime,
         tcp,
-        #[cfg(any(
-            feature = "socks5",
-            feature = "vless",
-            feature = "hysteria2",
-            feature = "shadowsocks",
-            feature = "trojan",
-            feature = "vmess",
-            feature = "mieru"
-        ))]
+        #[cfg(feature = "udp-runtime")]
         udp,
     ))
 }
@@ -304,31 +185,16 @@ impl ProtocolRegistry {
     /// that own that leaf.
     pub(crate) fn claim_outbound_leaf<'a>(
         &self,
+        config: &'a RuntimeConfig,
         leaf: ResolvedLeafOutbound<'a>,
     ) -> Result<ClaimedOutboundLeaf<'a>, EngineError> {
         if let ResolvedLeafOutbound::Block { tag } = leaf.clone() {
-            #[cfg(any(
-                feature = "socks5",
-                feature = "vless",
-                feature = "hysteria2",
-                feature = "shadowsocks",
-                feature = "trojan",
-                feature = "vmess",
-                feature = "mieru"
-            ))]
+            #[cfg(feature = "udp-runtime")]
             let udp = ClaimedUdpHooks::default();
             return Ok(ClaimedOutboundLeaf::new(
                 OutboundLeafRuntime::block(tag),
                 ClaimedTcpHooks::default(),
-                #[cfg(any(
-                    feature = "socks5",
-                    feature = "vless",
-                    feature = "hysteria2",
-                    feature = "shadowsocks",
-                    feature = "trojan",
-                    feature = "vmess",
-                    feature = "mieru"
-                ))]
+                #[cfg(feature = "udp-runtime")]
                 udp,
             ));
         }
@@ -337,7 +203,26 @@ impl ProtocolRegistry {
         let entry = self
             .outbound_protocol_entry(protocol)
             .ok_or_else(|| unsupported_outbound_leaf(protocol))?;
-        claim_outbound_hooks(entry, leaf)
+        if matches!(leaf, ResolvedLeafOutbound::Direct { .. }) {
+            return claim_outbound_hooks(entry, None, leaf);
+        }
+        let outbound_index = leaf.outbound_index().ok_or_else(|| {
+            EngineError::Io(std::io::Error::other(
+                "configured proxy leaf is missing its outbound index",
+            ))
+        })?;
+        let outbound = config.outbounds.get(outbound_index).ok_or_else(|| {
+            EngineError::Io(std::io::Error::other(format!(
+                "resolved outbound index {outbound_index} is outside the active config",
+            )))
+        })?;
+        if outbound.protocol.protocol_name() != protocol {
+            return Err(EngineError::Io(std::io::Error::other(format!(
+                "resolved outbound protocol `{protocol}` does not match active config protocol `{}`",
+                outbound.protocol.protocol_name()
+            ))));
+        }
+        claim_outbound_hooks(entry, Some(&outbound.protocol), leaf)
     }
 }
 
@@ -348,15 +233,8 @@ fn unsupported_outbound_leaf(protocol: &str) -> EngineError {
     ))
 }
 
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
-))]
+#[cfg(feature = "udp-runtime")]
+
 fn missing_udp_relay_capability() -> crate::runtime::udp_dispatch::FlowFailure {
     crate::runtime::udp_dispatch::FlowFailure {
         stage: "find_outbound_leaf",

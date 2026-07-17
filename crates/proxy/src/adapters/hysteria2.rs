@@ -30,15 +30,14 @@ pub(crate) mod udp;
 #[derive(Debug)]
 pub(crate) struct Hysteria2Adapter;
 
-fn transport_leaf(leaf: &ResolvedLeafOutbound<'_>) -> Option<Hysteria2TransportLeaf> {
-    let ResolvedLeafOutbound::Hysteria2 {
-        tag,
+fn transport_leaf(tag: &str, protocol: &OutboundProtocolConfig) -> Option<Hysteria2TransportLeaf> {
+    let OutboundProtocolConfig::Hysteria2 {
         server,
         port,
         password,
         client_fingerprint,
         ..
-    } = leaf
+    } = protocol
     else {
         return None;
     };
@@ -63,9 +62,10 @@ impl NamedProtocolAdapter for Hysteria2Adapter {
 impl Hysteria2Adapter {
     pub(crate) fn claim_outbound_leaf_impl<'a>(
         &self,
+        protocol: Option<&'a OutboundProtocolConfig>,
         leaf: ResolvedLeafOutbound<'a>,
     ) -> Option<OutboundLeafClaim<'a>> {
-        let leaf = transport_leaf(&leaf)?;
+        let leaf = transport_leaf(leaf.tag()?, protocol?)?;
         let runtime = OutboundLeafRuntime::proxy(
             leaf.tag(),
             leaf.server(),

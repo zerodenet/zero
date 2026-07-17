@@ -22,7 +22,7 @@ impl ProtocolInventory {
         match resolved {
             ResolvedOutbound::Single(candidate) => {
                 let claimed = self
-                    .claim_outbound_leaf(candidate.clone())
+                    .claim_outbound_leaf(ctx.config(), candidate.clone())
                     .map_err(|error| FlowFailure {
                         stage: "outbound_leaf_runtime",
                         error,
@@ -38,7 +38,7 @@ impl ProtocolInventory {
 
                 for candidate in candidates.iter().cloned() {
                     let prepared_candidate = self
-                        .claim_outbound_leaf(candidate)
+                        .claim_outbound_leaf(ctx.config(), candidate)
                         .map_err(|error| FlowFailure {
                             stage: "outbound_leaf_runtime",
                             error,
@@ -67,6 +67,7 @@ impl ProtocolInventory {
             }
             ResolvedOutbound::Relay { chain } => {
                 let claimed = self.claim_relay_chain(
+                    ctx.config(),
                     chain.iter().cloned(),
                     |error| FlowFailure {
                         stage: "outbound_leaf_runtime",

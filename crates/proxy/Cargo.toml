@@ -14,16 +14,29 @@ default = [
     "mixed",
     "vless",
 ]
-socks5 = ["dep:socks5", "socks5/runtime"]
+udp-runtime = []
+udp-response-runtime = ["udp-runtime"]
+managed-udp-runtime = ["udp-runtime"]
+managed-datagram-runtime = ["managed-udp-runtime"]
+managed-stream-runtime = ["managed-udp-runtime", "udp-response-runtime"]
+upstream-association-runtime = ["udp-runtime"]
+tcp-tunnel-runtime = []
+tcp-session-runtime = []
+tcp-transport-session-runtime = []
+socks5 = ["udp-response-runtime", "upstream-association-runtime", "tcp-tunnel-runtime", "dep:socks5", "socks5/runtime"]
 http = ["dep:http"]
 mixed = ["socks5", "http"]
 transport_quic = ["zero-transport/quic"]
 vless = [
+    "managed-stream-runtime",
+    "tcp-tunnel-runtime",
     "transport_quic",
     "dep:vless",
     "vless/reality",
 ]
 hysteria2 = [
+    "managed-datagram-runtime",
+    "tcp-transport-session-runtime",
     "quic_packet_path",
     "transport_quic",
     "dep:hysteria2",
@@ -31,11 +44,15 @@ hysteria2 = [
 ]
 quic_packet_path = ["dep:quinn"]
 shadowsocks = [
+    "managed-datagram-runtime",
+    "tcp-session-runtime",
     "dep:shadowsocks",
     "shadowsocks/runtime",
     "shadowsocks/blake3",
 ]
 trojan = [
+    "managed-stream-runtime",
+    "tcp-tunnel-runtime",
     "zero-transport/tls",
     "dep:ring",
     "dep:trojan",
@@ -43,10 +60,14 @@ trojan = [
     "dep:tokio-rustls",
 ]
 vmess = [
+    "managed-stream-runtime",
+    "tcp-session-runtime",
     "dep:vmess",
     "vmess/runtime",
 ]
 mieru = [
+    "managed-stream-runtime",
+    "tcp-session-runtime",
     "dep:mieru",
     "mieru/runtime",
 ]

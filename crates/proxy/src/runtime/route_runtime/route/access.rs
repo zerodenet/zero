@@ -3,15 +3,7 @@ use std::net::SocketAddr;
 #[cfg(any(feature = "vless", feature = "vmess"))]
 use super::super::MuxSubstreamRuntime;
 use super::model::{InboundRouteRuntime, InboundRouteRuntimeFactory};
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
-))]
+#[cfg(feature = "udp-runtime")]
 use crate::runtime::udp_ingress::UdpIngressRuntime;
 
 impl InboundRouteRuntime {
@@ -31,15 +23,7 @@ impl InboundRouteRuntime {
         self.tcp_runtime.select_http_redirect(session)
     }
 
-    #[cfg(any(
-        feature = "socks5",
-        feature = "vless",
-        feature = "hysteria2",
-        feature = "shadowsocks",
-        feature = "trojan",
-        feature = "vmess",
-        feature = "mieru"
-    ))]
+    #[cfg(feature = "udp-runtime")]
     pub(crate) fn udp_runtime(&self) -> UdpIngressRuntime {
         self.udp_runtime.clone()
     }
@@ -59,15 +43,7 @@ impl InboundRouteRuntimeFactory {
         InboundRouteRuntime::new(self.shared.clone(), self.inbound_tag.clone(), source_addr)
     }
 
-    #[cfg(any(
-        feature = "socks5",
-        feature = "vless",
-        feature = "hysteria2",
-        feature = "shadowsocks",
-        feature = "trojan",
-        feature = "vmess",
-        feature = "mieru"
-    ))]
+    #[cfg(feature = "udp-runtime")]
     pub(crate) fn udp_runtime(&self) -> UdpIngressRuntime {
         self.shared.udp_runtime()
     }

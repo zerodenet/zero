@@ -1,9 +1,7 @@
 use std::collections::HashMap;
 use std::time::Duration;
 
-use zero_config::{
-    ClientTlsConfig, OutboundGroupKind, OutboundProtocolConfig, RealityConfig, RuntimeConfig,
-};
+use zero_config::{OutboundGroupKind, OutboundRuntimeKind, RuntimeConfig};
 
 use super::error::EngineError;
 
@@ -33,128 +31,20 @@ impl EnginePlan {
         let mut urltest_groups = Vec::new();
         let mut loadbalance_groups = Vec::new();
 
-        for outbound in &config.outbounds {
-            let kind = match &outbound.protocol {
-                OutboundProtocolConfig::Direct => {
-                    TargetKind::Outbound(Box::new(OutboundTarget::Direct))
-                }
-                OutboundProtocolConfig::Block => {
-                    TargetKind::Outbound(Box::new(OutboundTarget::Block))
-                }
-                OutboundProtocolConfig::Socks5 {
-                    server,
+        for (outbound_index, outbound) in config.outbounds.iter().enumerate() {
+            let endpoint = outbound
+                .protocol
+                .endpoint()
+                .map(|(server, port)| OutboundEndpoint {
+                    server: server.to_owned(),
                     port,
-                    username,
-                    password,
-                } => TargetKind::Outbound(Box::new(OutboundTarget::Socks5 {
-                    server: server.clone(),
-                    port: *port,
-                    username: username.clone(),
-                    password: password.clone(),
-                })),
-                OutboundProtocolConfig::Vless {
-                    server,
-                    port,
-                    id,
-                    flow,
-                    mux_concurrency,
-                    mux_idle_timeout_secs,
-                    tls,
-                    reality,
-                    ws,
-                    grpc,
-                    h2,
-                    http_upgrade,
-                    split_http,
-                    quic,
-                } => TargetKind::Outbound(Box::new(OutboundTarget::Vless {
-                    server: server.clone(),
-                    port: *port,
-                    id: id.clone(),
-                    flow: flow.clone(),
-                    mux_concurrency: *mux_concurrency,
-                    mux_idle_timeout_secs: *mux_idle_timeout_secs,
-                    tls: tls.clone(),
-                    reality: reality.clone(),
-                    ws: ws.clone(),
-                    grpc: grpc.clone(),
-                    h2: h2.clone(),
-                    http_upgrade: http_upgrade.clone(),
-                    split_http: split_http.clone(),
-                    quic: quic.clone(),
-                })),
-                OutboundProtocolConfig::Hysteria2 {
-                    server,
-                    port,
-                    password,
-                    insecure,
-                    client_fingerprint,
-                } => TargetKind::Outbound(Box::new(OutboundTarget::Hysteria2 {
-                    server: server.clone(),
-                    port: *port,
-                    password: password.clone(),
-                    insecure: *insecure,
-                    client_fingerprint: client_fingerprint.clone(),
-                })),
-                OutboundProtocolConfig::Shadowsocks {
-                    server,
-                    port,
-                    password,
-                    cipher,
-                } => TargetKind::Outbound(Box::new(OutboundTarget::Shadowsocks {
-                    server: server.clone(),
-                    port: *port,
-                    password: password.clone(),
-                    cipher: cipher.clone(),
-                })),
-                OutboundProtocolConfig::Trojan {
-                    server,
-                    port,
-                    password,
-                    sni,
-                    insecure,
-                    client_fingerprint,
-                } => TargetKind::Outbound(Box::new(OutboundTarget::Trojan {
-                    server: server.clone(),
-                    port: *port,
-                    password: password.clone(),
-                    sni: sni.clone(),
-                    insecure: *insecure,
-                    client_fingerprint: client_fingerprint.clone(),
-                })),
-                OutboundProtocolConfig::Vmess {
-                    server,
-                    port,
-                    id,
-                    cipher,
-                    mux_concurrency,
-                    mux_idle_timeout_secs,
-                    tls,
-                    ws,
-                    grpc,
-                } => TargetKind::Outbound(Box::new(OutboundTarget::Vmess {
-                    server: server.clone(),
-                    port: *port,
-                    id: id.clone(),
-                    cipher: cipher.clone(),
-                    mux_concurrency: *mux_concurrency,
-                    mux_idle_timeout_secs: *mux_idle_timeout_secs,
-                    tls: tls.clone(),
-                    ws: ws.clone(),
-                    grpc: grpc.clone(),
-                })),
-                OutboundProtocolConfig::Mieru {
-                    server,
-                    port,
-                    username,
-                    password,
-                } => TargetKind::Outbound(Box::new(OutboundTarget::Mieru {
-                    server: server.clone(),
-                    port: *port,
-                    username: username.clone().unwrap_or_else(|| password.clone()),
-                    password: password.clone(),
-                })),
-            };
+                });
+            let kind = TargetKind::Outbound(OutboundTarget {
+                outbound_index,
+                protocol: outbound.protocol.protocol_name(),
+                runtime_kind: outbound.protocol.runtime_kind(),
+                endpoint,
+            });
 
             targets.push(TargetNode {
                 tag: outbound.tag.clone(),
@@ -350,7 +240,7 @@ impl TargetNode {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TargetKind {
-    Outbound(Box<OutboundTarget>),
+    Outbound(OutboundTarget),
     Selector(SelectorGroupPlan),
     Fallback(FallbackGroupPlan),
     UrlTest(UrlTestGroupPlan),
@@ -359,69 +249,37 @@ pub enum TargetKind {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum OutboundTarget {
-    Direct,
-    Block,
-    Socks5 {
-        server: String,
-        port: u16,
-        username: Option<String>,
-        password: Option<String>,
-    },
-    Vless {
-        server: String,
-        port: u16,
-        id: String,
-        flow: Option<String>,
-        mux_concurrency: Option<u32>,
-        mux_idle_timeout_secs: Option<u64>,
-        tls: Option<Box<ClientTlsConfig>>,
-        reality: Option<Box<RealityConfig>>,
-        ws: Option<Box<zero_config::WebSocketConfig>>,
-        grpc: Option<Box<zero_config::GrpcConfig>>,
-        h2: Option<Box<zero_config::H2Config>>,
-        http_upgrade: Option<Box<zero_config::HttpUpgradeConfig>>,
-        split_http: Option<Box<zero_config::SplitHttpConfig>>,
-        quic: Option<Box<zero_config::QuicConfig>>,
-    },
-    Hysteria2 {
-        server: String,
-        port: u16,
-        password: String,
-        insecure: bool,
-        client_fingerprint: Option<String>,
-    },
-    Shadowsocks {
-        server: String,
-        port: u16,
-        password: String,
-        cipher: String,
-    },
-    Trojan {
-        server: String,
-        port: u16,
-        password: String,
-        sni: Option<String>,
-        insecure: bool,
-        client_fingerprint: Option<String>,
-    },
-    Vmess {
-        server: String,
-        port: u16,
-        id: String,
-        cipher: String,
-        mux_concurrency: Option<u32>,
-        mux_idle_timeout_secs: Option<u64>,
-        tls: Option<Box<ClientTlsConfig>>,
-        ws: Option<Box<zero_config::WebSocketConfig>>,
-        grpc: Option<Box<zero_config::GrpcConfig>>,
-    },
-    Mieru {
-        server: String,
-        port: u16,
-        username: String,
-        password: String,
-    },
+pub struct OutboundTarget {
+    outbound_index: usize,
+    protocol: &'static str,
+    runtime_kind: OutboundRuntimeKind,
+    endpoint: Option<OutboundEndpoint>,
+}
+
+impl OutboundTarget {
+    pub fn outbound_index(&self) -> usize {
+        self.outbound_index
+    }
+
+    pub fn protocol(&self) -> &'static str {
+        self.protocol
+    }
+
+    pub fn runtime_kind(&self) -> OutboundRuntimeKind {
+        self.runtime_kind
+    }
+
+    pub fn endpoint(&self) -> Option<(&str, u16)> {
+        self.endpoint
+            .as_ref()
+            .map(|endpoint| (endpoint.server.as_str(), endpoint.port))
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct OutboundEndpoint {
+    server: String,
+    port: u16,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

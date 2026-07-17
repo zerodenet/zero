@@ -1,4 +1,4 @@
-use zero_config::InboundProtocolConfig;
+use zero_config::{InboundProtocolConfig, OutboundProtocolConfig, RuntimeConfig};
 use zero_engine::ResolvedLeafOutbound;
 
 pub(crate) fn fake_direct_leaf() -> ResolvedLeafOutbound<'static> {
@@ -21,17 +21,7 @@ pub(super) fn inbound_protocol_name(config: &InboundProtocolConfig) -> &'static 
 }
 
 pub(super) fn outbound_leaf_name(leaf: &ResolvedLeafOutbound<'_>) -> &'static str {
-    match leaf {
-        ResolvedLeafOutbound::Direct { .. } => "direct",
-        ResolvedLeafOutbound::Block { .. } => "block",
-        ResolvedLeafOutbound::Socks5 { .. } => "socks5",
-        ResolvedLeafOutbound::Vless { .. } => "vless",
-        ResolvedLeafOutbound::Hysteria2 { .. } => "hysteria2",
-        ResolvedLeafOutbound::Shadowsocks { .. } => "shadowsocks",
-        ResolvedLeafOutbound::Trojan { .. } => "trojan",
-        ResolvedLeafOutbound::Vmess { .. } => "vmess",
-        ResolvedLeafOutbound::Mieru { .. } => "mieru",
-    }
+    leaf.protocol_name()
 }
 
 pub(super) fn compiled_in_inbound_configs() -> Vec<InboundProtocolConfig> {
@@ -97,110 +87,171 @@ pub(super) fn compiled_in_inbound_configs() -> Vec<InboundProtocolConfig> {
     configs
 }
 
-pub(super) fn compiled_in_outbound_leaves<'a>() -> Vec<(ResolvedLeafOutbound<'a>, usize)> {
+fn config_with_outbound(tag: &str, protocol: OutboundProtocolConfig) -> RuntimeConfig {
+    let mut config = RuntimeConfig::parse(
+        r#"{
+            "outbounds": [{
+                "tag": "placeholder",
+                "protocol": { "type": "direct" }
+            }],
+            "route": { "rules": [], "final": { "type": "direct" } }
+        }"#,
+    )
+    .expect("minimal config");
+    config.outbounds[0].tag = tag.to_owned();
+    config.outbounds[0].protocol = protocol;
+    config
+}
+
+fn proxy_leaf(
+    tag: &'static str,
+    protocol: &'static str,
+    server: &'static str,
+    port: u16,
+) -> ResolvedLeafOutbound<'static> {
+    ResolvedLeafOutbound::Proxy {
+        tag,
+        outbound_index: 0,
+        protocol,
+        endpoint: Some((server, port)),
+    }
+}
+
+pub(super) fn compiled_in_outbound_leaves(
+) -> Vec<(RuntimeConfig, ResolvedLeafOutbound<'static>, usize)> {
+    let minimal = || {
+        RuntimeConfig::parse(r#"{ "route": { "rules": [], "final": { "type": "direct" } } }"#)
+            .expect("minimal config")
+    };
     let mut leaves = vec![
         (
+            minimal(),
             ResolvedLeafOutbound::Direct {
                 tag: Some("direct"),
             },
             1,
         ),
-        (ResolvedLeafOutbound::Block { tag: Some("block") }, 0),
+        (
+            minimal(),
+            ResolvedLeafOutbound::Block { tag: Some("block") },
+            0,
+        ),
     ];
 
     #[cfg(feature = "socks5")]
     leaves.push((
-        ResolvedLeafOutbound::Socks5 {
-            tag: "socks5",
-            server: "127.0.0.1",
-            port: 1080,
-            username: None,
-            password: None,
-        },
+        config_with_outbound(
+            "socks5",
+            OutboundProtocolConfig::Socks5 {
+                server: "127.0.0.1".to_owned(),
+                port: 1080,
+                username: None,
+                password: None,
+            },
+        ),
+        proxy_leaf("socks5", "socks5", "127.0.0.1", 1080),
         1,
     ));
     #[cfg(feature = "vless")]
     leaves.push((
-        ResolvedLeafOutbound::Vless {
-            tag: "vless",
-            server: "127.0.0.1",
-            port: 443,
-            id: "00000000-0000-0000-0000-000000000000",
-            flow: None,
-            mux_concurrency: None,
-            mux_idle_timeout_secs: None,
-            tls: None,
-            reality: None,
-            ws: None,
-            grpc: None,
-            h2: None,
-            http_upgrade: None,
-            split_http: None,
-            quic: None,
-        },
+        config_with_outbound(
+            "vless",
+            OutboundProtocolConfig::Vless {
+                server: "127.0.0.1".to_owned(),
+                port: 443,
+                id: "00000000-0000-0000-0000-000000000000".to_owned(),
+                flow: None,
+                mux_concurrency: None,
+                mux_idle_timeout_secs: None,
+                tls: None,
+                reality: None,
+                ws: None,
+                grpc: None,
+                h2: None,
+                http_upgrade: None,
+                split_http: None,
+                quic: None,
+            },
+        ),
+        proxy_leaf("vless", "vless", "127.0.0.1", 443),
         1,
     ));
     #[cfg(feature = "hysteria2")]
     leaves.push((
-        ResolvedLeafOutbound::Hysteria2 {
-            tag: "hysteria2",
-            server: "127.0.0.1",
-            port: 443,
-            password: "password",
-            insecure: false,
-            client_fingerprint: None,
-        },
+        config_with_outbound(
+            "hysteria2",
+            OutboundProtocolConfig::Hysteria2 {
+                server: "127.0.0.1".to_owned(),
+                port: 443,
+                password: "password".to_owned(),
+                insecure: false,
+                client_fingerprint: None,
+            },
+        ),
+        proxy_leaf("hysteria2", "hysteria2", "127.0.0.1", 443),
         1,
     ));
     #[cfg(feature = "shadowsocks")]
     leaves.push((
-        ResolvedLeafOutbound::Shadowsocks {
-            tag: "shadowsocks",
-            server: "127.0.0.1",
-            port: 8388,
-            password: "password",
-            cipher: "chacha20-ietf-poly1305",
-        },
+        config_with_outbound(
+            "shadowsocks",
+            OutboundProtocolConfig::Shadowsocks {
+                server: "127.0.0.1".to_owned(),
+                port: 8388,
+                password: "password".to_owned(),
+                cipher: "chacha20-ietf-poly1305".to_owned(),
+            },
+        ),
+        proxy_leaf("shadowsocks", "shadowsocks", "127.0.0.1", 8388),
         1,
     ));
     #[cfg(feature = "trojan")]
     leaves.push((
-        ResolvedLeafOutbound::Trojan {
-            tag: "trojan",
-            server: "127.0.0.1",
-            port: 443,
-            password: "password",
-            sni: None,
-            insecure: false,
-            client_fingerprint: None,
-        },
+        config_with_outbound(
+            "trojan",
+            OutboundProtocolConfig::Trojan {
+                server: "127.0.0.1".to_owned(),
+                port: 443,
+                password: "password".to_owned(),
+                sni: None,
+                insecure: false,
+                client_fingerprint: None,
+            },
+        ),
+        proxy_leaf("trojan", "trojan", "127.0.0.1", 443),
         1,
     ));
     #[cfg(feature = "vmess")]
     leaves.push((
-        ResolvedLeafOutbound::Vmess {
-            tag: "vmess",
-            server: "127.0.0.1",
-            port: 443,
-            id: "00000000-0000-0000-0000-000000000000",
-            cipher: "aes-128-gcm",
-            mux_concurrency: None,
-            mux_idle_timeout_secs: None,
-            tls: None,
-            ws: None,
-            grpc: None,
-        },
+        config_with_outbound(
+            "vmess",
+            OutboundProtocolConfig::Vmess {
+                server: "127.0.0.1".to_owned(),
+                port: 443,
+                id: "00000000-0000-0000-0000-000000000000".to_owned(),
+                cipher: "aes-128-gcm".to_owned(),
+                mux_concurrency: None,
+                mux_idle_timeout_secs: None,
+                tls: None,
+                ws: None,
+                grpc: None,
+            },
+        ),
+        proxy_leaf("vmess", "vmess", "127.0.0.1", 443),
         1,
     ));
     #[cfg(feature = "mieru")]
     leaves.push((
-        ResolvedLeafOutbound::Mieru {
-            tag: "mieru",
-            server: "127.0.0.1",
-            port: 8964,
-            username: "",
-            password: "password",
-        },
+        config_with_outbound(
+            "mieru",
+            OutboundProtocolConfig::Mieru {
+                server: "127.0.0.1".to_owned(),
+                port: 8964,
+                username: Some("password".to_owned()),
+                password: "password".to_owned(),
+            },
+        ),
+        proxy_leaf("mieru", "mieru", "127.0.0.1", 8964),
         1,
     ));
 

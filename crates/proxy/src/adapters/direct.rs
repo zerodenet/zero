@@ -9,28 +9,12 @@ use crate::protocol_catalog::protocol_descriptor;
 use crate::protocol_registry::{
     InboundListenerCapability, OutboundLeafClaim, ProtocolSupportCapability, TcpOutboundCapability,
 };
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
-))]
+#[cfg(feature = "udp-runtime")]
 use crate::protocol_registry::{UdpFlowCapability, UdpPacketPathCapability};
 
 mod inbound;
 mod tcp;
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
-))]
+#[cfg(feature = "udp-runtime")]
 mod udp;
 
 // Direct inbound is always available (no feature gate).
@@ -46,6 +30,7 @@ impl NamedProtocolAdapter for DirectAdapter {
 impl DirectAdapter {
     pub(crate) fn claim_outbound_leaf_impl<'a>(
         &self,
+        _protocol: Option<&'a OutboundProtocolConfig>,
         leaf: ResolvedLeafOutbound<'a>,
     ) -> Option<OutboundLeafClaim<'a>> {
         let ResolvedLeafOutbound::Direct { tag } = leaf else {
@@ -57,50 +42,20 @@ impl DirectAdapter {
         Some(OutboundLeafClaim {
             runtime,
             tcp,
-            #[cfg(any(
-                feature = "socks5",
-                feature = "vless",
-                feature = "hysteria2",
-                feature = "shadowsocks",
-                feature = "trojan",
-                feature = "vmess",
-                feature = "mieru"
-            ))]
+            #[cfg(feature = "udp-runtime")]
             udp: Some(self.claim_udp_flow_leaf_impl(tag)),
-            #[cfg(any(
-                feature = "socks5",
-                feature = "vless",
-                feature = "hysteria2",
-                feature = "shadowsocks",
-                feature = "trojan",
-                feature = "vmess",
-                feature = "mieru"
-            ))]
+            #[cfg(feature = "udp-runtime")]
             packet_path: None,
         })
     }
 }
 
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
-))]
+#[cfg(feature = "udp-runtime")]
+
 impl UdpFlowCapability for DirectAdapter {}
 
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
-))]
+#[cfg(feature = "udp-runtime")]
+
 impl UdpPacketPathCapability for DirectAdapter {}
 
 impl InboundListenerCapability for DirectAdapter {

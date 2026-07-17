@@ -12,17 +12,9 @@ impl UdpFlowOutbound {
         match self {
             Self::Relay { managed, .. } => Some(*managed),
             Self::Direct { .. } => None,
-            #[cfg(any(
-                feature = "socks5",
-                feature = "vless",
-                feature = "hysteria2",
-                feature = "shadowsocks",
-                feature = "trojan",
-                feature = "vmess",
-                feature = "mieru"
-            ))]
+            #[cfg(feature = "udp-runtime")]
             Self::PacketPathDatagram { .. } => None,
-            #[cfg(any(feature = "hysteria2", feature = "shadowsocks"))]
+            #[cfg(feature = "managed-datagram-runtime")]
             Self::Datagram { .. } => None,
             #[cfg(any(
                 feature = "vless",
@@ -45,15 +37,7 @@ impl UdpFlowOutbound {
     pub(crate) fn managed_flow(&self) -> Option<ManagedUdpFlowRef> {
         match self {
             Self::Direct { .. } => None,
-            #[cfg(any(
-                feature = "socks5",
-                feature = "vless",
-                feature = "hysteria2",
-                feature = "shadowsocks",
-                feature = "trojan",
-                feature = "vmess",
-                feature = "mieru"
-            ))]
+            #[cfg(feature = "udp-runtime")]
             Self::PacketPathDatagram { .. } => None,
             #[cfg(any(
                 feature = "socks5",
@@ -63,7 +47,7 @@ impl UdpFlowOutbound {
                 feature = "mieru"
             ))]
             Self::Relay { managed, .. } => Some(*managed),
-            #[cfg(any(feature = "hysteria2", feature = "shadowsocks"))]
+            #[cfg(feature = "managed-datagram-runtime")]
             Self::Datagram { managed, .. } => Some(*managed),
             #[cfg(any(
                 feature = "vless",

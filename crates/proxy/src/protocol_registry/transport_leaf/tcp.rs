@@ -73,15 +73,8 @@ where
     }
 }
 
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
-))]
+#[cfg(feature = "udp-runtime")]
+
 pub(crate) fn prepare_transport_tcp_connect<'a, TLeaf>(
     prepared: PreparedTransportLeaf<TLeaf>,
 ) -> Box<dyn crate::runtime::tcp_dispatch::operation::PreparedTcpConnectOperation + 'a>
@@ -97,15 +90,8 @@ where
     Box::new(crate::runtime::tcp_dispatch::operation::TransportLeafTcpConnectOperation { prepared })
 }
 
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
-))]
+#[cfg(feature = "udp-runtime")]
+
 pub(crate) fn prepare_transport_tcp_relay<'a, TLeaf>(
     prepared: PreparedTransportLeaf<TLeaf>,
 ) -> Box<dyn crate::runtime::tcp_dispatch::operation::PreparedTcpRelayOperation + 'a>

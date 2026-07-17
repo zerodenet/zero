@@ -42,7 +42,8 @@ impl UdpInboundResponseAccounting {
         record_udp_inbound_response_tx(&self.services, self.session_id, written_len);
     }
 
-    #[cfg(any(feature = "hysteria2", feature = "shadowsocks"))]
+    #[cfg(feature = "managed-datagram-runtime")]
+
     pub(crate) fn session_id(&self) -> Option<u64> {
         self.session_id
     }

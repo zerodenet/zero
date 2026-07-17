@@ -50,9 +50,8 @@ struct VmessOutboundProjection<'a> {
 
 #[cfg(feature = "vmess")]
 impl<'a> VmessOutboundProjection<'a> {
-    fn from_leaf(leaf: ResolvedLeafOutbound<'a>) -> Option<Self> {
-        let ResolvedLeafOutbound::Vmess {
-            tag,
+    fn from_config(tag: &'a str, protocol: &'a OutboundProtocolConfig) -> Option<Self> {
+        let OutboundProtocolConfig::Vmess {
             server,
             port,
             id,
@@ -62,20 +61,20 @@ impl<'a> VmessOutboundProjection<'a> {
             ws,
             grpc,
             ..
-        } = leaf
+        } = protocol
         else {
             return None;
         };
         Some(Self {
             tag,
             server,
-            port,
+            port: *port,
             id,
             cipher,
-            mux_concurrency,
-            tls,
-            ws,
-            grpc,
+            mux_concurrency: *mux_concurrency,
+            tls: tls.as_deref(),
+            ws: ws.as_deref(),
+            grpc: grpc.as_deref(),
         })
     }
 
@@ -114,9 +113,10 @@ const TCP_PATH: TcpPathCategory = TcpPathCategory::Session;
 impl VmessAdapter {
     pub(crate) fn claim_outbound_leaf_impl<'a>(
         &self,
+        protocol: Option<&'a OutboundProtocolConfig>,
         leaf: ResolvedLeafOutbound<'a>,
     ) -> Option<OutboundLeafClaim<'a>> {
-        let projection = VmessOutboundProjection::from_leaf(leaf)?;
+        let projection = VmessOutboundProjection::from_config(leaf.tag()?, protocol?)?;
         let runtime = OutboundLeafRuntime::proxy(
             projection.tag,
             projection.server,

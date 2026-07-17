@@ -31,25 +31,9 @@ use crate::protocol_registry::ProtocolRegistry;
     feature = "mieru"
 ))]
 use crate::runtime::udp_flow::managed::ManagedUdpHandlers;
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
-))]
+#[cfg(feature = "udp-runtime")]
 use crate::runtime::udp_flow::registered::RegisteredUdpHandlers;
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
-))]
+#[cfg(feature = "udp-runtime")]
 #[cfg(feature = "socks5")]
 use crate::runtime::udp_flow::registered::UpstreamUdpHandlers;
 
@@ -94,15 +78,7 @@ fn compiled_protocol_registry() -> ProtocolRegistry {
     );
     #[cfg(feature = "mixed")]
     registry.register_core_capability(Arc::new(MixedAdapter), None);
-    #[cfg(any(
-        feature = "socks5",
-        feature = "vless",
-        feature = "hysteria2",
-        feature = "shadowsocks",
-        feature = "trojan",
-        feature = "vmess",
-        feature = "mieru"
-    ))]
+    #[cfg(feature = "udp-runtime")]
     registry.register_capability(
         Arc::new(DirectAdapter),
         DirectAdapter::claim_outbound_leaf_impl,
@@ -127,15 +103,8 @@ pub(crate) fn protocol_registry() -> ProtocolRegistry {
     compiled_protocol_registry()
 }
 
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
-))]
+#[cfg(feature = "udp-runtime")]
+
 pub(crate) fn registered_udp_handlers(registry: &ProtocolRegistry) -> RegisteredUdpHandlers {
     #[cfg(any(
         feature = "vless",
@@ -159,7 +128,7 @@ pub(crate) fn registered_udp_handlers(registry: &ProtocolRegistry) -> Registered
             feature = "mieru"
         ))]
         managed: ManagedUdpHandlers {
-            #[cfg(any(feature = "hysteria2", feature = "shadowsocks"))]
+            #[cfg(feature = "managed-datagram-runtime")]
             datagram: registry
                 .managed_udp_handler_providers()
                 .filter_map(|capability| capability.managed_datagram_udp_handler())

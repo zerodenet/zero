@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-#[cfg(any(feature = "hysteria2", feature = "shadowsocks"))]
+#[cfg(feature = "managed-datagram-runtime")]
 use super::fixtures::FakeProviderResume;
 #[cfg(feature = "socks5")]
 use super::fixtures::FakeUpstreamResume;
@@ -22,12 +22,12 @@ async fn inventory_invokes_fake_udp_leaf_capability() {
         .new_dispatch("fake-inbound")
         .await
         .expect("UDP dispatch");
-    let ctx = UdpAdapterContext::new(proxy.config.source_dir(), proxy.udp_runtime_services());
+    let ctx = UdpAdapterContext::new(&proxy.config, proxy.udp_runtime_services());
     let payload = b"capability payload";
     let leaf = fake_direct_leaf();
     let claimed = proxy
         .protocols
-        .claim_outbound_leaf(leaf.clone())
+        .claim_outbound_leaf(&proxy.config, leaf.clone())
         .expect("fake UDP claim");
 
     let prepared = match proxy
@@ -68,11 +68,11 @@ async fn inventory_preserves_fake_udp_failure_metadata() {
         .new_dispatch("fake-inbound")
         .await
         .expect("UDP dispatch");
-    let ctx = UdpAdapterContext::new(proxy.config.source_dir(), proxy.udp_runtime_services());
+    let ctx = UdpAdapterContext::new(&proxy.config, proxy.udp_runtime_services());
     let leaf = fake_direct_leaf();
     let claimed = proxy
         .protocols
-        .claim_outbound_leaf(leaf.clone())
+        .claim_outbound_leaf(&proxy.config, leaf.clone())
         .expect("fake UDP claim");
 
     let prepared = match proxy
@@ -112,11 +112,11 @@ async fn inventory_invokes_fake_udp_relay_capabilities() {
         .new_dispatch("fake-inbound")
         .await
         .expect("UDP dispatch");
-    let ctx = UdpAdapterContext::new(proxy.config.source_dir(), proxy.udp_runtime_services());
+    let ctx = UdpAdapterContext::new(&proxy.config, proxy.udp_runtime_services());
     let leaf = fake_direct_leaf();
     let claimed = proxy
         .protocols
-        .claim_outbound_leaf(leaf.clone())
+        .claim_outbound_leaf(&proxy.config, leaf.clone())
         .expect("fake UDP claim");
 
     let prepared_relay = match claimed
@@ -196,7 +196,7 @@ async fn inventory_invokes_fake_udp_relay_capabilities() {
     );
 }
 
-#[cfg(any(feature = "hysteria2", feature = "shadowsocks"))]
+#[cfg(feature = "managed-datagram-runtime")]
 #[tokio::test]
 async fn inventory_executes_handler_produced_by_registered_provider() {
     use crate::runtime::udp_flow::managed::ManagedUdpFlowResume;
@@ -245,7 +245,7 @@ async fn inventory_executes_handler_produced_by_registered_provider() {
     assert_eq!(calls.provider_forwards(), 1);
 }
 
-#[cfg(any(feature = "hysteria2", feature = "shadowsocks"))]
+#[cfg(feature = "managed-datagram-runtime")]
 #[tokio::test]
 async fn reload_invalidates_provider_resumes_before_new_generation_flows() {
     use crate::runtime::udp_flow::managed::ManagedUdpFlowResume;
@@ -381,7 +381,7 @@ async fn inventory_composes_packet_path_roles_and_builds_carrier() {
         .expect("UDP dispatch");
     let claimed = proxy
         .protocols
-        .claim_outbound_leaf(leaf.clone())
+        .claim_outbound_leaf(&proxy.config, leaf.clone())
         .expect("fake packet-path claim");
 
     let (binding, request) = proxy
@@ -410,7 +410,7 @@ async fn inventory_composes_packet_path_roles_and_builds_carrier() {
     let sent = match dispatch
         .send_packet_path_chain(
             crate::protocol_registry::UdpAdapterContext::new(
-                proxy.config.source_dir(),
+                &proxy.config,
                 proxy.udp_runtime_services(),
             ),
             request,

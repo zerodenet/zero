@@ -28,15 +28,7 @@ pub(crate) struct UdpDatagramSource {
     pub(crate) codec: Arc<dyn DatagramCodec<Address, Error = zero_core::Error>>,
 }
 
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
-))]
+#[cfg(feature = "udp-runtime")]
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) struct UdpDatagramKey {
     pub(crate) tag: String,
@@ -45,15 +37,7 @@ pub(crate) struct UdpDatagramKey {
     pub(crate) cache_key: String,
 }
 
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
-))]
+#[cfg(feature = "udp-runtime")]
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) struct UdpDatagramEndpoint {
     pub(super) server: String,

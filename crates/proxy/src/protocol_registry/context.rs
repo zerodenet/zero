@@ -41,28 +41,12 @@ impl TcpRuntimeServices {
         self.resolver.as_ref()
     }
 
-    #[cfg(any(
-        feature = "socks5",
-        feature = "vless",
-        feature = "hysteria2",
-        feature = "shadowsocks",
-        feature = "trojan",
-        feature = "vmess",
-        feature = "mieru"
-    ))]
+    #[cfg(feature = "udp-runtime")]
     pub(crate) fn protocols(&self) -> &ProtocolInventory {
         &self.protocols
     }
 
-    #[cfg(any(
-        feature = "socks5",
-        feature = "vless",
-        feature = "hysteria2",
-        feature = "shadowsocks",
-        feature = "trojan",
-        feature = "vmess",
-        feature = "mieru"
-    ))]
+    #[cfg(feature = "udp-runtime")]
     pub(crate) async fn connect_upstream_owned(
         &self,
         server: String,
@@ -99,25 +83,15 @@ impl TcpRuntimeServices {
     }
 
     pub(crate) fn prepare_tcp_outbound<'a>(
-        &self,
+        &'a self,
         resolved: &'a zero_engine::ResolvedOutbound<'a>,
     ) -> Result<crate::inventory::PreparedTcpOutbound<'a>, crate::transport::TcpOutboundFailure>
     {
-        self.protocols.prepare_tcp_outbound(
-            OutboundAdapterContext::new(self.config.source_dir()),
-            resolved,
-        )
+        self.protocols
+            .prepare_tcp_outbound(OutboundAdapterContext::new(self.config.as_ref()), resolved)
     }
 
-    #[cfg(any(
-        feature = "socks5",
-        feature = "vless",
-        feature = "hysteria2",
-        feature = "shadowsocks",
-        feature = "trojan",
-        feature = "vmess",
-        feature = "mieru"
-    ))]
+    #[cfg(feature = "udp-runtime")]
     pub(crate) async fn dispatch_prepared_tcp_relay_carrier(
         &self,
         prepared: crate::inventory::PreparedTcpRelayChain<'_>,
@@ -129,15 +103,7 @@ impl TcpRuntimeServices {
         .await
     }
 
-    #[cfg(any(
-        feature = "socks5",
-        feature = "vless",
-        feature = "hysteria2",
-        feature = "shadowsocks",
-        feature = "trojan",
-        feature = "vmess",
-        feature = "mieru"
-    ))]
+    #[cfg(feature = "udp-runtime")]
     pub(crate) fn record_control_traffic(
         &self,
         session_id: u64,
@@ -169,44 +135,23 @@ impl TcpRuntimeServices {
 }
 
 #[derive(Clone)]
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
-))]
+#[cfg(feature = "udp-runtime")]
+
 pub(crate) struct UdpRuntimeServices {
     tcp: TcpRuntimeServices,
 }
 
 #[derive(Clone, Copy)]
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
-))]
+#[cfg(feature = "udp-runtime")]
+
 pub(crate) enum UdpAssociationCloseKind {
     Closed,
     IdleTimeout,
     Dropped,
 }
 
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
-))]
+#[cfg(feature = "udp-runtime")]
+
 impl UdpRuntimeServices {
     pub(crate) fn new(tcp: TcpRuntimeServices) -> Self {
         Self { tcp }
@@ -402,60 +347,46 @@ impl UdpRuntimeServices {
     }
 }
 
-#[derive(Clone)]
-pub(crate) struct OutboundAdapterContext {
-    source_dir: Option<std::path::PathBuf>,
+#[derive(Clone, Copy)]
+pub(crate) struct OutboundAdapterContext<'a> {
+    config: &'a RuntimeConfig,
 }
 
-impl OutboundAdapterContext {
-    pub(crate) fn new(source_dir: Option<&std::path::Path>) -> Self {
-        Self {
-            source_dir: source_dir.map(std::path::Path::to_path_buf),
-        }
+impl<'a> OutboundAdapterContext<'a> {
+    pub(crate) fn new(config: &'a RuntimeConfig) -> Self {
+        Self { config }
     }
 
     pub(crate) fn source_dir(&self) -> Option<&std::path::Path> {
-        self.source_dir.as_deref()
+        self.config.source_dir()
+    }
+
+    pub(crate) fn config(&self) -> &'a RuntimeConfig {
+        self.config
     }
 }
 
 #[derive(Clone)]
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
-))]
+#[cfg(feature = "udp-runtime")]
+
 pub(crate) struct UdpAdapterContext<'a> {
-    source_dir: Option<&'a std::path::Path>,
+    config: &'a RuntimeConfig,
     services: UdpRuntimeServices,
 }
 
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
-))]
+#[cfg(feature = "udp-runtime")]
+
 impl<'a> UdpAdapterContext<'a> {
-    pub(crate) fn new(
-        source_dir: Option<&'a std::path::Path>,
-        services: UdpRuntimeServices,
-    ) -> Self {
-        Self {
-            source_dir,
-            services,
-        }
+    pub(crate) fn new(config: &'a RuntimeConfig, services: UdpRuntimeServices) -> Self {
+        Self { config, services }
     }
 
     pub(crate) fn source_dir(&self) -> Option<&'a std::path::Path> {
-        self.source_dir
+        self.config.source_dir()
+    }
+
+    pub(crate) fn config(&self) -> &'a RuntimeConfig {
+        self.config
     }
 
     pub(crate) fn udp_enabled_for_outbound(&self, outbound_tag: Option<&str>) -> bool {

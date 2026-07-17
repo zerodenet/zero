@@ -36,11 +36,11 @@ impl InboundRouteRuntime {
     #[cfg(feature = "vless")]
     pub(crate) async fn relay_recorded_fallback_replay<R>(
         &self,
-        fallback: zero_transport::profile::OwnedInboundFallbackProfile,
+        fallback: zero_transport::OwnedInboundFallbackProfile,
         replay: R,
     ) -> Result<(), EngineError>
     where
-        R: zero_transport::inbound_route::FallbackReplayToUpstream + 'static,
+        R: zero_transport::protocol_inbound_route::FallbackReplayToUpstream + 'static,
     {
         self.tcp_runtime
             .relay_recorded_fallback_replay(fallback, replay)

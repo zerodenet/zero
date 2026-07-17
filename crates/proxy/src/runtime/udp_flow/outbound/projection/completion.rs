@@ -1,38 +1,15 @@
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
-))]
+#[cfg(feature = "udp-runtime")]
 use zero_engine::SessionOutcome;
 
 use super::super::model::{UdpFlowCompletion, UdpFlowOutbound};
 
-#[cfg(any(
-    feature = "socks5",
-    feature = "vless",
-    feature = "hysteria2",
-    feature = "shadowsocks",
-    feature = "trojan",
-    feature = "vmess",
-    feature = "mieru"
-))]
+#[cfg(feature = "udp-runtime")]
+
 impl UdpFlowOutbound {
     fn upstream_endpoint(&self) -> Option<(String, u16)> {
         match self {
             Self::Direct { .. } => None,
-            #[cfg(any(
-                feature = "socks5",
-                feature = "vless",
-                feature = "hysteria2",
-                feature = "shadowsocks",
-                feature = "trojan",
-                feature = "vmess",
-                feature = "mieru"
-            ))]
+            #[cfg(feature = "udp-runtime")]
             Self::PacketPathDatagram { server, port, .. } => Some((server.clone(), *port)),
             #[cfg(any(
                 feature = "socks5",
@@ -42,7 +19,7 @@ impl UdpFlowOutbound {
                 feature = "mieru"
             ))]
             Self::Relay { server, port, .. } => Some((server.clone(), *port)),
-            #[cfg(any(feature = "hysteria2", feature = "shadowsocks"))]
+            #[cfg(feature = "managed-datagram-runtime")]
             Self::Datagram { server, port, .. } => Some((server.clone(), *port)),
             #[cfg(any(
                 feature = "vless",
@@ -57,15 +34,7 @@ impl UdpFlowOutbound {
     fn success_outcome(&self) -> SessionOutcome {
         match self {
             Self::Direct { .. } => SessionOutcome::DirectRelayed,
-            #[cfg(any(
-                feature = "socks5",
-                feature = "vless",
-                feature = "hysteria2",
-                feature = "shadowsocks",
-                feature = "trojan",
-                feature = "vmess",
-                feature = "mieru"
-            ))]
+            #[cfg(feature = "udp-runtime")]
             Self::PacketPathDatagram { .. } => SessionOutcome::ChainedRelayed,
             #[cfg(any(
                 feature = "socks5",
@@ -75,7 +44,7 @@ impl UdpFlowOutbound {
                 feature = "mieru"
             ))]
             Self::Relay { .. } => SessionOutcome::ChainedRelayed,
-            #[cfg(any(feature = "hysteria2", feature = "shadowsocks"))]
+            #[cfg(feature = "managed-datagram-runtime")]
             Self::Datagram { .. } => SessionOutcome::ChainedRelayed,
             #[cfg(any(
                 feature = "vless",

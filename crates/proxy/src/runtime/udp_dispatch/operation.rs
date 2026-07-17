@@ -5,7 +5,7 @@
 
 mod contract;
 mod direct;
-#[cfg(any(feature = "hysteria2", feature = "shadowsocks"))]
+#[cfg(feature = "managed-datagram-runtime")]
 mod managed_datagram;
 #[cfg(feature = "socks5")]
 mod registered;
@@ -16,7 +16,7 @@ pub(crate) mod transport;
 
 pub(crate) use contract::PreparedUdpFlowOperation;
 pub(crate) use direct::DirectUdpFlowOperation;
-#[cfg(any(feature = "hysteria2", feature = "shadowsocks"))]
+#[cfg(feature = "managed-datagram-runtime")]
 pub(crate) use managed_datagram::ManagedDatagramUdpOperation;
 #[cfg(feature = "socks5")]
 pub(crate) use registered::RegisteredAssociationUdpOperation;

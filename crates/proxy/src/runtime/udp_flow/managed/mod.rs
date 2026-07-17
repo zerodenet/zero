@@ -3,12 +3,7 @@
 //! Concrete resume values remain opaque and are supplied by registered
 //! protocol handlers.
 
-#[cfg(any(
-    feature = "vless",
-    feature = "vmess",
-    feature = "trojan",
-    feature = "mieru"
-))]
+#[cfg(feature = "managed-stream-runtime")]
 pub(crate) mod bridge;
 #[cfg(any(
     feature = "vless",
@@ -28,9 +23,9 @@ mod cache;
     feature = "shadowsocks"
 ))]
 mod connection;
-#[cfg(any(feature = "hysteria2", feature = "shadowsocks"))]
+#[cfg(feature = "managed-datagram-runtime")]
 mod datagram;
-#[cfg(any(feature = "hysteria2", feature = "shadowsocks"))]
+#[cfg(feature = "managed-datagram-runtime")]
 pub(crate) mod datagram_manager;
 mod flow;
 pub(crate) mod model;
@@ -43,19 +38,9 @@ pub(crate) mod model;
     feature = "mieru"
 ))]
 pub(crate) mod state;
-#[cfg(any(
-    feature = "vless",
-    feature = "vmess",
-    feature = "trojan",
-    feature = "mieru"
-))]
+#[cfg(feature = "managed-stream-runtime")]
 mod stream;
-#[cfg(any(
-    feature = "vless",
-    feature = "vmess",
-    feature = "trojan",
-    feature = "mieru"
-))]
+#[cfg(feature = "managed-stream-runtime")]
 pub(crate) mod stream_manager;
 #[cfg(test)]
 mod tests;
@@ -78,14 +63,9 @@ pub(crate) use flow::ManagedUdpFlowResume;
     feature = "mieru"
 ))]
 pub(crate) use flow::{ManagedUdpFlowKind, ManagedUdpFlowRequest};
-#[cfg(any(feature = "hysteria2", feature = "shadowsocks"))]
+#[cfg(feature = "managed-datagram-runtime")]
 pub(crate) use model::ManagedDatagramFlowHandler;
-#[cfg(any(
-    feature = "vless",
-    feature = "vmess",
-    feature = "trojan",
-    feature = "mieru"
-))]
+#[cfg(feature = "managed-stream-runtime")]
 pub(crate) use model::ManagedStreamHandlerPair;
 #[cfg(any(
     feature = "vless",
