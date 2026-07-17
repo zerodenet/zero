@@ -7,7 +7,7 @@ use std::sync::Arc;
 use tokio::net::UnixListener;
 use tokio::sync::oneshot;
 use tokio::task::JoinSet;
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, warn};
 use zero_proxy::ProxyHandle;
 
 use super::connection;
@@ -114,7 +114,7 @@ async fn run_ipc_server(
                 let pipe = format!("{:?}", peer_addr);
                 active.fetch_add(1, Ordering::Relaxed);
                 super::events::emit_connected(&handle, active.load(Ordering::Relaxed), &pipe);
-                info!(?peer_addr, active = active.load(Ordering::Relaxed),
+                debug!(?peer_addr, active = active.load(Ordering::Relaxed),
                       "ipc client connected");
 
                 connections.spawn(async move {
@@ -130,7 +130,7 @@ async fn run_ipc_server(
                     super::events::emit_disconnected(&emit_handle, n, &pipe, error_str.as_deref());
                     match result {
                         Ok(()) => {
-                            info!(?peer_addr, active = n, "ipc client disconnected cleanly");
+                            debug!(?peer_addr, active = n, "ipc client disconnected cleanly");
                         }
                         Err(ref error) if connection::is_transient_disconnect(error) => {
                             warn!(?peer_addr, error = %error, active = n,

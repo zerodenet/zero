@@ -13,7 +13,7 @@ use std::time::Duration;
 use tokio::net::windows::named_pipe::ServerOptions;
 use tokio::sync::oneshot;
 use tokio::task::JoinSet;
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, warn};
 use zero_proxy::ProxyHandle;
 
 use super::connection;
@@ -94,7 +94,7 @@ async fn run_ipc_server(
                 let pipe_owned = pipe_name.to_string();
                 active.fetch_add(1, Ordering::Relaxed);
                 super::events::emit_connected(&handle, active.load(Ordering::Relaxed), &pipe_owned);
-                info!(pipe = %pipe_name, active = active.load(Ordering::Relaxed),
+                debug!(pipe = %pipe_name, active = active.load(Ordering::Relaxed),
                       "ipc client connected");
 
                 connections.spawn(async move {
@@ -110,7 +110,7 @@ async fn run_ipc_server(
                     super::events::emit_disconnected(&emit_handle, n, &pipe_owned, error_str.as_deref());
                     match result {
                         Ok(()) => {
-                            info!(active = n, "ipc client disconnected cleanly");
+                            debug!(active = n, "ipc client disconnected cleanly");
                         }
                         Err(ref error) if connection::is_transient_disconnect(error) => {
                             warn!(error = %error, active = n,
