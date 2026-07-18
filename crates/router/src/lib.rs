@@ -1,58 +1,12 @@
-use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use std::sync::Arc;
 
-use ipnet::IpNet;
 use zero_core::Address;
 
-/// Wrapper around compiled regex — compares by original pattern string.
-#[derive(Clone)]
-pub struct CompiledRegex {
-    pattern: String,
-    re: Arc<regex::Regex>,
-}
+mod condition;
+mod rule_set;
 
-impl std::fmt::Debug for CompiledRegex {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("CompiledRegex")
-            .field("pattern", &self.pattern)
-            .finish()
-    }
-}
-
-impl PartialEq for CompiledRegex {
-    fn eq(&self, other: &Self) -> bool {
-        self.pattern == other.pattern
-    }
-}
-
-impl Eq for CompiledRegex {}
-
-impl CompiledRegex {
-    pub fn new(pattern: String) -> Result<Self, regex::Error> {
-        Ok(Self {
-            re: Arc::new(regex::Regex::new(&pattern)?),
-            pattern,
-        })
-    }
-
-    /// The original pattern string this regex was compiled from.
-    pub fn pattern(&self) -> &str {
-        &self.pattern
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum RuleCondition {
-    Inbound(Vec<String>),
-    Domain(Vec<String>),
-    DomainKeyword(Vec<String>),
-    DomainRegex(Vec<CompiledRegex>),
-    Ip(Vec<IpNet>),
-    GeoIp(Vec<String>),
-    Sni(Vec<String>),
-    And(Vec<RuleCondition>),
-    Or(Vec<RuleCondition>),
-}
+pub use condition::{condition_describe, CompiledRegex, RuleCondition};
+pub use rule_set::RuleSetMatcher;
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum RouteAction {
@@ -114,9 +68,17 @@ impl RuleSet {
     }
 
     pub fn decide_ref_with_context(&self, context: RouteContext<'_>) -> &RouteAction {
+        let rule_query = condition::prepare_rule_query(context.address);
         self.rules
             .iter()
-            .find(|rule| condition_matches(&rule.condition, context, self.geoip_db.as_deref()))
+            .find(|rule| {
+                condition::condition_matches(
+                    &rule.condition,
+                    context,
+                    self.geoip_db.as_deref(),
+                    rule_query.as_ref(),
+                )
+            })
             .map(|rule| &rule.action)
             .unwrap_or(&self.final_action)
     }
@@ -141,11 +103,15 @@ impl RuleSet {
     }
 
     pub fn decide_trace_with_context(&self, context: RouteContext<'_>) -> RouteDecision {
-        if let Some((index, rule)) =
-            self.rules.iter().enumerate().find(|(_, rule)| {
-                condition_matches(&rule.condition, context, self.geoip_db.as_deref())
-            })
-        {
+        let rule_query = condition::prepare_rule_query(context.address);
+        if let Some((index, rule)) = self.rules.iter().enumerate().find(|(_, rule)| {
+            condition::condition_matches(
+                &rule.condition,
+                context,
+                self.geoip_db.as_deref(),
+                rule_query.as_ref(),
+            )
+        }) {
             RouteDecision {
                 action: rule.action.clone(),
                 matched_rule: Some(MatchedRule {
@@ -158,34 +124,6 @@ impl RuleSet {
                 action: self.final_action.clone(),
                 matched_rule: None,
             }
-        }
-    }
-}
-
-/// Human-readable summary of a [`RuleCondition`], for diagnostics/trace.
-pub fn condition_describe(condition: &RuleCondition) -> String {
-    let join = |vals: &[String]| vals.join(", ");
-    match condition {
-        RuleCondition::Inbound(v) => format!("inbound: {}", join(v)),
-        RuleCondition::Domain(v) => format!("domain: {}", join(v)),
-        RuleCondition::DomainKeyword(v) => format!("domain_keyword: {}", join(v)),
-        RuleCondition::DomainRegex(v) => {
-            let pats: Vec<&str> = v.iter().map(CompiledRegex::pattern).collect();
-            format!("domain_regex: {}", pats.join(", "))
-        }
-        RuleCondition::Ip(v) => {
-            let nets: Vec<String> = v.iter().map(|n| n.to_string()).collect();
-            format!("ip: {}", nets.join(", "))
-        }
-        RuleCondition::GeoIp(v) => format!("geoip: {}", join(v)),
-        RuleCondition::Sni(v) => format!("sni: {}", join(v)),
-        RuleCondition::And(items) => {
-            let inner: Vec<String> = items.iter().map(condition_describe).collect();
-            format!("and({})", inner.join(", "))
-        }
-        RuleCondition::Or(items) => {
-            let inner: Vec<String> = items.iter().map(condition_describe).collect();
-            format!("or({})", inner.join(", "))
         }
     }
 }
@@ -214,83 +152,10 @@ pub struct RouteContext<'a> {
     pub inbound_tag: Option<&'a str>,
 }
 
-fn condition_matches(
-    condition: &RuleCondition,
-    context: RouteContext<'_>,
-    geoip_db: Option<&maxminddb::Reader<Vec<u8>>>,
-) -> bool {
-    match condition {
-        RuleCondition::Inbound(tags) => match context.inbound_tag {
-            Some(inbound_tag) => tags.iter().any(|tag| tag == inbound_tag),
-            None => false,
-        },
-        RuleCondition::Domain(patterns) => match context.address {
-            Address::Domain(domain) => patterns
-                .iter()
-                .any(|pattern| domain_matches(pattern, domain)),
-            _ => false,
-        },
-        RuleCondition::DomainKeyword(keywords) => match context.address {
-            Address::Domain(domain) => keywords.iter().any(|kw| {
-                domain
-                    .to_ascii_lowercase()
-                    .contains(&kw.to_ascii_lowercase())
-            }),
-            _ => false,
-        },
-        RuleCondition::DomainRegex(patterns) => match context.address {
-            Address::Domain(domain) => patterns.iter().any(|re| re.re.is_match(domain)),
-            _ => false,
-        },
-        RuleCondition::Ip(networks) => match address_to_ip(context.address) {
-            Some(ip) => networks.iter().any(|network| network.contains(&ip)),
-            None => false,
-        },
-        RuleCondition::GeoIp(codes) => match (address_to_ip(context.address), geoip_db) {
-            (Some(ip), Some(db)) => {
-                if let Ok(country) = db.lookup::<maxminddb::geoip2::Country>(ip) {
-                    country
-                        .country
-                        .and_then(|c| c.iso_code)
-                        .map(|cc| codes.iter().any(|code| code.eq_ignore_ascii_case(cc)))
-                        .unwrap_or(false)
-                } else {
-                    false
-                }
-            }
-            _ => false,
-        },
-        RuleCondition::Sni(patterns) => match context.sni {
-            Some(sni) => patterns.iter().any(|pattern| domain_matches(pattern, sni)),
-            None => false,
-        },
-        RuleCondition::And(conditions) => conditions
-            .iter()
-            .all(|c| condition_matches(c, context, geoip_db)),
-        RuleCondition::Or(conditions) => conditions
-            .iter()
-            .any(|c| condition_matches(c, context, geoip_db)),
-    }
-}
-
-fn domain_matches(pattern: &str, domain: &str) -> bool {
-    let pattern = pattern.trim().trim_start_matches('.').to_ascii_lowercase();
-    let domain = domain.to_ascii_lowercase();
-
-    domain == pattern || domain.ends_with(&format!(".{pattern}"))
-}
-
-fn address_to_ip(address: &Address) -> Option<IpAddr> {
-    match address {
-        Address::Domain(_) => None,
-        Address::Ipv4(bytes) => Some(IpAddr::V4(Ipv4Addr::from(*bytes))),
-        Address::Ipv6(bytes) => Some(IpAddr::V6(Ipv6Addr::from(*bytes))),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ipnet::IpNet;
 
     fn rs(rules: Vec<Rule>, final_action: RouteAction) -> RuleSet {
         RuleSet::new(rules, final_action)

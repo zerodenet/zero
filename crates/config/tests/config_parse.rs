@@ -2050,6 +2050,46 @@ fn rejects_invalid_cidr_rule_set_entry() {
     cleanup_temp_dir(&project_dir);
 }
 
+#[test]
+fn rejects_zrs_with_invalid_full_checksum() {
+    let project_dir = temp_test_dir("config-rule-set-invalid-zrs-checksum");
+    let matcher_path = project_dir.join("corrupt.zrs");
+    let (compiled, _) = zero_rule::RuleSetCompiler
+        .compile(zero_rule::RuleSet::new(vec![zero_rule::Rule::DomainExact(
+            "blocked.example".to_owned(),
+        )]))
+        .expect("compile matcher");
+    let mut artifact = zero_rule::zrs::encode(&compiled).expect("encode ZRS");
+    let last = artifact.last_mut().expect("non-empty ZRS");
+    *last ^= 0xff;
+    fs::write(&matcher_path, artifact).expect("write corrupt ZRS");
+
+    let error = RuntimeConfig::parse(&format!(
+        r#"{{
+            "route": {{
+                "rule_sets": [{{
+                    "tag": "corrupt",
+                    "type": "file",
+                    "path": "{}",
+                    "format": "zrs"
+                }}],
+                "rules": [{{
+                    "condition": {{ "type": "rule_set", "tag": "corrupt" }},
+                    "action": {{ "type": "direct" }}
+                }}],
+                "final": {{ "type": "direct" }}
+            }}
+        }}"#,
+        escape_json_path(&matcher_path),
+    ))
+    .expect_err("corrupt ZRS should fail");
+
+    assert!(matches!(error, zero_config::ConfigError::InvalidRuleSet(_)));
+    assert!(error.to_string().contains("checksum"));
+
+    cleanup_temp_dir(&project_dir);
+}
+
 fn temp_test_dir(prefix: &str) -> PathBuf {
     let nonce = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -2058,6 +2098,10 @@ fn temp_test_dir(prefix: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!("{prefix}-{nonce}"));
     fs::create_dir_all(&dir).expect("create temp test dir");
     dir
+}
+
+fn escape_json_path(path: &Path) -> String {
+    path.display().to_string().replace('\\', "\\\\")
 }
 
 fn cleanup_temp_dir(path: &Path) {

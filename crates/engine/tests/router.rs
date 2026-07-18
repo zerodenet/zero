@@ -237,6 +237,128 @@ fn route_rules_can_match_inbound_tag_to_group() {
     assert!(matches!(default_action, zero_engine::RouteDecision::Direct));
 }
 
+#[test]
+fn zero_rule_ir_routes_mixed_domain_and_ip_matchers() {
+    let project_dir = temp_test_dir("engine-zero-rule-ir-router");
+    let matcher_path = project_dir.join("private.zero.json");
+    let semantic = zero_rule::RuleSet::new(vec![
+        zero_rule::Rule::DomainKeyword("telemetry".to_owned()),
+        zero_rule::Rule::Ipv6Cidr("fd00::/8".parse().unwrap()),
+    ]);
+    fs::write(
+        &matcher_path,
+        zero_rule::protocol::encode_json(&semantic).expect("encode Zero Rule IR"),
+    )
+    .expect("write Zero Rule IR");
+
+    let config = RuntimeConfig::parse(&format!(
+        r#"{{
+            "route": {{
+                "rule_sets": [{{
+                    "tag": "private",
+                    "type": "file",
+                    "path": "{}",
+                    "format": "zero_rule_ir"
+                }}],
+                "rules": [{{
+                    "condition": {{ "type": "rule_set", "tag": "private" }},
+                    "action": {{ "type": "reject" }}
+                }}],
+                "final": {{ "type": "direct" }}
+            }}
+        }}"#,
+        escape_json_path(&matcher_path),
+    ))
+    .expect("config should parse");
+    let engine = Engine::new(config).expect("engine should build");
+
+    assert!(matches!(
+        engine.route_for(&zero_core::Address::Domain(
+            "api.Telemetry.example".to_owned()
+        )),
+        zero_router::RouteAction::Reject
+    ));
+    assert!(matches!(
+        engine.route_for(&zero_core::Address::Ipv6(
+            "fd12::1".parse::<std::net::Ipv6Addr>().unwrap().octets()
+        )),
+        zero_router::RouteAction::Reject
+    ));
+    assert!(matches!(
+        engine.route_for(&zero_core::Address::Domain("example.com".to_owned())),
+        zero_router::RouteAction::Direct
+    ));
+
+    cleanup_temp_dir(&project_dir);
+}
+
+#[test]
+fn reload_replaces_zrs_router_snapshot() {
+    let project_dir = temp_test_dir("engine-zrs-reload");
+    let first_path = project_dir.join("first.zrs");
+    let second_path = project_dir.join("second.zrs");
+    write_zrs(&first_path, "first.example");
+    write_zrs(&second_path, "second.example");
+
+    let first_config = zrs_config(&first_path);
+    let engine = Engine::new(first_config).expect("engine should build first ZRS router");
+    assert_route_rejected(&engine, "first.example");
+    assert_route_direct(&engine, "second.example");
+
+    engine
+        .reload_config(zrs_config(&second_path))
+        .expect("reload second ZRS router");
+    assert_route_direct(&engine, "first.example");
+    assert_route_rejected(&engine, "second.example");
+
+    cleanup_temp_dir(&project_dir);
+}
+
+fn write_zrs(path: &Path, domain: &str) {
+    let (compiled, _) = zero_rule::RuleSetCompiler
+        .compile(zero_rule::RuleSet::new(vec![zero_rule::Rule::DomainExact(
+            domain.to_owned(),
+        )]))
+        .expect("compile ZRS matcher");
+    fs::write(path, zero_rule::zrs::encode(&compiled).expect("encode ZRS")).expect("write ZRS");
+}
+
+fn zrs_config(path: &Path) -> RuntimeConfig {
+    RuntimeConfig::parse(&format!(
+        r#"{{
+            "route": {{
+                "rule_sets": [{{
+                    "tag": "selected",
+                    "type": "file",
+                    "path": "{}",
+                    "format": "zrs"
+                }}],
+                "rules": [{{
+                    "condition": {{ "type": "rule_set", "tag": "selected" }},
+                    "action": {{ "type": "reject" }}
+                }}],
+                "final": {{ "type": "direct" }}
+            }}
+        }}"#,
+        escape_json_path(path),
+    ))
+    .expect("ZRS config should parse")
+}
+
+fn assert_route_rejected(engine: &Engine, domain: &str) {
+    assert!(matches!(
+        engine.route_for(&zero_core::Address::Domain(domain.to_owned())),
+        zero_router::RouteAction::Reject
+    ));
+}
+
+fn assert_route_direct(engine: &Engine, domain: &str) {
+    assert!(matches!(
+        engine.route_for(&zero_core::Address::Domain(domain.to_owned())),
+        zero_router::RouteAction::Direct
+    ));
+}
+
 fn temp_test_dir(prefix: &str) -> PathBuf {
     let nonce = SystemTime::now()
         .duration_since(UNIX_EPOCH)

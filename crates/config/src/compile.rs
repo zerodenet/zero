@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::path::Path;
 
-use zero_router::{RouteAction, Rule, RuleCondition, RuleSet};
+use zero_router::{RouteAction, Rule, RuleCondition, RuleSet, RuleSetMatcher};
 
 use crate::rule_sets::compile_rule_sets;
 use crate::{ConfigError, RouteActionConfig, RouteConfig, RouteRuleConfig, RuleConditionConfig};
@@ -50,7 +50,7 @@ fn resolve_path(path: &str, base_dir: Option<&Path>) -> std::path::PathBuf {
 impl RouteRuleConfig {
     pub(crate) fn compile(
         &self,
-        compiled_rule_sets: &HashMap<String, RuleCondition>,
+        compiled_rule_sets: &HashMap<String, RuleSetMatcher>,
     ) -> Result<Rule, ConfigError> {
         Ok(Rule {
             condition: self.condition.compile(compiled_rule_sets)?,
@@ -62,7 +62,7 @@ impl RouteRuleConfig {
 impl RuleConditionConfig {
     pub(crate) fn compile(
         &self,
-        compiled_rule_sets: &HashMap<String, RuleCondition>,
+        compiled_rule_sets: &HashMap<String, RuleSetMatcher>,
     ) -> Result<RuleCondition, ConfigError> {
         match self {
             Self::Inbound { values } => {
@@ -101,6 +101,7 @@ impl RuleConditionConfig {
             Self::RuleSet { tag } => compiled_rule_sets
                 .get(tag)
                 .cloned()
+                .map(RuleCondition::RuleSet)
                 .ok_or_else(|| ConfigError::UndefinedRuleSetTag { tag: tag.clone() }),
             Self::GeoIp { values } => {
                 if values.is_empty() {
@@ -164,7 +165,7 @@ fn validate_non_empty_values(kind: &str, values: &[String]) -> Result<(), Config
 fn compile_nested_condition<F>(
     kind: &'static str,
     items: &[RuleConditionConfig],
-    compiled_rule_sets: &HashMap<String, RuleCondition>,
+    compiled_rule_sets: &HashMap<String, RuleSetMatcher>,
     wrap: F,
 ) -> Result<RuleCondition, ConfigError>
 where

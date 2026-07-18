@@ -75,6 +75,10 @@ pub enum RuleSetFormatConfig {
     DomainList,
     #[serde(rename = "cidr_list")]
     CidrList,
+    #[serde(rename = "zero_rule_ir", alias = "zero_ir")]
+    ZeroRuleIr,
+    #[serde(rename = "zrs")]
+    Zrs,
 }
 
 fn default_rule_set_update_interval() -> u64 {

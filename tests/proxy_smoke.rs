@@ -177,9 +177,29 @@ fn zero_binary_applies_file_backed_rule_sets() {
     let project_dir = create_temp_dir("proxy-smoke-rule-sets");
     let rules_dir = project_dir.join("rules");
     fs::create_dir_all(&rules_dir).expect("create rules dir");
-    fs::write(rules_dir.join("ads.txt"), "blocked.example\n.ads.local\n")
-        .expect("write domain rules");
-    fs::write(rules_dir.join("lan.txt"), "127.0.0.0/8\n").expect("write cidr rules");
+    fs::write(
+        rules_dir.join("ads.zero.json"),
+        r#"{
+            "version": 1,
+            "name": "ads",
+            "rules": [
+                { "type": "domain_suffix", "value": "blocked.example" },
+                { "type": "domain_suffix", "value": "ads.local" }
+            ]
+        }"#,
+    )
+    .expect("write domain Zero Rule IR");
+    fs::write(
+        rules_dir.join("lan.zero.json"),
+        r#"{
+            "version": 1,
+            "name": "lan",
+            "rules": [
+                { "type": "ipv4_cidr", "value": "127.0.0.0/8" }
+            ]
+        }"#,
+    )
+    .expect("write CIDR Zero Rule IR");
 
     let proxy_port = free_port();
     let echo_port = free_port();
@@ -208,14 +228,14 @@ fn zero_binary_applies_file_backed_rule_sets() {
                     {{
                         "tag": "ads",
                         "type": "file",
-                        "path": "rules/ads.txt",
-                        "format": "domain_list"
+                        "path": "rules/ads.zero.json",
+                        "format": "zero_rule_ir"
                     }},
                     {{
                         "tag": "lan",
                         "type": "file",
-                        "path": "rules/lan.txt",
-                        "format": "cidr_list"
+                        "path": "rules/lan.zero.json",
+                        "format": "zero_rule_ir"
                     }}
                 ],
                 "rules": [

@@ -12,3 +12,4 @@ ipnet.workspace = true
 maxminddb.workspace = true
 regex = "1"
 zero-core = { path = "../core" }
+zero-rule = { path = "../rule" }
