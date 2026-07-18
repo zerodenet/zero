@@ -14,6 +14,7 @@ use super::event_log::EngineEventLog;
 use super::groups::OutboundGroupStateStore;
 use super::hook::{FlowHook, FlowHookChain};
 use super::outbound_health::OutboundHealth;
+use super::passive_relay_health::PassiveRelayHealth;
 use super::plan::{EnginePlan, TargetId};
 use super::probe_trigger::ProbeTriggerRegistry;
 use super::resolve::{
@@ -25,6 +26,7 @@ use super::stats::EngineStats;
 mod configuration;
 mod diagnostics;
 mod observability;
+mod passive_health;
 mod policy;
 mod session;
 
@@ -43,6 +45,7 @@ pub struct Engine {
     pub(crate) probe_trigger_registry: Arc<ProbeTriggerRegistry>,
     flow_hook: Option<Arc<FlowHookChain>>,
     pub(crate) outbound_health: Arc<OutboundHealth>,
+    pub(crate) passive_relay_health: Arc<PassiveRelayHealth>,
     udp_upstream_idle_timeout: Duration,
     /// Reload notification channel: wakes the proxy's main loop when
     /// `reload_config` atomically swaps the plan / router / config.
@@ -154,6 +157,7 @@ impl Engine {
             outbound_group_state,
             probe_trigger_registry: ProbeTriggerRegistry::shared(),
             outbound_health: Arc::new(OutboundHealth::new()),
+            passive_relay_health: Arc::new(PassiveRelayHealth::default()),
             flow_hook: None,
             udp_upstream_idle_timeout,
             reload_notify: Arc::new(std::sync::Mutex::new(Vec::new())),

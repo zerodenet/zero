@@ -7,6 +7,7 @@ mod groups;
 mod handle;
 mod hook;
 mod outbound_health;
+mod passive_relay_health;
 mod plan;
 mod probe_trigger;
 mod resolve;
@@ -26,6 +27,7 @@ pub use event_log::EventsSinceResult;
 pub use groups::{UrlTestGroupState, UrlTestMemberState};
 pub use handle::{EngineHandle, EventSubscriber};
 pub use hook::{BlockReason, FlowContext, FlowHook, FlowHookChain, FlowTraffic};
+pub use passive_relay_health::{PassiveRelayHealthKey, PassiveRelayOutcome, PassiveRelaySelection};
 pub use plan::{
     EnginePlan, FallbackGroupPlan, LoadBalanceGroupPlan, OutboundTarget, SelectorGroupPlan,
     TargetId, TargetKind, TargetNode, UrlTestGroupPlan,

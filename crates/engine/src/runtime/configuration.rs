@@ -23,6 +23,7 @@ impl Engine {
 
         let config_for_persist = new_config.clone();
         *self.config.write().expect("config lock poisoned") = Arc::new(new_config);
+        self.passive_relay_health.clear();
         self.event_log.push_config_changed();
 
         if let Some(path) = &self.config_path {

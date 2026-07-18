@@ -1,7 +1,7 @@
 use std::time::Instant;
 
 use zero_core::Session;
-use zero_engine::{EngineError, SessionHandle, SessionOutcome};
+use zero_engine::{CompletedSessionRecord, EngineError, SessionHandle, SessionOutcome};
 
 use crate::logging::{log_session_failed, log_session_finished};
 
@@ -9,12 +9,15 @@ pub(super) fn finish_relay_success(
     handle: &mut SessionHandle,
     outcome: SessionOutcome,
     upstream_endpoint: Option<&(String, u16)>,
-) {
+) -> Option<CompletedSessionRecord> {
     if let Some(record) = handle.finish(outcome) {
         log_session_finished(
             &record,
             upstream_endpoint.map(|(server, port)| (server.as_str(), *port)),
         );
+        Some(record)
+    } else {
+        None
     }
 }
 
@@ -24,7 +27,7 @@ pub(super) fn finish_relay_failure(
     started_at: Instant,
     error: &EngineError,
     upstream_endpoint: Option<&(String, u16)>,
-) {
+) -> Option<CompletedSessionRecord> {
     let record =
         handle.finish_with_reason(SessionOutcome::Failed, Some("upstream_error".to_owned()));
     log_session_failed(
@@ -35,18 +38,22 @@ pub(super) fn finish_relay_failure(
         error,
         upstream_endpoint.map(|(server, port)| (server.as_str(), *port)),
     );
+    record
 }
 
 pub(super) fn finish_relay_idle_timeout(
     handle: &mut SessionHandle,
     outcome: SessionOutcome,
     upstream_endpoint: Option<&(String, u16)>,
-) {
+) -> Option<CompletedSessionRecord> {
     if let Some(record) = handle.finish_with_reason(outcome, Some("idle_timeout".to_owned())) {
         log_session_finished(
             &record,
             upstream_endpoint.map(|(server, port)| (server.as_str(), *port)),
         );
+        Some(record)
+    } else {
+        None
     }
 }
 

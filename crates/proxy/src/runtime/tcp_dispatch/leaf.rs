@@ -14,11 +14,21 @@ pub(crate) async fn dispatch_tcp(
 ) -> Result<TcpRouteResult, EngineError> {
     runtime.resolve_fake_ip_target(session).await;
     let action = runtime.route_decision(session);
-    let resolved = runtime.resolve_outbound(&action)?;
-    let outbound = super::dispatch_tcp_outbound(runtime.runtime_services(), session, resolved)
-        .await
-        .map_err(|failure| EngineError::Io(io::Error::other(failure.error)))?;
+    let (resolved, passive_relay_selections) = runtime.resolve_outbound(&action, session)?;
+    let outbound =
+        match super::dispatch_tcp_outbound(runtime.runtime_services(), session, resolved).await {
+            Ok(outbound) => outbound,
+            Err(failure) => {
+                runtime.record_passive_relay_outcome(
+                    &passive_relay_selections,
+                    session,
+                    zero_engine::PassiveRelayOutcome::Failure,
+                );
+                return Err(EngineError::Io(io::Error::other(failure.error)));
+            }
+        };
     let mut result = extract_tcp_stream(outbound)?;
     result.route_action = action;
+    result.passive_relay_selections = passive_relay_selections;
     Ok(result)
 }

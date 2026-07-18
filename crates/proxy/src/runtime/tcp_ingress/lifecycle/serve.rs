@@ -29,6 +29,7 @@ use zero_traits::AsyncSocket;
 use super::super::contract::ClientResponseInboundProtocol;
 use super::super::contract::InboundProtocol;
 use super::super::runtime::TcpIngressRuntime;
+use super::passive_health::classify_relay_outcome;
 use super::result::{
     finish_blocked, finish_relay_failure, finish_relay_idle_timeout, finish_relay_success,
     finish_route_or_establish_failure,
@@ -89,6 +90,7 @@ pub(crate) async fn serve_inbound<P: InboundProtocol>(
                 SessionOutcome::ChainedRelayed
             };
             let upstream_endpoint = result.upstream_endpoint;
+            let passive_relay_selections = result.passive_relay_selections;
 
             protocol.send_ok(&mut client).await?;
 
@@ -107,21 +109,43 @@ pub(crate) async fn serve_inbound<P: InboundProtocol>(
 
             match relay_result {
                 Ok(Ok(())) => {
-                    finish_relay_success(&mut handle, outcome, upstream_endpoint.as_ref());
+                    if let Some(record) =
+                        finish_relay_success(&mut handle, outcome, upstream_endpoint.as_ref())
+                    {
+                        runtime.record_passive_relay_outcome(
+                            &passive_relay_selections,
+                            &session,
+                            classify_relay_outcome(&record, None),
+                        );
+                    }
                     Ok(())
                 }
                 Ok(Err(error)) => {
-                    finish_relay_failure(
+                    if let Some(record) = finish_relay_failure(
                         &mut handle,
                         &session,
                         started_at,
                         &error,
                         upstream_endpoint.as_ref(),
-                    );
+                    ) {
+                        runtime.record_passive_relay_outcome(
+                            &passive_relay_selections,
+                            &session,
+                            classify_relay_outcome(&record, Some(&error)),
+                        );
+                    }
                     Err(error)
                 }
                 Err(_elapsed) => {
-                    finish_relay_idle_timeout(&mut handle, outcome, upstream_endpoint.as_ref());
+                    if let Some(record) =
+                        finish_relay_idle_timeout(&mut handle, outcome, upstream_endpoint.as_ref())
+                    {
+                        runtime.record_passive_relay_outcome(
+                            &passive_relay_selections,
+                            &session,
+                            classify_relay_outcome(&record, None),
+                        );
+                    }
                     Ok(())
                 }
             }

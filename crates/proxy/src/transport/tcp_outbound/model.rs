@@ -1,6 +1,6 @@
 use std::io;
 
-use zero_engine::{EngineError, RouteDecision};
+use zero_engine::{EngineError, PassiveRelaySelection, RouteDecision};
 
 use crate::transport::TcpRelayStream;
 
@@ -11,6 +11,7 @@ pub(crate) struct TcpRouteResult {
     pub is_direct: bool,
     pub upstream_endpoint: Option<(String, u16)>,
     pub route_action: RouteDecision,
+    pub passive_relay_selections: Vec<PassiveRelaySelection>,
 }
 
 pub(crate) struct EstablishedTcpOutbound {

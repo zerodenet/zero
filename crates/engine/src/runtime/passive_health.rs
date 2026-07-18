@@ -1,0 +1,136 @@
+use std::sync::Arc;
+
+use zero_core::Address;
+
+use super::{Engine, RouteDecision};
+use crate::resolve::resolve_target_id_with_urltest_selector;
+use crate::{
+    EngineError, EnginePlan, PassiveRelayHealthKey, PassiveRelayOutcome, PassiveRelaySelection,
+    ResolvedOutbound, TargetId,
+};
+
+impl Engine {
+    pub fn resolve_route_decision_for_flow(
+        &self,
+        action: RouteDecision,
+        target: &Address,
+        port: u16,
+    ) -> Result<
+        (
+            ResolvedOutbound<'static>,
+            Option<Arc<EnginePlan>>,
+            Vec<PassiveRelaySelection>,
+        ),
+        EngineError,
+    > {
+        let RouteDecision::Route(tag) = action else {
+            let (resolved, plan) = self.resolve_route_decision(action)?;
+            return Ok((resolved, plan, Vec::new()));
+        };
+
+        let plan = self.plan();
+        let target_id = plan
+            .target_id(&tag)
+            .ok_or_else(|| EngineError::MissingRouteTarget { tag: tag.clone() })?;
+        let mut selections = Vec::new();
+        let mut selector = |group_id: TargetId, selected: TargetId| {
+            let (member_id, half_open) =
+                self.select_urltest_member_for_flow(&plan, group_id, selected, target, port);
+            if let (Some(group), Some(member)) = (plan.target(group_id), plan.target(member_id)) {
+                selections.push(PassiveRelaySelection {
+                    policy_tag: group.tag().to_owned(),
+                    member_tag: member.tag().to_owned(),
+                    half_open,
+                });
+            }
+            member_id
+        };
+        let resolved = resolve_target_id_with_urltest_selector(
+            &plan,
+            &self.outbound_group_state,
+            target_id,
+            &mut selector,
+        )
+        .ok_or_else(|| EngineError::MissingRouteTarget { tag })?;
+        drop(selector);
+
+        // SAFETY: `plan` is returned alongside the resolved value and owns all
+        // borrowed target data for at least as long as the caller holds it.
+        let resolved = unsafe { std::mem::transmute(resolved) };
+        Ok((resolved, Some(plan), selections))
+    }
+
+    fn select_urltest_member_for_flow(
+        &self,
+        plan: &EnginePlan,
+        group_id: TargetId,
+        selected: TargetId,
+        target: &Address,
+        port: u16,
+    ) -> (TargetId, bool) {
+        let Some(group) = plan.target(group_id) else {
+            return (selected, false);
+        };
+        let Some(urltest) = group.as_urltest() else {
+            return (selected, false);
+        };
+        let member_allowed = |member_id: TargetId| {
+            let Some(member) = plan.target(member_id) else {
+                return None;
+            };
+            self.passive_relay_health
+                .allow_flow(&PassiveRelayHealthKey {
+                    policy_tag: group.tag().to_owned(),
+                    member_tag: member.tag().to_owned(),
+                    target: target.clone(),
+                    port,
+                })
+        };
+
+        if let Some(half_open) = member_allowed(selected) {
+            return (selected, half_open);
+        }
+
+        if let Some(state) = self.outbound_group_state.urltest_state(group_id) {
+            let mut healthy = state
+                .members
+                .into_iter()
+                .filter(|member| member.member_id != selected && member.healthy)
+                .collect::<Vec<_>>();
+            healthy.sort_by_key(|member| member.latency_ms.unwrap_or(u64::MAX));
+            for member in healthy {
+                if let Some(half_open) = member_allowed(member.member_id) {
+                    return (member.member_id, half_open);
+                }
+            }
+        }
+
+        for member_id in urltest.members().iter().copied() {
+            if member_id != selected {
+                if let Some(half_open) = member_allowed(member_id) {
+                    return (member_id, half_open);
+                }
+            }
+        }
+        (selected, false)
+    }
+
+    pub fn record_passive_relay_outcome(
+        &self,
+        selection: &PassiveRelaySelection,
+        target: &Address,
+        port: u16,
+        outcome: PassiveRelayOutcome,
+    ) {
+        self.passive_relay_health.record(
+            PassiveRelayHealthKey {
+                policy_tag: selection.policy_tag.clone(),
+                member_tag: selection.member_tag.clone(),
+                target: target.clone(),
+                port,
+            },
+            outcome,
+            selection.half_open,
+        );
+    }
+}

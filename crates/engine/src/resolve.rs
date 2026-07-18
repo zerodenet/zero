@@ -43,7 +43,23 @@ pub(crate) fn resolve_target_id<'a>(
     target_id: TargetId,
 ) -> Option<ResolvedOutbound<'a>> {
     let mut stack = Vec::new();
-    resolve_target_inner(plan, outbound_group_state, target_id, &mut stack)
+    resolve_target_inner(plan, outbound_group_state, target_id, &mut stack, &mut None)
+}
+
+pub(crate) fn resolve_target_id_with_urltest_selector<'a>(
+    plan: &'a EnginePlan,
+    outbound_group_state: &OutboundGroupStateStore,
+    target_id: TargetId,
+    selector: &mut dyn FnMut(TargetId, TargetId) -> TargetId,
+) -> Option<ResolvedOutbound<'a>> {
+    let mut stack = Vec::new();
+    resolve_target_inner(
+        plan,
+        outbound_group_state,
+        target_id,
+        &mut stack,
+        &mut Some(selector),
+    )
 }
 
 pub(crate) fn resolve_target_chains(
@@ -60,6 +76,7 @@ fn resolve_target_inner<'a>(
     outbound_group_state: &OutboundGroupStateStore,
     target_id: TargetId,
     stack: &mut Vec<TargetId>,
+    urltest_selector: &mut Option<&mut dyn FnMut(TargetId, TargetId) -> TargetId>,
 ) -> Option<ResolvedOutbound<'a>> {
     if stack.contains(&target_id) {
         return None;
@@ -76,12 +93,24 @@ fn resolve_target_inner<'a>(
             let selected = outbound_group_state
                 .selector_selected_target(target_id)
                 .unwrap_or_else(|| selector.initial_member());
-            resolve_target_inner(plan, outbound_group_state, selected, stack)
+            resolve_target_inner(
+                plan,
+                outbound_group_state,
+                selected,
+                stack,
+                urltest_selector,
+            )
         }
         TargetKind::Relay(relay) => {
             let mut chain = Vec::with_capacity(relay.chain().len());
             for &member_id in relay.chain() {
-                let resolved = resolve_target_inner(plan, outbound_group_state, member_id, stack)?;
+                let resolved = resolve_target_inner(
+                    plan,
+                    outbound_group_state,
+                    member_id,
+                    stack,
+                    urltest_selector,
+                )?;
                 match resolved {
                     ResolvedOutbound::Single(leaf) => chain.push(leaf),
                     _ => return None,
@@ -92,17 +121,33 @@ fn resolve_target_inner<'a>(
         TargetKind::Fallback(fallback) => {
             let mut candidates = Vec::new();
             for &member_id in fallback.members() {
-                let resolved = resolve_target_inner(plan, outbound_group_state, member_id, stack)?;
+                let resolved = resolve_target_inner(
+                    plan,
+                    outbound_group_state,
+                    member_id,
+                    stack,
+                    urltest_selector,
+                )?;
                 append_candidates(&mut candidates, resolved);
             }
 
             Some(ResolvedOutbound::Fallback { candidates })
         }
         TargetKind::UrlTest(urltest) => {
-            let selected = outbound_group_state
+            let default_selected = outbound_group_state
                 .selected_target(target_id)
                 .unwrap_or_else(|| urltest.initial_member());
-            resolve_target_inner(plan, outbound_group_state, selected, stack)
+            let selected = urltest_selector
+                .as_deref_mut()
+                .map(|selector| selector(target_id, default_selected))
+                .unwrap_or(default_selected);
+            resolve_target_inner(
+                plan,
+                outbound_group_state,
+                selected,
+                stack,
+                urltest_selector,
+            )
         }
         TargetKind::LoadBalance(lb) => {
             let member_count = lb.members().len();
@@ -128,7 +173,13 @@ fn resolve_target_inner<'a>(
 
             let mut candidates = Vec::new();
             for &member_id in &ordered {
-                let resolved = resolve_target_inner(plan, outbound_group_state, member_id, stack)?;
+                let resolved = resolve_target_inner(
+                    plan,
+                    outbound_group_state,
+                    member_id,
+                    stack,
+                    urltest_selector,
+                )?;
                 append_candidates(&mut candidates, resolved);
             }
 
