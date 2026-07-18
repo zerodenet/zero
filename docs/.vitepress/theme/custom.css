@@ -32,7 +32,6 @@
 }
 
 .vp-doc table {
-  display: table;
   width: 100%;
 }
 
@@ -40,10 +39,4 @@
   background:
     radial-gradient(circle at 12% 8%, rgba(8, 127, 115, 0.12), transparent 30rem),
     linear-gradient(180deg, rgba(8, 127, 115, 0.035), transparent 32rem);
-}
-
-@media (max-width: 767px) {
-  .vp-doc table {
-    display: block;
-  }
 }
