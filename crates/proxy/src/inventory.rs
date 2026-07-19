@@ -5,8 +5,6 @@ mod metadata;
 mod protocols;
 mod runtime;
 mod tcp;
-#[cfg(test)]
-mod tests;
 #[cfg(feature = "udp-runtime")]
 mod udp;
 

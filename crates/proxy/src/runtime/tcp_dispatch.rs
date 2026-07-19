@@ -9,7 +9,5 @@ pub(crate) mod operation;
 mod outbound;
 pub(crate) mod relay;
 
-#[cfg(test)]
-pub(crate) use candidate::dispatch_prepared_tcp_candidate;
 pub(crate) use leaf::dispatch_tcp;
 pub(crate) use outbound::dispatch_tcp_outbound;

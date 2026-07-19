@@ -44,8 +44,6 @@ pub(crate) use context::{
 };
 pub(crate) use defaults::{bind_tcp_inbound, inbound_listen_addr};
 pub(crate) use model::{BoundInbound, OutboundLeafRuntime};
-#[cfg(test)]
-pub(crate) use registry::fake_direct_leaf;
 pub(crate) use registry::ClaimedOutboundLeaf;
 pub(crate) use registry::ProtocolRegistry;
 #[cfg(feature = "managed-stream-runtime")]

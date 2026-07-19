@@ -70,8 +70,6 @@ pub(crate) use crate::runtime::udp_flow::result::{FlowFailure, FlowStartResult};
 pub(crate) use managed::UpstreamTrackedStart;
 #[cfg(feature = "udp-runtime")]
 pub(crate) use model::UdpDispatch;
-#[cfg(test)]
-pub(crate) use outbound::execute_prepared_udp_candidate;
 pub(crate) use outbound::start_udp_resolved_outbound;
 pub(crate) mod operation;
 pub(crate) mod packet_path_operation;

@@ -1,10 +1,6 @@
 use zero_config::{InboundProtocolConfig, OutboundProtocolConfig, RuntimeConfig};
 use zero_engine::{OutboundIdentity, ResolvedLeafOutbound};
 
-pub(crate) fn fake_direct_leaf() -> ResolvedLeafOutbound<'static> {
-    ResolvedLeafOutbound::Direct { tag: Some("fake") }
-}
-
 pub(super) fn inbound_protocol_name(config: &InboundProtocolConfig) -> &'static str {
     match config {
         InboundProtocolConfig::Socks5 { .. } => "socks5",

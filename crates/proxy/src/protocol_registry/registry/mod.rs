@@ -66,5 +66,3 @@ impl fmt::Debug for ProtocolRegistry {
 
 #[cfg(test)]
 mod tests;
-#[cfg(test)]
-pub(crate) use tests::fake_direct_leaf;

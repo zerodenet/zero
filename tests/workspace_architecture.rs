@@ -189,7 +189,6 @@ fn engine_leaf_projection_stops_at_the_inventory_registry_claim_boundary() {
         let relative = path.strip_prefix(&proxy).expect("proxy-relative path");
         let allowed = relative == Path::new("inventory/runtime.rs")
             || relative == Path::new("protocol_registry/registry/outbound.rs")
-            || relative.starts_with("inventory/tests")
             || relative.starts_with("protocol_registry/registry/tests");
         assert!(
             allowed,
