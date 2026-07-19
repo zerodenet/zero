@@ -108,6 +108,7 @@ where
 pub(super) async fn handle_chain_result<H>(
     context: &PacketSessionUdpLoopContext<'_>,
     handler: &mut H,
+    dispatch: &UdpDispatch,
     last_activity: &mut TokioInstant,
     chain_result: ChainUdpResponseResult,
 ) -> Result<(), EngineError>
@@ -119,6 +120,7 @@ where
             *last_activity = TokioInstant::now();
             let response = record_chain_udp_response_parts(
                 context.runtime.services(),
+                dispatch,
                 target,
                 port,
                 payload,

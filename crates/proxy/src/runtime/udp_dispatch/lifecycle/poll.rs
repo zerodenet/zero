@@ -90,6 +90,17 @@ impl UdpDispatch {
         #[cfg(feature = "upstream-association-runtime")]
         self.flow_state.close_all_upstreams();
 
-        self.flows.finish_all()
+        let completed = self.flows.finish_all();
+        for flow in &completed {
+            if !flow.passive_health_confirmed {
+                self.runtime.record_passive_relay_target_outcome(
+                    &flow.passive_relay_selections,
+                    &flow.record.target,
+                    flow.record.port,
+                    zero_engine::PassiveRelayOutcome::Neutral,
+                );
+            }
+        }
+        completed
     }
 }

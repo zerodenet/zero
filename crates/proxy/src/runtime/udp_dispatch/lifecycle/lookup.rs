@@ -6,6 +6,19 @@ use zero_core::Address;
 use crate::runtime::udp_dispatch::UdpDispatch;
 
 impl UdpDispatch {
+    pub(crate) fn confirm_passive_health(&self, session_id: Option<u64>) {
+        let Some(session_id) = session_id else {
+            return;
+        };
+        if let Some((session, selections)) = self.flows.confirm_passive_health(session_id) {
+            self.runtime.record_passive_relay_outcome(
+                &selections,
+                &session,
+                zero_engine::PassiveRelayOutcome::Success,
+            );
+        }
+    }
+
     /// Look up the session ID for a direct response sender.
     pub(crate) fn direct_response_session_id(&self, sender: SocketAddr) -> Option<u64> {
         self.flows.direct_response_session_id(sender)

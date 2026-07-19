@@ -5,6 +5,7 @@ use zero_engine::{EngineError, SessionOutcome};
 
 use super::{FlowStartResult, UdpDispatch};
 use crate::logging::{log_session_failed, log_session_finished};
+use crate::runtime::passive_relay_health::classify_relay_outcome;
 use crate::runtime::pipe::UdpPipeInput;
 
 impl UdpDispatch {
@@ -40,7 +41,8 @@ impl UdpDispatch {
 
         runtime.resolve_fake_ip_target(&mut session).await;
         let action = runtime.route_decision(&session);
-        let resolved = match runtime.resolve_outbound(&action) {
+        let (resolved, passive_relay_selections) = match runtime.resolve_outbound(&action, &session)
+        {
             Ok(resolved) => resolved,
             Err(error) => {
                 let record = session_handle.finish(SessionOutcome::Failed);
@@ -65,8 +67,13 @@ impl UdpDispatch {
                 let session_id = session.id;
                 session.outbound_tag = Some(outbound.tag().to_owned());
                 runtime.set_session_outbound(&session);
-                self.flows
-                    .insert(session, session_handle, *outbound, input.client_session_id);
+                self.flows.insert(
+                    session.clone(),
+                    session_handle,
+                    *outbound,
+                    input.client_session_id,
+                    passive_relay_selections.clone(),
+                );
                 runtime
                     .services()
                     .record_session_outbound_tx(session_id, tx_bytes);
@@ -94,6 +101,13 @@ impl UdpDispatch {
                         .as_ref()
                         .map(|(server, port)| (server.as_str(), *port)),
                 );
+                if let Some(record) = record.as_ref() {
+                    runtime.record_passive_relay_outcome(
+                        &passive_relay_selections,
+                        &session,
+                        classify_relay_outcome(record, Some(&failure.error)),
+                    );
+                }
                 Err(failure.error)
             }
         }

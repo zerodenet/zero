@@ -2,7 +2,7 @@ use zero_engine::{CompletedSessionRecord, EngineError, PassiveRelayOutcome};
 
 const EARLY_RELAY_FAILURE_LIMIT_MS: u64 = 3_000;
 
-pub(super) fn classify_relay_outcome(
+pub(crate) fn classify_relay_outcome(
     record: &CompletedSessionRecord,
     error: Option<&EngineError>,
 ) -> PassiveRelayOutcome {
@@ -38,11 +38,7 @@ mod tests {
 
     use super::*;
 
-    fn record(
-        duration_ms: u64,
-        outbound_tx_bytes: u64,
-        outbound_rx_bytes: u64,
-    ) -> CompletedSessionRecord {
+    fn record(network: Network, duration_ms: u64, tx: u64, rx: u64) -> CompletedSessionRecord {
         CompletedSessionRecord {
             id: 1,
             inbound_tag: Some("entry".to_owned()),
@@ -51,18 +47,18 @@ mod tests {
             port: 14788,
             protocol: ProtocolType::UNKNOWN,
             auth: None,
-            network: Network::Tcp,
+            network,
             mode: "rule".to_owned(),
             started_at_unix_ms: 0,
             last_activity_at_unix_ms: 0,
             finished_at_unix_ms: duration_ms,
             duration_ms,
-            bytes_up: outbound_tx_bytes,
-            bytes_down: outbound_rx_bytes,
-            inbound_rx_bytes: outbound_tx_bytes,
-            inbound_tx_bytes: outbound_rx_bytes,
-            outbound_rx_bytes,
-            outbound_tx_bytes,
+            bytes_up: tx,
+            bytes_down: rx,
+            inbound_rx_bytes: tx,
+            inbound_tx_bytes: rx,
+            outbound_rx_bytes: rx,
+            outbound_tx_bytes: tx,
             process_id: None,
             process_name: None,
             outcome: SessionOutcome::Failed,
@@ -71,33 +67,35 @@ mod tests {
     }
 
     #[test]
-    fn classifies_the_observed_shadowsocks_failure() {
+    fn classifies_early_transport_failures_for_tcp_and_udp() {
         let error = EngineError::Io(io::Error::other("shadowsocks unexpected EOF"));
-        assert_eq!(
-            classify_relay_outcome(&record(459, 1749, 0), Some(&error)),
-            PassiveRelayOutcome::Failure
-        );
+        for network in [Network::Tcp, Network::Udp] {
+            assert_eq!(
+                classify_relay_outcome(&record(network, 459, 1749, 0), Some(&error)),
+                PassiveRelayOutcome::Failure
+            );
+        }
     }
 
     #[test]
-    fn does_not_penalize_a_flow_that_received_upstream_data() {
+    fn upstream_data_wins_over_a_later_transport_error() {
         let error = EngineError::Io(io::Error::new(io::ErrorKind::BrokenPipe, "broken pipe"));
         assert_eq!(
-            classify_relay_outcome(&record(459, 1749, 1), Some(&error)),
+            classify_relay_outcome(&record(Network::Udp, 459, 1749, 1), Some(&error)),
             PassiveRelayOutcome::Success
         );
     }
 
     #[test]
-    fn does_not_penalize_late_or_unclassified_failures() {
+    fn ignores_late_and_unclassified_failures() {
         let eof = EngineError::Io(io::Error::other("shadowsocks unexpected EOF"));
         let other = EngineError::Io(io::Error::other("application rejected request"));
         assert_eq!(
-            classify_relay_outcome(&record(3_001, 1749, 0), Some(&eof)),
+            classify_relay_outcome(&record(Network::Udp, 3_001, 1749, 0), Some(&eof)),
             PassiveRelayOutcome::Neutral
         );
         assert_eq!(
-            classify_relay_outcome(&record(459, 1749, 0), Some(&other)),
+            classify_relay_outcome(&record(Network::Udp, 459, 1749, 0), Some(&other)),
             PassiveRelayOutcome::Neutral
         );
     }

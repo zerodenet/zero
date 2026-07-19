@@ -39,6 +39,7 @@ pub(crate) fn record_upstream_udp_response_received(
         }
         None => udp_response_session_id(dispatch, &target, port),
     };
+    dispatch.confirm_passive_health(session_id);
     let accounting =
         UdpInboundResponseAccounting::record_received(services, session_id, payload.len());
     UdpUpstreamResponseParts {
@@ -56,6 +57,7 @@ fn record_direct_udp_response_received(
     payload_len: usize,
 ) -> UdpInboundResponseAccounting {
     let session_id = dispatch.direct_response_session_id(sender);
+    dispatch.confirm_passive_health(session_id);
     UdpInboundResponseAccounting::record_received(services, session_id, payload_len)
 }
 
@@ -85,11 +87,13 @@ fn record_chain_udp_response_received(
 
 pub(crate) fn record_chain_udp_response_parts(
     services: &UdpRuntimeServices,
+    dispatch: &UdpDispatch,
     target: Address,
     port: u16,
     payload: Vec<u8>,
     session_id: Option<u64>,
 ) -> UdpChainResponseParts {
+    dispatch.confirm_passive_health(session_id);
     let accounting = record_chain_udp_response_received(services, session_id, payload.len());
     UdpChainResponseParts {
         target,

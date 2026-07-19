@@ -1,8 +1,10 @@
 use std::sync::Arc;
 
+use zero_api::PassiveRelayHealthState;
 use zero_core::Address;
 
 use super::{Engine, RouteDecision};
+use crate::passive_relay_health::PassiveRelayHealthTransition;
 use crate::resolve::resolve_target_id_with_urltest_selector;
 use crate::{
     EngineError, EnginePlan, PassiveRelayHealthKey, PassiveRelayOutcome, PassiveRelaySelection,
@@ -41,6 +43,16 @@ impl Engine {
                     member_tag: member.tag().to_owned(),
                     half_open,
                 });
+                if half_open {
+                    self.event_log.push_passive_relay_health_changed(
+                        group.tag(),
+                        member.tag(),
+                        target,
+                        port,
+                        PassiveRelayHealthState::HalfOpen,
+                        None,
+                    );
+                }
             }
             member_id
         };
@@ -120,15 +132,31 @@ impl Engine {
         port: u16,
         outcome: PassiveRelayOutcome,
     ) {
-        self.passive_relay_health.record(
-            PassiveRelayHealthKey {
-                policy_tag: selection.policy_tag.clone(),
-                member_tag: selection.member_tag.clone(),
-                target: target.clone(),
-                port,
-            },
-            outcome,
-            selection.half_open,
-        );
+        let key = PassiveRelayHealthKey {
+            policy_tag: selection.policy_tag.clone(),
+            member_tag: selection.member_tag.clone(),
+            target: target.clone(),
+            port,
+        };
+        let transition =
+            self.passive_relay_health
+                .record(key.clone(), outcome, selection.half_open);
+        if let Some(transition) = transition {
+            let (state, duration_ms) = match transition {
+                PassiveRelayHealthTransition::Quarantined(duration) => (
+                    PassiveRelayHealthState::Quarantined,
+                    Some(duration.as_millis() as u64),
+                ),
+                PassiveRelayHealthTransition::Healthy => (PassiveRelayHealthState::Healthy, None),
+            };
+            self.event_log.push_passive_relay_health_changed(
+                &key.policy_tag,
+                &key.member_tag,
+                &key.target,
+                key.port,
+                state,
+                duration_ms,
+            );
+        }
     }
 }

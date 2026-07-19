@@ -124,6 +124,7 @@ async fn registered_udp_state_forwards_with_restored_opaque_resume() {
             managed: flow_ref,
         },
         client_session_id: None,
+        passive_relay_selections: Vec::new(),
     };
     let config =
         RuntimeConfig::parse(r#"{ "route": { "rules": [], "final": { "type": "direct" } } }"#)

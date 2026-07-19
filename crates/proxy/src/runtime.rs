@@ -34,6 +34,7 @@ pub(crate) mod mux_udp;
 pub(crate) mod orchestration;
 #[cfg(feature = "managed-stream-runtime")]
 pub(crate) mod packet_session_udp;
+mod passive_relay_health;
 pub(crate) mod path;
 pub(crate) mod pipe;
 mod reload;

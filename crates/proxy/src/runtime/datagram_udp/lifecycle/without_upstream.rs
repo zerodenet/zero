@@ -31,7 +31,7 @@ where
                 handle_direct_response(context, source, responder, dispatch, sender, &direct_buf[..n]).await;
             }
             Some(chain_result) = chain_tasks.join_next() => {
-                handle_chain_result(context, source, responder, chain_result).await;
+                handle_chain_result(context, dispatch, source, responder, chain_result).await;
             }
         }
     }

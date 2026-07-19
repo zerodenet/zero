@@ -225,6 +225,7 @@ async fn inventory_executes_handler_produced_by_registered_provider() {
             managed,
         },
         client_session_id: None,
+        passive_relay_selections: Vec::new(),
     };
     let mut chain_tasks = tokio::task::JoinSet::new();
     let payload = b"provider handler payload";
@@ -274,6 +275,7 @@ async fn reload_invalidates_provider_resumes_before_new_generation_flows() {
             managed: old_ref,
         },
         client_session_id: None,
+        passive_relay_selections: Vec::new(),
     };
     let mut chain_tasks = tokio::task::JoinSet::new();
     let payload = b"reload generation payload";
@@ -308,6 +310,7 @@ async fn reload_invalidates_provider_resumes_before_new_generation_flows() {
             managed: new_ref,
         },
         client_session_id: None,
+        passive_relay_selections: Vec::new(),
     };
     assert!(state
         .forward_existing_managed_flow(

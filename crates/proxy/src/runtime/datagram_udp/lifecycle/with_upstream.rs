@@ -60,7 +60,7 @@ where
             }
             _ = wait_for_upstream_idle(upstream_idle_deadline) => {}
             Some(chain_result) = chain_tasks.join_next() => {
-                handle_chain_result(context, source, responder, chain_result).await;
+                handle_chain_result(context, dispatch, source, responder, chain_result).await;
             }
         }
     }

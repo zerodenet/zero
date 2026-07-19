@@ -89,7 +89,7 @@ where
                 handle_upstream_response(&context, &mut dispatch, &mut handler, &relay, upstream).await?;
             }
             Some(chain_result) = chain_tasks.join_next() => {
-                handle_chain_result(&context, &mut handler, &relay, chain_result).await;
+                handle_chain_result(&context, &dispatch, &mut handler, &relay, chain_result).await;
             }
             _ = wait_for_upstream_idle(idle_deadline) => {
                 handle_idle_timeout(&context, &mut dispatch);

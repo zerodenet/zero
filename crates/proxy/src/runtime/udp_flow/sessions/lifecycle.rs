@@ -1,5 +1,5 @@
 use zero_core::{Address, Session};
-use zero_engine::{SessionHandle, SessionOutcome};
+use zero_engine::{PassiveRelaySelection, SessionHandle, SessionOutcome};
 
 use crate::runtime::udp_flow::outbound::UdpFlowOutbound;
 use crate::runtime::udp_flow::snapshot::UdpFlowSnapshot;
@@ -40,6 +40,7 @@ impl UdpSessionFlows {
         handle: SessionHandle,
         outbound: UdpFlowOutbound,
         client_session_id: Option<u64>,
+        passive_relay_selections: Vec<PassiveRelaySelection>,
     ) {
         let key = UdpFlowKey::new(&session.target, session.port, client_session_id);
         self.index_flow(&key, &outbound);
@@ -50,8 +51,27 @@ impl UdpSessionFlows {
                 handle,
                 outbound,
                 client_session_id,
+                passive_relay_selections,
+                passive_health_confirmed: std::sync::atomic::AtomicBool::new(false),
             },
         );
+    }
+
+    pub(crate) fn confirm_passive_health(
+        &self,
+        session_id: u64,
+    ) -> Option<(Session, Vec<PassiveRelaySelection>)> {
+        let flow = self
+            .flows
+            .values()
+            .find(|flow| flow.session.id == session_id)?;
+        if flow
+            .passive_health_confirmed
+            .swap(true, std::sync::atomic::Ordering::AcqRel)
+        {
+            return None;
+        }
+        Some((flow.session.clone(), flow.passive_relay_selections.clone()))
     }
 
     pub(crate) fn finish(

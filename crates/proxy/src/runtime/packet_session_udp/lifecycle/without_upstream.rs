@@ -61,7 +61,7 @@ where
                 }
             }
             Some(chain_result) = chain_tasks.join_next() => {
-                handle_chain_result(context, handler, last_activity, chain_result).await?;
+                handle_chain_result(context, handler, dispatch, last_activity, chain_result).await?;
             }
         }
     }

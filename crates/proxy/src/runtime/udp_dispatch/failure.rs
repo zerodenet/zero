@@ -4,6 +4,7 @@ use zero_engine::{EngineError, SessionOutcome};
 
 use super::UdpDispatch;
 use crate::logging::log_session_failed;
+use crate::runtime::passive_relay_health::classify_relay_outcome;
 use crate::runtime::udp_flow::snapshot::UdpFlowSnapshot;
 
 impl UdpDispatch {
@@ -20,6 +21,11 @@ impl UdpDispatch {
             flow.client_session_id,
             SessionOutcome::Failed,
         ) {
+            self.runtime.record_passive_relay_outcome(
+                &flow.passive_relay_selections,
+                &flow.session,
+                classify_relay_outcome(&completed.record, Some(error)),
+            );
             log_session_failed(
                 &flow.session,
                 Some(&completed.record),

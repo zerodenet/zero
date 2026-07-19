@@ -6,8 +6,9 @@ use serde_json::{json, Value};
 use std::time::{SystemTime, UNIX_EPOCH};
 use zero_api::{
     event_type, ApiEvent, AuthInfo, EndpointRef, EventFilter, FlowEventPayload, FlowOutcome,
-    FlowTiming, Network as ApiNetwork, PolicyDecision, PolicyProbeCompletedPayload,
-    PolicySelectedPayload, RawApiEvent, RouteDecision, TargetAddress, TrafficStats,
+    FlowTiming, Network as ApiNetwork, PassiveRelayHealthChangedPayload, PassiveRelayHealthState,
+    PolicyDecision, PolicyProbeCompletedPayload, PolicySelectedPayload, RawApiEvent, RouteDecision,
+    TargetAddress, TrafficStats,
 };
 use zero_core::{Address, Network, ProtocolType, Session};
 
@@ -126,6 +127,38 @@ impl EngineEventLog {
         let event = ApiEvent::new(
             format!("probe-{}-{}", policy_tag, now_ms),
             event_type::POLICY_PROBE_COMPLETED,
+            now_ms,
+            payload,
+        );
+        self.push(event);
+    }
+
+    pub fn push_passive_relay_health_changed(
+        &self,
+        policy_tag: &str,
+        member_tag: &str,
+        target: &Address,
+        port: u16,
+        state: PassiveRelayHealthState,
+        quarantine_duration_ms: Option<u64>,
+    ) {
+        let now_ms = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64;
+        let payload = PassiveRelayHealthChangedPayload {
+            policy_tag: policy_tag.to_owned(),
+            member_tag: member_tag.to_owned(),
+            target: passive_health_target(target),
+            port,
+            state,
+            quarantine_duration_ms,
+        };
+        let payload = serde_json::to_value(payload)
+            .expect("passive relay health payload should be serializable");
+        let event = ApiEvent::new(
+            format!("passive-relay-health-{policy_tag}-{member_tag}-{now_ms}"),
+            event_type::POLICY_PASSIVE_RELAY_HEALTH_CHANGED,
             now_ms,
             payload,
         );
@@ -360,6 +393,14 @@ impl EngineEventLog {
             .lock()
             .unwrap_or_else(|error| error.into_inner())
             .retain(|subscriber| subscriber.try_send(event.clone()).is_ok());
+    }
+}
+
+fn passive_health_target(target: &Address) -> String {
+    match target {
+        Address::Domain(domain) => domain.clone(),
+        Address::Ipv4(octets) => std::net::Ipv4Addr::from(*octets).to_string(),
+        Address::Ipv6(octets) => std::net::Ipv6Addr::from(*octets).to_string(),
     }
 }
 

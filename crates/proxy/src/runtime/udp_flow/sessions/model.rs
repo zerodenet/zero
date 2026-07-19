@@ -1,7 +1,9 @@
 use std::collections::HashMap;
 use std::net::SocketAddr;
+use std::sync::atomic::AtomicBool;
 
 use zero_core::{Address, Session};
+use zero_engine::PassiveRelaySelection;
 use zero_engine::{CompletedSessionRecord, SessionHandle, SessionOutcome};
 
 use crate::runtime::udp_flow::outbound::UdpFlowOutbound;
@@ -51,6 +53,8 @@ impl UdpUpstreamResponseKey {
 pub(crate) struct CompletedUdpFlow {
     pub(crate) record: CompletedSessionRecord,
     pub(crate) upstream: Option<(String, u16)>,
+    pub(crate) passive_relay_selections: Vec<PassiveRelaySelection>,
+    pub(crate) passive_health_confirmed: bool,
 }
 
 #[derive(Debug, Default)]
@@ -66,6 +70,8 @@ pub(super) struct UdpFlow {
     pub(super) handle: SessionHandle,
     pub(super) outbound: UdpFlowOutbound,
     pub(super) client_session_id: Option<u64>,
+    pub(super) passive_relay_selections: Vec<PassiveRelaySelection>,
+    pub(super) passive_health_confirmed: AtomicBool,
 }
 
 impl UdpFlow {
@@ -74,17 +80,26 @@ impl UdpFlow {
             session: self.session.clone(),
             outbound: self.outbound.clone(),
             client_session_id: self.client_session_id,
+            passive_relay_selections: self.passive_relay_selections.clone(),
         }
     }
 
     pub(super) fn finish(mut self, outcome: SessionOutcome) -> CompletedUdpFlow {
         let upstream = self.outbound.completion().upstream;
+        let passive_health_confirmed = self
+            .passive_health_confirmed
+            .load(std::sync::atomic::Ordering::Acquire);
         let record = self
             .handle
             .finish(outcome)
             .expect("udp flow should be active before finish");
 
-        CompletedUdpFlow { record, upstream }
+        CompletedUdpFlow {
+            record,
+            upstream,
+            passive_relay_selections: self.passive_relay_selections,
+            passive_health_confirmed,
+        }
     }
 
     pub(super) fn finish_success(self) -> CompletedUdpFlow {

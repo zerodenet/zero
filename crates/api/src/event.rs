@@ -11,6 +11,7 @@ pub mod event_type {
 
     pub const POLICY_SELECTED: &str = "policy.selected";
     pub const POLICY_PROBE_COMPLETED: &str = "policy.probe.completed";
+    pub const POLICY_PASSIVE_RELAY_HEALTH_CHANGED: &str = "policy.passive_relay_health.changed";
 
     pub const STATS_SAMPLED: &str = "stats.sampled";
 
@@ -28,6 +29,7 @@ pub mod event_type {
         FLOW_COMPLETED,
         POLICY_SELECTED,
         POLICY_PROBE_COMPLETED,
+        POLICY_PASSIVE_RELAY_HEALTH_CHANGED,
         STATS_SAMPLED,
         CONFIG_CHANGED,
         ENGINE_STARTED,
@@ -40,6 +42,24 @@ pub mod event_type {
     pub fn is_known(value: &str) -> bool {
         ALL.contains(&value)
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PassiveRelayHealthState {
+    Quarantined,
+    HalfOpen,
+    Healthy,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PassiveRelayHealthChangedPayload {
+    pub policy_tag: String,
+    pub member_tag: String,
+    pub target: String,
+    pub port: u16,
+    pub state: PassiveRelayHealthState,
+    pub quarantine_duration_ms: Option<u64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

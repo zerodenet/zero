@@ -29,11 +29,11 @@ use zero_traits::AsyncSocket;
 use super::super::contract::ClientResponseInboundProtocol;
 use super::super::contract::InboundProtocol;
 use super::super::runtime::TcpIngressRuntime;
-use super::passive_health::classify_relay_outcome;
 use super::result::{
     finish_blocked, finish_relay_failure, finish_relay_idle_timeout, finish_relay_success,
     finish_route_or_establish_failure,
 };
+use crate::runtime::passive_relay_health::classify_relay_outcome;
 use crate::runtime::pipe::{KernelPipe, TcpPipe, TcpPipeInput};
 use crate::transport::is_block_error;
 

@@ -138,6 +138,7 @@ fn event_type_catalog_lists_current_api_events() {
             event_type::FLOW_COMPLETED,
             event_type::POLICY_SELECTED,
             event_type::POLICY_PROBE_COMPLETED,
+            event_type::POLICY_PASSIVE_RELAY_HEALTH_CHANGED,
             event_type::STATS_SAMPLED,
             event_type::CONFIG_CHANGED,
             event_type::ENGINE_STARTED,
@@ -149,4 +150,21 @@ fn event_type_catalog_lists_current_api_events() {
     );
     assert!(event_type::is_known("flow.completed"));
     assert!(!event_type::is_known("panel.user.changed"));
+}
+
+#[test]
+fn passive_relay_health_event_payload_has_stable_state_names() {
+    let payload = zero_api::PassiveRelayHealthChangedPayload {
+        policy_tag: "auto".to_owned(),
+        member_tag: "primary".to_owned(),
+        target: "landing.test".to_owned(),
+        port: 14788,
+        state: zero_api::PassiveRelayHealthState::HalfOpen,
+        quarantine_duration_ms: None,
+    };
+    let value = serde_json::to_value(payload).expect("serialize passive health payload");
+    assert_eq!(value["state"], "half_open");
+    let decoded: zero_api::PassiveRelayHealthChangedPayload =
+        serde_json::from_value(value).expect("deserialize passive health payload");
+    assert_eq!(decoded.state, zero_api::PassiveRelayHealthState::HalfOpen);
 }

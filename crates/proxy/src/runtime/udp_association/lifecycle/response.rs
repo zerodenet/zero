@@ -69,6 +69,7 @@ where
 
 pub(super) async fn handle_chain_result<H>(
     context: &UdpAssociationLoopContext<'_>,
+    dispatch: &UdpDispatch,
     handler: &mut H,
     relay: &TokioDatagramSocket,
     chain_result: ChainAssociationResult,
@@ -79,6 +80,7 @@ pub(super) async fn handle_chain_result<H>(
         Ok(Ok((target, port, payload, session_id))) => {
             let response = record_chain_udp_response_parts(
                 context.runtime.services(),
+                dispatch,
                 target,
                 port,
                 payload,

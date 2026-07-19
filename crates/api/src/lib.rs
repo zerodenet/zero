@@ -24,7 +24,10 @@ pub use command::{
     PolicyProbeCommand, PolicySelectCommand, TunStartCommand, TunStopCommand,
 };
 pub use error::{ApiError, ApiErrorCode, ErrorDetail};
-pub use event::{event_type, ApiEvent, EventFilter, PublishResult};
+pub use event::{
+    event_type, ApiEvent, EventFilter, PassiveRelayHealthChangedPayload, PassiveRelayHealthState,
+    PublishResult,
+};
 pub use flow::{
     AuthInfo, EndpointRef, FlowEventPayload, FlowOutcome, FlowTiming, Network, PolicyDecision,
     PolicyProbeCompletedPayload, PolicyProbeMember, PolicySelectedPayload, RouteDecision,

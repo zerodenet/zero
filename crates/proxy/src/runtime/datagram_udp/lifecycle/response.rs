@@ -50,6 +50,7 @@ pub(super) async fn handle_direct_response<S, R>(
 
 pub(super) async fn handle_chain_result<S, R>(
     context: &DatagramUdpLoopContext<'_>,
+    dispatch: &UdpDispatch,
     source: &S,
     responder: &mut R,
     chain_result: ChainUdpResponseResult,
@@ -61,6 +62,7 @@ pub(super) async fn handle_chain_result<S, R>(
         Ok(Ok((target, port, payload, session_id))) => {
             let response = record_chain_udp_response_parts(
                 context.runtime.services(),
+                dispatch,
                 target,
                 port,
                 payload,
