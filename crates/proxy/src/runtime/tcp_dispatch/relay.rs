@@ -33,7 +33,6 @@ pub(crate) async fn dispatch_prepared_tcp_relay_hop(
 }
 
 #[cfg(feature = "udp-runtime")]
-
 pub(crate) async fn dispatch_prepared_tcp_relay_carrier(
     services: TcpRuntimeServices,
     prepared: PreparedTcpRelayChain<'_>,

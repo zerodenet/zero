@@ -60,9 +60,7 @@ impl ProtocolInventory {
                             error,
                             upstream_endpoint: None,
                         })
-                        .and_then(|claimed| {
-                            self.prepare_claimed_tcp_candidate(ctx.clone(), &claimed)
-                        });
+                        .and_then(|claimed| self.prepare_claimed_tcp_candidate(ctx, &claimed));
                     match prepared_candidate {
                         Ok(candidate) => prepared.push(candidate),
                         Err(failure) => last_failure = Some(failure),

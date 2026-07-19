@@ -4,7 +4,6 @@ use crate::runtime::path::UdpPathCategory;
 use crate::runtime::udp_flow::outbound::model::UdpFlowOutbound;
 
 #[cfg(feature = "udp-runtime")]
-
 impl UdpFlowOutbound {
     pub(crate) fn tag(&self) -> &str {
         match self {

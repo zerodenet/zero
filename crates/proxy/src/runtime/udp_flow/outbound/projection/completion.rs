@@ -4,7 +4,6 @@ use zero_engine::SessionOutcome;
 use super::super::model::{UdpFlowCompletion, UdpFlowOutbound};
 
 #[cfg(feature = "udp-runtime")]
-
 impl UdpFlowOutbound {
     fn upstream_endpoint(&self) -> Option<(String, u16)> {
         match self {

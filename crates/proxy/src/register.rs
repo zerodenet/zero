@@ -107,7 +107,6 @@ pub(crate) fn compiled_protocol_features() -> Vec<String> {
 }
 
 #[cfg(feature = "udp-runtime")]
-
 pub(crate) fn registered_udp_handlers(registry: &ProtocolRegistry) -> RegisteredUdpHandlers {
     #[cfg(feature = "managed-stream-runtime")]
     let (stream_packet, relay) = registry

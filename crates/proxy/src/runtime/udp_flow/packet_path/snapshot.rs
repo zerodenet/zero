@@ -11,7 +11,6 @@ pub(crate) struct PacketPathLookupKey {
 }
 
 #[cfg(feature = "udp-runtime")]
-
 impl PacketPathLookupKey {
     pub(crate) fn from_parts(
         carrier: &PacketPathCarrierDescriptor,
@@ -40,7 +39,6 @@ pub(crate) struct PacketPathFlowSnapshot {
 }
 
 #[cfg(feature = "udp-runtime")]
-
 impl PacketPathFlowSnapshot {
     fn from_parts(datagram: &UdpDatagramDescriptor, carrier: &PacketPathCarrierDescriptor) -> Self {
         Self {
@@ -58,14 +56,12 @@ impl PacketPathFlowSnapshot {
 }
 
 #[cfg(feature = "udp-runtime")]
-
 pub(crate) struct PacketPathFlowBinding {
     datagram: UdpDatagramSource,
     flow_snapshot: PacketPathFlowSnapshot,
 }
 
 #[cfg(feature = "udp-runtime")]
-
 impl PacketPathFlowBinding {
     pub(crate) fn new(
         datagram: UdpDatagramSource,

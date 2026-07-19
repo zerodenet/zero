@@ -32,7 +32,6 @@ impl Default for ProtocolInventory {
 }
 
 #[cfg(feature = "udp-runtime")]
-
 impl ProtocolInventory {
     pub(crate) fn registered_udp_handlers(
         &self,

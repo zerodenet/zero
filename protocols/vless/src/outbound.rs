@@ -272,12 +272,12 @@ impl PreparedVlessOutboundRequestBundle {
     ) -> Result<Self, Error> {
         #[cfg(feature = "reality")]
         {
-            return Self::from_config_with_transport_hints(
+            Self::from_config_with_transport_hints(
                 id,
                 flow,
                 mux_concurrency,
                 StreamMuxTransportHints::default(),
-            );
+            )
         }
 
         #[cfg(not(feature = "reality"))]
@@ -387,10 +387,10 @@ impl PreparedVlessOutboundRequestBundle {
     pub fn udp_direct_flow_plan(&self) -> crate::udp::PreparedVlessUdpFlowPlan {
         #[cfg(feature = "reality")]
         {
-            return crate::udp::PreparedVlessUdpFlowPlan::with_transport_profile(
+            crate::udp::PreparedVlessUdpFlowPlan::with_transport_profile(
                 self.requests.udp_direct_flow_plan(),
                 self.mux_transport_profile.clone(),
-            );
+            )
         }
 
         #[cfg(not(feature = "reality"))]
@@ -402,10 +402,10 @@ impl PreparedVlessOutboundRequestBundle {
     pub fn udp_relay_final_hop_plan(&self) -> crate::udp::PreparedVlessUdpFlowPlan {
         #[cfg(feature = "reality")]
         {
-            return crate::udp::PreparedVlessUdpFlowPlan::with_transport_profile(
+            crate::udp::PreparedVlessUdpFlowPlan::with_transport_profile(
                 self.requests.udp_relay_final_hop_plan(),
                 self.mux_transport_profile.clone(),
-            );
+            )
         }
 
         #[cfg(not(feature = "reality"))]
@@ -417,10 +417,10 @@ impl PreparedVlessOutboundRequestBundle {
     pub fn udp_relay_paired_transport_plan(&self) -> crate::udp::PreparedVlessUdpFlowPlan {
         #[cfg(feature = "reality")]
         {
-            return crate::udp::PreparedVlessUdpFlowPlan::with_transport_profile(
+            crate::udp::PreparedVlessUdpFlowPlan::with_transport_profile(
                 self.requests.udp_relay_paired_transport_plan(),
                 self.mux_transport_profile.clone(),
-            );
+            )
         }
 
         #[cfg(not(feature = "reality"))]

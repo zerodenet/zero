@@ -13,12 +13,10 @@ use zero_engine::EngineError;
 /// Stored in a unified [`JoinSet`] so all chain outbound responses are
 /// polled from a single `select!` branch via UDP dispatch chain polling.
 #[cfg(feature = "udp-runtime")]
-
 pub(crate) type ChainTask = Result<(Address, u16, Vec<u8>, Option<u64>), EngineError>;
 
 /// Runtime context shared by UDP outbound managers for one send operation.
 #[cfg(feature = "udp-runtime")]
-
 pub(crate) struct UdpFlowContext<'a> {
     pub(crate) chain_tasks: &'a mut JoinSet<ChainTask>,
     pub(crate) session_id: u64,

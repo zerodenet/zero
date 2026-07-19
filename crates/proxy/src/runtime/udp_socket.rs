@@ -11,7 +11,6 @@ use zero_platform_tokio::TokioDatagramSocket;
 
 /// Send UDP packet directly to target.
 #[cfg(feature = "udp-runtime")]
-
 pub(crate) async fn send_direct_udp_packet(
     socket: &TokioDatagramSocket,
     target_addr: SocketAddr,

@@ -58,7 +58,7 @@ impl ProtocolInventory {
 
         if operation.needs_two_streams() {
             let post_prepared = self
-                .prepare_claimed_tcp_relay_chain(outbound_ctx.clone(), claimed_chain)
+                .prepare_claimed_tcp_relay_chain(outbound_ctx, claimed_chain)
                 .map_err(flow_failure_from_tcp_outbound)?;
             let get_prepared = self
                 .prepare_claimed_tcp_relay_chain(outbound_ctx, claimed_chain)

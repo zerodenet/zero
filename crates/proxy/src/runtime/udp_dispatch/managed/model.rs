@@ -22,7 +22,6 @@ pub(super) struct ManagedUdpSend<'a> {
 }
 
 #[cfg(feature = "managed-datagram-runtime")]
-
 pub(crate) struct ManagedDatagramStart<'a, T> {
     pub(crate) services: Option<UdpRuntimeServices>,
     pub(crate) tag: &'a str,

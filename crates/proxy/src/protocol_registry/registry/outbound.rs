@@ -242,7 +242,6 @@ fn unsupported_outbound_leaf(protocol: &str) -> EngineError {
 }
 
 #[cfg(feature = "udp-runtime")]
-
 fn missing_udp_relay_capability() -> crate::runtime::udp_dispatch::FlowFailure {
     crate::runtime::udp_dispatch::FlowFailure {
         stage: "find_outbound_leaf",

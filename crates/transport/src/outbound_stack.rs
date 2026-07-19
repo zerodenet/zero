@@ -50,41 +50,22 @@ where
     TH2: H2TransportProfile + ?Sized,
     THttp: HttpUpgradeTransportProfile + ?Sized,
 {
-    let StreamTransportStack {
-        tls: tls_config,
-        ws: ws_config,
-        grpc: grpc_config,
-        h2: h2_config,
-        http_upgrade: http_upgrade_config,
-        source_dir,
-    } = stack;
-
     #[cfg(feature = "tls")]
-    let carrier = match tls_config {
-        Some(tls) => tls::connect_tls_upstream(socket, tls, source_dir, server).await?,
+    let carrier = match stack.tls {
+        Some(tls) => tls::connect_tls_upstream(socket, tls, stack.source_dir, server).await?,
         None => TcpRelayStream::new(socket),
     };
 
     #[cfg(not(feature = "tls"))]
     let carrier = {
-        if tls_config.is_some() {
+        if stack.tls.is_some() {
             return invalid_transport_stack(invalid_message);
         }
-        let _ = source_dir;
+        let _ = stack.source_dir;
         TcpRelayStream::new(socket)
     };
 
-    connect_layered_transport_stack(
-        carrier,
-        ws_config,
-        grpc_config,
-        h2_config,
-        http_upgrade_config,
-        server,
-        port,
-        invalid_message,
-    )
-    .await
+    connect_layered_transport_stack(carrier, stack, server, port, invalid_message).await
 }
 
 pub async fn connect_relay_transport_stack<TTls, TWs, TGrpc, TH2, THttp>(
@@ -101,59 +82,46 @@ where
     TH2: H2TransportProfile + ?Sized,
     THttp: HttpUpgradeTransportProfile + ?Sized,
 {
-    let StreamTransportStack {
-        tls: tls_config,
-        ws: ws_config,
-        grpc: grpc_config,
-        h2: h2_config,
-        http_upgrade: http_upgrade_config,
-        source_dir,
-    } = stack;
-
     #[cfg(feature = "tls")]
-    let carrier = match tls_config {
-        Some(tls) => tls::connect_tls_stream(stream, tls, source_dir, server).await?,
+    let carrier = match stack.tls {
+        Some(tls) => tls::connect_tls_stream(stream, tls, stack.source_dir, server).await?,
         None => stream,
     };
 
     #[cfg(not(feature = "tls"))]
     let carrier = {
-        if tls_config.is_some() {
+        if stack.tls.is_some() {
             return invalid_transport_stack(invalid_message);
         }
-        let _ = source_dir;
+        let _ = stack.source_dir;
         stream
     };
 
-    connect_layered_transport_stack(
-        carrier,
-        ws_config,
-        grpc_config,
-        h2_config,
-        http_upgrade_config,
-        server,
-        port,
-        invalid_message,
-    )
-    .await
+    connect_layered_transport_stack(carrier, stack, server, port, invalid_message).await
 }
 
-async fn connect_layered_transport_stack<TWs, TGrpc, TH2, THttp>(
+async fn connect_layered_transport_stack<TTls, TWs, TGrpc, TH2, THttp>(
     carrier: TcpRelayStream,
-    ws_config: Option<&TWs>,
-    grpc_config: Option<&TGrpc>,
-    h2_config: Option<&TH2>,
-    http_upgrade_config: Option<&THttp>,
+    stack: StreamTransportStack<'_, TTls, TWs, TGrpc, TH2, THttp>,
     _server: &str,
     _port: u16,
     invalid_message: &'static str,
 ) -> Result<TcpRelayStream, RuntimeError>
 where
+    TTls: ClientTlsProfile + ?Sized,
     TWs: WebSocketTransportProfile + ?Sized,
     TGrpc: GrpcTransportProfile + ?Sized,
     TH2: H2TransportProfile + ?Sized,
     THttp: HttpUpgradeTransportProfile + ?Sized,
 {
+    let StreamTransportStack {
+        ws: ws_config,
+        grpc: grpc_config,
+        h2: h2_config,
+        http_upgrade: http_upgrade_config,
+        ..
+    } = stack;
+
     #[cfg(not(feature = "h2"))]
     if h2_config.is_some() {
         return invalid_transport_stack(invalid_message);

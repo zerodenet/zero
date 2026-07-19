@@ -23,42 +23,30 @@ struct MockSocket {
 
 impl AsyncSocket for MockSocket {
     type Error = ();
-    fn read<'a>(
-        &'a mut self,
-        buf: &'a mut [u8],
-    ) -> impl core::future::Future<Output = Result<usize, Self::Error>> + Send + 'a {
-        async move {
-            // Read at least one byte, then as many more as available
-            let first = self.rx.recv().await.ok_or(())?;
-            buf[0] = first;
-            let mut n = 1;
-            while n < buf.len() {
-                match self.rx.try_recv() {
-                    Ok(b) => {
-                        buf[n] = b;
-                        n += 1;
-                    }
-                    Err(_) => break,
+    async fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
+        // Read at least one byte, then as many more as available
+        let first = self.rx.recv().await.ok_or(())?;
+        buf[0] = first;
+        let mut n = 1;
+        while n < buf.len() {
+            match self.rx.try_recv() {
+                Ok(b) => {
+                    buf[n] = b;
+                    n += 1;
                 }
+                Err(_) => break,
             }
-            Ok(n)
         }
+        Ok(n)
     }
-    fn write_all<'a>(
-        &'a mut self,
-        buf: &'a [u8],
-    ) -> impl core::future::Future<Output = Result<(), Self::Error>> + Send + 'a {
-        async move {
-            for &b in buf {
-                let _ = self.tx.send(b);
-            }
-            Ok(())
+    async fn write_all(&mut self, buf: &[u8]) -> Result<(), Self::Error> {
+        for &b in buf {
+            let _ = self.tx.send(b);
         }
+        Ok(())
     }
-    fn shutdown<'a>(
-        &'a mut self,
-    ) -> impl core::future::Future<Output = Result<(), Self::Error>> + Send + 'a {
-        async move { Ok(()) }
+    async fn shutdown(&mut self) -> Result<(), Self::Error> {
+        Ok(())
     }
 }
 

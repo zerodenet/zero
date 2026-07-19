@@ -54,7 +54,7 @@ impl InboundStreamUdpRelay for DummyUdpRelay {
 }
 
 enum DummyMuxRoute {
-    Udp(Session),
+    Udp(Box<Session>),
     Mux { reader: u64, server: &'static str },
 }
 
@@ -80,7 +80,7 @@ impl InboundMuxStreamRoute for DummyMuxRoute {
         FMuxFut: Future<Output = Result<(), E>> + Send,
     {
         match self {
-            Self::Udp(session) => on_udp(session, DummyUdpRelay).await,
+            Self::Udp(session) => on_udp(*session, DummyUdpRelay).await,
             Self::Mux { reader, server } => on_mux(reader, server).await,
         }
     }
@@ -110,7 +110,7 @@ async fn mux_route_preserves_udp_session_and_inbound_tag() {
     let expected = session.clone();
 
     dispatch_protocol_mux_route(
-        DummyMuxRoute::Udp(session),
+        DummyMuxRoute::Udp(Box::new(session)),
         MuxRouteBridge {
             runtime: {
                 let proxy = proxy();

@@ -204,7 +204,6 @@ pub(super) struct FakeProviderResume {
 }
 
 #[cfg(feature = "managed-datagram-runtime")]
-
 struct FakeProviderDatagramHandler {
     calls: Arc<TcpCapabilityCalls>,
 }
@@ -379,7 +378,6 @@ impl crate::protocol_registry::UpstreamUdpHandlerProvider for FakeTcpCapability 
 ))]
 impl crate::protocol_registry::ManagedUdpHandlerProvider for FakeTcpCapability {
     #[cfg(feature = "managed-datagram-runtime")]
-
     fn managed_datagram_udp_handler(
         &self,
     ) -> Option<Box<dyn crate::runtime::udp_flow::managed::ManagedDatagramFlowHandler>> {

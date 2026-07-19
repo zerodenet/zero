@@ -119,10 +119,7 @@ async fn inventory_invokes_fake_tcp_leaf_and_relay_capabilities() {
         .claim_outbound_leaf(&proxy.config, leaf.clone())
         .expect("fake leaf claim");
 
-    let prepared = match proxy
-        .protocols
-        .prepare_claimed_tcp_candidate(ctx.clone(), &claimed)
-    {
+    let prepared = match proxy.protocols.prepare_claimed_tcp_candidate(ctx, &claimed) {
         Ok(prepared) => prepared,
         Err(_) => panic!("fake leaf prepare failed"),
     };
@@ -168,10 +165,7 @@ async fn inventory_preserves_tcp_and_relay_capability_failures() {
         .claim_outbound_leaf(&proxy.config, leaf.clone())
         .expect("fake leaf claim");
 
-    let prepared = match proxy
-        .protocols
-        .prepare_claimed_tcp_candidate(ctx.clone(), &claimed)
-    {
+    let prepared = match proxy.protocols.prepare_claimed_tcp_candidate(ctx, &claimed) {
         Ok(prepared) => prepared,
         Err(_) => panic!("fake leaf prepare failed"),
     };

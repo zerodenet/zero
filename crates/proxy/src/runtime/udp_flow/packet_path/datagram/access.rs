@@ -3,7 +3,6 @@ use zero_core::Address;
 use super::model::{UdpDatagramDescriptor, UdpDatagramEndpoint, UdpDatagramKey, UdpDatagramSource};
 
 #[cfg(feature = "udp-runtime")]
-
 impl UdpDatagramDescriptor {
     pub(crate) fn key_part(&self) -> UdpDatagramKey {
         UdpDatagramKey {
@@ -23,7 +22,6 @@ impl UdpDatagramDescriptor {
 }
 
 #[cfg(feature = "udp-runtime")]
-
 impl UdpDatagramSource {
     pub(crate) fn descriptor(&self) -> &UdpDatagramDescriptor {
         &self.descriptor
@@ -31,7 +29,6 @@ impl UdpDatagramSource {
 }
 
 #[cfg(feature = "udp-runtime")]
-
 impl UdpDatagramEndpoint {
     pub(crate) fn target(&self) -> Address {
         Address::Domain(self.server.clone())

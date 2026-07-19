@@ -50,11 +50,9 @@ impl DirectAdapter {
 }
 
 #[cfg(feature = "udp-runtime")]
-
 impl UdpFlowCapability for DirectAdapter {}
 
 #[cfg(feature = "udp-runtime")]
-
 impl UdpPacketPathCapability for DirectAdapter {}
 
 impl InboundListenerCapability for DirectAdapter {

@@ -8,7 +8,6 @@ use zero_engine::SessionOutcome;
 pub(crate) struct ManagedUdpFlowRef(pub(crate) u64);
 
 #[cfg(feature = "udp-runtime")]
-
 impl ManagedUdpFlowRef {
     pub(crate) fn new(id: u64) -> Self {
         Self(id)
@@ -56,21 +55,18 @@ pub(crate) enum UdpFlowOutbound {
 }
 
 #[cfg(feature = "udp-runtime")]
-
 pub(in crate::runtime::udp_flow) struct UdpFlowIndexKeys<'a> {
     pub(in crate::runtime::udp_flow) direct_sender: Option<SocketAddr>,
     pub(in crate::runtime::udp_flow) upstream_response_tag: Option<&'a str>,
 }
 
 #[cfg(feature = "udp-runtime")]
-
 pub(in crate::runtime::udp_flow) struct UdpFlowCompletion {
     pub(in crate::runtime::udp_flow) upstream: Option<(String, u16)>,
     pub(in crate::runtime::udp_flow) success_outcome: SessionOutcome,
 }
 
 #[cfg(feature = "udp-runtime")]
-
 pub(crate) struct UdpFlowUpstream<'a> {
     pub(crate) server: &'a str,
     pub(crate) port: u16,

@@ -42,7 +42,6 @@ pub(crate) trait ManagedRelayFlowHandler: Send + Sync {
 }
 
 #[cfg(feature = "managed-stream-runtime")]
-
 pub(crate) struct ManagedStreamHandlerPair {
     #[cfg(feature = "managed-stream-runtime")]
     pub(crate) stream_packet: Box<dyn ManagedStreamPacketFlowHandler>,

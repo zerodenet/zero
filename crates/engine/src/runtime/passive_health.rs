@@ -9,20 +9,19 @@ use crate::{
     ResolvedOutbound, TargetId,
 };
 
+type PassiveRelayResolution = (
+    ResolvedOutbound<'static>,
+    Option<Arc<EnginePlan>>,
+    Vec<PassiveRelaySelection>,
+);
+
 impl Engine {
     pub fn resolve_route_decision_for_flow(
         &self,
         action: RouteDecision,
         target: &Address,
         port: u16,
-    ) -> Result<
-        (
-            ResolvedOutbound<'static>,
-            Option<Arc<EnginePlan>>,
-            Vec<PassiveRelaySelection>,
-        ),
-        EngineError,
-    > {
+    ) -> Result<PassiveRelayResolution, EngineError> {
         let RouteDecision::Route(tag) = action else {
             let (resolved, plan) = self.resolve_route_decision(action)?;
             return Ok((resolved, plan, Vec::new()));
@@ -51,12 +50,13 @@ impl Engine {
             target_id,
             &mut selector,
         )
-        .ok_or_else(|| EngineError::MissingRouteTarget { tag })?;
-        drop(selector);
+        .ok_or(EngineError::MissingRouteTarget { tag })?;
 
         // SAFETY: `plan` is returned alongside the resolved value and owns all
         // borrowed target data for at least as long as the caller holds it.
-        let resolved = unsafe { std::mem::transmute(resolved) };
+        let resolved = unsafe {
+            std::mem::transmute::<ResolvedOutbound<'_>, ResolvedOutbound<'static>>(resolved)
+        };
         Ok((resolved, Some(plan), selections))
     }
 
@@ -75,9 +75,7 @@ impl Engine {
             return (selected, false);
         };
         let member_allowed = |member_id: TargetId| {
-            let Some(member) = plan.target(member_id) else {
-                return None;
-            };
+            let member = plan.target(member_id)?;
             self.passive_relay_health
                 .allow_flow(&PassiveRelayHealthKey {
                     policy_tag: group.tag().to_owned(),

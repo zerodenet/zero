@@ -495,15 +495,12 @@ where
 {
     type Stream = S;
 
-    fn replay_to<'a, W>(
-        self,
-        upstream: &'a mut W,
-    ) -> impl core::future::Future<Output = Result<Self::Stream, W::Error>> + Send + 'a
+    async fn replay_to<'a, W>(self, upstream: &'a mut W) -> Result<Self::Stream, W::Error>
     where
         Self: 'a,
         W: AsyncSocket + Send + 'a,
     {
-        async move { self.replay_to_upstream(upstream).await }
+        self.replay_to_upstream(upstream).await
     }
 }
 

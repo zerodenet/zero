@@ -14,12 +14,11 @@ impl ProtocolInventory {
         ctx: OutboundAdapterContext,
         claimed_chain: &ClaimedRelayChain<'a>,
     ) -> Result<PreparedTcpRelayChain<'a>, TcpOutboundFailure> {
-        let first_prepared =
-            self.prepare_claimed_tcp_candidate(ctx.clone(), claimed_chain.first())?;
+        let first_prepared = self.prepare_claimed_tcp_candidate(ctx, claimed_chain.first())?;
         let mut prepared_hops = Vec::with_capacity(claimed_chain.relay_hops().len());
         for next_hop in claimed_chain.relay_hops() {
             let prepared = self
-                .prepare_claimed_tcp_relay_hop(ctx.clone(), next_hop)
+                .prepare_claimed_tcp_relay_hop(ctx, next_hop)
                 .map_err(|error| TcpOutboundFailure {
                     stage: "relay_prepare",
                     error,

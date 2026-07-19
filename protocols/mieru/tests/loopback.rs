@@ -16,33 +16,19 @@ struct DuplexSock(tokio::io::DuplexStream);
 impl AsyncSocket for DuplexSock {
     type Error = std::io::Error;
 
-    fn read<'a>(
-        &'a mut self,
-        buf: &'a mut [u8],
-    ) -> impl core::future::Future<Output = Result<usize, Self::Error>> + Send + 'a {
-        async move {
-            use tokio::io::AsyncReadExt;
-            self.0.read(buf).await
-        }
+    async fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
+        use tokio::io::AsyncReadExt;
+        self.0.read(buf).await
     }
 
-    fn write_all<'a>(
-        &'a mut self,
-        buf: &'a [u8],
-    ) -> impl core::future::Future<Output = Result<(), Self::Error>> + Send + 'a {
-        async move {
-            use tokio::io::AsyncWriteExt;
-            self.0.write_all(buf).await
-        }
+    async fn write_all(&mut self, buf: &[u8]) -> Result<(), Self::Error> {
+        use tokio::io::AsyncWriteExt;
+        self.0.write_all(buf).await
     }
 
-    fn shutdown<'a>(
-        &'a mut self,
-    ) -> impl core::future::Future<Output = Result<(), Self::Error>> + Send + 'a {
-        async move {
-            use tokio::io::AsyncWriteExt;
-            self.0.shutdown().await
-        }
+    async fn shutdown(&mut self) -> Result<(), Self::Error> {
+        use tokio::io::AsyncWriteExt;
+        self.0.shutdown().await
     }
 }
 

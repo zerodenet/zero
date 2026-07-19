@@ -36,7 +36,6 @@ pub(crate) trait ClaimedTcpOutboundLeaf<'a>: Send + Sync {
 }
 
 #[cfg(feature = "udp-runtime")]
-
 pub(crate) trait ClaimedUdpFlowLeaf<'a>: Send + Sync {
     fn prepare_udp_flow(
         &self,
@@ -55,7 +54,6 @@ pub(crate) trait ClaimedUdpFlowLeaf<'a>: Send + Sync {
 }
 
 #[cfg(feature = "udp-runtime")]
-
 pub(crate) trait ClaimedUdpPacketPathLeaf<'a>: Send + Sync {
     fn prepare_udp_packet_path(
         &self,
@@ -130,7 +128,6 @@ pub(crate) trait InboundListenerCapability: Send + Sync {
 pub(crate) trait TcpOutboundCapability: Send + Sync {}
 
 #[cfg(feature = "udp-runtime")]
-
 pub(crate) trait UdpFlowCapability: Send + Sync {}
 
 #[cfg(feature = "upstream-association-runtime")]
@@ -142,10 +139,8 @@ pub(crate) trait UpstreamUdpHandlerProvider: Send + Sync {
     feature = "managed-datagram-runtime",
     feature = "managed-stream-runtime"
 ))]
-
 pub(crate) trait ManagedUdpHandlerProvider: Send + Sync {
     #[cfg(feature = "managed-datagram-runtime")]
-
     fn managed_datagram_udp_handler(&self) -> Option<Box<dyn ManagedDatagramFlowHandler>> {
         None
     }
@@ -157,5 +152,4 @@ pub(crate) trait ManagedUdpHandlerProvider: Send + Sync {
 }
 
 #[cfg(feature = "udp-runtime")]
-
 pub(crate) trait UdpPacketPathCapability: Send + Sync {}

@@ -74,28 +74,18 @@ where
 {
     type Error = io::Error;
 
-    fn read<'a>(
-        &'a mut self,
-        buf: &'a mut [u8],
-    ) -> impl core::future::Future<Output = Result<usize, Self::Error>> + Send + 'a {
-        async move {
-            let n = self.inner.read(buf).await?;
-            self.recorded.extend_from_slice(&buf[..n]);
-            Ok(n)
-        }
+    async fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
+        let n = self.inner.read(buf).await?;
+        self.recorded.extend_from_slice(&buf[..n]);
+        Ok(n)
     }
 
-    fn write_all<'a>(
-        &'a mut self,
-        buf: &'a [u8],
-    ) -> impl core::future::Future<Output = Result<(), Self::Error>> + Send + 'a {
-        async move { self.inner.write_all(buf).await }
+    async fn write_all(&mut self, buf: &[u8]) -> Result<(), Self::Error> {
+        self.inner.write_all(buf).await
     }
 
-    fn shutdown<'a>(
-        &'a mut self,
-    ) -> impl core::future::Future<Output = Result<(), Self::Error>> + Send + 'a {
-        async move { self.inner.shutdown().await }
+    async fn shutdown(&mut self) -> Result<(), Self::Error> {
+        self.inner.shutdown().await
     }
 }
 

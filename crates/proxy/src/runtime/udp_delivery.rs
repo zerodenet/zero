@@ -21,7 +21,6 @@ where
 }
 
 #[cfg(feature = "managed-datagram-runtime")]
-
 pub(crate) async fn write_optional_direct_response<F, Fut, E>(
     response: &UdpDirectResponseParts<'_>,
     write: F,
@@ -88,7 +87,6 @@ where
 }
 
 #[cfg(feature = "managed-datagram-runtime")]
-
 pub(crate) async fn write_optional_chain_response<F, Fut, E>(
     response: &UdpChainResponseParts,
     write: F,

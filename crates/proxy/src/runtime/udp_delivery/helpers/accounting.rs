@@ -43,7 +43,6 @@ impl UdpInboundResponseAccounting {
     }
 
     #[cfg(feature = "managed-datagram-runtime")]
-
     pub(crate) fn session_id(&self) -> Option<u64> {
         self.session_id
     }

@@ -163,7 +163,7 @@ struct VlessInboundMuxOpenedStream {
 #[cfg(feature = "reality")]
 enum VlessInboundMuxOpenedRouteState {
     Tcp {
-        session: Session,
+        session: Box<Session>,
         relay: VlessInboundMuxTcpRelay,
     },
     Udp {
@@ -180,7 +180,10 @@ struct VlessInboundMuxOpenedRoute {
 impl VlessInboundMuxOpenedRoute {
     fn tcp(session: Session, relay: VlessInboundMuxTcpRelay) -> Self {
         Self {
-            state: VlessInboundMuxOpenedRouteState::Tcp { session, relay },
+            state: VlessInboundMuxOpenedRouteState::Tcp {
+                session: Box::new(session),
+                relay,
+            },
         }
     }
 
@@ -490,7 +493,7 @@ where
 
         match route.state {
             VlessInboundMuxOpenedRouteState::Tcp { session, relay } => {
-                on_tcp_opened(session, relay)?;
+                on_tcp_opened(*session, relay)?;
             }
             VlessInboundMuxOpenedRouteState::Udp { relay } => {
                 on_udp_opened(relay)?;
@@ -816,7 +819,7 @@ fn encode_new_stream_response(assigned_id: u16, status: u8) -> Vec<u8> {
     encode_frame(MUX_STREAM_NEW, STATUS_NEW, 0, &payload)
 }
 
-/// Parse a new-stream response payload → (assigned_id, status).
+// Parse a new-stream response payload → (assigned_id, status).
 // ── Data / End / KeepAlive frame helpers ──
 
 /// Build a TCP data frame (STATUS_KEEP | OPTION_DATA).
@@ -868,7 +871,7 @@ fn parse_address_from_bytes(atyp: u8, data: &[u8]) -> Result<Address, Error> {
 
 // ── mux client ─────────────────────────────────────────
 
-/// Minimal MUX client — manages stream allocation and frame I/O.
+// Minimal MUX client — manages stream allocation and frame I/O.
 // ── mux server ─────────────────────────────────────────
 
 /// MUX server-side handler — reads frames and dispatches.

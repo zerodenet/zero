@@ -1,7 +1,6 @@
 use super::super::model::{UdpFlowIndexKeys, UdpFlowOutbound};
 
 #[cfg(feature = "udp-runtime")]
-
 impl UdpFlowOutbound {
     pub(in crate::runtime::udp_flow) fn index_keys(&self) -> UdpFlowIndexKeys<'_> {
         UdpFlowIndexKeys {

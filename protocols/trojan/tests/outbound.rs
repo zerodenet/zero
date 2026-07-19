@@ -60,20 +60,13 @@ impl AsyncSocket for RecordingSocket {
         Ok(n)
     }
 
-    fn write_all<'a>(
-        &'a mut self,
-        buf: &'a [u8],
-    ) -> impl core::future::Future<Output = Result<(), Self::Error>> + Send + 'a {
-        async move {
-            self.writes.push(buf.to_vec());
-            Ok(())
-        }
+    async fn write_all(&mut self, buf: &[u8]) -> Result<(), Self::Error> {
+        self.writes.push(buf.to_vec());
+        Ok(())
     }
 
-    fn shutdown<'a>(
-        &'a mut self,
-    ) -> impl core::future::Future<Output = Result<(), Self::Error>> + Send + 'a {
-        async move { Ok(()) }
+    async fn shutdown(&mut self) -> Result<(), Self::Error> {
+        Ok(())
     }
 }
 

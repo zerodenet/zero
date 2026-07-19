@@ -18,7 +18,6 @@ use crate::runtime::udp_flow::outbound::UdpFlowOutbound;
 
 impl UdpDispatch {
     #[cfg(feature = "managed-datagram-runtime")]
-
     async fn start_tracked_managed_udp(
         &mut self,
         request: ManagedUdpSend<'_>,
@@ -42,7 +41,6 @@ impl UdpDispatch {
     }
 
     #[cfg(feature = "managed-datagram-runtime")]
-
     pub(crate) async fn start_transport_managed_datagram<T>(
         &mut self,
         services: Option<crate::protocol_registry::UdpRuntimeServices>,
@@ -72,7 +70,6 @@ impl UdpDispatch {
     }
 
     #[cfg(feature = "managed-datagram-runtime")]
-
     pub(crate) async fn start_tracked_managed_datagram<T>(
         &mut self,
         request: ManagedDatagramStart<'_, T>,

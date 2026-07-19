@@ -13,6 +13,12 @@ use std::task::{Context, Poll};
 
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf};
 use tokio::sync::mpsc;
+
+type OpenedUdpStream = (
+    u16,
+    mpsc::UnboundedSender<Vec<u8>>,
+    mpsc::UnboundedReceiver<Vec<u8>>,
+);
 use zero_core::{Address, Error};
 
 use crate::mux_crypto::MuxCrypto;
@@ -435,16 +441,7 @@ impl MuxPoolConn {
         })
     }
 
-    fn open_udp_stream(
-        self: &Arc<Self>,
-    ) -> Result<
-        (
-            u16,
-            mpsc::UnboundedSender<Vec<u8>>,
-            mpsc::UnboundedReceiver<Vec<u8>>,
-        ),
-        Error,
-    > {
+    fn open_udp_stream(self: &Arc<Self>) -> Result<OpenedUdpStream, Error> {
         let sid = self.allocate_stream_id();
         let (up_tx, up_rx) = mpsc::unbounded_channel::<Vec<u8>>();
         let (down_tx, down_rx) = mpsc::unbounded_channel::<Vec<u8>>();

@@ -41,22 +41,17 @@ pub enum VlessTcpFallbackReplay {
 impl zero_core::InboundFallbackReplay for VlessTcpFallbackReplay {
     type Stream = TcpRelayStream;
 
-    fn replay_to<'a, W>(
-        self,
-        upstream: &'a mut W,
-    ) -> impl core::future::Future<Output = Result<Self::Stream, W::Error>> + Send + 'a
+    async fn replay_to<'a, W>(self, upstream: &'a mut W) -> Result<Self::Stream, W::Error>
     where
         Self: 'a,
         W: zero_traits::AsyncSocket + Send + 'a,
     {
-        async move {
-            match self {
-                Self::Client(replay) => replay.replay_to_upstream(upstream).await,
-                Self::Socket(replay) => replay
-                    .replay_to_upstream(upstream)
-                    .await
-                    .map(TcpRelayStream::from),
-            }
+        match self {
+            Self::Client(replay) => replay.replay_to_upstream(upstream).await,
+            Self::Socket(replay) => replay
+                .replay_to_upstream(upstream)
+                .await
+                .map(TcpRelayStream::from),
         }
     }
 }

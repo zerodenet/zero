@@ -54,33 +54,20 @@ where
 {
     type Error = S::Error;
 
-    fn read<'a>(
-        &'a mut self,
-        buf: &'a mut [u8],
-    ) -> impl core::future::Future<Output = Result<usize, Self::Error>> + Send + 'a {
-        async move {
-            let read = self.inner.read(buf).await?;
-            self.traffic.read_bytes = self.traffic.read_bytes.saturating_add(read as u64);
-            Ok(read)
-        }
+    async fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
+        let read = self.inner.read(buf).await?;
+        self.traffic.read_bytes = self.traffic.read_bytes.saturating_add(read as u64);
+        Ok(read)
     }
 
-    fn write_all<'a>(
-        &'a mut self,
-        buf: &'a [u8],
-    ) -> impl core::future::Future<Output = Result<(), Self::Error>> + Send + 'a {
-        async move {
-            self.inner.write_all(buf).await?;
-            self.traffic.written_bytes =
-                self.traffic.written_bytes.saturating_add(buf.len() as u64);
-            Ok(())
-        }
+    async fn write_all(&mut self, buf: &[u8]) -> Result<(), Self::Error> {
+        self.inner.write_all(buf).await?;
+        self.traffic.written_bytes = self.traffic.written_bytes.saturating_add(buf.len() as u64);
+        Ok(())
     }
 
-    fn shutdown<'a>(
-        &'a mut self,
-    ) -> impl core::future::Future<Output = Result<(), Self::Error>> + Send + 'a {
-        async move { self.inner.shutdown().await }
+    async fn shutdown(&mut self) -> Result<(), Self::Error> {
+        self.inner.shutdown().await
     }
 }
 

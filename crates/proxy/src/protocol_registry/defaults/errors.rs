@@ -15,7 +15,6 @@ pub(in crate::protocol_registry) fn relay_hop_unsupported() -> EngineError {
 }
 
 #[cfg(feature = "udp-runtime")]
-
 pub(in crate::protocol_registry) fn udp_relay_final_hop_unsupported() -> FlowFailure {
     udp_flow_unsupported(
         "no_udp_relay_final_hop",
@@ -24,7 +23,6 @@ pub(in crate::protocol_registry) fn udp_relay_final_hop_unsupported() -> FlowFai
 }
 
 #[cfg(feature = "udp-runtime")]
-
 fn udp_flow_unsupported(stage: &'static str, message: &'static str) -> FlowFailure {
     FlowFailure {
         stage,
