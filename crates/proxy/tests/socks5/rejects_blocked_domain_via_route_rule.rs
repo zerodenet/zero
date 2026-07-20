@@ -31,6 +31,7 @@ async fn rejects_blocked_domain_via_route_rule() {
     .expect("parse engine config");
 
     let engine = Engine::new(config).expect("build engine");
+    let probe = engine.clone();
     let engine_handle = spawn_engine(engine);
 
     wait_for_listener(proxy_port).await;
@@ -58,6 +59,25 @@ async fn rejects_blocked_domain_via_route_rule() {
         .await
         .expect("read response");
     assert_eq!(response[1], 0x02);
+
+    wait_for("blocked flow completion", || {
+        !probe.completed_sessions().is_empty()
+    })
+    .await;
+    let events = probe
+        .subscribe(EventFilter {
+            event_types: vec![event_type::FLOW_COMPLETED.to_owned()],
+            ..EventFilter::default()
+        })
+        .expect("read completed event");
+    let record = &events[0].payload["record"];
+    assert_eq!(record["route"]["action"], "reject");
+    assert_eq!(record["route"]["matched_rule"]["index"], 0);
+    assert_eq!(
+        record["route"]["matched_rule"]["condition"],
+        "domain: blocked.example"
+    );
+    assert_eq!(record["result"]["outcome"], "blocked");
 
     engine_handle.shutdown().await.expect("shutdown engine");
 }

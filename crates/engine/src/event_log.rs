@@ -1,16 +1,18 @@
 use std::collections::{BTreeMap, VecDeque};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{mpsc::SyncSender, Arc, Mutex};
+use std::sync::{mpsc::SyncSender, mpsc::TrySendError, Arc, Mutex};
 
 use serde_json::{json, Value};
 use std::time::{SystemTime, UNIX_EPOCH};
 use zero_api::{
-    event_type, ApiEvent, AuthInfo, EndpointRef, EventFilter, FlowEventPayload, FlowOutcome,
-    FlowTiming, Network as ApiNetwork, PassiveRelayHealthChangedPayload, PassiveRelayHealthState,
-    PolicyDecision, PolicyProbeCompletedPayload, PolicySelectedPayload, RawApiEvent, RouteDecision,
-    TargetAddress, TrafficStats,
+    event_type, ApiEvent, AuthInfo, EndpointRef, EventFilter, FlowEventPayload, FlowFailureInfo,
+    FlowOutcome, FlowPath, FlowRecord, FlowRecordTiming, FlowResult, FlowRoute, FlowSource,
+    FlowState, FlowTarget, FlowThroughput, FlowTiming, MatchedRuleInfo, Network as ApiNetwork,
+    PassiveRelayHealthChangedPayload, PassiveRelayHealthState, PolicyDecision,
+    PolicyProbeCompletedPayload, PolicySelectedPayload, RawApiEvent, RouteDecision, TargetAddress,
+    TrafficStats,
 };
-use zero_core::{Address, Network, ProtocolType, Session};
+use zero_core::{Address, Network, ProtocolType, SessionAuth};
 
 use super::completed_sessions::CompletedSessionRecord;
 use super::session_registry::ActiveSession;
@@ -28,7 +30,7 @@ pub struct EventsSinceResult {
     pub events: Vec<RawApiEvent>,
 }
 
-const DEFAULT_EVENT_LOG_CAPACITY: usize = 1024;
+const DEFAULT_EVENT_LOG_CAPACITY: usize = 8192;
 
 #[derive(Debug)]
 pub struct EngineEventLog {
@@ -221,6 +223,7 @@ impl EngineEventLog {
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
             .as_millis() as u64;
+        let traffic = traffic_stats_active(session);
         let payload = json!({
             "flow_id": session.id.to_string(),
             "network": match session.network {
@@ -229,8 +232,8 @@ impl EngineEventLog {
             },
             "inbound_tag": session.inbound_tag,
             "outbound_tag": session.outbound_tag,
-            "bytes_up": session.bytes_up,
-            "bytes_down": session.bytes_down,
+            "bytes_up": traffic.bytes_up,
+            "bytes_down": traffic.bytes_down,
             "inbound_rx_bytes": session.inbound_rx_bytes,
             "inbound_tx_bytes": session.inbound_tx_bytes,
             "outbound_rx_bytes": session.outbound_rx_bytes,
@@ -238,6 +241,7 @@ impl EngineEventLog {
             "throughput_up_bps": session.throughput_up_bps,
             "throughput_down_bps": session.throughput_down_bps,
             "snapshot_at_unix_ms": now_ms,
+            "record": active_flow_record(session, FlowState::Active, now_ms),
         });
         let event = ApiEvent::new(
             format!("{}:{}:{}", event_type::FLOW_UPDATED, session.id, now_ms),
@@ -248,17 +252,12 @@ impl EngineEventLog {
         self.push(event);
     }
 
-    pub fn push_flow_started(&self, session: &Session, mode: &str) {
+    pub fn push_flow_started(&self, session: &ActiveSession) {
         let now_ms = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
             .as_millis() as u64;
-        let auth = session.auth.as_ref().map(|auth| AuthInfo {
-            scheme: auth.scheme.clone(),
-            credential_id: auth.credential_id.clone(),
-            principal_key: auth.principal_key.clone(),
-            attributes: BTreeMap::new(),
-        });
+        let auth = session.auth.as_ref().map(auth_info);
         let principal_key = auth.as_ref().and_then(|a| a.principal_key.clone());
 
         let payload = FlowEventPayload {
@@ -274,7 +273,7 @@ impl EngineEventLog {
                 port: session.port,
             },
             route: RouteDecision {
-                mode: mode.to_owned(),
+                mode: session.mode.clone(),
                 target: None,
             },
             policy: None::<PolicyDecision>,
@@ -290,6 +289,7 @@ impl EngineEventLog {
             },
             outcome: FlowOutcome::DirectRelayed, // placeholder; overwritten at completion
             close_reason: None,
+            record: Some(active_flow_record(session, FlowState::Opening, now_ms)),
         };
 
         let payload = serde_json::to_value(payload)
@@ -302,6 +302,87 @@ impl EngineEventLog {
         );
         event.principal_key = principal_key;
         self.push(event);
+    }
+
+    pub fn push_flow_routed(&self, session: &ActiveSession) {
+        let now_ms = unix_timestamp_ms();
+        let auth = session.auth.as_ref().map(auth_info);
+        let principal_key = auth.as_ref().and_then(|item| item.principal_key.clone());
+        let route_target = session
+            .route
+            .as_ref()
+            .and_then(|route| route.target.clone());
+        let outbound = session.outbound_tag.as_ref().map(|tag| EndpointRef {
+            tag: tag.clone(),
+            protocol: session
+                .path
+                .outbound_protocol
+                .clone()
+                .unwrap_or_else(|| "unknown".to_owned()),
+        });
+        let payload = FlowEventPayload {
+            flow_id: session.id.to_string(),
+            network: api_network(session.network),
+            inbound: EndpointRef {
+                tag: session.inbound_tag.clone().unwrap_or_default(),
+                protocol: protocol_name(session.protocol).to_owned(),
+            },
+            auth,
+            target: TargetAddress {
+                host: address_host(&session.target),
+                port: session.port,
+            },
+            route: RouteDecision {
+                mode: session.mode.clone(),
+                target: route_target,
+            },
+            policy: None::<PolicyDecision>,
+            outbound,
+            traffic: traffic_stats_active(session),
+            timing: FlowTiming {
+                started_at_unix_ms: session.started_at_unix_ms,
+                ended_at_unix_ms: None,
+                duration_ms: None,
+            },
+            outcome: FlowOutcome::DirectRelayed,
+            close_reason: None,
+            record: Some(active_flow_record(session, FlowState::Active, now_ms)),
+        };
+        let payload =
+            serde_json::to_value(payload).expect("flow routed event payload should serialize");
+        let mut event = ApiEvent::new(
+            format!(
+                "{}:{}:{}",
+                event_type::FLOW_ROUTED,
+                session.id,
+                session.revision
+            ),
+            event_type::FLOW_ROUTED,
+            now_ms,
+            payload,
+        );
+        event.principal_key = principal_key;
+        self.push(event);
+    }
+
+    pub(crate) fn flow_snapshot_event(&self, sessions: &[ActiveSession]) -> RawApiEvent {
+        let now_ms = unix_timestamp_ms();
+        let watermark = self.latest_sequence();
+        let records = sessions
+            .iter()
+            .map(|session| active_flow_record(session, FlowState::Active, now_ms))
+            .collect::<Vec<_>>();
+        let mut event = ApiEvent::new(
+            format!("{}:{}", event_type::FLOW_SNAPSHOT, watermark),
+            event_type::FLOW_SNAPSHOT,
+            now_ms,
+            json!({
+                "watermark": watermark,
+                "records": records,
+            }),
+        );
+        event.sequence = Some(watermark);
+        event
     }
 
     pub fn push_flow_completed(
@@ -392,7 +473,10 @@ impl EngineEventLog {
         self.subscribers
             .lock()
             .unwrap_or_else(|error| error.into_inner())
-            .retain(|subscriber| subscriber.try_send(event.clone()).is_ok());
+            .retain(|subscriber| match subscriber.try_send(event.clone()) {
+                Ok(()) | Err(TrySendError::Full(_)) => true,
+                Err(TrySendError::Disconnected(_)) => false,
+            });
     }
 }
 
@@ -437,16 +521,7 @@ fn flow_completed_event(
             tag: tag.clone(),
             protocol: outbound_protocol(tag).unwrap_or("unknown").to_owned(),
         }),
-        traffic: TrafficStats {
-            bytes_up: record.bytes_up,
-            bytes_down: record.bytes_down,
-            inbound_rx_bytes: Some(record.inbound_rx_bytes),
-            inbound_tx_bytes: Some(record.inbound_tx_bytes),
-            outbound_rx_bytes: Some(record.outbound_rx_bytes),
-            outbound_tx_bytes: Some(record.outbound_tx_bytes),
-            packets_up: None,
-            packets_down: None,
-        },
+        traffic: traffic_stats_completed(record),
         timing: FlowTiming {
             started_at_unix_ms: record.started_at_unix_ms,
             ended_at_unix_ms: Some(record.finished_at_unix_ms),
@@ -454,6 +529,7 @@ fn flow_completed_event(
         },
         outcome: api_outcome(record.outcome),
         close_reason: record.close_reason.clone(),
+        record: Some(completed_flow_record(record)),
     };
 
     let payload =
@@ -472,6 +548,238 @@ fn flow_completed_event(
     event.labels = BTreeMap::new();
     event.principal_key = principal_key;
     event
+}
+
+fn active_flow_record(
+    session: &ActiveSession,
+    state: FlowState,
+    sampled_at_unix_ms: u64,
+) -> FlowRecord {
+    FlowRecord {
+        flow_id: session.id.to_string(),
+        revision: session.revision,
+        state,
+        network: api_network(session.network),
+        inbound: EndpointRef {
+            tag: session.inbound_tag.clone().unwrap_or_default(),
+            protocol: protocol_name(session.protocol).to_owned(),
+        },
+        auth: session.auth.as_ref().map(auth_info),
+        source: flow_source(
+            session.source_ip.as_ref(),
+            session.source_port,
+            session.process_id,
+            session.process_name.as_ref(),
+            session.process_path.as_ref(),
+        ),
+        target: flow_target(
+            &session.target,
+            session.port,
+            session.sni.as_ref(),
+            &session.path,
+        ),
+        route: flow_route(session.route.as_ref(), &session.mode),
+        path: flow_path(session.outbound_tag.as_ref(), &session.path),
+        traffic: traffic_stats_active(session),
+        throughput: FlowThroughput {
+            upload_bps: session.throughput_up_bps,
+            download_bps: session.throughput_down_bps,
+            sampled_at_unix_ms,
+        },
+        timing: FlowRecordTiming {
+            started_at_unix_ms: session.started_at_unix_ms,
+            last_activity_at_unix_ms: session.last_activity_at_unix_ms,
+            ended_at_unix_ms: None,
+            duration_ms: None,
+        },
+        result: None,
+    }
+}
+
+fn completed_flow_record(record: &CompletedSessionRecord) -> FlowRecord {
+    FlowRecord {
+        flow_id: record.id.to_string(),
+        revision: record.revision,
+        state: FlowState::Completed,
+        network: api_network(record.network),
+        inbound: EndpointRef {
+            tag: record.inbound_tag.clone().unwrap_or_default(),
+            protocol: protocol_name(record.protocol).to_owned(),
+        },
+        auth: record.auth.as_ref().map(auth_info),
+        source: flow_source(
+            record.source_ip.as_ref(),
+            record.source_port,
+            record.process_id,
+            record.process_name.as_ref(),
+            record.process_path.as_ref(),
+        ),
+        target: flow_target(
+            &record.target,
+            record.port,
+            record.sni.as_ref(),
+            &record.path,
+        ),
+        route: flow_route(record.route.as_ref(), &record.mode),
+        path: flow_path(record.outbound_tag.as_ref(), &record.path),
+        traffic: traffic_stats_completed(record),
+        throughput: FlowThroughput {
+            upload_bps: record.throughput_up_bps,
+            download_bps: record.throughput_down_bps,
+            sampled_at_unix_ms: record.finished_at_unix_ms,
+        },
+        timing: FlowRecordTiming {
+            started_at_unix_ms: record.started_at_unix_ms,
+            last_activity_at_unix_ms: record.last_activity_at_unix_ms,
+            ended_at_unix_ms: Some(record.finished_at_unix_ms),
+            duration_ms: Some(record.duration_ms),
+        },
+        result: Some(FlowResult {
+            outcome: api_outcome(record.outcome),
+            close_reason: record.close_reason.clone(),
+            failure: record.failure.as_ref().map(|failure| FlowFailureInfo {
+                stage: failure.stage.clone(),
+                code: failure.code.clone(),
+                message: failure.message.clone(),
+                remote: failure.remote.as_ref().map(|remote| TargetAddress {
+                    host: remote.host.clone(),
+                    port: remote.port,
+                }),
+            }),
+        }),
+    }
+}
+
+fn auth_info(auth: &SessionAuth) -> AuthInfo {
+    AuthInfo {
+        scheme: auth.scheme.clone(),
+        credential_id: auth.credential_id.clone(),
+        principal_key: auth.principal_key.clone(),
+        attributes: BTreeMap::new(),
+    }
+}
+
+fn flow_source(
+    source_ip: Option<&Address>,
+    source_port: Option<u16>,
+    process_id: Option<u32>,
+    process_name: Option<&String>,
+    process_path: Option<&String>,
+) -> Option<FlowSource> {
+    if source_ip.is_none()
+        && process_id.is_none()
+        && process_name.is_none()
+        && process_path.is_none()
+    {
+        return None;
+    }
+    Some(FlowSource {
+        ip: source_ip.map(address_host).unwrap_or_default(),
+        port: source_port,
+        process_id,
+        process_name: process_name.cloned(),
+        process_path: process_path.cloned(),
+    })
+}
+
+fn flow_target(
+    target: &Address,
+    port: u16,
+    sni: Option<&String>,
+    path: &crate::FlowPathObservation,
+) -> FlowTarget {
+    let resolved_ip = match target {
+        Address::Domain(_) if path.outbound_protocol.as_deref() == Some("direct") => path
+            .remote
+            .as_ref()
+            .filter(|remote| remote.host.parse::<std::net::IpAddr>().is_ok())
+            .map(|remote| remote.host.clone()),
+        Address::Domain(_) => None,
+        Address::Ipv4(_) | Address::Ipv6(_) => Some(address_host(target)),
+    };
+    FlowTarget {
+        host: address_host(target),
+        port,
+        resolved_ip,
+        sniffed_host: sni.cloned(),
+    }
+}
+
+fn flow_route(route: Option<&crate::FlowRouteObservation>, fallback_mode: &str) -> FlowRoute {
+    let Some(route) = route else {
+        return FlowRoute {
+            mode: fallback_mode.to_owned(),
+            action: "pending".to_owned(),
+            ..FlowRoute::default()
+        };
+    };
+    FlowRoute {
+        mode: route.mode.clone(),
+        action: route.action.clone(),
+        target: route.target.clone(),
+        matched_rule: route.matched_rule.as_ref().map(|matched| MatchedRuleInfo {
+            index: matched.index,
+            condition: matched.condition.clone(),
+        }),
+        selection_chain: route.selection_chain.clone(),
+    }
+}
+
+fn flow_path(outbound_tag: Option<&String>, path: &crate::FlowPathObservation) -> FlowPath {
+    FlowPath {
+        outbound: outbound_tag.map(|tag| EndpointRef {
+            tag: tag.clone(),
+            protocol: path
+                .outbound_protocol
+                .clone()
+                .unwrap_or_else(|| "unknown".to_owned()),
+        }),
+        remote: path.remote.as_ref().map(|remote| TargetAddress {
+            host: remote.host.clone(),
+            port: remote.port,
+        }),
+        relay_chain: path
+            .relay_chain
+            .iter()
+            .map(|(tag, protocol)| EndpointRef {
+                tag: tag.clone(),
+                protocol: protocol.clone(),
+            })
+            .collect(),
+    }
+}
+
+fn traffic_stats_active(session: &ActiveSession) -> TrafficStats {
+    TrafficStats {
+        bytes_up: session.inbound_rx_bytes.max(session.outbound_tx_bytes),
+        bytes_down: session.outbound_rx_bytes.max(session.inbound_tx_bytes),
+        inbound_rx_bytes: Some(session.inbound_rx_bytes),
+        inbound_tx_bytes: Some(session.inbound_tx_bytes),
+        outbound_rx_bytes: Some(session.outbound_rx_bytes),
+        outbound_tx_bytes: Some(session.outbound_tx_bytes),
+        packets_up: None,
+        packets_down: None,
+    }
+}
+
+fn traffic_stats_completed(record: &CompletedSessionRecord) -> TrafficStats {
+    TrafficStats {
+        bytes_up: record.inbound_rx_bytes.max(record.outbound_tx_bytes),
+        bytes_down: record.outbound_rx_bytes.max(record.inbound_tx_bytes),
+        inbound_rx_bytes: Some(record.inbound_rx_bytes),
+        inbound_tx_bytes: Some(record.inbound_tx_bytes),
+        outbound_rx_bytes: Some(record.outbound_rx_bytes),
+        outbound_tx_bytes: Some(record.outbound_tx_bytes),
+        packets_up: None,
+        packets_down: None,
+    }
+}
+
+fn unix_timestamp_ms() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64
 }
 
 fn matches_filter(event: &RawApiEvent, filter: &EventFilter) -> bool {

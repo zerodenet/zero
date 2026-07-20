@@ -4,7 +4,7 @@ use zero_core::{Network, Session};
 use zero_engine::{EngineError, SessionOutcome};
 
 use super::{FlowStartResult, UdpDispatch};
-use crate::logging::{log_session_failed, log_session_finished};
+use crate::logging::{log_session_failed, log_session_finished, session_failure_observation};
 use crate::runtime::passive_relay_health::classify_relay_outcome;
 use crate::runtime::pipe::UdpPipeInput;
 
@@ -32,6 +32,14 @@ impl UdpDispatch {
         if let Some(auth) = input.auth {
             session.auth = Some(auth.clone());
         }
+        if let Some(source_addr) = input.source_addr {
+            session.source_ip = Some(match source_addr.ip() {
+                std::net::IpAddr::V4(ip) => zero_core::Address::Ipv4(ip.octets()),
+                std::net::IpAddr::V6(ip) => zero_core::Address::Ipv6(ip.octets()),
+            });
+            session.source_port = Some(source_addr.port());
+        }
+        runtime.resolve_fake_ip_target(&mut session).await;
         runtime.prepare_udp_session(&mut session, &self.inbound_tag);
         let mut session_handle = runtime.track_session(session.id);
         let started_at = Instant::now();
@@ -39,13 +47,15 @@ impl UdpDispatch {
             .services()
             .record_session_inbound_rx(session.id, input.payload.len() as u64);
 
-        runtime.resolve_fake_ip_target(&mut session).await;
         let action = runtime.route_decision(&session);
         let (resolved, passive_relay_selections) = match runtime.resolve_outbound(&action, &session)
         {
             Ok(resolved) => resolved,
             Err(error) => {
-                let record = session_handle.finish(SessionOutcome::Failed);
+                let record = session_handle.finish_with_failure(
+                    "upstream_error",
+                    session_failure_observation("resolve_outbound", &error, None),
+                );
                 log_session_failed(
                     &session,
                     record.as_ref(),
@@ -66,7 +76,8 @@ impl UdpDispatch {
             Ok(FlowStartResult::Flow { outbound, tx_bytes }) => {
                 let session_id = session.id;
                 session.outbound_tag = Some(outbound.tag().to_owned());
-                runtime.set_session_outbound(&session);
+                let remote = outbound.observed_remote();
+                runtime.set_session_outbound(&session, Some(&remote));
                 self.flows.insert(
                     session.clone(),
                     session_handle,
@@ -81,25 +92,29 @@ impl UdpDispatch {
             }
             Ok(FlowStartResult::Blocked { tag }) => {
                 session.outbound_tag = Some(tag);
-                runtime.set_session_outbound(&session);
+                runtime.set_session_outbound(&session, None);
                 if let Some(record) = session_handle.finish(SessionOutcome::Blocked) {
                     log_session_finished(&record, None);
                 }
                 Ok(session.id)
             }
             Err(failure) => {
-                let record = session_handle.finish(SessionOutcome::Failed);
                 let stage = failure.stage;
+                let upstream = failure
+                    .upstream
+                    .as_ref()
+                    .map(|(server, port)| (server.as_str(), *port));
+                let record = session_handle.finish_with_failure(
+                    "upstream_error",
+                    session_failure_observation(stage, &failure.error, upstream),
+                );
                 log_session_failed(
                     &session,
                     record.as_ref(),
                     stage,
                     started_at.elapsed(),
                     &failure.error,
-                    failure
-                        .upstream
-                        .as_ref()
-                        .map(|(server, port)| (server.as_str(), *port)),
+                    upstream,
                 );
                 if let Some(record) = record.as_ref() {
                     runtime.record_passive_relay_outcome(

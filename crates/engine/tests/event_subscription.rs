@@ -1,7 +1,8 @@
 use zero_api::{
-    event_type, EventFilter, EventSource, PolicyProbeCompletedPayload, PolicyProbeMember,
+    event_type, ApiEvent, EventFilter, EventSource, PolicyProbeCompletedPayload, PolicyProbeMember,
 };
 use zero_config::RuntimeConfig;
+use zero_core::{Address, Network, ProtocolType, Session};
 use zero_engine::{Engine, EngineHandle};
 
 #[test]
@@ -63,4 +64,118 @@ fn streams_policy_probe_events_from_the_engine_event_log() {
         )
         .expect("read event history");
     assert_eq!(latest, vec![event]);
+}
+
+#[test]
+fn flow_subscription_starts_with_self_contained_active_snapshot() {
+    let config = RuntimeConfig::parse(
+        r#"{
+            "inbounds": [],
+            "outbounds": [{ "tag": "direct", "protocol": { "type": "direct" } }],
+            "route": { "rules": [], "final": { "type": "direct" } }
+        }"#,
+    )
+    .expect("parse config");
+    let engine = Engine::new(config).expect("build engine");
+    let handle = EngineHandle::new(engine.clone());
+    let mut session = Session::new(
+        0,
+        Address::Domain("example.com".to_owned()),
+        443,
+        Network::Tcp,
+        ProtocolType::new("socks5"),
+    );
+    session.source_ip = Some(Address::Ipv4([192, 168, 1, 8]));
+    session.source_port = Some(49152);
+    engine.prepare_session(&mut session, "socks-in");
+    engine.record_session_inbound_rx(session.id, 64);
+    engine.record_session_outbound_tx(session.id, 64);
+    engine.record_session_outbound_rx(session.id, 32);
+    engine.record_session_inbound_tx(session.id, 32);
+
+    let subscriber = handle
+        .subscribe(EventFilter {
+            event_types: vec![event_type::FLOW_ROUTED.to_owned()],
+            ..EventFilter::default()
+        })
+        .expect("subscribe to flow lifecycle");
+    let snapshot = subscriber.try_recv().expect("initial flow snapshot");
+    assert_eq!(snapshot.event_type, event_type::FLOW_SNAPSHOT);
+    assert_eq!(snapshot.payload["records"][0]["flow_id"], "1");
+    assert_eq!(snapshot.payload["records"][0]["state"], "active");
+    assert_eq!(
+        snapshot.payload["records"][0]["source"]["ip"],
+        "192.168.1.8"
+    );
+    assert_eq!(
+        snapshot.payload["records"][0]["target"]["host"],
+        "example.com"
+    );
+    assert_eq!(snapshot.payload["records"][0]["traffic"]["bytes_up"], 64);
+    assert_eq!(snapshot.payload["records"][0]["traffic"]["bytes_down"], 32);
+    assert_eq!(
+        snapshot.payload["records"][0]["traffic"]["inbound_rx_bytes"],
+        64
+    );
+    assert_eq!(
+        snapshot.payload["records"][0]["traffic"]["outbound_tx_bytes"],
+        64
+    );
+
+    let trace = engine.route_trace_with_inbound(&session.target, None, Some("socks-in"));
+    engine.record_session_route(session.id, &trace);
+    session.outbound_tag = Some("direct".to_owned());
+    engine.set_session_outbound(&session);
+
+    let routed = subscriber.try_recv().expect("flow routed event");
+    assert_eq!(routed.event_type, event_type::FLOW_ROUTED);
+    assert_eq!(routed.payload["record"]["state"], "active");
+    assert_eq!(routed.payload["record"]["route"]["action"], "direct");
+    assert_eq!(
+        routed.payload["record"]["route"]["selection_chain"][0],
+        "direct"
+    );
+    assert_eq!(
+        routed.payload["record"]["path"]["outbound"]["tag"],
+        "direct"
+    );
+}
+
+#[test]
+fn full_live_queue_does_not_unregister_subscriber() {
+    let config = RuntimeConfig::parse(
+        r#"{
+            "route": { "rules": [], "final": { "type": "direct" } }
+        }"#,
+    )
+    .expect("parse config");
+    let engine = Engine::new(config).expect("build engine");
+    let handle = EngineHandle::new(engine);
+    let subscriber = handle
+        .subscribe(EventFilter {
+            event_types: vec![event_type::ENGINE_WARNING.to_owned()],
+            ..EventFilter::default()
+        })
+        .expect("subscribe to warnings");
+
+    for index in 0..1_100_u64 {
+        handle.emit(ApiEvent::new(
+            format!("warning-{index}"),
+            event_type::ENGINE_WARNING,
+            index,
+            serde_json::json!({ "index": index }),
+        ));
+    }
+    while subscriber.try_recv().is_some() {}
+
+    handle.emit(ApiEvent::new(
+        "warning-final",
+        event_type::ENGINE_WARNING,
+        1_101,
+        serde_json::json!({ "index": 1_101 }),
+    ));
+    let final_event = subscriber
+        .try_recv()
+        .expect("subscriber should remain registered after backpressure");
+    assert_eq!(final_event.event_id, "warning-final");
 }

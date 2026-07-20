@@ -3,7 +3,25 @@ use std::time::Duration;
 use tracing::{info, warn};
 use zero_core::{Network, ProtocolType, Session};
 
-use zero_engine::CompletedSessionRecord;
+use zero_engine::{
+    CompletedSessionRecord, EngineError, FlowFailureObservation, FlowRemoteEndpoint,
+};
+
+pub(crate) fn session_failure_observation(
+    stage: &'static str,
+    error: &EngineError,
+    upstream: Option<(&str, u16)>,
+) -> FlowFailureObservation {
+    FlowFailureObservation {
+        stage: stage.to_owned(),
+        code: Some(error.code().to_owned()),
+        message: error.to_string(),
+        remote: upstream.map(|(host, port)| FlowRemoteEndpoint {
+            host: host.to_owned(),
+            port,
+        }),
+    }
+}
 
 pub(crate) fn log_session_accepted(
     session: &Session,
@@ -24,6 +42,8 @@ pub(crate) fn log_session_accepted(
 }
 
 pub(crate) fn log_session_finished(record: &CompletedSessionRecord, upstream: Option<(&str, u16)>) {
+    let bytes_up = record.inbound_rx_bytes.max(record.outbound_tx_bytes);
+    let bytes_down = record.outbound_rx_bytes.max(record.inbound_tx_bytes);
     match upstream {
         Some((server, port)) => info!(
             session_id = record.id,
@@ -38,8 +58,8 @@ pub(crate) fn log_session_finished(record: &CompletedSessionRecord, upstream: Op
             upstream_port = port,
             outcome = record.outcome.kind(),
             duration_ms = record.duration_ms,
-            bytes_up = record.bytes_up,
-            bytes_down = record.bytes_down,
+            bytes_up,
+            bytes_down,
             inbound_rx_bytes = record.inbound_rx_bytes,
             inbound_tx_bytes = record.inbound_tx_bytes,
             outbound_rx_bytes = record.outbound_rx_bytes,
@@ -57,8 +77,8 @@ pub(crate) fn log_session_finished(record: &CompletedSessionRecord, upstream: Op
             port = record.port,
             outcome = record.outcome.kind(),
             duration_ms = record.duration_ms,
-            bytes_up = record.bytes_up,
-            bytes_down = record.bytes_down,
+            bytes_up,
+            bytes_down,
             inbound_rx_bytes = record.inbound_rx_bytes,
             inbound_tx_bytes = record.inbound_tx_bytes,
             outbound_rx_bytes = record.outbound_rx_bytes,
@@ -80,8 +100,12 @@ pub(crate) fn log_session_failed(
     let duration_ms = record
         .map(|item| item.duration_ms)
         .unwrap_or(duration.as_millis() as u64);
-    let bytes_up = record.map(|item| item.bytes_up).unwrap_or(0);
-    let bytes_down = record.map(|item| item.bytes_down).unwrap_or(0);
+    let bytes_up = record
+        .map(|item| item.inbound_rx_bytes.max(item.outbound_tx_bytes))
+        .unwrap_or(0);
+    let bytes_down = record
+        .map(|item| item.outbound_rx_bytes.max(item.inbound_tx_bytes))
+        .unwrap_or(0);
     let inbound_rx_bytes = record.map(|item| item.inbound_rx_bytes).unwrap_or(0);
     let inbound_tx_bytes = record.map(|item| item.inbound_tx_bytes).unwrap_or(0);
     let outbound_rx_bytes = record.map(|item| item.outbound_rx_bytes).unwrap_or(0);

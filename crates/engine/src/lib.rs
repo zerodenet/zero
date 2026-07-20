@@ -3,6 +3,7 @@ mod completed_sessions;
 mod error;
 mod event_log;
 mod export;
+mod flow_observation;
 mod groups;
 mod handle;
 mod hook;
@@ -22,6 +23,10 @@ pub use api::register_build_features;
 pub use completed_sessions::CompletedSessionRecord;
 pub use error::EngineError;
 pub use event_log::EventsSinceResult;
+pub use flow_observation::{
+    FlowFailureObservation, FlowPathObservation, FlowRemoteEndpoint, FlowRouteObservation,
+    MatchedRouteRule,
+};
 // Re-export snapshot types from zero-api so downstream code doesn't need
 // to import from two different crates for the same logical types.
 pub use groups::{UrlTestGroupState, UrlTestMemberState};
@@ -35,7 +40,7 @@ pub use plan::{
 pub use probe_trigger::{ProbeTrigger, ProbeTriggerRegistry};
 pub use resolve::{OutboundIdentity, ResolvedLeafOutbound, ResolvedOutbound};
 pub use runtime::Engine;
-pub use runtime::RouteDecision;
+pub use runtime::{RouteDecision, RouteTrace};
 pub use session_lifecycle::SessionHandle;
 pub use session_registry::ActiveSession;
 pub use stats::SessionOutcome;

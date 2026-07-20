@@ -14,11 +14,15 @@ impl TcpIngressRuntime {
     }
 
     pub(crate) fn route_decision(&self, session: &Session) -> RouteDecision {
-        self.services.engine().route_decision_with_inbound(
+        let trace = self.services.engine().route_trace_with_inbound(
             &session.target,
             session.sni.as_deref(),
             session.inbound_tag.as_deref(),
-        )
+        );
+        self.services
+            .engine()
+            .record_session_route(session.id, &trace);
+        trace.decision
     }
 
     pub(crate) fn resolve_outbound(
@@ -36,8 +40,17 @@ impl TcpIngressRuntime {
         log_session_accepted(session, action, self.services.config().mode.kind());
     }
 
-    pub(crate) fn set_session_outbound(&self, session: &Session) {
-        self.services.engine().set_session_outbound(session);
+    pub(crate) fn set_session_outbound(
+        &self,
+        session: &Session,
+        remote: Option<&(String, u16)>,
+        relay_chain: Vec<(String, String)>,
+    ) {
+        self.services.engine().set_session_outbound_with_path(
+            session,
+            remote.map(|(host, port)| (host.as_str(), *port)),
+            relay_chain,
+        );
     }
 
     pub(crate) fn record_passive_relay_outcome(

@@ -106,8 +106,8 @@ pub struct FlowTraffic {
 impl FlowTraffic {
     pub fn from_completed(record: &super::completed_sessions::CompletedSessionRecord) -> Self {
         Self {
-            bytes_up: record.bytes_up,
-            bytes_down: record.bytes_down,
+            bytes_up: record.inbound_rx_bytes.max(record.outbound_tx_bytes),
+            bytes_down: record.outbound_rx_bytes.max(record.inbound_tx_bytes),
             duration_ms: record.duration_ms,
         }
     }

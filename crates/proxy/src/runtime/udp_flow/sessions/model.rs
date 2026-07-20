@@ -4,7 +4,7 @@ use std::sync::atomic::AtomicBool;
 
 use zero_core::{Address, Session};
 use zero_engine::PassiveRelaySelection;
-use zero_engine::{CompletedSessionRecord, SessionHandle, SessionOutcome};
+use zero_engine::{CompletedSessionRecord, FlowFailureObservation, SessionHandle, SessionOutcome};
 
 use crate::runtime::udp_flow::outbound::UdpFlowOutbound;
 use crate::runtime::udp_flow::snapshot::UdpFlowSnapshot;
@@ -105,5 +105,26 @@ impl UdpFlow {
     pub(super) fn finish_success(self) -> CompletedUdpFlow {
         let outcome = self.outbound.completion().success_outcome;
         self.finish(outcome)
+    }
+
+    pub(super) fn finish_with_failure(
+        mut self,
+        failure: FlowFailureObservation,
+    ) -> CompletedUdpFlow {
+        let upstream = self.outbound.completion().upstream;
+        let passive_health_confirmed = self
+            .passive_health_confirmed
+            .load(std::sync::atomic::Ordering::Acquire);
+        let record = self
+            .handle
+            .finish_with_failure("upstream_error", failure)
+            .expect("udp flow should be active before failure");
+
+        CompletedUdpFlow {
+            record,
+            upstream,
+            passive_relay_selections: self.passive_relay_selections,
+            passive_health_confirmed,
+        }
     }
 }

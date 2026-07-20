@@ -101,6 +101,7 @@ fn flow_completed_event_serializes_as_normalized_envelope() {
         },
         outcome: FlowOutcome::ChainedRelayed,
         close_reason: None,
+        record: None,
     };
 
     let mut event = ApiEvent::new(
@@ -134,8 +135,10 @@ fn event_type_catalog_lists_current_api_events() {
         event_type::ALL,
         [
             event_type::FLOW_STARTED,
+            event_type::FLOW_ROUTED,
             event_type::FLOW_UPDATED,
             event_type::FLOW_COMPLETED,
+            event_type::FLOW_SNAPSHOT,
             event_type::POLICY_SELECTED,
             event_type::POLICY_PROBE_COMPLETED,
             event_type::POLICY_PASSIVE_RELAY_HEALTH_CHANGED,

@@ -12,7 +12,6 @@ pub(crate) async fn dispatch_tcp(
     runtime: &TcpIngressRuntime,
     session: &mut Session,
 ) -> Result<TcpRouteResult, EngineError> {
-    runtime.resolve_fake_ip_target(session).await;
     let action = runtime.route_decision(session);
     let (resolved, passive_relay_selections) = runtime.resolve_outbound(&action, session)?;
     let outbound =

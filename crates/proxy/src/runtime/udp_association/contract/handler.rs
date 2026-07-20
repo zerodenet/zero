@@ -59,9 +59,14 @@ where
             payload,
         } = request;
         let inbound_tag = dispatch.inbound_tag().to_owned();
+        let source_addr = sender;
         let sender = zero_platform_tokio::socket_addr_to_socket_address(sender);
-        let mut dispatch_bridge =
-            UdpAssociationDispatchBridge::new(runtime, dispatch, pending_control_traffic);
+        let mut dispatch_bridge = UdpAssociationDispatchBridge::new(
+            runtime,
+            dispatch,
+            pending_control_traffic,
+            source_addr,
+        );
         let result = match self
             .dispatch_datagram(sender, payload, &mut dispatch_bridge)
             .await

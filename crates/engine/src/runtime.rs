@@ -69,6 +69,13 @@ pub enum RouteDecision {
     Reject,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RouteTrace {
+    pub decision: RouteDecision,
+    pub mode: String,
+    pub matched_rule: Option<crate::MatchedRouteRule>,
+}
+
 impl RouteDecision {
     fn into_route_action(self) -> RouteAction {
         match self {
@@ -246,26 +253,52 @@ impl Engine {
         sni: Option<&str>,
         inbound_tag: Option<&str>,
     ) -> RouteDecision {
+        self.route_trace_with_inbound(address, sni, inbound_tag)
+            .decision
+    }
+
+    pub fn route_trace_with_inbound(
+        &self,
+        address: &Address,
+        sni: Option<&str>,
+        inbound_tag: Option<&str>,
+    ) -> RouteTrace {
         let mode = self.mode.lock().unwrap_or_else(|e| e.into_inner()).clone();
         match &mode {
             ModeConfig::Rule => {
-                let action = self
+                let trace = self
                     .router
                     .lock()
                     .expect("router lock poisoned")
-                    .decide_with_context(RouteContext {
+                    .decide_trace_with_context(RouteContext {
                         address,
                         sni,
                         inbound_tag,
                     });
-                match action {
+                let decision = match trace.action {
                     RouteAction::Route(tag) => RouteDecision::Route(tag),
                     RouteAction::Direct => RouteDecision::Direct,
                     RouteAction::Reject => RouteDecision::Reject,
+                };
+                RouteTrace {
+                    decision,
+                    mode: mode.kind().to_owned(),
+                    matched_rule: trace.matched_rule.map(|matched| crate::MatchedRouteRule {
+                        index: matched.index,
+                        condition: matched.condition,
+                    }),
                 }
             }
-            ModeConfig::Direct => RouteDecision::Direct,
-            ModeConfig::Global { outbound } => RouteDecision::Route(outbound.clone()),
+            ModeConfig::Direct => RouteTrace {
+                decision: RouteDecision::Direct,
+                mode: mode.kind().to_owned(),
+                matched_rule: None,
+            },
+            ModeConfig::Global { outbound } => RouteTrace {
+                decision: RouteDecision::Route(outbound.clone()),
+                mode: mode.kind().to_owned(),
+                matched_rule: None,
+            },
         }
     }
 

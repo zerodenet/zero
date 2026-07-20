@@ -60,7 +60,8 @@ impl TcpRuntimeServices {
     pub(crate) async fn connect_direct(
         &self,
         session: &zero_core::Session,
-    ) -> Result<zero_platform_tokio::TokioSocket, zero_engine::EngineError> {
+    ) -> Result<(zero_platform_tokio::TokioSocket, std::net::SocketAddr), zero_engine::EngineError>
+    {
         self.upstream
             .protocols
             .direct_connector()

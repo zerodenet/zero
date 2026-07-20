@@ -68,6 +68,8 @@ pub struct Session {
     pub process_id: Option<u32>,
     /// Local process name (Linux only).
     pub process_name: Option<String>,
+    /// Local process executable path (Linux only).
+    pub process_path: Option<String>,
 }
 
 impl Session {
@@ -94,6 +96,7 @@ impl Session {
             source_port: None,
             process_id: None,
             process_name: None,
+            process_path: None,
         }
     }
 

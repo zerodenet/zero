@@ -10,11 +10,16 @@ pub(crate) fn extract_tcp_stream(
     outbound: EstablishedTcpOutbound,
 ) -> Result<TcpRouteResult, EngineError> {
     match outbound.kind {
-        EstablishedTcpOutboundKind::Direct { tag, upstream } => Ok(TcpRouteResult {
+        EstablishedTcpOutboundKind::Direct {
+            tag,
+            remote,
+            upstream,
+        } => Ok(TcpRouteResult {
             upstream,
             outbound_tag: tag,
             is_direct: true,
-            upstream_endpoint: None,
+            upstream_endpoint: Some(remote),
+            relay_chain: Vec::new(),
             route_action: RouteDecision::Direct,
             passive_relay_selections: Vec::new(),
         }),
@@ -32,14 +37,21 @@ pub(crate) fn extract_tcp_stream(
             outbound_tag: tag,
             is_direct: false,
             upstream_endpoint: Some((server, port)),
+            relay_chain: Vec::new(),
             route_action: RouteDecision::Direct,
             passive_relay_selections: Vec::new(),
         }),
-        EstablishedTcpOutboundKind::Relay { upstream } => Ok(TcpRouteResult {
+        EstablishedTcpOutboundKind::Relay {
+            tag,
+            upstream_endpoint,
+            relay_chain,
             upstream,
-            outbound_tag: "relay".to_owned(),
+        } => Ok(TcpRouteResult {
+            upstream,
+            outbound_tag: tag,
             is_direct: false,
-            upstream_endpoint: None,
+            upstream_endpoint,
+            relay_chain,
             route_action: RouteDecision::Direct,
             passive_relay_selections: Vec::new(),
         }),

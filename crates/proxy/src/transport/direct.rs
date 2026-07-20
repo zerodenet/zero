@@ -21,11 +21,12 @@ impl DirectConnector {
         &self,
         session: &Session,
         resolver: &DnsSystem,
-    ) -> Result<TokioSocket, Error> {
+    ) -> Result<(TokioSocket, SocketAddr), Error> {
         let addr = self.resolve_target_addr(session, resolver).await?;
 
         TokioSocket::connect_addr(addr)
             .await
+            .map(|socket| (socket, addr))
             .map_err(|_| Error::Io("failed to connect direct target"))
     }
 

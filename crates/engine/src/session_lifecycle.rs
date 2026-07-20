@@ -1,6 +1,7 @@
 use super::completed_sessions::CompletedSessionRecord;
 use super::runtime::Engine;
 use super::stats::SessionOutcome;
+use super::FlowFailureObservation;
 
 #[derive(Debug)]
 pub struct SessionHandle {
@@ -35,6 +36,25 @@ impl SessionHandle {
         let record = self
             .engine
             .finish_session_with_reason(self.session_id, outcome, close_reason);
+        self.finished = true;
+        record
+    }
+
+    pub fn finish_with_failure(
+        &mut self,
+        close_reason: impl Into<String>,
+        failure: FlowFailureObservation,
+    ) -> Option<CompletedSessionRecord> {
+        if self.finished {
+            return None;
+        }
+
+        let record = self.engine.finish_session_with_observation(
+            self.session_id,
+            SessionOutcome::Failed,
+            Some(close_reason.into()),
+            Some(failure),
+        );
         self.finished = true;
         record
     }

@@ -1,4 +1,5 @@
-use std::sync::mpsc;
+use std::collections::VecDeque;
+use std::sync::{mpsc, Mutex};
 
 use zero_api::{
     ApiResult, CommandRequest, CommandResponse, CommandService, EventFilter, EventSource,
@@ -11,8 +12,9 @@ use super::runtime::Engine;
 /// `EventSource` access to the engine.
 ///
 /// Multiple subscribers can receive events concurrently via
-/// `EventSource::subscribe`.  Subscribers that fall behind are dropped
-/// transparently (the channel capacity is 64).
+/// `EventSource::subscribe`. Slow subscribers retain their registration;
+/// the bounded live queue can shed samples while the event-log sequence
+/// still exposes the gap to consumers.
 #[derive(Clone)]
 pub struct EngineHandle {
     engine: Engine,
@@ -58,9 +60,18 @@ impl EventSource for EngineHandle {
     type Stream = EventSubscriber;
 
     fn subscribe(&self, filter: EventFilter) -> ApiResult<Self::Stream> {
-        let (tx, rx) = mpsc::sync_channel(64);
+        let (tx, rx) = mpsc::sync_channel(1024);
         self.engine.subscribe_events(tx);
-        Ok(EventSubscriber { rx, filter })
+        let initial = if wants_flow_snapshot(&filter) {
+            VecDeque::from([self.engine.flow_snapshot_event()])
+        } else {
+            VecDeque::new()
+        };
+        Ok(EventSubscriber {
+            initial: Mutex::new(initial),
+            rx,
+            filter,
+        })
     }
 
     fn latest(&self, limit: usize, filter: EventFilter) -> ApiResult<Vec<RawApiEvent>> {
@@ -74,6 +85,7 @@ impl EventSource for EngineHandle {
 /// events matching the subscriber's filter are yielded; others are
 /// silently skipped.
 pub struct EventSubscriber {
+    initial: Mutex<VecDeque<RawApiEvent>>,
     rx: mpsc::Receiver<RawApiEvent>,
     filter: EventFilter,
 }
@@ -84,6 +96,14 @@ impl EventSubscriber {
     /// Returns `None` when the publisher has been dropped (the
     /// `EngineHandle` no longer exists).
     pub fn recv(&self) -> Option<RawApiEvent> {
+        if let Some(event) = self
+            .initial
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .pop_front()
+        {
+            return Some(event);
+        }
         loop {
             let event = self.rx.recv().ok()?;
             if matches_event(&event, &self.filter) {
@@ -94,6 +114,14 @@ impl EventSubscriber {
 
     /// Non-blocking read of the next matching event.
     pub fn try_recv(&self) -> Option<RawApiEvent> {
+        if let Some(event) = self
+            .initial
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .pop_front()
+        {
+            return Some(event);
+        }
         loop {
             let event = self.rx.try_recv().ok()?;
             if matches_event(&event, &self.filter) {
@@ -101,6 +129,20 @@ impl EventSubscriber {
             }
         }
     }
+}
+
+fn wants_flow_snapshot(filter: &EventFilter) -> bool {
+    filter.event_types.is_empty()
+        || filter.event_types.iter().any(|event_type| {
+            matches!(
+                event_type.as_str(),
+                zero_api::event_type::FLOW_STARTED
+                    | zero_api::event_type::FLOW_ROUTED
+                    | zero_api::event_type::FLOW_UPDATED
+                    | zero_api::event_type::FLOW_COMPLETED
+                    | zero_api::event_type::FLOW_SNAPSHOT
+            )
+        })
 }
 
 fn matches_event(event: &RawApiEvent, filter: &EventFilter) -> bool {

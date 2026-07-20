@@ -10,6 +10,7 @@ use std::net::SocketAddr;
 pub(crate) struct ProcessInfo {
     pub pid: u32,
     pub name: String,
+    pub path: Option<String>,
 }
 
 /// Attempt to identify the local process that owns `source_addr`.
@@ -106,7 +107,10 @@ fn find_process_by_inode(target_inode: u64) -> Option<ProcessInfo> {
                 let name = std::fs::read_to_string(format!("/proc/{pid}/comm"))
                     .map(|s| s.trim().to_owned())
                     .unwrap_or_else(|_| "unknown".to_owned());
-                return Some(ProcessInfo { pid, name });
+                let path = std::fs::read_link(format!("/proc/{pid}/exe"))
+                    .ok()
+                    .map(|path| path.to_string_lossy().into_owned());
+                return Some(ProcessInfo { pid, name, path });
             }
         }
     }

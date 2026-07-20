@@ -10,11 +10,15 @@ use crate::runtime::udp_dispatch::{FlowFailure, FlowStartResult, UdpDispatch};
 
 impl UdpIngressRuntime {
     pub(crate) fn route_decision(&self, session: &Session) -> RouteDecision {
-        self.tcp_services.engine().route_decision_with_inbound(
+        let trace = self.tcp_services.engine().route_trace_with_inbound(
             &session.target,
             session.sni.as_deref(),
             session.inbound_tag.as_deref(),
-        )
+        );
+        self.tcp_services
+            .engine()
+            .record_session_route(session.id, &trace);
+        trace.decision
     }
 
     pub(crate) fn resolve_outbound(
@@ -32,8 +36,12 @@ impl UdpIngressRuntime {
         log_session_accepted(session, action, self.tcp_services.config().mode.kind());
     }
 
-    pub(crate) fn set_session_outbound(&self, session: &Session) {
-        self.tcp_services.engine().set_session_outbound(session);
+    pub(crate) fn set_session_outbound(&self, session: &Session, remote: Option<&(String, u16)>) {
+        self.tcp_services.engine().set_session_outbound_with_path(
+            session,
+            remote.map(|(host, port)| (host.as_str(), *port)),
+            Vec::new(),
+        );
     }
 
     pub(crate) fn record_passive_relay_outcome(

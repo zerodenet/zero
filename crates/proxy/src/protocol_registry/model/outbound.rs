@@ -7,6 +7,8 @@ use crate::runtime::path::{OutboundEndpoint, TcpPathCategory};
 /// adapter that claimed the leaf.
 #[derive(Debug, Clone)]
 pub(crate) struct OutboundLeafRuntime {
+    pub(crate) tag: Option<String>,
+    pub(crate) protocol: String,
     pub(crate) tcp_path: TcpPathCategory,
     #[cfg(feature = "udp-runtime")]
     pub(crate) health_tag: Option<String>,
@@ -17,8 +19,16 @@ pub(crate) struct OutboundLeafRuntime {
 }
 
 impl OutboundLeafRuntime {
-    pub(crate) fn proxy(tag: &str, server: &str, port: u16, tcp_path: TcpPathCategory) -> Self {
+    pub(crate) fn proxy(
+        tag: &str,
+        protocol: &str,
+        server: &str,
+        port: u16,
+        tcp_path: TcpPathCategory,
+    ) -> Self {
         Self {
+            tag: Some(tag.to_owned()),
+            protocol: protocol.to_owned(),
             tcp_path,
             #[cfg(feature = "udp-runtime")]
             health_tag: Some(tag.to_owned()),
@@ -36,6 +46,8 @@ impl OutboundLeafRuntime {
 impl OutboundLeafRuntime {
     pub(crate) fn direct(tag: Option<&str>) -> Self {
         Self {
+            tag: tag.map(str::to_owned),
+            protocol: "direct".to_owned(),
             tcp_path: TcpPathCategory::Direct,
             #[cfg(feature = "udp-runtime")]
             health_tag: None,
@@ -48,6 +60,8 @@ impl OutboundLeafRuntime {
 
     pub(crate) fn block(tag: Option<&str>) -> Self {
         Self {
+            tag: tag.map(str::to_owned),
+            protocol: "block".to_owned(),
             tcp_path: TcpPathCategory::Block,
             #[cfg(feature = "udp-runtime")]
             health_tag: None,

@@ -162,7 +162,9 @@ fn claim_outbound_hooks<'a>(
         OutboundLeafInput::Proxy {
             outbound,
             endpoint: (server, port),
-        } => OutboundLeafRuntime::proxy(outbound.tag(), server, port, tcp_path),
+        } => {
+            OutboundLeafRuntime::proxy(outbound.tag(), entry.support.name(), server, port, tcp_path)
+        }
     };
     let tcp = ClaimedTcpHooks {
         capability: Some(Arc::from(tcp) as Arc<dyn ClaimedTcpOutboundLeaf<'a> + 'a>),

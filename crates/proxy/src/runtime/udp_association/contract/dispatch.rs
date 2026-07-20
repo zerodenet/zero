@@ -22,6 +22,7 @@ pub(super) struct UdpAssociationDispatchBridge<'a> {
     runtime: &'a UdpIngressRuntime,
     dispatch: &'a mut UdpDispatch,
     pending_control_traffic: &'a mut StreamTraffic,
+    source_addr: std::net::SocketAddr,
     outcome: UdpAssociationDispatchOutcome,
 }
 
@@ -30,11 +31,13 @@ impl<'a> UdpAssociationDispatchBridge<'a> {
         runtime: &'a UdpIngressRuntime,
         dispatch: &'a mut UdpDispatch,
         pending_control_traffic: &'a mut StreamTraffic,
+        source_addr: std::net::SocketAddr,
     ) -> Self {
         Self {
             runtime,
             dispatch,
             pending_control_traffic,
+            source_addr,
             outcome: UdpAssociationDispatchOutcome::ClientHandled,
         }
     }
@@ -66,7 +69,12 @@ impl InboundUdpAssociationDispatcher for UdpAssociationDispatchBridge<'_> {
     ) -> Result<(), Self::Error> {
         let session_id = self
             .runtime
-            .dispatch_inbound_packet(self.dispatch, &inbound_dispatch, None)
+            .dispatch_inbound_packet(
+                self.dispatch,
+                &inbound_dispatch,
+                None,
+                Some(self.source_addr),
+            )
             .await?;
 
         self.runtime

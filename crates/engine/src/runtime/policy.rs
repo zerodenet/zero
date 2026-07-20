@@ -18,7 +18,7 @@ impl Engine {
     }
 
     pub fn push_flow_updates(&self) {
-        for session in self.active_sessions() {
+        for session in self.session_registry.dirty_snapshot() {
             self.event_log.push_flow_updated(&session);
         }
     }

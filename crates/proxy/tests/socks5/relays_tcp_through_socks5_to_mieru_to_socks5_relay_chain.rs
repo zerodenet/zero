@@ -114,6 +114,7 @@ async fn relays_tcp_through_socks5_to_mieru_to_socks5_relay_chain() {
     ))
     .expect("parse outer config");
     let outer_engine = Engine::new(outer_config).expect("build outer engine");
+    let outer_probe = outer_engine.clone();
     let outer_handle = spawn_engine(outer_engine);
 
     wait_for_listener(outer_port).await;
@@ -155,6 +156,27 @@ async fn relays_tcp_through_socks5_to_mieru_to_socks5_relay_chain() {
     let mut echoed = [0_u8; 4];
     client.read_exact(&mut echoed).await.expect("read payload");
     assert_eq!(&echoed, b"mhop");
+    drop(client);
+
+    wait_for("outer relay flow completion", || {
+        !outer_probe.completed_sessions().is_empty()
+    })
+    .await;
+    let events = outer_probe
+        .subscribe(EventFilter {
+            event_types: vec![event_type::FLOW_COMPLETED.to_owned()],
+            ..EventFilter::default()
+        })
+        .expect("read relay completion event");
+    let record = &events[0].payload["record"];
+    assert_eq!(record["route"]["target"], "tcp-relay-chain");
+    assert_eq!(record["path"]["outbound"]["tag"], "final-socks");
+    assert_eq!(record["path"]["outbound"]["protocol"], "socks5");
+    assert_eq!(record["path"]["remote"]["port"], first_hop_port);
+    assert_eq!(record["path"]["relay_chain"][0]["tag"], "first-mieru");
+    assert_eq!(record["path"]["relay_chain"][0]["protocol"], "mieru");
+    assert_eq!(record["path"]["relay_chain"][1]["tag"], "final-socks");
+    assert_eq!(record["path"]["relay_chain"][1]["protocol"], "socks5");
 
     outer_handle
         .shutdown()

@@ -18,6 +18,127 @@ pub struct FlowEventPayload {
     /// Why the flow ended (standard close reason). `None` = normal / unspecified.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub close_reason: Option<String>,
+    /// Canonical connection record shared by GUI, SSE, JSONL, and webhook
+    /// consumers. Legacy top-level fields stay on this payload for wire
+    /// compatibility while new consumers migrate to this record.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub record: Option<FlowRecord>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FlowState {
+    Opening,
+    Active,
+    Completed,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FlowRecord {
+    pub flow_id: String,
+    pub revision: u64,
+    pub state: FlowState,
+    pub network: Network,
+    pub inbound: EndpointRef,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub auth: Option<AuthInfo>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<FlowSource>,
+    pub target: FlowTarget,
+    pub route: FlowRoute,
+    pub path: FlowPath,
+    pub traffic: TrafficStats,
+    pub throughput: FlowThroughput,
+    pub timing: FlowRecordTiming,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub result: Option<FlowResult>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FlowSource {
+    pub ip: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub port: Option<u16>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub process_id: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub process_name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub process_path: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FlowTarget {
+    pub host: String,
+    pub port: u16,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resolved_ip: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sniffed_host: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FlowRoute {
+    pub mode: String,
+    pub action: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub matched_rule: Option<MatchedRuleInfo>,
+    #[serde(default)]
+    pub selection_chain: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MatchedRuleInfo {
+    pub index: usize,
+    pub condition: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FlowPath {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub outbound: Option<EndpointRef>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub remote: Option<TargetAddress>,
+    #[serde(default)]
+    pub relay_chain: Vec<EndpointRef>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FlowThroughput {
+    pub upload_bps: u64,
+    pub download_bps: u64,
+    pub sampled_at_unix_ms: u64,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FlowRecordTiming {
+    pub started_at_unix_ms: u64,
+    pub last_activity_at_unix_ms: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ended_at_unix_ms: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub duration_ms: Option<u64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FlowResult {
+    pub outcome: FlowOutcome,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub close_reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub failure: Option<FlowFailureInfo>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FlowFailureInfo {
+    pub stage: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub code: Option<String>,
+    pub message: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub remote: Option<TargetAddress>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]

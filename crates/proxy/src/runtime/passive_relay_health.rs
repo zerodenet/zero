@@ -41,8 +41,11 @@ mod tests {
     fn record(network: Network, duration_ms: u64, tx: u64, rx: u64) -> CompletedSessionRecord {
         CompletedSessionRecord {
             id: 1,
+            revision: 1,
             inbound_tag: Some("entry".to_owned()),
             outbound_tag: Some("hk-ss-1".to_owned()),
+            route: None,
+            path: zero_engine::FlowPathObservation::default(),
             target: Address::Domain("landing.example".to_owned()),
             port: 14788,
             protocol: ProtocolType::UNKNOWN,
@@ -59,10 +62,17 @@ mod tests {
             inbound_tx_bytes: rx,
             outbound_rx_bytes: rx,
             outbound_tx_bytes: tx,
+            throughput_up_bps: 0,
+            throughput_down_bps: 0,
             process_id: None,
             process_name: None,
+            process_path: None,
+            sni: None,
+            source_ip: None,
+            source_port: None,
             outcome: SessionOutcome::Failed,
             close_reason: Some("upstream_error".to_owned()),
+            failure: None,
         }
     }
 

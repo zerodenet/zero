@@ -1,3 +1,4 @@
+use std::net::SocketAddr;
 use zero_core::{Address, InboundUdpDispatch, ProtocolType, SessionAuth};
 use zero_engine::EngineError;
 
@@ -12,6 +13,7 @@ pub(crate) struct UdpPipeInput<'a> {
     pub(crate) payload: &'a [u8],
     pub(crate) protocol: ProtocolType,
     pub(crate) auth: Option<&'a SessionAuth>,
+    pub(crate) source_addr: Option<SocketAddr>,
     /// Optional protocol-supplied client-session isolation key.
     ///
     /// When present, flows that would collide on `(target, port)` alone are
@@ -45,6 +47,7 @@ impl<'a> UdpPipeInput<'a> {
     pub(crate) fn from_inbound_dispatch(
         dispatch: &'a InboundUdpDispatch,
         auth: Option<&'a SessionAuth>,
+        source_addr: Option<SocketAddr>,
     ) -> Self {
         Self {
             target: dispatch.target().clone(),
@@ -52,6 +55,7 @@ impl<'a> UdpPipeInput<'a> {
             payload: dispatch.payload(),
             protocol: dispatch.protocol(),
             auth,
+            source_addr,
             client_session_id: dispatch.client_session_id(),
         }
     }

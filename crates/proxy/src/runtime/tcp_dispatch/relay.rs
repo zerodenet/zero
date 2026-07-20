@@ -11,6 +11,25 @@ pub(crate) async fn dispatch_prepared_tcp_relay_chain(
     session: &Session,
     prepared: PreparedTcpRelayChain<'_>,
 ) -> Result<EstablishedTcpOutbound, TcpOutboundFailure> {
+    let upstream_endpoint = prepared.first.endpoint.clone();
+    let mut relay_chain = vec![(
+        prepared
+            .first
+            .tag
+            .clone()
+            .unwrap_or_else(|| "unknown".to_owned()),
+        prepared.first.protocol.clone(),
+    )];
+    relay_chain.extend(
+        prepared
+            .relay_hops
+            .iter()
+            .map(|hop| (hop.tag.clone(), hop.protocol.clone())),
+    );
+    let outbound_tag = relay_chain
+        .last()
+        .map(|(tag, _)| tag.clone())
+        .unwrap_or_else(|| "relay".to_owned());
     let (stream, final_hop) = execute_relay_prefix(services.clone(), prepared).await?;
     let stream = dispatch_prepared_tcp_relay_hop(services, stream, session, final_hop)
         .await
@@ -20,7 +39,12 @@ pub(crate) async fn dispatch_prepared_tcp_relay_chain(
             upstream_endpoint: None,
         })?;
 
-    Ok(EstablishedTcpOutbound::relay(stream))
+    Ok(EstablishedTcpOutbound::relay(
+        outbound_tag,
+        upstream_endpoint,
+        relay_chain,
+        stream,
+    ))
 }
 
 pub(crate) async fn dispatch_prepared_tcp_relay_hop(

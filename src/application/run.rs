@@ -276,7 +276,7 @@ async fn wait_for_shutdown_signal() {
 fn spawn_stats_sampler(engine: Engine) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
         let mut stats_tick = tokio::time::interval(std::time::Duration::from_secs(1));
-        let mut flow_tick = tokio::time::interval(std::time::Duration::from_secs(10));
+        let mut flow_tick = tokio::time::interval(std::time::Duration::from_secs(1));
         loop {
             tokio::select! {
                 _ = stats_tick.tick() => engine.push_stats_sampled(),

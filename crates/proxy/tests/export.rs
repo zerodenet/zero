@@ -155,6 +155,29 @@ async fn exports_serializable_engine_status_view() {
     assert_eq!(completed.payload["outbound"]["protocol"], "direct");
     assert!(completed.payload["traffic"]["bytes_up"].as_u64().unwrap() >= 4);
     assert!(completed.payload["traffic"]["bytes_down"].as_u64().unwrap() >= 4);
+    let record = &completed.payload["record"];
+    assert_eq!(record["flow_id"], "1");
+    assert_eq!(record["state"], "completed");
+    assert_eq!(record["source"]["ip"], "127.0.0.1");
+    assert_eq!(record["target"]["host"], "127.0.0.1");
+    assert_eq!(record["target"]["port"], echo_port);
+    assert_eq!(record["route"]["mode"], "rule");
+    assert_eq!(record["route"]["action"], "direct");
+    assert_eq!(record["route"]["selection_chain"][0], "direct");
+    assert_eq!(record["path"]["outbound"]["tag"], "direct");
+    assert_eq!(record["path"]["outbound"]["protocol"], "direct");
+    assert_eq!(record["result"]["outcome"], "direct_relayed");
+    assert!(record["timing"]["ended_at_unix_ms"].as_u64().is_some());
+
+    let routed = events
+        .iter()
+        .find(|event| event.event_type == event_type::FLOW_ROUTED)
+        .expect("flow routed event");
+    assert_eq!(routed.payload["record"]["state"], "active");
+    assert!(
+        routed.payload["record"]["revision"].as_u64().unwrap()
+            < record["revision"].as_u64().unwrap()
+    );
 
     let filtered = handle
         .subscribe(EventFilter {

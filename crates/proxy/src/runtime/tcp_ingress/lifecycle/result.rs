@@ -3,7 +3,7 @@ use std::time::Instant;
 use zero_core::Session;
 use zero_engine::{CompletedSessionRecord, EngineError, SessionHandle, SessionOutcome};
 
-use crate::logging::{log_session_failed, log_session_finished};
+use crate::logging::{log_session_failed, log_session_finished, session_failure_observation};
 
 pub(super) fn finish_relay_success(
     handle: &mut SessionHandle,
@@ -28,15 +28,18 @@ pub(super) fn finish_relay_failure(
     error: &EngineError,
     upstream_endpoint: Option<&(String, u16)>,
 ) -> Option<CompletedSessionRecord> {
-    let record =
-        handle.finish_with_reason(SessionOutcome::Failed, Some("upstream_error".to_owned()));
+    let upstream = upstream_endpoint.map(|(server, port)| (server.as_str(), *port));
+    let record = handle.finish_with_failure(
+        "upstream_error",
+        session_failure_observation("relay", error, upstream),
+    );
     log_session_failed(
         session,
         record.as_ref(),
         "relay",
         started_at.elapsed(),
         error,
-        upstream_endpoint.map(|(server, port)| (server.as_str(), *port)),
+        upstream,
     );
     record
 }
@@ -70,8 +73,10 @@ pub(super) fn finish_route_or_establish_failure(
     started_at: Instant,
     error: &EngineError,
 ) {
-    let record =
-        handle.finish_with_reason(SessionOutcome::Failed, Some("upstream_error".to_owned()));
+    let record = handle.finish_with_failure(
+        "upstream_error",
+        session_failure_observation("route_or_establish", error, None),
+    );
     log_session_failed(
         session,
         record.as_ref(),

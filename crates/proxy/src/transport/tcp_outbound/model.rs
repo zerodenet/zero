@@ -10,6 +10,7 @@ pub(crate) struct TcpRouteResult {
     pub outbound_tag: String,
     pub is_direct: bool,
     pub upstream_endpoint: Option<(String, u16)>,
+    pub relay_chain: Vec<(String, String)>,
     pub route_action: RouteDecision,
     pub passive_relay_selections: Vec<PassiveRelaySelection>,
 }
@@ -21,6 +22,7 @@ pub(crate) struct EstablishedTcpOutbound {
 pub(super) enum EstablishedTcpOutboundKind {
     Direct {
         tag: String,
+        remote: (String, u16),
         upstream: TcpRelayStream,
     },
     Block,
@@ -31,15 +33,23 @@ pub(super) enum EstablishedTcpOutboundKind {
         upstream: TcpRelayStream,
     },
     Relay {
+        tag: String,
+        upstream_endpoint: Option<(String, u16)>,
+        relay_chain: Vec<(String, String)>,
         upstream: TcpRelayStream,
     },
 }
 
 impl EstablishedTcpOutbound {
-    pub(crate) fn direct(tag: impl Into<String>, upstream: TcpRelayStream) -> Self {
+    pub(crate) fn direct(
+        tag: impl Into<String>,
+        remote: (String, u16),
+        upstream: TcpRelayStream,
+    ) -> Self {
         Self {
             kind: EstablishedTcpOutboundKind::Direct {
                 tag: tag.into(),
+                remote,
                 upstream,
             },
         }
@@ -68,9 +78,19 @@ impl EstablishedTcpOutbound {
         }
     }
 
-    pub(crate) fn relay(upstream: TcpRelayStream) -> Self {
+    pub(crate) fn relay(
+        tag: impl Into<String>,
+        upstream_endpoint: Option<(String, u16)>,
+        relay_chain: Vec<(String, String)>,
+        upstream: TcpRelayStream,
+    ) -> Self {
         Self {
-            kind: EstablishedTcpOutboundKind::Relay { upstream },
+            kind: EstablishedTcpOutboundKind::Relay {
+                tag: tag.into(),
+                upstream_endpoint,
+                relay_chain,
+                upstream,
+            },
         }
     }
 
@@ -78,7 +98,7 @@ impl EstablishedTcpOutbound {
         match self.kind {
             EstablishedTcpOutboundKind::Direct { upstream, .. } => Ok(upstream),
             EstablishedTcpOutboundKind::Proxied { upstream, .. } => Ok(upstream),
-            EstablishedTcpOutboundKind::Relay { upstream } => Ok(upstream),
+            EstablishedTcpOutboundKind::Relay { upstream, .. } => Ok(upstream),
             EstablishedTcpOutboundKind::Block => Err(EngineError::Io(io::Error::new(
                 io::ErrorKind::InvalidInput,
                 "first relay hop resolved to block",

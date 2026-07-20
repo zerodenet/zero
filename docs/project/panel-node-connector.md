@@ -73,7 +73,37 @@ Content-Type: application/json
       "bytes_up": 1024,
       "bytes_down": 4096
     },
-    "outcome": "direct-relayed"
+    "outcome": "direct_relayed",
+    "record": {
+      "flow_id": "42",
+      "revision": 8,
+      "state": "completed",
+      "network": "tcp",
+      "inbound": { "tag": "socks-in", "protocol": "socks5" },
+      "source": { "ip": "192.168.1.10", "port": 52864 },
+      "target": { "host": "example.com", "port": 443, "resolved_ip": "203.0.113.10" },
+      "route": {
+        "mode": "rule",
+        "action": "route",
+        "target": "proxy",
+        "matched_rule": { "index": 3, "condition": "domain: example.com" },
+        "selection_chain": ["proxy", "edge-us"]
+      },
+      "path": {
+        "outbound": { "tag": "edge-us", "protocol": "vmess" },
+        "remote": { "host": "198.51.100.8", "port": 443 },
+        "relay_chain": []
+      },
+      "traffic": { "bytes_up": 1024, "bytes_down": 4096 },
+      "throughput": { "upload_bps": 0, "download_bps": 0, "sampled_at_unix_ms": 1760000005000 },
+      "timing": {
+        "started_at_unix_ms": 1760000000000,
+        "last_activity_at_unix_ms": 1760000004900,
+        "ended_at_unix_ms": 1760000005000,
+        "duration_ms": 5000
+      },
+      "result": { "outcome": "chained_relayed", "close_reason": null, "failure": null }
+    }
   }
 }
 ```

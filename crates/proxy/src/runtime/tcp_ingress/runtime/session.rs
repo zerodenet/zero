@@ -57,16 +57,17 @@ impl TcpIngressRuntime {
             });
             session.source_port = Some(addr.port());
         }
-        self.services
-            .engine()
-            .prepare_session(session, &self.inbound_tag);
-
         if let Some(addr) = self.source_addr {
             if let Some(info) = crate::process_lookup::lookup_process(addr) {
                 session.process_id = Some(info.pid);
                 session.process_name = Some(info.name);
+                session.process_path = info.path;
             }
         }
+
+        self.services
+            .engine()
+            .prepare_session(session, &self.inbound_tag);
     }
 
     pub(crate) fn track_session(&self, session_id: u64) -> SessionHandle {

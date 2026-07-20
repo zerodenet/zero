@@ -10,6 +10,11 @@ impl Engine {
         self.event_log.subscribe(subscriber);
     }
 
+    pub(crate) fn flow_snapshot_event(&self) -> RawApiEvent {
+        self.event_log
+            .flow_snapshot_event(&self.session_registry.snapshot())
+    }
+
     pub(crate) fn emit_event(&self, event: RawApiEvent) {
         self.event_log.push_external(event);
     }

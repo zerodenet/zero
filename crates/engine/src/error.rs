@@ -47,6 +47,27 @@ pub enum EngineError {
     UnhealthyOutbound { tag: String },
 }
 
+impl EngineError {
+    pub fn code(&self) -> &'static str {
+        match self {
+            Self::Config(_) => "config",
+            Self::Io(_) => "io",
+            Self::Core(_) => "core",
+            Self::NoInbounds => "no_inbounds",
+            Self::CompiledFeatureDisabled { .. } => "compiled_feature_disabled",
+            Self::MissingRouteTarget { .. } => "missing_route_target",
+            Self::InvalidPlan { .. } => "invalid_plan",
+            Self::InboundTaskExited => "inbound_task_exited",
+            Self::InvalidUrlTestGroup { .. } => "invalid_url_test_group",
+            Self::UrlTestTaskExited => "url_test_task_exited",
+            Self::SelectorGroupNotFound { .. } => "selector_group_not_found",
+            Self::SelectorGroupTypeMismatch { .. } => "selector_group_type_mismatch",
+            Self::SelectorTargetNotFound { .. } => "selector_target_not_found",
+            Self::UnhealthyOutbound { .. } => "unhealthy_outbound",
+        }
+    }
+}
+
 impl From<RuntimeError> for EngineError {
     fn from(error: RuntimeError) -> Self {
         match error {

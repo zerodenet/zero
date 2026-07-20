@@ -8,7 +8,10 @@ use crate::completed_sessions::CompletedSessionRecord;
 use crate::hook::{FlowContext, FlowHook, FlowTraffic};
 use crate::session_lifecycle::SessionHandle;
 use crate::stats::SessionOutcome;
-use crate::EngineError;
+use crate::{
+    EngineError, FlowFailureObservation, FlowRemoteEndpoint, FlowRouteObservation, RouteDecision,
+    RouteTrace,
+};
 
 impl Engine {
     pub fn prepare_session(&self, session: &mut Session, inbound_tag: &str) {
@@ -29,12 +32,61 @@ impl Engine {
         }
         self.session_registry.insert(session, mode.kind());
         self.stats.record_start();
-        self.event_log.push_flow_started(session, mode.kind());
+        if let Some(active) = self.session_registry.snapshot_one(session.id) {
+            self.event_log.push_flow_started(&active);
+        }
     }
 
     pub fn set_session_outbound(&self, session: &Session) {
-        self.session_registry
-            .update_outbound_tag(session.id, session.outbound_tag.as_deref());
+        self.set_session_outbound_with_path(session, None, Vec::new());
+    }
+
+    pub fn set_session_outbound_with_remote(&self, session: &Session, remote: Option<(&str, u16)>) {
+        self.set_session_outbound_with_path(session, remote, Vec::new());
+    }
+
+    pub fn set_session_outbound_with_path(
+        &self,
+        session: &Session,
+        remote: Option<(&str, u16)>,
+        relay_chain: Vec<(String, String)>,
+    ) {
+        let outbound_protocol = session
+            .outbound_tag
+            .as_deref()
+            .and_then(|tag| self.outbound_protocol_for_tag(tag));
+        let active = self.session_registry.update_outbound(
+            session.id,
+            session.outbound_tag.as_deref(),
+            outbound_protocol,
+            remote.map(|(host, port)| FlowRemoteEndpoint {
+                host: host.to_owned(),
+                port,
+            }),
+            relay_chain,
+        );
+        if let Some(active) = active {
+            self.event_log.push_flow_routed(&active);
+        }
+    }
+
+    pub fn record_session_route(&self, id: u64, trace: &RouteTrace) {
+        let (action, target) = match &trace.decision {
+            RouteDecision::Route(tag) => ("route".to_owned(), Some(tag.clone())),
+            RouteDecision::Direct => ("direct".to_owned(), None),
+            RouteDecision::Reject => ("reject".to_owned(), None),
+        };
+        let selection_chain = target.iter().cloned().collect();
+        self.session_registry.update_route(
+            id,
+            FlowRouteObservation {
+                mode: trace.mode.clone(),
+                action,
+                target,
+                matched_rule: trace.matched_rule.clone(),
+                selection_chain,
+            },
+        );
     }
 
     pub fn record_session_upload(&self, id: u64, bytes: u64) {
@@ -100,7 +152,17 @@ impl Engine {
         outcome: SessionOutcome,
         reason: Option<String>,
     ) -> Option<CompletedSessionRecord> {
-        let record = self.session_registry.finish(id, outcome, reason)?;
+        self.finish_session_with_observation(id, outcome, reason, None)
+    }
+
+    pub fn finish_session_with_observation(
+        &self,
+        id: u64,
+        outcome: SessionOutcome,
+        reason: Option<String>,
+        failure: Option<FlowFailureObservation>,
+    ) -> Option<CompletedSessionRecord> {
+        let record = self.session_registry.finish(id, outcome, reason, failure)?;
         self.stats.record_finish(outcome);
         self.stats.record_traffic(
             record.outbound_tag.as_deref(),

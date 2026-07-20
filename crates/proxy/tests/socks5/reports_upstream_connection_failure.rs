@@ -63,5 +63,25 @@ async fn reports_upstream_connection_failure_to_client_and_session_history() {
     })
     .await;
 
+    let events = probe
+        .subscribe(EventFilter {
+            event_types: vec![event_type::FLOW_COMPLETED.to_owned()],
+            ..EventFilter::default()
+        })
+        .expect("read completed flow events");
+    let completed = events.first().expect("completed flow event");
+    assert_eq!(completed.payload["record"]["state"], "completed");
+    assert_eq!(completed.payload["record"]["result"]["outcome"], "failed");
+    assert_eq!(
+        completed.payload["record"]["result"]["failure"]["stage"],
+        "route_or_establish"
+    );
+    assert!(completed.payload["record"]["result"]["failure"]["code"]
+        .as_str()
+        .is_some());
+    assert!(completed.payload["record"]["result"]["failure"]["message"]
+        .as_str()
+        .is_some_and(|message| !message.is_empty()));
+
     handle.shutdown().await.expect("shutdown engine");
 }

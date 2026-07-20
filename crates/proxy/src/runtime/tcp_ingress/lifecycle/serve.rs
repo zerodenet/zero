@@ -65,6 +65,7 @@ pub(crate) async fn serve_inbound<P: InboundProtocol>(
     let mut session = session;
     let mut client = client;
 
+    runtime.resolve_fake_ip_target(&mut session).await;
     runtime.apply_url_rewrite(&mut session);
     runtime.apply_kernel_rate_limits(&mut session);
     runtime.prepare_session(&mut session);
@@ -82,7 +83,11 @@ pub(crate) async fn serve_inbound<P: InboundProtocol>(
             runtime.log_session_accepted(&session, &result.route_action);
 
             session.outbound_tag = Some(result.outbound_tag.clone());
-            runtime.set_session_outbound(&session);
+            runtime.set_session_outbound(
+                &session,
+                result.upstream_endpoint.as_ref(),
+                result.relay_chain.clone(),
+            );
 
             let outcome = if result.is_direct {
                 SessionOutcome::DirectRelayed

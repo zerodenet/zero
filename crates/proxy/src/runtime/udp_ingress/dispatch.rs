@@ -15,6 +15,7 @@ impl UdpIngressRuntime {
         dispatch: &mut UdpDispatch,
         inbound_dispatch: &InboundUdpDispatch,
         auth: Option<&SessionAuth>,
+        source_addr: Option<std::net::SocketAddr>,
     ) -> Result<u64, EngineError> {
         if !self.udp_enabled_for_inbound(dispatch.inbound_tag()) {
             return Err(EngineError::Io(std::io::Error::other(
@@ -23,7 +24,11 @@ impl UdpIngressRuntime {
         }
 
         UdpPipe::new(dispatch)
-            .dispatch(UdpPipeInput::from_inbound_dispatch(inbound_dispatch, auth))
+            .dispatch(UdpPipeInput::from_inbound_dispatch(
+                inbound_dispatch,
+                auth,
+                source_addr,
+            ))
             .await
     }
 

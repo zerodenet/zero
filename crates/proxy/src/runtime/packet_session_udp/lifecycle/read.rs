@@ -18,7 +18,7 @@ pub(super) async fn process_packet_session_read(
             *last_activity = TokioInstant::now();
             if let Err(error) = context
                 .runtime
-                .dispatch_inbound_packet(dispatch, &inbound_dispatch, context.auth)
+                .dispatch_inbound_packet(dispatch, &inbound_dispatch, context.auth, None)
                 .await
             {
                 warn!(

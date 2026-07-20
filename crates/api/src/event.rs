@@ -6,8 +6,10 @@ use crate::EVENT_SCHEMA_ID;
 
 pub mod event_type {
     pub const FLOW_STARTED: &str = "flow.started";
+    pub const FLOW_ROUTED: &str = "flow.routed";
     pub const FLOW_UPDATED: &str = "flow.updated";
     pub const FLOW_COMPLETED: &str = "flow.completed";
+    pub const FLOW_SNAPSHOT: &str = "flow.snapshot";
 
     pub const POLICY_SELECTED: &str = "policy.selected";
     pub const POLICY_PROBE_COMPLETED: &str = "policy.probe.completed";
@@ -25,8 +27,10 @@ pub mod event_type {
 
     pub const ALL: &[&str] = &[
         FLOW_STARTED,
+        FLOW_ROUTED,
         FLOW_UPDATED,
         FLOW_COMPLETED,
+        FLOW_SNAPSHOT,
         POLICY_SELECTED,
         POLICY_PROBE_COMPLETED,
         POLICY_PASSIVE_RELAY_HEALTH_CHANGED,

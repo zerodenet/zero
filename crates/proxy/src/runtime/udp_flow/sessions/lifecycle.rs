@@ -1,5 +1,5 @@
 use zero_core::{Address, Session};
-use zero_engine::{PassiveRelaySelection, SessionHandle, SessionOutcome};
+use zero_engine::{FlowFailureObservation, PassiveRelaySelection, SessionHandle};
 
 use crate::runtime::udp_flow::outbound::UdpFlowOutbound;
 use crate::runtime::udp_flow::snapshot::UdpFlowSnapshot;
@@ -74,17 +74,17 @@ impl UdpSessionFlows {
         Some((flow.session.clone(), flow.passive_relay_selections.clone()))
     }
 
-    pub(crate) fn finish(
+    pub(crate) fn finish_with_failure(
         &mut self,
         target: &Address,
         port: u16,
         client_session_id: Option<u64>,
-        outcome: SessionOutcome,
+        failure: FlowFailureObservation,
     ) -> Option<CompletedUdpFlow> {
         let key = UdpFlowKey::new(target, port, client_session_id);
         let flow = self.flows.remove(&key)?;
         self.unindex_flow(&key, &flow.outbound);
-        Some(flow.finish(outcome))
+        Some(flow.finish_with_failure(failure))
     }
 
     pub(crate) fn finish_all(&mut self) -> Vec<CompletedUdpFlow> {
