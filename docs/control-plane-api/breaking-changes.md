@@ -98,4 +98,4 @@ IPC、HTTP SSE 和 gRPC 的 wire 格式保持 `zero.api.v1` / `zero.event.v1`，
 - GUI/SDK/面板的明确迁移步骤；
 - 对应回归测试位置。
 
-开发期间只在版本矩阵和 `## Unreleased` 下登记，不预判最终发布版本，也不写入 Cargo 的 `-dev` 构建号。完整测试通过后，由 `scripts/version_contract.py prepare-release <version>` 或 `scripts/release.{ps1,sh}` 将矩阵行、章节标题和 workspace 版本一起封板；禁止手工分别修改这些位置。
+开发期间只在版本矩阵和 `## Unreleased` 下登记，不预判最终发布版本，也不写入 Cargo 的 `-dev` 构建号。完整测试通过后，由 `scripts/release.ps1` 或 `scripts/release.sh` 将矩阵行、章节标题和 workspace 版本一起封板；禁止手工分别修改这些位置。

@@ -26,9 +26,9 @@ jobs:
         shell: bash
         run: |
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
-            python3 scripts/version_contract.py check-release "${GITHUB_REF_NAME#v}"
+            ./scripts/release.sh "${GITHUB_REF_NAME#v}" --check-release
           else
-            python3 scripts/version_contract.py check
+            ./scripts/release.sh --check
           fi
 
       - uses: actions/setup-node@v4

@@ -6,8 +6,6 @@ on:
     paths:
       - "Cargo.toml"
       - "docs/control-plane-api/breaking-changes.md"
-      - "scripts/version_contract.py"
-      - "scripts/tests/test_version_contract.py"
       - "scripts/release.ps1"
       - "scripts/release.sh"
       - ".github/workflows/release.yml"
@@ -18,8 +16,6 @@ on:
     paths:
       - "Cargo.toml"
       - "docs/control-plane-api/breaking-changes.md"
-      - "scripts/version_contract.py"
-      - "scripts/tests/test_version_contract.py"
       - "scripts/release.ps1"
       - "scripts/release.sh"
       - ".github/workflows/release.yml"
@@ -36,8 +32,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Unit tests
-        run: python3 -m unittest discover -s scripts/tests -p 'test_*.py' -v
+      - name: Bash contract
+        run: ./scripts/release.sh --check
 
-      - name: Repository contract
-        run: python3 scripts/version_contract.py check
+      - name: PowerShell contract
+        shell: pwsh
+        run: ./scripts/release.ps1 -Check
