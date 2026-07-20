@@ -164,7 +164,11 @@ pub fn events_stream(
 
     let catch_up = match since {
         Some(s) => {
-            let result = handle.engine_handle().inner().events_since(s, 256, &filter);
+            let result = handle.since(s, 256, filter.clone()).map_err(|error| {
+                let status = api_error_status(&error);
+                let body = serde_json::to_vec_pretty(&error).unwrap_or_default();
+                (status, body)
+            })?;
             if result.has_gap {
                 tracing::warn!(
                     requested_since = s,

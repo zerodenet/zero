@@ -14,4 +14,13 @@ impl zero_api::EventSource for ProxyHandle {
     ) -> zero_api::ApiResult<Vec<zero_api::RawApiEvent>> {
         self.inner.latest(limit, filter)
     }
+
+    fn since(
+        &self,
+        sequence: u64,
+        limit: usize,
+        filter: zero_api::EventFilter,
+    ) -> zero_api::ApiResult<zero_api::EventReplay> {
+        self.inner.since(sequence, limit, filter)
+    }
 }

@@ -63,7 +63,65 @@ fn streams_policy_probe_events_from_the_engine_event_log() {
             },
         )
         .expect("read event history");
-    assert_eq!(latest, vec![event]);
+    assert_eq!(latest, vec![event.clone()]);
+
+    let sequence = event.sequence.expect("event sequence");
+    let replay = handle
+        .since(
+            sequence - 1,
+            1,
+            EventFilter {
+                event_types: vec![event_type::POLICY_PROBE_COMPLETED.to_owned()],
+                ..EventFilter::default()
+            },
+        )
+        .expect("replay events after cursor");
+    assert_eq!(replay.requested_after, sequence - 1);
+    assert_eq!(replay.actual_from, sequence);
+    assert!(!replay.has_gap);
+    assert_eq!(replay.events, vec![event]);
+
+    let filtered_replay = handle
+        .since(
+            0,
+            1,
+            EventFilter {
+                event_types: vec![event_type::POLICY_PROBE_COMPLETED.to_owned()],
+                ..EventFilter::default()
+            },
+        )
+        .expect("replay filtered events from the beginning");
+    assert!(
+        !filtered_replay.has_gap,
+        "retained non-matching events must not look like an eviction gap"
+    );
+    assert_eq!(filtered_replay.actual_from, sequence);
+}
+
+#[test]
+fn engine_event_source_subscribe_is_live_like_engine_handle() {
+    let config = RuntimeConfig::parse(
+        r#"{
+            "inbounds": [],
+            "outbounds": [{ "tag": "direct", "protocol": { "type": "direct" } }],
+            "route": { "rules": [], "final": { "type": "direct" } }
+        }"#,
+    )
+    .expect("parse config");
+    let engine = Engine::new(config).expect("build engine");
+    let subscriber = engine
+        .subscribe(EventFilter {
+            event_types: vec![event_type::ENGINE_WARNING.to_owned()],
+            ..EventFilter::default()
+        })
+        .expect("subscribe directly through Engine");
+
+    engine.emit_warning("test_warning", "live event");
+
+    let event = subscriber.try_recv().expect("receive live engine event");
+    assert_eq!(event.event_type, event_type::ENGINE_WARNING);
+    assert_eq!(event.payload["code"], "test_warning");
+    assert_eq!(event.payload["message"], "live event");
 }
 
 #[test]

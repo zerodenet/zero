@@ -5,30 +5,18 @@ use std::sync::{mpsc::SyncSender, mpsc::TrySendError, Arc, Mutex};
 use serde_json::{json, Value};
 use std::time::{SystemTime, UNIX_EPOCH};
 use zero_api::{
-    event_type, ApiEvent, AuthInfo, EndpointRef, EventFilter, FlowEventPayload, FlowFailureInfo,
-    FlowOutcome, FlowPath, FlowRecord, FlowRecordTiming, FlowResult, FlowRoute, FlowSource,
-    FlowState, FlowTarget, FlowThroughput, FlowTiming, MatchedRuleInfo, Network as ApiNetwork,
-    PassiveRelayHealthChangedPayload, PassiveRelayHealthState, PolicyDecision,
-    PolicyProbeCompletedPayload, PolicySelectedPayload, RawApiEvent, RouteDecision, TargetAddress,
-    TrafficStats,
+    event_type, ApiEvent, AuthInfo, EndpointRef, EventFilter, EventReplay, FlowEventPayload,
+    FlowFailureInfo, FlowOutcome, FlowPath, FlowRecord, FlowRecordTiming, FlowResult, FlowRoute,
+    FlowSource, FlowState, FlowTarget, FlowThroughput, FlowTiming, MatchedRuleInfo,
+    Network as ApiNetwork, PassiveRelayHealthChangedPayload, PassiveRelayHealthState,
+    PolicyDecision, PolicyProbeCompletedPayload, PolicySelectedPayload, RawApiEvent, RouteDecision,
+    TargetAddress, TrafficStats,
 };
 use zero_core::{Address, Network, ProtocolType, SessionAuth};
 
 use super::completed_sessions::CompletedSessionRecord;
 use super::session_registry::ActiveSession;
 use super::stats::SessionOutcome;
-
-/// Result of [`EngineEventLog::events_since`] ->?includes the actual start
-/// sequence so consumers can detect if events were evicted from the ring buffer.
-pub struct EventsSinceResult {
-    /// Sequence number of the first event actually returned.
-    /// If `actual_from > requested_since + 1`, there is a gap.
-    pub actual_from: u64,
-    /// `true` when events between `since` and `actual_from` were lost.
-    pub has_gap: bool,
-    /// The matching events.
-    pub events: Vec<RawApiEvent>,
-}
 
 const DEFAULT_EVENT_LOG_CAPACITY: usize = 8192;
 
@@ -405,20 +393,19 @@ impl EngineEventLog {
     }
 
     /// Return events with `sequence > since` that match the filter, along with
-    /// the actual first sequence number in the result.
+    /// the actual first sequence number available to this replay.
     ///
     /// If `actual_from > since + 1`, some events were evicted from the ring
     /// buffer and the consumer has a gap.  Used for SSE `Last-Event-ID` / `?since=` resumption.
-    pub fn events_since(
-        &self,
-        since: u64,
-        limit: usize,
-        filter: &EventFilter,
-    ) -> EventsSinceResult {
-        let events: Vec<RawApiEvent> = self
-            .inner
-            .lock()
-            .expect("engine event log lock poisoned")
+    pub fn events_since(&self, since: u64, limit: usize, filter: &EventFilter) -> EventReplay {
+        let requested_next = since.saturating_add(1);
+        let retained = self.inner.lock().expect("engine event log lock poisoned");
+        let retained_from = retained
+            .front()
+            .and_then(|event| event.sequence)
+            .unwrap_or(requested_next);
+        let has_gap = retained_from > requested_next;
+        let events: Vec<RawApiEvent> = retained
             .iter()
             .filter(|event| {
                 event.sequence.map(|s| s > since).unwrap_or(false) && matches_filter(event, filter)
@@ -427,11 +414,20 @@ impl EngineEventLog {
             .cloned()
             .collect();
 
-        let actual_from = events.first().and_then(|e| e.sequence).unwrap_or(since + 1);
+        let replay_start = if has_gap {
+            retained_from
+        } else {
+            requested_next
+        };
+        let actual_from = events
+            .first()
+            .and_then(|event| event.sequence)
+            .unwrap_or(replay_start);
 
-        EventsSinceResult {
+        EventReplay {
+            requested_after: since,
             actual_from,
-            has_gap: actual_from > since + 1,
+            has_gap,
             events,
         }
     }

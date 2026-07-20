@@ -5,8 +5,8 @@ use serde::Serialize;
 
 use crate::ApiResult;
 use crate::{
-    AuthContext, CommandRequest, CommandResponse, EventFilter, Permission, PublishResult,
-    QueryRequest, QueryResponse, RawApiEvent,
+    AuthContext, CommandRequest, CommandResponse, EventFilter, EventReplay, Permission,
+    PublishResult, QueryRequest, QueryResponse, RawApiEvent,
 };
 
 pub trait QueryService {
@@ -17,13 +17,33 @@ pub trait CommandService {
     fn execute(&self, command: CommandRequest) -> ApiResult<CommandResponse>;
 }
 
-pub trait EventSource {
-    type Stream;
+/// A live stream returned by [`EventSource::subscribe`].
+///
+/// Implementations may prepend a synthetic synchronization event such as
+/// `flow.snapshot`, but subsequent items must be live events emitted after the
+/// subscription was registered. Historical inspection belongs to
+/// [`EventSource::latest`], not to `subscribe`.
+pub trait EventStream: Send + 'static {
+    /// Block until the next matching event arrives or the source is closed.
+    fn recv(&self) -> Option<RawApiEvent>;
 
+    /// Read the next matching event without blocking.
+    fn try_recv(&self) -> Option<RawApiEvent>;
+}
+
+pub trait EventSource {
+    type Stream: EventStream;
+
+    /// Register a live event subscription.
     fn subscribe(&self, filter: EventFilter) -> ApiResult<Self::Stream>;
 
     /// Snapshot of recent events matching the filter.
     fn latest(&self, limit: usize, filter: EventFilter) -> ApiResult<Vec<RawApiEvent>>;
+
+    /// Replay retained events whose sequence is greater than `sequence`.
+    ///
+    /// Consumers must inspect `has_gap` before applying the returned events.
+    fn since(&self, sequence: u64, limit: usize, filter: EventFilter) -> ApiResult<EventReplay>;
 }
 
 pub trait EventSink {

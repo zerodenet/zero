@@ -1,9 +1,9 @@
 use std::sync::mpsc::SyncSender;
 
-use zero_api::{EventFilter, RawApiEvent};
+use zero_api::{EventFilter, EventReplay, RawApiEvent};
 
 use super::Engine;
-use crate::{ActiveSession, CompletedSessionRecord, EventsSinceResult};
+use crate::{ActiveSession, CompletedSessionRecord};
 
 impl Engine {
     pub(crate) fn subscribe_events(&self, subscriber: SyncSender<RawApiEvent>) {
@@ -35,12 +35,7 @@ impl Engine {
         self.event_log.snapshot(filter)
     }
 
-    pub fn events_since(
-        &self,
-        since: u64,
-        limit: usize,
-        filter: &EventFilter,
-    ) -> EventsSinceResult {
+    pub fn events_since(&self, since: u64, limit: usize, filter: &EventFilter) -> EventReplay {
         self.event_log.events_since(since, limit, filter)
     }
 

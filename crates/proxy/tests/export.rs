@@ -139,8 +139,8 @@ async fn exports_serializable_engine_status_view() {
     .await;
 
     let events = handle
-        .subscribe(EventFilter::default())
-        .expect("subscribe events");
+        .latest(usize::MAX, EventFilter::default())
+        .expect("read event history");
     let completed = events
         .iter()
         .find(|event| event.event_type == event_type::FLOW_COMPLETED)
@@ -180,11 +180,14 @@ async fn exports_serializable_engine_status_view() {
     );
 
     let filtered = handle
-        .subscribe(EventFilter {
-            inbound_tags: vec!["socks-in".to_owned()],
-            ..EventFilter::default()
-        })
-        .expect("subscribe filtered events");
+        .latest(
+            usize::MAX,
+            EventFilter {
+                inbound_tags: vec!["socks-in".to_owned()],
+                ..EventFilter::default()
+            },
+        )
+        .expect("read filtered event history");
     assert!(
         !filtered.is_empty(),
         "should have at least 1 flow.completed event"

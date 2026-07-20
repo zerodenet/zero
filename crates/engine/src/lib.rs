@@ -22,7 +22,7 @@ mod view;
 pub use api::register_build_features;
 pub use completed_sessions::CompletedSessionRecord;
 pub use error::EngineError;
-pub use event_log::EventsSinceResult;
+pub type EventsSinceResult = zero_api::EventReplay;
 pub use flow_observation::{
     FlowFailureObservation, FlowPathObservation, FlowRemoteEndpoint, FlowRouteObservation,
     MatchedRouteRule,

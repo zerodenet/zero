@@ -64,10 +64,13 @@ async fn reports_upstream_connection_failure_to_client_and_session_history() {
     .await;
 
     let events = probe
-        .subscribe(EventFilter {
-            event_types: vec![event_type::FLOW_COMPLETED.to_owned()],
-            ..EventFilter::default()
-        })
+        .latest(
+            usize::MAX,
+            EventFilter {
+                event_types: vec![event_type::FLOW_COMPLETED.to_owned()],
+                ..EventFilter::default()
+            },
+        )
         .expect("read completed flow events");
     let completed = events.first().expect("completed flow event");
     assert_eq!(completed.payload["record"]["state"], "completed");

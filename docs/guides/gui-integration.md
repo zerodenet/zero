@@ -2,6 +2,10 @@
 
 Zero 提供三通道控制面。GUI 应用推荐走 **IPC**（Unix Domain Socket / Windows Named Pipe）——零端口冲突，文件权限隔离，无需 API key。
 
+::: warning 版本语义
+对接多个内核版本时，先读取 `health.engine_build_id`，再按[控制面兼容性与破坏性变更](../control-plane-api/breaking-changes.md)选择快照、增量合并和兼容分支。不能只根据 JSON 能否反序列化判断语义兼容。
+:::
+
 ## 架构
 
 ```

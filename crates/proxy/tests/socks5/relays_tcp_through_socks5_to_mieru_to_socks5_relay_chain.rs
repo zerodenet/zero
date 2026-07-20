@@ -163,10 +163,13 @@ async fn relays_tcp_through_socks5_to_mieru_to_socks5_relay_chain() {
     })
     .await;
     let events = outer_probe
-        .subscribe(EventFilter {
-            event_types: vec![event_type::FLOW_COMPLETED.to_owned()],
-            ..EventFilter::default()
-        })
+        .latest(
+            usize::MAX,
+            EventFilter {
+                event_types: vec![event_type::FLOW_COMPLETED.to_owned()],
+                ..EventFilter::default()
+            },
+        )
         .expect("read relay completion event");
     let record = &events[0].payload["record"];
     assert_eq!(record["route"]["target"], "tcp-relay-chain");

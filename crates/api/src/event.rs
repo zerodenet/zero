@@ -107,6 +107,19 @@ pub struct EventFilter {
     pub inbound_tags: Vec<String>,
 }
 
+/// Events retained after a consumer-provided sequence cursor.
+///
+/// `has_gap` tells a reconnecting consumer that the source evicted at least
+/// one event after `requested_after`; the consumer must rebuild state from a
+/// query or synchronization snapshot before applying further deltas.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct EventReplay {
+    pub requested_after: u64,
+    pub actual_from: u64,
+    pub has_gap: bool,
+    pub events: Vec<ApiEvent<serde_json::Value>>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PublishResult {
     pub delivered: bool,

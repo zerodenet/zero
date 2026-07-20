@@ -11,6 +11,7 @@ use zero_config::{ModeConfig, RuntimeConfig};
 
 use super::error::EngineError;
 use super::export::{completed_to_flow, session_to_flow};
+use super::handle::EventSubscriber;
 use super::runtime::Engine;
 
 // ── Build features registry (injected from the top-level binary) ───
@@ -40,16 +41,25 @@ impl CommandService for Engine {
 }
 
 impl EventSource for Engine {
-    type Stream = Vec<RawApiEvent>;
+    type Stream = EventSubscriber;
 
     fn subscribe(&self, filter: EventFilter) -> zero_api::ApiResult<Self::Stream> {
-        Ok(self.events_snapshot(&filter))
+        Ok(EventSubscriber::subscribe(self, filter))
     }
 
     fn latest(&self, limit: usize, filter: EventFilter) -> zero_api::ApiResult<Vec<RawApiEvent>> {
         let mut events = self.events_snapshot(&filter);
         events.truncate(limit);
         Ok(events)
+    }
+
+    fn since(
+        &self,
+        sequence: u64,
+        limit: usize,
+        filter: EventFilter,
+    ) -> zero_api::ApiResult<zero_api::EventReplay> {
+        Ok(self.events_since(sequence, limit, &filter))
     }
 }
 

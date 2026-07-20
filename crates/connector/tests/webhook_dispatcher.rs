@@ -1,5 +1,6 @@
 #![cfg(feature = "panel_connector")]
 
+use std::collections::VecDeque;
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::sync::{Arc, Mutex};
@@ -7,7 +8,7 @@ use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
 use serde_json::json;
-use zero_api::{event_type, ApiEvent, EventFilter, EventSource, RawApiEvent};
+use zero_api::{event_type, ApiEvent, EventFilter, EventSource, EventStream, RawApiEvent};
 use zero_config::{ApiConfig, EventSinkConfig};
 use zero_connector::{spawn_event_dispatcher, EventDispatcherOptions};
 
@@ -16,11 +17,27 @@ struct StaticEventSource {
     events: Arc<Mutex<Vec<RawApiEvent>>>,
 }
 
+struct StaticEventStream {
+    events: Mutex<VecDeque<RawApiEvent>>,
+}
+
+impl EventStream for StaticEventStream {
+    fn recv(&self) -> Option<RawApiEvent> {
+        self.try_recv()
+    }
+
+    fn try_recv(&self) -> Option<RawApiEvent> {
+        self.events.lock().expect("events lock").pop_front()
+    }
+}
+
 impl EventSource for StaticEventSource {
-    type Stream = Vec<RawApiEvent>;
+    type Stream = StaticEventStream;
 
     fn subscribe(&self, _filter: EventFilter) -> zero_api::ApiResult<Self::Stream> {
-        Ok(self.events.lock().expect("events lock").clone())
+        Ok(StaticEventStream {
+            events: Mutex::new(self.events.lock().expect("events lock").clone().into()),
+        })
     }
 
     fn latest(&self, limit: usize, _filter: EventFilter) -> zero_api::ApiResult<Vec<RawApiEvent>> {
@@ -32,6 +49,33 @@ impl EventSource for StaticEventSource {
             .take(limit)
             .cloned()
             .collect())
+    }
+
+    fn since(
+        &self,
+        sequence: u64,
+        limit: usize,
+        _filter: EventFilter,
+    ) -> zero_api::ApiResult<zero_api::EventReplay> {
+        let events: Vec<_> = self
+            .events
+            .lock()
+            .expect("events lock")
+            .iter()
+            .filter(|event| event.sequence.is_some_and(|value| value > sequence))
+            .take(limit)
+            .cloned()
+            .collect();
+        let actual_from = events
+            .first()
+            .and_then(|event| event.sequence)
+            .unwrap_or_else(|| sequence.saturating_add(1));
+        Ok(zero_api::EventReplay {
+            requested_after: sequence,
+            actual_from,
+            has_gap: actual_from > sequence.saturating_add(1),
+            events,
+        })
     }
 }
 

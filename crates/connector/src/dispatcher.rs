@@ -7,7 +7,10 @@ use std::time::{Duration, Instant};
 
 use tokio::task::JoinHandle;
 use tracing::{debug, warn};
-use zero_api::{DeadLetterSink, EventFilter, EventSink, EventSource, RawApiEvent, SinkStatus};
+use zero_api::{
+    event_type, DeadLetterSink, EventFilter, EventSink, EventSource, EventStream, RawApiEvent,
+    SinkStatus,
+};
 use zero_config::ApiConfig;
 
 use crate::registry::{build_event_sinks, ConfiguredEventSink};
@@ -125,7 +128,7 @@ pub fn spawn_event_dispatcher<S>(
     options: EventDispatcherOptions,
 ) -> ConnectorResult<Option<EventDispatcherHandle>>
 where
-    S: EventSource<Stream = Vec<RawApiEvent>> + Send + Sync + 'static,
+    S: EventSource + Send + Sync + 'static,
 {
     let (init_tx, init_rx) = mpsc::sync_channel(1);
     let (shutdown_tx, shutdown_rx) = mpsc::channel();
@@ -209,10 +212,16 @@ fn run_event_dispatcher<S>(
     shutdown: mpsc::Receiver<()>,
     dead_letter: Option<DeadLetterSink>,
 ) where
-    S: EventSource<Stream = Vec<RawApiEvent>> + Send + Sync + 'static,
+    S: EventSource + Send + Sync + 'static,
 {
-    let mut last_sequence = 0_u64;
     let mut pending = VecDeque::new();
+    let subscriber = match source.subscribe(EventFilter::default()) {
+        Ok(subscriber) => subscriber,
+        Err(error) => {
+            warn!(error = %error, "event dispatcher failed to subscribe to source");
+            return;
+        }
+    };
 
     loop {
         retry_pending(
@@ -222,22 +231,13 @@ fn run_event_dispatcher<S>(
             options.max_retry_attempts,
             dead_letter.as_ref(),
         );
-        match source.subscribe(EventFilter::default()) {
-            Ok(events) => {
-                for event in events {
-                    let should_dispatch = event
-                        .sequence
-                        .map(|sequence| sequence > last_sequence)
-                        .unwrap_or(true);
-                    if should_dispatch {
-                        dispatch_event(&sinks, stats, &mut pending, event.clone());
-                        if let Some(sequence) = event.sequence {
-                            last_sequence = last_sequence.max(sequence);
-                        }
-                    }
-                }
+        while let Some(event) = subscriber.try_recv() {
+            // `flow.snapshot` is a synchronization baseline for live clients.
+            // Persistent sinks consume lifecycle facts only and must not bill or
+            // audit the same active flow again whenever a dispatcher starts.
+            if event.event_type != event_type::FLOW_SNAPSHOT {
+                dispatch_event(&sinks, stats, &mut pending, event);
             }
-            Err(error) => warn!(error = %error, "event dispatcher failed to read source"),
         }
 
         match shutdown.recv_timeout(options.poll_interval) {

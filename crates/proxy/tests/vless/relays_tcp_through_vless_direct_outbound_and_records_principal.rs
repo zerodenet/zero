@@ -76,11 +76,14 @@ async fn relays_tcp_through_vless_direct_outbound_and_records_principal() {
     );
 
     let events = engine_handle
-        .subscribe(EventFilter {
-            principal_keys: vec!["user:10001".to_owned()],
-            ..EventFilter::default()
-        })
-        .expect("subscribe events");
+        .latest(
+            usize::MAX,
+            EventFilter {
+                principal_keys: vec!["user:10001".to_owned()],
+                ..EventFilter::default()
+            },
+        )
+        .expect("read event history");
     let completed_event = events
         .iter()
         .find(|event| event.event_type == event_type::FLOW_COMPLETED)

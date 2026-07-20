@@ -91,6 +91,7 @@ const controlSidebar: SidebarItem[] = [
     page('HTTP JSON API', '/control-plane-api/http-api'),
     page('本地 IPC 协议', '/control-plane-api/ipc-protocol'),
     page('通用契约', '/control-plane-api/contract'),
+    page('兼容性与破坏性变更', '/control-plane-api/breaking-changes'),
   ], false),
   group('事件与扩展', [
     page('事件目录', '/control-plane-api/events'),

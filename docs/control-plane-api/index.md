@@ -18,6 +18,7 @@ Zero 通过 HTTP JSON API、gRPC、Unix Domain Socket / Windows Named Pipe、CLI
 | [push-connector.md](./push-connector.md) | 节点主动上报与远程命令 |
 | [cli.md](./cli.md) | CLI 控制命令 |
 | [contract.md](./contract.md) | API 契约和外部命名规则 |
+| [breaking-changes.md](./breaking-changes.md) | 版本语义、破坏性变更和 GUI 迁移要求 |
 | [GUI 接入指南](../guides/gui-integration.md) | 本地 GUI 的 IPC/HTTP 接入流程、状态模型和短期补齐建议 |
 
 ## 架构概览

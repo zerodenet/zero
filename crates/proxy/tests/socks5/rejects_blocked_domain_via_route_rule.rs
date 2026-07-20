@@ -65,10 +65,13 @@ async fn rejects_blocked_domain_via_route_rule() {
     })
     .await;
     let events = probe
-        .subscribe(EventFilter {
-            event_types: vec![event_type::FLOW_COMPLETED.to_owned()],
-            ..EventFilter::default()
-        })
+        .latest(
+            usize::MAX,
+            EventFilter {
+                event_types: vec![event_type::FLOW_COMPLETED.to_owned()],
+                ..EventFilter::default()
+            },
+        )
         .expect("read completed event");
     let record = &events[0].payload["record"];
     assert_eq!(record["route"]["action"], "reject");

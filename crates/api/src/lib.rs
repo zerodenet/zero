@@ -25,8 +25,8 @@ pub use command::{
 };
 pub use error::{ApiError, ApiErrorCode, ErrorDetail};
 pub use event::{
-    event_type, ApiEvent, EventFilter, PassiveRelayHealthChangedPayload, PassiveRelayHealthState,
-    PublishResult,
+    event_type, ApiEvent, EventFilter, EventReplay, PassiveRelayHealthChangedPayload,
+    PassiveRelayHealthState, PublishResult,
 };
 pub use flow::{
     AuthInfo, EndpointRef, FlowEventPayload, FlowFailureInfo, FlowOutcome, FlowPath, FlowRecord,
@@ -51,7 +51,9 @@ pub use snapshot::{
     PolicyMemberSnapshot, PolicySnapshot, RuntimeSnapshot, StatsSnapshot, StatusSnapshot,
     UdpUpstreamStats,
 };
-pub use traits::{ApiAuth, ApiCodec, CommandService, EventSink, EventSource, QueryService};
+pub use traits::{
+    ApiAuth, ApiCodec, CommandService, EventSink, EventSource, EventStream, QueryService,
+};
 #[cfg(feature = "webhook")]
 pub use webhook::{WebhookEventSink, WebhookEventSinkConfig};
 

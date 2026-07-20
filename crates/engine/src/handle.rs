@@ -3,7 +3,7 @@ use std::sync::{mpsc, Mutex};
 
 use zero_api::{
     ApiResult, CommandRequest, CommandResponse, CommandService, EventFilter, EventSource,
-    QueryRequest, QueryResponse, QueryService, RawApiEvent,
+    EventStream, QueryRequest, QueryResponse, QueryService, RawApiEvent,
 };
 
 use super::runtime::Engine;
@@ -60,22 +60,20 @@ impl EventSource for EngineHandle {
     type Stream = EventSubscriber;
 
     fn subscribe(&self, filter: EventFilter) -> ApiResult<Self::Stream> {
-        let (tx, rx) = mpsc::sync_channel(1024);
-        self.engine.subscribe_events(tx);
-        let initial = if wants_flow_snapshot(&filter) {
-            VecDeque::from([self.engine.flow_snapshot_event()])
-        } else {
-            VecDeque::new()
-        };
-        Ok(EventSubscriber {
-            initial: Mutex::new(initial),
-            rx,
-            filter,
-        })
+        Ok(EventSubscriber::subscribe(&self.engine, filter))
     }
 
     fn latest(&self, limit: usize, filter: EventFilter) -> ApiResult<Vec<RawApiEvent>> {
         self.engine.latest(limit, filter)
+    }
+
+    fn since(
+        &self,
+        sequence: u64,
+        limit: usize,
+        filter: EventFilter,
+    ) -> ApiResult<zero_api::EventReplay> {
+        Ok(self.engine.events_since(sequence, limit, &filter))
     }
 }
 
@@ -91,6 +89,21 @@ pub struct EventSubscriber {
 }
 
 impl EventSubscriber {
+    pub(crate) fn subscribe(engine: &Engine, filter: EventFilter) -> Self {
+        let (tx, rx) = mpsc::sync_channel(1024);
+        engine.subscribe_events(tx);
+        let initial = if wants_flow_snapshot(&filter) {
+            VecDeque::from([engine.flow_snapshot_event()])
+        } else {
+            VecDeque::new()
+        };
+        Self {
+            initial: Mutex::new(initial),
+            rx,
+            filter,
+        }
+    }
+
     /// Block until the next matching event arrives.
     ///
     /// Returns `None` when the publisher has been dropped (the
@@ -128,6 +141,16 @@ impl EventSubscriber {
                 return Some(event);
             }
         }
+    }
+}
+
+impl EventStream for EventSubscriber {
+    fn recv(&self) -> Option<RawApiEvent> {
+        EventSubscriber::recv(self)
+    }
+
+    fn try_recv(&self) -> Option<RawApiEvent> {
+        EventSubscriber::try_recv(self)
     }
 }
 
