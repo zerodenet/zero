@@ -452,6 +452,8 @@ url_test 探测完成后发射，包含每个成员的探测结果。
 
 IPC 和 SSE 的**事件 JSON 格式完全相同**（都是 `ApiEvent<P>` 信封），消费者只需一套解析代码。
 
+GUI 的 IPC/HTTP/gRPC 连接和 EventDispatcher 都消费统一的 `EventSource` 语义，但前者面向交互式实时状态，后者面向 JSONL/Webhook 的持久投递。PushConnector 不消费该事件流；它只负责面板心跳和远程命令。组件边界见 [Push Connector](./push-connector.md#与-gui-和事件-sink-的职责边界)。
+
 | 方式 | 过滤 | 回放 | 格式 |
 |------|------|------|------|
 | SSE (`GET /api/v1/events/stream?types=...`) | event_type 白名单，`*` = 全部 | `?since=<seq>` / `Last-Event-ID`；实时阶段含 `flow.snapshot` 基线 | SSE frame: `id` + `event` + `data: <ApiEvent JSON>` |

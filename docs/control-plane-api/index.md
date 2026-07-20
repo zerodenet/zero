@@ -43,6 +43,8 @@ Zero 通过 HTTP JSON API、gRPC、Unix Domain Socket / Windows Named Pipe、CLI
 └─────────────────────────────────────────────────────┘
 ```
 
+图中的通道共享控制面数据模型，但适配职责不同：GUI 通过 IPC/HTTP/gRPC 直接使用查询、命令和实时事件；EventDispatcher 订阅 `EventSource` 后向 JSONL/Webhook Sink 做过滤、序列化和可靠投递；Panel Connector 只读取心跳所需的汇总统计并通过 `CommandService` 接收远程命令，不消费 flow 事件。详见 [Push Connector 的职责边界](./push-connector.md#与-gui-和事件-sink-的职责边界)。
+
 ## 四种通道对比
 
 | 维度 | HTTP | gRPC | IPC (UDS/Pipe) | CLI |
