@@ -45,6 +45,49 @@ cd docs
 npm run check
 ```
 
+## 版本契约与封板
+
+开发构建号、待发布兼容性记录和正式发布版本由 `scripts/version_contract.py` 统一管理。不要手工把 `-dev` 版本写进 `breaking-changes.md`，也不要在发布 workflow 中临时覆盖 Cargo 版本。
+
+开发期间，已实现但尚未封板的语义变化登记在 `Unreleased`：
+
+```powershell
+py -3 scripts/version_contract.py check
+```
+
+Linux/macOS 使用 `python3` 执行相同命令。正式版本测试完成后，可先只读预览封板差异：
+
+```powershell
+py -3 scripts/version_contract.py prepare-release 0.0.16 --dry-run
+```
+
+实际发布仍通过现有 wrapper 完成。wrapper 会调用版本契约脚本，同时更新 `Cargo.toml` 和兼容性文档，然后提交、打 tag，并按参数决定是否推送：
+
+```powershell
+./scripts/release.ps1 -Version 0.0.16 -NoPush
+```
+
+```bash
+./scripts/release.sh 0.0.16 --no-push
+```
+
+发布后开启下一个开发周期时使用：
+
+```powershell
+py -3 scripts/version_contract.py start-development 0.0.17-dev
+```
+
+命令语义：
+
+| 命令 | 是否写文件 | 作用 |
+|------|------------|------|
+| `check` | 否 | 根据 Cargo 当前是 `-dev` 或正式版本，检查文档状态 |
+| `start-development X.Y.Z-dev` | 是 | 设置开发构建身份，保留新的 `Unreleased` 区域 |
+| `prepare-release X.Y.Z` | 是 | 将 `Unreleased` 原子封板为正式版本并更新 Cargo |
+| `check-release X.Y.Z` | 否 | 校验 Cargo、兼容矩阵和版本章节与 tag 一致 |
+
+版本契约单测位于 `scripts/tests/test_version_contract.py`。独立 CI workflow 会在 Cargo、兼容文档、发布脚本或 workflow 变化时执行单测和仓库校验；tag release 和文档部署还会再次执行 `check-release`。
+
 ## 根 package 的 feature
 
 根 package `zero` 是对外构建入口，它把协议和控制面 feature 转发到内部 crate。

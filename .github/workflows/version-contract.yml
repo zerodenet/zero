@@ -1,0 +1,43 @@
+name: Version Contract
+
+on:
+  push:
+    branches: [develop, main]
+    paths:
+      - "Cargo.toml"
+      - "docs/control-plane-api/breaking-changes.md"
+      - "scripts/version_contract.py"
+      - "scripts/tests/test_version_contract.py"
+      - "scripts/release.ps1"
+      - "scripts/release.sh"
+      - ".github/workflows/release.yml"
+      - ".github/workflows/docs.yml"
+      - ".github/workflows/version-contract.yml"
+  pull_request:
+    branches: [develop, main]
+    paths:
+      - "Cargo.toml"
+      - "docs/control-plane-api/breaking-changes.md"
+      - "scripts/version_contract.py"
+      - "scripts/tests/test_version_contract.py"
+      - "scripts/release.ps1"
+      - "scripts/release.sh"
+      - ".github/workflows/release.yml"
+      - ".github/workflows/docs.yml"
+      - ".github/workflows/version-contract.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Validate Cargo and compatibility versions
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Unit tests
+        run: python3 -m unittest discover -s scripts/tests -p 'test_*.py' -v
+
+      - name: Repository contract
+        run: python3 scripts/version_contract.py check

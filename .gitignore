@@ -5,6 +5,8 @@ Cargo.lock
 .claude/
 .cargo/config.toml
 node_modules/
+__pycache__/
+*.py[cod]
 
 # Docs
 docs/.vitepress/dist/

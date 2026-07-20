@@ -1,12 +1,13 @@
 #!/usr/bin/env pwsh
 <#
 .SYNOPSIS
-    Bump the Zero project version, commit, tag, and push to all remotes.
+    Seal the tested Zero version, commit, tag, and push to all remotes.
 
 .DESCRIPTION
-    Updates the workspace.package.version field in the root Cargo.toml,
-    commits the change, creates an annotated git tag (v<version>), and
-    pushes the commit + tag to every configured remote.
+    Moves the compatibility ledger's Unreleased entry to the requested
+    version, updates workspace.package.version, commits both files, creates an
+    annotated git tag (v<version>), and pushes the commit + tag to every
+    configured remote.
 
 .PARAMETER Version
     The new version string (e.g. "0.0.14" or "0.0.14-beta"). Required.
@@ -42,6 +43,27 @@ param(
 $ErrorActionPreference = "Stop"
 Set-Location $PSScriptRoot\..
 
+function Invoke-VersionContract {
+    param([string[]]$ContractArgs)
+
+    if (Get-Command py -ErrorAction SilentlyContinue) {
+        & py -3 scripts/version_contract.py @ContractArgs
+    }
+    elseif (Get-Command python3 -ErrorAction SilentlyContinue) {
+        & python3 scripts/version_contract.py @ContractArgs
+    }
+    elseif (Get-Command python -ErrorAction SilentlyContinue) {
+        & python scripts/version_contract.py @ContractArgs
+    }
+    else {
+        Write-Error "Python 3 is required to manage the release version contract."
+    }
+
+    if ($LASTEXITCODE -ne 0) {
+        throw "Version contract command failed: $($ContractArgs -join ' ')"
+    }
+}
+
 # ---------- Validate ----------
 if ($Version -notmatch '^\d+\.\d+\.\d+(-[\w.]+)?$') {
     Write-Error "Invalid version format. Expected X.Y.Z or X.Y.Z-suffix. Got: '$Version'"
@@ -57,6 +79,8 @@ if (-not (Test-Path $cargoTomlPath)) {
     Write-Error "Cargo.toml not found — run from the repo root."
     exit 1
 }
+
+Invoke-VersionContract @("check")
 
 # Check clean working tree
 $gitStatus = git status --porcelain
@@ -88,7 +112,8 @@ Write-Host "Current version: $currentVersion -> New version: $Version" -Foregrou
 Write-Host "Tag: $tagName" -ForegroundColor Yellow
 
 if ($DryRun) {
-    Write-Host "[DRY RUN] Would update Cargo.toml, commit, tag $tagName, push to: $($remotes -join ', ')" -ForegroundColor Green
+    Invoke-VersionContract @("prepare-release", $Version, "--dry-run")
+    Write-Host "[DRY RUN] Would update Cargo.toml and breaking-changes.md, commit, tag $tagName, push to: $($remotes -join ', ')" -ForegroundColor Green
     exit 0
 }
 
@@ -99,19 +124,14 @@ if ($confirm -notmatch '^[yY]') {
     exit 0
 }
 
-# ---------- Update Cargo.toml ----------
-Write-Host "Updating version in $cargoTomlPath..." -ForegroundColor Cyan
-$updated = $cargoContent -replace "(\[workspace\.package\][^\[]*?version\s*=\s*`")[^`"]+(`")", "`${1}$Version`${2}"
-if ($updated -eq $cargoContent) {
-    Write-Error "Failed to update version in Cargo.toml — pattern not matched."
-    exit 1
-}
-Set-Content -Path $cargoTomlPath -Value $updated -NoNewline
-Write-Host "  version = `"$Version`"" -ForegroundColor Green
+# ---------- Seal version contract ----------
+Write-Host "Sealing Cargo and compatibility docs for $Version..." -ForegroundColor Cyan
+Invoke-VersionContract @("prepare-release", $Version)
+Invoke-VersionContract @("check-release", $Version)
 
 # ---------- Commit ----------
 Write-Host "Committing..." -ForegroundColor Cyan
-git add Cargo.toml
+git add Cargo.toml docs/control-plane-api/breaking-changes.md
 git commit -m $Message
 Write-Host "  commit: $Message" -ForegroundColor Green
 

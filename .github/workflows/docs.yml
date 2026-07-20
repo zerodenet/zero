@@ -22,6 +22,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Verify version contract
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            python3 scripts/version_contract.py check-release "${GITHUB_REF_NAME#v}"
+          else
+            python3 scripts/version_contract.py check
+          fi
+
       - uses: actions/setup-node@v4
         with:
           node-version: 20

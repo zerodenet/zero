@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# release.sh — Bump the Zero project version, commit, tag, and push to all remotes.
+# release.sh — Seal the tested Zero version, commit, tag, and push to all remotes.
 #
 # Usage:
 #   ./scripts/release.sh 0.0.14
@@ -67,6 +67,17 @@ if [[ ! -f Cargo.toml ]]; then
     exit 1
 fi
 
+if command -v python3 >/dev/null 2>&1; then
+    PYTHON_BIN=python3
+elif command -v python >/dev/null 2>&1; then
+    PYTHON_BIN=python
+else
+    echo "Error: Python 3 is required to manage the release version contract."
+    exit 1
+fi
+
+"$PYTHON_BIN" scripts/version_contract.py check
+
 if ! git diff-index --quiet HEAD --; then
     echo "Error: working tree is not clean. Commit or stash changes before releasing."
     exit 1
@@ -91,7 +102,8 @@ echo -e "\033[33mCurrent version: ${CURRENT_VERSION} -> New version: ${VERSION}\
 echo -e "\033[33mTag: ${TAG_NAME}\033[0m"
 
 if $DRY_RUN; then
-    echo -e "\033[32m[DRY RUN] Would update Cargo.toml, commit, tag $TAG_NAME, push to: ${REMOTES[*]}\033[0m"
+    "$PYTHON_BIN" scripts/version_contract.py prepare-release "$VERSION" --dry-run
+    echo -e "\033[32m[DRY RUN] Would update Cargo.toml and breaking-changes.md, commit, tag $TAG_NAME, push to: ${REMOTES[*]}\033[0m"
     exit 0
 fi
 
@@ -102,22 +114,14 @@ if [[ ! "$CONFIRM" =~ ^[yY] ]]; then
     exit 0
 fi
 
-# ---------- update Cargo.toml ----------
-echo -e "\033[36mUpdating version in Cargo.toml...\033[0m"
-# Replace only the version line inside [workspace.package]
-sed -i "/^\[workspace\.package\]/,/^\[workspace\.dependencies\]/ s/^\(version[[:space:]]*=[[:space:]]*\"\)[^\"]*\(\".*\)/\1${VERSION}\2/" Cargo.toml
-
-# verify it changed
-NEW_VERSION=$(awk '/^\[workspace\.package\]/{found=1} found && /^version[[:space:]]*=[[:space:]]*"/{match($0, /"[^"]+"/); print substr($0, RSTART+1, RLENGTH-2); exit}' Cargo.toml)
-if [[ "$NEW_VERSION" != "$VERSION" ]]; then
-    echo "Error: failed to update version in Cargo.toml (expected '$VERSION', got '$NEW_VERSION')"
-    exit 1
-fi
-echo -e "\033[32m  version = \"${VERSION}\"\033[0m"
+# ---------- seal version contract ----------
+echo -e "\033[36mSealing Cargo and compatibility docs for ${VERSION}...\033[0m"
+"$PYTHON_BIN" scripts/version_contract.py prepare-release "$VERSION"
+"$PYTHON_BIN" scripts/version_contract.py check-release "$VERSION"
 
 # ---------- commit ----------
 echo -e "\033[36mCommitting...\033[0m"
-git add Cargo.toml
+git add Cargo.toml docs/control-plane-api/breaking-changes.md
 git commit -m "$MESSAGE"
 echo -e "\033[32m  commit: ${MESSAGE}\033[0m"
 

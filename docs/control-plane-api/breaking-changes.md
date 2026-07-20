@@ -25,10 +25,10 @@
 
 | 版本 | 影响面 | 迁移结论 |
 |------|--------|----------|
-| `0.0.16-dev` | 进程内 Rust `EventSource`、事件 Sink | Rust 实现者必须迁移到实时 `EventStream`；IPC/HTTP/gRPC GUI wire 无变化 |
+| `Unreleased` | 进程内 Rust `EventSource`、事件 Sink | Rust 实现者必须迁移到实时 `EventStream`；IPC/HTTP/gRPC GUI wire 无变化 <!-- version-contract:unreleased-row --> |
 | `0.0.15-rc` | GUI flow 生命周期 | 订阅 ACK 后以 `flow.snapshot` 建立活动连接基线，再合并 flow 增量 |
 
-## `0.0.16-dev`
+## Unreleased
 
 ### `EventSource` 统一为实时订阅
 
@@ -63,7 +63,7 @@ EventDispatcher 从周期性事件环扫描改为持有一个实时订阅：
 
 ### 对外 GUI 影响
 
-IPC、HTTP SSE 和 gRPC 的 wire 格式保持 `zero.api.v1` / `zero.event.v1`，现有 GUI 不需要因 `0.0.16-dev` 修改帧解析。GUI 仍需遵守 `0.0.15-rc` 建立的快照与增量合并规则。
+IPC、HTTP SSE 和 gRPC 的 wire 格式保持 `zero.api.v1` / `zero.event.v1`，现有 GUI 不需要因本次待发布变更修改帧解析。GUI 仍需遵守 `0.0.15-rc` 建立的快照与增量合并规则。
 
 ## `0.0.15-rc`
 
@@ -97,3 +97,5 @@ IPC、HTTP SSE 和 gRPC 的 wire 格式保持 `zero.api.v1` / `zero.event.v1`，
 - 兼容窗口和可检测条件；
 - GUI/SDK/面板的明确迁移步骤；
 - 对应回归测试位置。
+
+开发期间只在版本矩阵和 `## Unreleased` 下登记，不预判最终发布版本，也不写入 Cargo 的 `-dev` 构建号。完整测试通过后，由 `scripts/version_contract.py prepare-release <version>` 或 `scripts/release.{ps1,sh}` 将矩阵行、章节标题和 workspace 版本一起封板；禁止手工分别修改这些位置。
