@@ -635,7 +635,7 @@ Server-Sent Events (SSE) 实时事件流。
 
 | 参数/头 | 说明 |
 |---------|------|
-| `?types=flow.completed,policy.selected` | 事件类型过滤 |
+| `?types=flow.completed,policy.selected` | 事件类型过滤；包含任一 flow 生命周期类型时会生成活动快照 |
 | `?since=<sequence>` | 断点续传，从指定 sequence 之后开始 |
 | `Last-Event-ID: <sequence>` | 同上，HTTP 头形式 |
 
@@ -648,6 +648,8 @@ data: {"schema_id":"zero.event.v1","event_id":"...","event_type":"flow.completed
 
 连接断开后可使用 `Last-Event-ID` 续传，服务端先发送追赶事件再切回实时流。详见 [events.md](./events.md)。
 
+实时订阅阶段会生成 `flow.snapshot` 作为当前活动连接基线；它不在事件环中，因此不会被 `?since=` 回放，也不会出现在下面的一次性 `/events` 结果中。带断点续传的连接会先收到事件环中的追赶事件，再进入包含新快照的实时阶段。消费者应以快照的 `records` 替换活动集合，并按 `revision` 合并后续生命周期事件。
+
 ### GET /api/v1/events
 
-事件快照（一次性返回当前事件日志中的所有事件）。不如 `/events/stream` 实时，适合一次性调试。
+事件快照（一次性返回当前事件日志中的所有事件）。不如 `/events/stream` 实时，适合一次性调试。这里的“事件快照”是事件环内容，不是 `flow.snapshot` 活动连接基线。

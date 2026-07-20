@@ -69,10 +69,14 @@ zero events
 
 输出示例：
 ```json
+{"event_type":"flow.snapshot","event_id":"...","occurred_at_unix_ms":...,"payload":{"watermark":1024,"records":[...]}}
 {"event_type":"flow.started","event_id":"...","occurred_at_unix_ms":...,"payload":{...}}
+{"event_type":"flow.routed","event_id":"...","occurred_at_unix_ms":...,"payload":{...}}
 {"event_type":"flow.updated","event_id":"...","occurred_at_unix_ms":...,"payload":{...}}
 {"event_type":"flow.completed","event_id":"...","occurred_at_unix_ms":...,"payload":{...}}
 ```
+
+`zero events` 建立实时订阅后先输出 `flow.snapshot` 活动连接基线，随后输出生命周期增量。每个生命周期 payload 的 `record` 都使用统一 `FlowRecord`；完成记录是自包含事实。
 
 ### zero help
 

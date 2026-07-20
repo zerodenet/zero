@@ -492,7 +492,7 @@ es.onmessage = (e) => console.log(JSON.parse(e.data));
 | 事件 | 频率 | 用途 |
 |------|------|------|
 | `flow.started` | 每个连接 | 新连接通知 |
-| `flow.updated` | 每 10s / 连接 | 实时流量速率 |
+| `flow.updated` | 每 1s 检查，仅变化连接 | 实时流量速率 |
 | `flow.snapshot` | 订阅基线 | 当前所有活动连接的完整记录 |
 | `flow.routed` | 路由建立 | 命中规则、选择链、实际出站和远端 |
 | `flow.completed` | 连接结束 | 自包含的最终记录、流量、结果和结构化失败 |
