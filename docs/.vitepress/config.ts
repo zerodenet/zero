@@ -28,6 +28,7 @@ const guideSidebar: SidebarItem[] = [
   page('快速开始', '/guides/quickstart'),
   group('应用集成', [
     page('GUI 接入', '/guides/gui-integration'),
+    page('机场面板接入', '/guides/panel-integration'),
     page('配置错误处理', '/guides/config-failure-examples'),
   ]),
 ]
