@@ -12,7 +12,6 @@ use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 
 use crate::TunDevice;
 
-const TUNSETIFF: libc::c_ulong = 0x4004_54ca;
 const IFF_TUN: libc::c_int = 0x0001;
 const IFF_NO_PI: libc::c_int = 0x1000;
 
@@ -53,7 +52,7 @@ impl LinuxTun {
         ifr.ifr_ifru.ifru_flags = (IFF_TUN | IFF_NO_PI) as i16;
 
         // SAFETY: ifr is correctly sized and initialized.
-        let ret = unsafe { libc::ioctl(fd, TUNSETIFF, &ifr as *const _) };
+        let ret = unsafe { libc::ioctl(fd, libc::TUNSETIFF, &ifr as *const _) };
         if ret < 0 {
             return Err(io::Error::last_os_error());
         }
