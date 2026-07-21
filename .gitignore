@@ -3,6 +3,7 @@ Cargo.lock
 **/*.rs.bk
 *.pdb
 .claude/
+.codex/
 .cargo/config.toml
 node_modules/
 __pycache__/
@@ -13,6 +14,8 @@ docs/.vitepress/dist/
 docs/.vitepress/cache/
 docs/node_modules/
 docs/package-lock.json
+docs/pnpm-lock.yaml
+docs/pnpm-workspace.yaml
 
 # Logs / generated
 *.log
