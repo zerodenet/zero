@@ -25,10 +25,15 @@
 
 | 版本 | 影响面 | 迁移结论 |
 |------|--------|----------|
-| `Unreleased` | 进程内 Rust `EventSource`、事件 Sink | Rust 实现者必须迁移到实时 `EventStream`；IPC/HTTP/gRPC GUI wire 无变化 <!-- version-contract:unreleased-row --> |
+| `Unreleased` | — | 暂无待发布的兼容性变更 <!-- version-contract:unreleased-row --> |
+| `0.0.15-rc.1` | 进程内 Rust `EventSource`、事件 Sink | Rust 实现者必须迁移到实时 `EventStream`；IPC/HTTP/gRPC GUI wire 无变化 |
 | `0.0.15-rc` | GUI flow 生命周期 | 订阅 ACK 后以 `flow.snapshot` 建立活动连接基线，再合并 flow 增量 |
 
 ## Unreleased
+
+<!-- 在这里登记已实现但尚未封板的兼容性变更。 -->
+
+## 0.0.15-rc.1
 
 ### `EventSource` 统一为实时订阅
 
